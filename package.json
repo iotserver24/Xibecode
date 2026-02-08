@@ -1,0 +1,63 @@
+{
+  "name": "xibecode",
+  "version": "1.0.0",
+  "description": "AI-powered autonomous coding assistant with advanced context handling",
+  "main": "dist/index.js",
+  "type": "module",
+  "bin": {
+    "xibecode": "./dist/index.js",
+    "xc": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "prepare": "npm run build",
+    "test": "vitest"
+  },
+  "keywords": [
+    "cli",
+    "ai",
+    "coding",
+    "assistant",
+    "autonomous",
+    "agent",
+    "claude",
+    "anthropic",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/xibecode"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/xibecode/issues"
+  },
+  "homepage": "https://github.com/yourusername/xibecode#readme",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "commander": "^12.0.0",
+    "chalk": "^5.3.0",
+    "ora": "^8.0.1",
+    "inquirer": "^9.2.12",
+    "dotenv": "^16.3.1",
+    "conf": "^12.0.0",
+    "diff": "^5.1.0",
+    "fast-glob": "^3.3.2",
+    "node-fetch": "^3.3.2",
+    "strip-ansi": "^7.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/diff": "^5.0.8",
+    "@types/inquirer": "^9.0.7",
+    "typescript": "^5.3.3",
+    "tsx": "^4.7.0",
+    "vitest": "^1.0.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

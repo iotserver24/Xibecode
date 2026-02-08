@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Build
+dist/
+*.tsbuildinfo
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE / Editor
+.vscode/
+.idea/
+.cursor/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# XibeCode
+.xibecode_backups/
+
+# Temp
+*.tmp
+*.temp
+.cache/
+
+# Optional: uncomment if you don't want to track lockfiles (bun.lock / pnpm-lock.yaml)
+# bun.lock
+# pnpm-lock.yaml
