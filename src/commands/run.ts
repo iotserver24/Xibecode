@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import { EnhancedAgent } from '../core/agent.js';
 import { CodingToolExecutor } from '../core/tools.js';
+import { PluginManager } from '../core/plugins.js';
 import { EnhancedUI } from '../ui/enhanced-tui.js';
 import { ConfigManager } from '../utils/config.js';
 import chalk from 'chalk';
@@ -12,6 +13,8 @@ interface RunOptions {
   apiKey?: string;
   maxIterations: string;
   verbose: boolean;
+  dryRun?: boolean;
+  changedOnly?: boolean;
 }
 
 export async function runCommand(prompt: string | undefined, options: RunOptions) {
@@ -57,11 +60,34 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   const parsedIterations = parseInt(options.maxIterations);
   const maxIterations = parsedIterations > 0 ? parsedIterations : 150;
 
+  // Get dry-run setting
+  const dryRun = options.dryRun ?? config.get('enableDryRunByDefault') ?? false;
+  const testCommandOverride = config.get('testCommandOverride');
+
+  // Load plugins
+  const pluginManager = new PluginManager();
+  const pluginPaths = config.get('plugins') || [];
+  if (pluginPaths.length > 0) {
+    try {
+      await pluginManager.loadPlugins(pluginPaths);
+      const loadedPlugins = pluginManager.getPlugins();
+      if (loadedPlugins.length > 0) {
+        ui.info(`Loaded ${loadedPlugins.length} plugin(s): ${loadedPlugins.map(p => p.name).join(', ')}`);
+      }
+    } catch (error: any) {
+      ui.warning(`Failed to load some plugins: ${error.message}`);
+    }
+  }
+
   // Show session info
-  ui.startSession(finalPrompt, { model, maxIterations });
+  ui.startSession(finalPrompt, { model, maxIterations, dryRun });
 
   // Initialize components
-  const toolExecutor = new CodingToolExecutor(process.cwd());
+  const toolExecutor = new CodingToolExecutor(process.cwd(), {
+    dryRun,
+    testCommandOverride,
+    pluginManager,
+  });
   const agent = new EnhancedAgent({
     apiKey,
     baseUrl,

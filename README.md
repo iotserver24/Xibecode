@@ -15,6 +15,13 @@ XibeCode is a professional CLI tool that brings autonomous AI coding capabilitie
 - ✅ **Loop Detection** - Prevents infinite loops and runaway executions
 - ✅ **Multiple Edit Methods** - Smart edit, line-range edit, insert, revert
 
+### 🆕 New Features (v2.0)
+- ✅ **Test Integration** - Auto-detect and run tests (Vitest, Jest, pytest, Go test)
+- ✅ **Git Awareness** - Check status, create checkpoints, revert changes safely
+- ✅ **Dry-Run Mode** - Preview changes without making them
+- ✅ **Safety Controls** - Risk assessment and command blocking for dangerous operations
+- ✅ **Plugin System** - Extend XibeCode with custom tools and workflows
+
 ### File Operations
 - 📖 Read files (whole or partial for large files)
 - 📝 Write files (create or overwrite)
@@ -93,6 +100,8 @@ xibecode run [prompt] [options]
 - `-k, --api-key <key>` - API key (overrides config)
 - `-d, --max-iterations <number>` - Maximum iterations (default: 50)
 - `-v, --verbose` - Show detailed logs
+- `--dry-run` - Preview changes without making them
+- `--changed-only` - Focus only on git-changed files
 
 **Examples:**
 
@@ -111,6 +120,15 @@ xibecode run "Optimize this code" --model claude-opus-4-5-20251101
 
 # Custom API endpoint
 xibecode run "task" --base-url https://custom-api.com
+
+# New in v2.0: Dry-run mode
+xibecode run "Refactor authentication" --dry-run
+
+# Focus on git-changed files only
+xibecode run "Fix linting errors" --changed-only
+
+# Run tests after making changes
+xibecode run "Add validation and run tests to verify"
 ```
 
 ### Chat Command (Interactive Mode)
@@ -312,6 +330,245 @@ If something fails, the AI will:
 3. Try a different approach
 4. Can revert changes if needed
 
+## 🧪 Test Integration
+
+XibeCode automatically detects and runs your project tests:
+
+```bash
+# Fix failing tests
+xibecode run "Fix the failing tests"
+
+# Run tests after changes
+xibecode run "Add validation to User model and ensure all tests pass"
+```
+
+**Supported test runners:**
+- Node.js: Vitest, Jest, Mocha, Ava
+- Python: pytest, unittest
+- Go: `go test`
+
+**Package manager detection:**
+- Prioritizes: pnpm → bun → npm
+- Detects from lock files (`pnpm-lock.yaml`, `bun.lockb`, `package-lock.json`)
+
+**Example workflow:**
+```bash
+xibecode run "Refactor the authentication module:
+1. Read the current code
+2. Make improvements
+3. Run tests to verify
+4. Fix any test failures
+5. Repeat until all tests pass"
+```
+
+## 🔀 Git Integration
+
+Work smarter with git-aware workflows:
+
+### Check Repository State
+
+```bash
+xibecode run "Show me the current git status"
+```
+
+The AI will use `get_git_status` to see:
+- Current branch
+- Staged/unstaged/untracked files
+- Clean/dirty state
+- Commits ahead/behind upstream
+
+### Focus on Changed Files
+
+```bash
+xibecode run "Fix linting errors in changed files" --changed-only
+```
+
+The AI will:
+- Get list of modified files with `get_git_changed_files`
+- Focus edits only on those files
+- More efficient for large codebases
+
+### Create Safe Checkpoints
+
+```bash
+xibecode run "Refactor the database layer (create checkpoint first)"
+```
+
+The AI can:
+- Create checkpoints with `create_git_checkpoint`
+- Use git stash or commit strategy (configurable)
+- Revert to checkpoints if something goes wrong
+
+**Example:**
+```javascript
+// The AI executes:
+create_git_checkpoint({
+  message: "before refactoring database layer",
+  strategy: "stash"  // or "commit"
+})
+
+// ... makes changes ...
+
+// If needed:
+revert_to_git_checkpoint({
+  checkpoint_id: "stash@{0}",
+  checkpoint_type: "stash",
+  confirm: true
+})
+```
+
+### Prepare Branches for Review
+
+```bash
+xibecode run "Prepare this branch for code review:
+- Run tests
+- Fix any linting errors
+- Generate a summary of changes"
+```
+
+## 🔒 Safety Features
+
+### Dry-Run Mode
+
+Preview changes without making them:
+
+```bash
+xibecode run "Refactor the auth module" --dry-run
+```
+
+In dry-run mode:
+- All file operations show what *would* happen
+- No actual changes are made
+- Git operations are simulated
+- Perfect for testing complex tasks
+
+**Example output:**
+```
+[DRY RUN] Would replace lines 15-20 with 8 new lines
+[DRY RUN] Would write 150 lines to src/auth/index.ts
+[DRY RUN] Would create stash checkpoint: "before auth refactor"
+```
+
+### Risk Assessment
+
+XibeCode automatically assesses risk for operations:
+
+**High-risk operations** (require extra care):
+- Deleting files/directories
+- Force push to git
+- Destructive shell commands
+- Reverting to checkpoints
+
+**Blocked operations:**
+- Fork bombs
+- Deleting root/home directories
+- Direct disk writes
+- Extremely dangerous commands
+
+**Example:**
+```bash
+$ xibecode run "Delete all test files"
+
+⚠ HIGH RISK: Deletes files/directories permanently
+  • Ensure backups exist before deletion
+  • Suggestion: Consider using `mv` to move files to a temporary location first
+```
+
+### Safer Alternatives
+
+XibeCode suggests safer alternatives for risky commands:
+
+- `rm -rf` → "Use `mv` to move files first"
+- `git push --force` → "Use `git push --force-with-lease`"
+- `npm install` → "Use `pnpm install` or `bun install`"
+
+## 🔌 Plugin System
+
+Extend XibeCode with custom tools and domain-specific logic:
+
+### Create a Plugin
+
+```javascript
+// my-plugin.js
+export default {
+  name: 'my-custom-plugin',
+  version: '1.0.0',
+  description: 'Adds custom tools for my workflow',
+
+  registerTools() {
+    return [
+      {
+        schema: {
+          name: 'deploy_to_staging',
+          description: 'Deploy the app to staging environment',
+          input_schema: {
+            type: 'object',
+            properties: {
+              branch: { type: 'string', description: 'Branch to deploy' }
+            },
+            required: ['branch']
+          }
+        },
+        async handler(input) {
+          // Your custom logic here
+          return { success: true, deployed: true, branch: input.branch };
+        }
+      }
+    ];
+  },
+
+  initialize() {
+    console.log('My plugin loaded!');
+  }
+};
+```
+
+### Load Plugins
+
+```bash
+# Via config
+xibecode config --show
+
+# Edit ~/.xibecode/config.json
+{
+  "plugins": [
+    "/path/to/my-plugin.js",
+    "./local-plugin.js"
+  ]
+}
+
+# Or use directly
+xibecode run "Deploy to staging" 
+```
+
+The AI will automatically have access to your custom tools!
+
+### Plugin Examples
+
+**Database migrations:**
+```javascript
+registerTools() {
+  return [{
+    schema: { name: 'run_migration', ... },
+    handler: async (input) => {
+      // Run database migration
+    }
+  }];
+}
+```
+
+**Internal APIs:**
+```javascript
+registerTools() {
+  return [{
+    schema: { name: 'query_internal_api', ... },
+    handler: async (input) => {
+      // Call internal company API
+    }
+  }];
+}
+```
+
 ## 📊 Usage Examples
 
 ### Build a Feature
@@ -360,11 +617,18 @@ XibeCode stores config in `~/.xibecode/`
 
 ```javascript
 {
-  "apiKey": "sk-ant-...",           // Your Anthropic API key
-  "baseUrl": "https://...",         // Custom API endpoint (optional)
-  "model": "claude-sonnet-4-5-...", // Default model
-  "maxIterations": 50,              // Default max iterations
-  "defaultVerbose": false           // Default verbose mode
+  "apiKey": "sk-ant-...",                 // Your Anthropic API key
+  "baseUrl": "https://...",               // Custom API endpoint (optional)
+  "model": "claude-sonnet-4-5-...",       // Default model
+  "maxIterations": 50,                    // Default max iterations
+  "defaultVerbose": false,                // Default verbose mode
+  
+  // New in v2.0
+  "preferredPackageManager": "pnpm",      // Package manager: "pnpm", "bun", or "npm"
+  "enableDryRunByDefault": false,         // Enable dry-run mode by default
+  "gitCheckpointStrategy": "stash",       // Git checkpoint: "stash" or "commit"
+  "testCommandOverride": "",              // Custom test command (optional)
+  "plugins": []                           // Array of plugin paths
 }
 ```
 

@@ -138,7 +138,7 @@ export class EnhancedUI {
   }
 
   // ─── Session info (run mode) ──────────────────────────
-  startSession(task: string, config: { model: string; maxIterations: number }) {
+  startSession(task: string, config: { model: string; maxIterations: number; dryRun?: boolean; gitStatus?: any }) {
     this.startTime = Date.now();
     console.log('  ' + T.dimBold('TASK'));
     const taskLines = this.wrapText(task, W - 6);
@@ -146,6 +146,15 @@ export class EnhancedUI {
     console.log('');
     console.log('  ' + T.dim('  model') + '       ' + T.text(config.model));
     console.log('  ' + T.dim('  iterations') + '  ' + T.text(isFinite(config.maxIterations) ? String(config.maxIterations) : 'unlimited'));
+    
+    if (config.dryRun) {
+      console.log('  ' + T.dim('  mode') + '        ' + T.info('DRY RUN (no changes will be made)'));
+    }
+    
+    if (config.gitStatus && config.gitStatus.isGitRepo) {
+      this.gitStatus(config.gitStatus);
+    }
+    
     console.log('');
     console.log('  ' + line());
     console.log('');
@@ -325,6 +334,124 @@ export class EnhancedUI {
 
   success(message: string) {
     console.log('  ' + T.success('  ✔ ') + T.text(message));
+  }
+
+  // ─── Safety & Risk ────────────────────────────────────
+  safetyWarning(level: 'low' | 'medium' | 'high', message: string, warnings: string[] = []) {
+    const icons = {
+      low: T.info('  ℹ '),
+      medium: T.warn('  ⚠ '),
+      high: T.error('  ⚠ '),
+    };
+    const labels = {
+      low: T.info('Low Risk'),
+      medium: T.warn('Medium Risk'),
+      high: T.error('HIGH RISK'),
+    };
+
+    console.log('');
+    console.log('  ' + icons[level] + labels[level] + ': ' + T.text(message));
+    
+    if (warnings.length > 0) {
+      warnings.forEach(w => {
+        console.log('       ' + T.dim('• ' + w));
+      });
+    }
+  }
+
+  dryRunIndicator(message: string) {
+    console.log('       ' + T.info('[DRY RUN]') + ' ' + T.dim(message));
+  }
+
+  // ─── Improved Diff Summary ────────────────────────────
+  diffSummary(files: Array<{ path: string; insertions: number; deletions: number }>) {
+    if (files.length === 0) return;
+
+    const totalInsertions = files.reduce((sum, f) => sum + f.insertions, 0);
+    const totalDeletions = files.reduce((sum, f) => sum + f.deletions, 0);
+
+    console.log('');
+    console.log('    ' + T.bold(`Changes: ${files.length} file(s)`));
+    console.log('       ' + T.success(`+${totalInsertions}`) + ' ' + T.error(`-${totalDeletions}`));
+    
+    if (this.verbose) {
+      files.slice(0, 10).forEach(f => {
+        const stats = T.success(`+${f.insertions}`) + ' ' + T.error(`-${f.deletions}`);
+        console.log('       ' + stats + ' ' + T.text(f.path));
+      });
+      
+      if (files.length > 10) {
+        console.log('       ' + T.dim(`... and ${files.length - 10} more files`));
+      }
+    }
+  }
+
+  // ─── Git Status ───────────────────────────────────────
+  gitStatus(status: {
+    branch?: string;
+    isClean?: boolean;
+    staged?: string[];
+    unstaged?: string[];
+    untracked?: string[];
+  }) {
+    const parts: string[] = [];
+    
+    if (status.branch) {
+      parts.push(T.info(`branch: ${status.branch}`));
+    }
+    
+    if (status.isClean) {
+      parts.push(T.success('clean'));
+    } else {
+      const counts = [];
+      if (status.staged && status.staged.length > 0) {
+        counts.push(T.success(`${status.staged.length} staged`));
+      }
+      if (status.unstaged && status.unstaged.length > 0) {
+        counts.push(T.warn(`${status.unstaged.length} unstaged`));
+      }
+      if (status.untracked && status.untracked.length > 0) {
+        counts.push(T.dim(`${status.untracked.length} untracked`));
+      }
+      if (counts.length > 0) {
+        parts.push(counts.join(', '));
+      }
+    }
+
+    if (parts.length > 0) {
+      console.log('    ' + T.dim('git: ') + parts.join(' | '));
+    }
+  }
+
+  // ─── Test Results ─────────────────────────────────────
+  testResults(results: {
+    success: boolean;
+    runner?: string;
+    testsRun?: number;
+    testsPassed?: number;
+    testsFailed?: number;
+    duration?: number;
+  }) {
+    const icon = results.success ? T.success('✔') : T.error('✘');
+    const status = results.success ? T.success('PASS') : T.error('FAIL');
+    
+    console.log('');
+    console.log('    ' + icon + ' ' + status);
+    
+    if (results.runner) {
+      console.log('       ' + T.dim(`runner: ${results.runner}`));
+    }
+    
+    if (results.testsRun !== undefined) {
+      const passed = results.testsPassed || 0;
+      const failed = results.testsFailed || 0;
+      console.log('       ' + T.success(`${passed} passed`) + ' ' + (failed > 0 ? T.error(`${failed} failed`) : ''));
+    }
+    
+    if (results.duration) {
+      const seconds = (results.duration / 1000).toFixed(2);
+      console.log('       ' + T.dim(`duration: ${seconds}s`));
+    }
   }
 
   // ─── Completion summary ───────────────────────────────

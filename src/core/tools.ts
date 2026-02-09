@@ -5,6 +5,10 @@ import { promisify } from 'util';
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
 import { ContextManager } from './context.js';
 import { FileEditor } from './editor.js';
+import { GitUtils } from '../utils/git.js';
+import { TestRunnerDetector } from '../utils/testRunner.js';
+import { SafetyChecker } from '../utils/safety.js';
+import { PluginManager } from './plugins.js';
 import * as os from 'os';
 
 const execAsync = promisify(exec);
@@ -18,13 +22,32 @@ export class CodingToolExecutor implements ToolExecutor {
   private workingDir: string;
   private contextManager: ContextManager;
   private fileEditor: FileEditor;
+  private gitUtils: GitUtils;
+  private testRunner: TestRunnerDetector;
+  private safetyChecker: SafetyChecker;
+  private pluginManager: PluginManager;
   private platform: string;
+  private dryRun: boolean;
+  private testCommandOverride?: string;
 
-  constructor(workingDir: string = process.cwd()) {
+  constructor(
+    workingDir: string = process.cwd(),
+    options?: { 
+      dryRun?: boolean; 
+      testCommandOverride?: string;
+      pluginManager?: PluginManager;
+    }
+  ) {
     this.workingDir = workingDir;
     this.contextManager = new ContextManager(workingDir);
     this.fileEditor = new FileEditor(workingDir);
+    this.gitUtils = new GitUtils(workingDir);
+    this.testRunner = new TestRunnerDetector(workingDir);
+    this.safetyChecker = new SafetyChecker();
+    this.pluginManager = options?.pluginManager || new PluginManager();
     this.platform = os.platform();
+    this.dryRun = options?.dryRun || false;
+    this.testCommandOverride = options?.testCommandOverride;
   }
 
   /**
@@ -41,6 +64,33 @@ export class CodingToolExecutor implements ToolExecutor {
 
   async execute(toolName: string, input: any): Promise<any> {
     const p = this.parseInput(input);
+
+    // Check if it's a plugin tool
+    if (this.pluginManager.isPluginTool(toolName)) {
+      return this.pluginManager.executePluginTool(toolName, p);
+    }
+
+    // Safety assessment for risky operations
+    const riskAssessment = this.safetyChecker.assessToolRisk(toolName, p);
+    
+    // Check for blocked commands in run_command
+    if (toolName === 'run_command' && p.command) {
+      const blockCheck = this.safetyChecker.isCommandBlocked(p.command);
+      if (blockCheck.blocked) {
+        return {
+          error: true,
+          success: false,
+          message: `Command blocked: ${blockCheck.reason}`,
+          blocked: true,
+        };
+      }
+
+      // Suggest safer alternative if available
+      const suggestion = this.safetyChecker.suggestSaferAlternative(p.command);
+      if (suggestion && riskAssessment.level === 'high') {
+        riskAssessment.warnings.push(`Suggestion: ${suggestion}`);
+      }
+    }
 
     switch (toolName) {
       case 'read_file': {
@@ -162,13 +212,54 @@ export class CodingToolExecutor implements ToolExecutor {
         return this.revertFile(p.path, p.backup_index);
       }
 
+      case 'run_tests': {
+        return this.runTests(p.command, p.cwd);
+      }
+
+      case 'get_test_status': {
+        return this.getTestStatus();
+      }
+
+      case 'get_git_status': {
+        return this.getGitStatus();
+      }
+
+      case 'get_git_diff_summary': {
+        return this.getGitDiffSummary(p.target);
+      }
+
+      case 'get_git_changed_files': {
+        return this.getGitChangedFiles(p.target);
+      }
+
+      case 'create_git_checkpoint': {
+        if (!p.message || typeof p.message !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: message (string)' };
+        }
+        return this.createGitCheckpoint(p.message, p.strategy);
+      }
+
+      case 'revert_to_git_checkpoint': {
+        if (!p.checkpoint_id || typeof p.checkpoint_id !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: checkpoint_id (string)' };
+        }
+        if (!p.confirm) {
+          return { error: true, success: false, message: 'Revert requires explicit confirmation. Set confirm: true' };
+        }
+        return this.revertToGitCheckpoint(p.checkpoint_id, p.checkpoint_type, p.confirm);
+      }
+
+      case 'git_show_diff': {
+        return this.gitShowDiff(p.file_path, p.target);
+      }
+
       default:
-        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file` };
+        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff` };
     }
   }
 
   getTools(): Tool[] {
-    return [
+    const coreTools: Tool[] = [
       {
         name: 'read_file',
         description: 'Read file contents. For large files, can read specific line ranges to avoid token limits. Always use this before editing files.',
@@ -434,7 +525,129 @@ export class CodingToolExecutor implements ToolExecutor {
           required: ['path'],
         },
       },
+      {
+        name: 'run_tests',
+        description: 'Run project tests. Automatically detects test runner (Vitest, Jest, Mocha, pytest, Go test, etc.) and package manager (pnpm > bun > npm). Use this to validate changes and fix failing tests.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            command: {
+              type: 'string',
+              description: 'Optional: Custom test command to run instead of auto-detected command',
+            },
+            cwd: {
+              type: 'string',
+              description: 'Optional: Working directory to run tests in',
+            },
+          },
+        },
+      },
+      {
+        name: 'get_test_status',
+        description: 'Get the status of the last test run, including pass/fail counts and failure details.',
+        input_schema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'get_git_status',
+        description: 'Get current git repository status including branch, staged/unstaged files, and clean/dirty state.',
+        input_schema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'get_git_diff_summary',
+        description: 'Get a summary of changes with line counts (insertions/deletions) per file.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            target: {
+              type: 'string',
+              description: 'Optional: Target to compare against (default: HEAD). Examples: "HEAD", "main", "origin/main"',
+            },
+          },
+        },
+      },
+      {
+        name: 'get_git_changed_files',
+        description: 'Get list of files that have been changed (staged + unstaged). Useful for focusing edits on relevant files.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            target: {
+              type: 'string',
+              description: 'Optional: Target to compare against. If not provided, returns currently changed files.',
+            },
+          },
+        },
+      },
+      {
+        name: 'create_git_checkpoint',
+        description: 'Create a safe restore point before making risky changes. Can use git stash or commit strategy.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            message: {
+              type: 'string',
+              description: 'Description of the checkpoint (e.g., "before refactoring auth module")',
+            },
+            strategy: {
+              type: 'string',
+              enum: ['stash', 'commit'],
+              description: 'Checkpoint strategy: "stash" (default) or "commit"',
+            },
+          },
+          required: ['message'],
+        },
+      },
+      {
+        name: 'revert_to_git_checkpoint',
+        description: 'Revert code to a previous checkpoint. REQUIRES explicit confirmation. Use list_checkpoints to see available checkpoints.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            checkpoint_id: {
+              type: 'string',
+              description: 'Checkpoint ID (e.g., "stash@{0}" or commit hash)',
+            },
+            checkpoint_type: {
+              type: 'string',
+              enum: ['stash', 'commit'],
+              description: 'Type of checkpoint',
+            },
+            confirm: {
+              type: 'boolean',
+              description: 'Must be set to true to confirm the revert operation',
+            },
+          },
+          required: ['checkpoint_id', 'checkpoint_type', 'confirm'],
+        },
+      },
+      {
+        name: 'git_show_diff',
+        description: 'Get unified diff output for a file or entire repository. Useful for reviewing changes.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            file_path: {
+              type: 'string',
+              description: 'Optional: Specific file to get diff for. If not provided, shows all changes.',
+            },
+            target: {
+              type: 'string',
+              description: 'Optional: Target to compare against (default: HEAD)',
+            },
+          },
+        },
+      },
     ];
+
+    // Merge plugin tools
+    const pluginTools = this.pluginManager.getPluginTools();
+    return [...coreTools, ...pluginTools];
   }
 
   private resolvePath(filePath: string): string {
@@ -490,6 +703,19 @@ export class CodingToolExecutor implements ToolExecutor {
 
   private async writeFile(filePath: string, content: string): Promise<any> {
     const fullPath = this.resolvePath(filePath);
+    
+    if (this.dryRun) {
+      const lines = content.split('\n').length;
+      return {
+        success: true,
+        dryRun: true,
+        path: filePath,
+        lines,
+        size: content.length,
+        message: `[DRY RUN] Would write ${lines} lines to ${filePath}`,
+      };
+    }
+
     try {
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
       await fs.writeFile(fullPath, content, 'utf-8');
@@ -506,16 +732,45 @@ export class CodingToolExecutor implements ToolExecutor {
   }
 
   private async editFile(filePath: string, search: string, replace: string, all?: boolean): Promise<any> {
+    if (this.dryRun) {
+      return {
+        success: true,
+        dryRun: true,
+        path: filePath,
+        message: `[DRY RUN] Would replace "${search.slice(0, 50)}..." with "${replace.slice(0, 50)}..."`,
+      };
+    }
+
     const result = await this.fileEditor.smartEdit(filePath, { search, replace, all });
     return result;
   }
 
   private async editLines(filePath: string, startLine: number, endLine: number, newContent: string): Promise<any> {
+    if (this.dryRun) {
+      const lines = newContent.split('\n').length;
+      return {
+        success: true,
+        dryRun: true,
+        path: filePath,
+        message: `[DRY RUN] Would replace lines ${startLine}-${endLine} with ${lines} new lines`,
+      };
+    }
+
     const result = await this.fileEditor.editLineRange(filePath, { startLine, endLine, newContent });
     return result;
   }
 
   private async insertAtLine(filePath: string, line: number, content: string): Promise<any> {
+    if (this.dryRun) {
+      const lines = content.split('\n').length;
+      return {
+        success: true,
+        dryRun: true,
+        path: filePath,
+        message: `[DRY RUN] Would insert ${lines} lines at line ${line}`,
+      };
+    }
+
     const result = await this.fileEditor.insertAtLine(filePath, line, content);
     return result;
   }
@@ -664,6 +919,27 @@ export class CodingToolExecutor implements ToolExecutor {
 
   private async deleteFile(filePath: string): Promise<any> {
     const fullPath = this.resolvePath(filePath);
+
+    if (this.dryRun) {
+      try {
+        const stats = await fs.stat(fullPath);
+        const type = stats.isDirectory() ? 'directory' : 'file';
+        return {
+          success: true,
+          dryRun: true,
+          path: filePath,
+          message: `[DRY RUN] Would delete ${type}: ${filePath}`,
+        };
+      } catch (error: any) {
+        return {
+          success: true,
+          dryRun: true,
+          path: filePath,
+          message: `[DRY RUN] Would attempt to delete ${filePath} (file not found)`,
+        };
+      }
+    }
+
     try {
       const stats = await fs.stat(fullPath);
       if (stats.isDirectory()) {
@@ -678,6 +954,16 @@ export class CodingToolExecutor implements ToolExecutor {
   }
 
   private async moveFile(source: string, destination: string): Promise<any> {
+    if (this.dryRun) {
+      return {
+        success: true,
+        dryRun: true,
+        source,
+        destination,
+        message: `[DRY RUN] Would move ${source} to ${destination}`,
+      };
+    }
+
     const sourcePath = this.resolvePath(source);
     const destPath = this.resolvePath(destination);
     try {
@@ -709,5 +995,253 @@ export class CodingToolExecutor implements ToolExecutor {
   private async revertFile(filePath: string, backupIndex: number = 0): Promise<any> {
     const result = await this.fileEditor.revertToBackup(filePath, backupIndex);
     return result;
+  }
+
+  // ── Test Runner Methods ──
+
+  private lastTestResult: any = null;
+
+  private async runTests(customCommand?: string, cwd?: string): Promise<any> {
+    try {
+      // Detect test runner and command
+      const testInfo = await this.testRunner.detectTestRunner(
+        customCommand || this.testCommandOverride
+      );
+
+      if (!testInfo.detected || !testInfo.command) {
+        return {
+          error: true,
+          success: false,
+          message: 'No test runner detected. Ensure package.json has a test script or specify a custom command.',
+        };
+      }
+
+      const workDir = cwd ? this.resolvePath(cwd) : this.workingDir;
+      const startTime = Date.now();
+
+      // Run the test command
+      const result = await this.runCommand(testInfo.command, cwd, undefined, 300);
+      const duration = Date.now() - startTime;
+
+      // Parse test output
+      const parsed = this.testRunner.parseTestOutput(
+        result.stdout + '\n' + result.stderr,
+        testInfo.runner
+      );
+
+      const failures = result.success
+        ? []
+        : this.testRunner.extractFailures(result.stdout + '\n' + result.stderr);
+
+      this.lastTestResult = {
+        success: result.success,
+        exitCode: result.exitCode,
+        output: result.stdout,
+        errors: result.stderr,
+        duration,
+        runner: testInfo.runner,
+        command: testInfo.command,
+        packageManager: testInfo.packageManager,
+        ...parsed,
+        failures,
+      };
+
+      return {
+        success: result.success,
+        runner: testInfo.runner,
+        command: testInfo.command,
+        packageManager: testInfo.packageManager,
+        duration,
+        testsRun: parsed.testsRun,
+        testsPassed: parsed.testsPassed,
+        testsFailed: parsed.testsFailed,
+        exitCode: result.exitCode,
+        output: result.stdout,
+        errors: result.stderr,
+        failures: failures.slice(0, 5), // Limit failures in response
+      };
+    } catch (error: any) {
+      return {
+        error: true,
+        success: false,
+        message: `Failed to run tests: ${error.message}`,
+      };
+    }
+  }
+
+  private async getTestStatus(): Promise<any> {
+    if (!this.lastTestResult) {
+      return {
+        error: true,
+        success: false,
+        message: 'No test results available. Run tests first using run_tests.',
+      };
+    }
+
+    return {
+      success: true,
+      lastRun: this.lastTestResult,
+    };
+  }
+
+  // ── Git Methods ──
+
+  private async getGitStatus(): Promise<any> {
+    try {
+      const status = await this.gitUtils.getStatus();
+      return {
+        success: true,
+        ...status,
+      };
+    } catch (error: any) {
+      return {
+        error: true,
+        success: false,
+        message: `Failed to get git status: ${error.message}`,
+      };
+    }
+  }
+
+  private async getGitDiffSummary(target?: string): Promise<any> {
+    try {
+      const summary = await this.gitUtils.getDiffSummary(target);
+      return {
+        success: true,
+        ...summary,
+      };
+    } catch (error: any) {
+      return {
+        error: true,
+        success: false,
+        message: `Failed to get diff summary: ${error.message}`,
+      };
+    }
+  }
+
+  private async getGitChangedFiles(target?: string): Promise<any> {
+    try {
+      const files = target
+        ? await this.gitUtils.getChangedFilesSince(target)
+        : await this.gitUtils.getChangedFiles();
+
+      return {
+        success: true,
+        files,
+        count: files.length,
+      };
+    } catch (error: any) {
+      return {
+        error: true,
+        success: false,
+        message: `Failed to get changed files: ${error.message}`,
+      };
+    }
+  }
+
+  private async createGitCheckpoint(
+    message: string,
+    strategy?: 'stash' | 'commit'
+  ): Promise<any> {
+    if (this.dryRun) {
+      return {
+        success: true,
+        dryRun: true,
+        message: `[DRY RUN] Would create ${strategy || 'stash'} checkpoint: "${message}"`,
+      };
+    }
+
+    try {
+      const result = await this.gitUtils.createCheckpoint(message, strategy);
+
+      if (!result.success) {
+        return {
+          error: true,
+          success: false,
+          message: result.error || 'Failed to create checkpoint',
+        };
+      }
+
+      return {
+        success: true,
+        checkpoint: result.checkpoint,
+        message: `Checkpoint created: ${result.checkpoint?.id}`,
+      };
+    } catch (error: any) {
+      return {
+        error: true,
+        success: false,
+        message: `Failed to create checkpoint: ${error.message}`,
+      };
+    }
+  }
+
+  private async revertToGitCheckpoint(
+    checkpointId: string,
+    checkpointType: 'stash' | 'commit',
+    confirm: boolean
+  ): Promise<any> {
+    if (this.dryRun) {
+      return {
+        success: true,
+        dryRun: true,
+        message: `[DRY RUN] Would revert to ${checkpointType} checkpoint: ${checkpointId}`,
+      };
+    }
+
+    if (!confirm) {
+      return {
+        error: true,
+        success: false,
+        message: 'Revert requires explicit confirmation. Set confirm: true',
+      };
+    }
+
+    try {
+      const checkpoint = {
+        type: checkpointType,
+        id: checkpointId,
+        message: '',
+        timestamp: new Date(),
+      };
+
+      const result = await this.gitUtils.revertToCheckpoint(checkpoint, confirm);
+
+      if (!result.success) {
+        return {
+          error: true,
+          success: false,
+          message: result.error || 'Failed to revert',
+        };
+      }
+
+      return {
+        success: true,
+        message: `Reverted to checkpoint: ${checkpointId}`,
+      };
+    } catch (error: any) {
+      return {
+        error: true,
+        success: false,
+        message: `Failed to revert: ${error.message}`,
+      };
+    }
+  }
+
+  private async gitShowDiff(filePath?: string, target?: string): Promise<any> {
+    try {
+      const diff = await this.gitUtils.getUnifiedDiff(filePath, target);
+      return {
+        success: true,
+        diff,
+        file: filePath,
+        target: target || 'HEAD',
+      };
+    } catch (error: any) {
+      return {
+        error: true,
+        success: false,
+        message: `Failed to get diff: ${error.message}`,
+      };
+    }
   }
 }

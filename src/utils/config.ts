@@ -8,6 +8,11 @@ export interface XibeCodeConfig {
   model?: string;
   maxIterations?: number;
   defaultVerbose?: boolean;
+  preferredPackageManager?: 'pnpm' | 'bun' | 'npm';
+  enableDryRunByDefault?: boolean;
+  gitCheckpointStrategy?: 'stash' | 'commit';
+  testCommandOverride?: string;
+  plugins?: string[];
 }
 
 export class ConfigManager {
@@ -24,6 +29,10 @@ export class ConfigManager {
         model: 'claude-sonnet-4-5-20250929',
         maxIterations: 50,
         defaultVerbose: false,
+        preferredPackageManager: 'pnpm',
+        enableDryRunByDefault: false,
+        gitCheckpointStrategy: 'stash',
+        plugins: [],
       },
     });
   }

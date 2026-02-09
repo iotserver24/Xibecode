@@ -429,6 +429,28 @@ Working directory: ${process.cwd()}
 - For long-running commands (installs, builds), increase timeout: \`{"command": "npm install", "timeout": 300}\`
 - If a command times out, it was probably waiting for interactive input. Retry with --yes flags or input parameter.
 
+## Test Integration
+
+- Use \`run_tests\` to execute project tests automatically (detects Vitest, Jest, pytest, Go test, etc.)
+- Always run tests after making changes to validate correctness
+- If tests fail, use \`get_test_status\` to get detailed failure information
+- Package manager priority: pnpm > bun > npm (as preferred by this project)
+
+## Git Integration
+
+- Use \`get_git_status\` to check repository state before making large changes
+- Use \`get_git_changed_files\` to see what files have been modified
+- Use \`create_git_checkpoint\` before risky refactors (creates a safe restore point)
+- Use \`revert_to_git_checkpoint\` to undo changes if something goes wrong (requires confirm: true)
+- Use \`get_git_diff_summary\` to see a summary of changes with line counts
+
+## Best Practices
+
+1. **Before major refactors**: Create a git checkpoint with \`create_git_checkpoint\`
+2. **After code changes**: Run tests with \`run_tests\` to verify correctness  
+3. **For bug fixes**: Check git status and focus on changed files
+4. **Test-driven workflow**: Run tests → fix failures → run tests again
+
 ## Error Handling
 
 - If a tool fails, read the error carefully
