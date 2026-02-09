@@ -14,7 +14,7 @@ const program = new Command();
 program
   .name('xibecode')
   .description('XibeCode - AI-powered autonomous coding assistant')
-  .version('2.0.0');
+  .version('0.0.2');
 
 // Main run command
 program
@@ -66,7 +66,7 @@ if (!process.argv.slice(2).length) {
   console.log('  ' + B('│') + '                                                              ' + B('│'));
   console.log('  ' + B('│') + '   ' + Cb('⚡ XibeCode') + '                                                ' + B('│'));
   console.log('  ' + B('│') + '   ' + D('AI-Powered Autonomous Coding Assistant') + '                      ' + B('│'));
-  console.log('  ' + B('│') + '   ' + M('v2.0.0') + '                                                      ' + B('│'));
+  console.log('  ' + B('│') + '   ' + M('v0.0.2 - With Test & Git Integration') + '                       ' + B('│'));
   console.log('  ' + B('│') + '                                                              ' + B('│'));
   console.log('  ' + B('╰──────────────────────────────────────────────────────────────╯'));
   console.log('');

@@ -4,6 +4,15 @@
 
 XibeCode is a professional CLI tool that brings autonomous AI coding capabilities to your terminal. Like Claude Code, but open-source, customizable, and with advanced context management.
 
+## 🆕 What's New in v0.0.2
+
+**Major Updates:**
+- 🧪 **Test Integration** - Auto-detect & run tests (Vitest, Jest, pytest, Go test)
+- 🔀 **Git Awareness** - Create checkpoints, check status, revert changes safely
+- 🛡️ **Safety Controls** - Dry-run mode, risk assessment, command blocking
+- 🔌 **Plugin System** - Extend XibeCode with custom tools
+- 📦 **Smart Package Manager** - Prefers pnpm → bun → npm
+
 ## 🎯 Key Features
 
 ### Core Capabilities
