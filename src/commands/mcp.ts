@@ -184,21 +184,59 @@ export async function mcpCommand(
       ui.success('Created default MCP servers file');
     }
 
-    // Open in default editor
-    const { exec } = await import('child_process');
-    const { promisify } = await import('util');
-    const execAsync = promisify(exec);
+    // Show file path clearly
+    console.log(chalk.bold.white('\n📝 MCP Servers Configuration File\n'));
+    console.log(chalk.cyan(`  File: ${filePath}\n`));
     
-    const editor = process.env.EDITOR || process.env.VISUAL || (process.platform === 'win32' ? 'notepad' : 'nano');
+    // Check if we're in an interactive terminal
+    const isInteractive = process.stdin.isTTY && process.stdout.isTTY;
     
-    try {
-      console.log(chalk.cyan(`Opening ${filePath} in ${editor}...\n`));
-      await execAsync(`${editor} "${filePath}"`);
-      ui.success('File saved. Run "xibecode mcp reload" to reload servers.');
-    } catch (error: any) {
-      ui.error(`Failed to open editor: ${error.message}`);
-      console.log(chalk.white(`\n  Edit the file manually: ${filePath}\n`));
-      process.exit(1);
+    if (!isInteractive) {
+      // Non-interactive terminal - just show the path
+      console.log(chalk.white('  Edit this file manually:\n'));
+      console.log(chalk.cyan(`    ${filePath}\n`));
+      console.log(chalk.gray('  After editing, run: xibecode mcp reload\n'));
+      return;
+    }
+    
+    // Try to open in editor
+    const editor = process.env.EDITOR || process.env.VISUAL;
+    
+    if (editor) {
+      console.log(chalk.gray(`  Opening in ${editor}...\n`));
+      
+      try {
+        const { spawn } = await import('child_process');
+        const editorProcess = spawn(editor, [filePath], {
+          stdio: 'inherit',
+          detached: false,
+        });
+        
+        editorProcess.on('error', (error: Error) => {
+          console.log(chalk.yellow(`\n⚠ Could not open ${editor}: ${error.message}\n`));
+          console.log(chalk.white('  Edit the file manually:\n'));
+          console.log(chalk.cyan(`    ${filePath}\n`));
+        });
+        
+        editorProcess.on('exit', (code) => {
+          if (code === 0 || code === null) {
+            console.log(chalk.green('\n✓ File saved. Run "xibecode mcp reload" to reload servers.\n'));
+          }
+        });
+      } catch (error: any) {
+        console.log(chalk.yellow(`\n⚠ Could not open editor: ${error.message}\n`));
+        console.log(chalk.white('  Edit the file manually:\n'));
+        console.log(chalk.cyan(`    ${filePath}\n`));
+      }
+    } else {
+      // No editor set, show instructions
+      console.log(chalk.white('  To edit this file:\n'));
+      console.log(chalk.cyan(`    1. Open: ${filePath}\n`));
+      console.log(chalk.gray('    2. Or set EDITOR environment variable:\n'));
+      console.log(chalk.cyan(`       export EDITOR=code  # VS Code`));
+      console.log(chalk.cyan(`       export EDITOR=nano   # Nano`));
+      console.log(chalk.cyan(`       export EDITOR=vim    # Vim\n`));
+      console.log(chalk.gray('    3. After editing, run: xibecode mcp reload\n'));
     }
 
   } else if (action === 'init') {
