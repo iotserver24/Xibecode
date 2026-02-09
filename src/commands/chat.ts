@@ -180,7 +180,7 @@ export async function chatCommand(options: ChatOptions) {
 
   // ── Chat loop ──
   while (true) {
-    const { message } = await inquirer.prompt([
+    let { message } = await inquirer.prompt([
       {
         type: 'input',
         name: 'message',
@@ -188,6 +188,55 @@ export async function chatCommand(options: ChatOptions) {
         prefix: '',
       },
     ]);
+
+    // Special interactive flow when user types just "@"
+    if (message.trim() === '@') {
+      try {
+        const dir = process.cwd();
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+
+        if (!entries.length) {
+          ui.info('No files or folders in current directory');
+          continue;
+        }
+
+        const choices = entries.slice(0, 100).map(entry => {
+          const isDir = entry.isDirectory();
+          const label =
+            (isDir ? '📁 ' : '📄 ') +
+            entry.name +
+            (isDir ? '/' : '');
+          return {
+            name: label,
+            value: entry.name + (isDir ? '/' : ''),
+          };
+        });
+
+        const { picked } = await inquirer.prompt([
+          {
+            type: 'list',
+            name: 'picked',
+            message: 'Select file or folder',
+            choices,
+          },
+        ]);
+
+        const followUp = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'message',
+            message: chalk.hex('#00E676').bold('❯ You '),
+            prefix: '',
+            default: '@' + picked,
+          },
+        ]);
+
+        message = followUp.message;
+      } catch (error: any) {
+        ui.error('Failed to list files for selection', error);
+        continue;
+      }
+    }
 
     if (!message.trim()) continue;
 
