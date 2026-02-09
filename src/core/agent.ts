@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { MessageParam, Tool, ToolUseBlock, TextBlock, ContentBlock } from '@anthropic-ai/sdk/resources/messages';
 import { EventEmitter } from 'events';
+import { AgentMode, MODE_CONFIG, ModeState, createModeState, transitionMode, ModeOrchestrator, parseModeRequest, stripModeRequests, ModeTransitionPolicy } from './modes';
 
 export interface AgentConfig {
   apiKey: string;
@@ -8,10 +9,11 @@ export interface AgentConfig {
   model: string;
   maxIterations?: number;
   verbose?: boolean;
+  mode?: AgentMode;
 }
 
 export interface AgentEvent {
-  type: 'thinking' | 'tool_call' | 'tool_result' | 'response' | 'error' | 'warning' | 'complete' | 'iteration' | 'stream_start' | 'stream_text' | 'stream_end';
+  type: 'thinking' | 'tool_call' | 'tool_result' | 'response' | 'error' | 'warning' | 'complete' | 'iteration' | 'stream_start' | 'stream_text' | 'stream_end' | 'mode_changed' | 'mode_change_requested';
   data: any;
 }
 
@@ -143,6 +145,8 @@ export class EnhancedAgent extends EventEmitter {
   private iterationCount = 0;
   private toolCallCount = 0;
   private filesChanged: Set<string> = new Set();
+  private modeState: ModeState;
+  private modeOrchestrator: ModeOrchestrator;
 
   constructor(config: AgentConfig) {
     super();
@@ -154,11 +158,20 @@ export class EnhancedAgent extends EventEmitter {
     
     this.client = new Anthropic(clientConfig);
     this.config = {
-      ...config,
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl ?? '',
+      model: config.model,
       maxIterations: config.maxIterations ?? 150,
       verbose: config.verbose ?? false,
-      baseUrl: config.baseUrl ?? '',
+      mode: config.mode ?? 'agent',
     };
+
+    // Initialize mode state and orchestrator
+    this.modeState = createModeState(this.config.mode);
+    this.modeOrchestrator = new ModeOrchestrator({
+      autoApprovalPolicy: 'always', // Allow AI to switch modes autonomously
+      allowAutoEscalation: true,
+    });
   }
 
   emit(event: AgentEvent['type'], data: any): boolean {
@@ -202,12 +215,57 @@ export class EnhancedAgent extends EventEmitter {
         const textBlocks = content.filter((block): block is TextBlock => block.type === 'text');
         const toolUseBlocks = content.filter((block): block is ToolUseBlock => block.type === 'tool_use');
 
+        // Check for mode change requests in text blocks
+        for (const block of textBlocks) {
+          const modeRequest = parseModeRequest(block.text);
+          if (modeRequest) {
+            this.modeState = this.modeOrchestrator.requestModeChange(
+              this.modeState,
+              modeRequest.mode,
+              modeRequest.reason,
+              'model'
+            );
+
+            // Evaluate the request
+            const evaluation = this.modeOrchestrator.evaluateModeChangeRequest(this.modeState);
+
+            if (evaluation.approved) {
+              // Auto-approved - switch immediately
+              const oldMode = this.modeState.current;
+              this.modeState = transitionMode(this.modeState, modeRequest.mode, modeRequest.reason);
+
+              // Update tool executor mode
+              if (toolExecutor.setMode) {
+                toolExecutor.setMode(modeRequest.mode);
+              }
+
+              this.emit('mode_changed', {
+                from: oldMode,
+                to: modeRequest.mode,
+                reason: modeRequest.reason,
+                auto: true,
+              });
+            } else {
+              // Requires confirmation
+              this.emit('mode_change_requested', {
+                from: this.modeState.current,
+                to: modeRequest.mode,
+                reason: modeRequest.reason,
+                requiresConfirmation: evaluation.requiresConfirmation,
+                message: evaluation.reason,
+              });
+            }
+          }
+        }
+
         // Show text responses (only if not already streamed)
         if (!streamed) {
           for (const block of textBlocks) {
             const cleanText = ThinkTagFilter.strip(block.text);
-            if (cleanText) {
-              this.emit('response', { text: cleanText });
+            // Remove mode request tags for display
+            const displayText = stripModeRequests(cleanText);
+            if (displayText) {
+              this.emit('response', { text: displayText });
             }
           }
         }
