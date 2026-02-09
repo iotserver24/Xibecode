@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import ora, { Ora } from 'ora';
 
 // ─── Version ────────────────────────────────────────────────────
-const VERSION = '0.0.1';
+const VERSION = '0.0.3';
 
 // ─── Theme (Gemini CLI / OpenCode inspired) ─────────────────────
 const T = {
@@ -192,9 +192,7 @@ export class EnhancedUI {
     this.stopSpinner();
     this.isStreaming = true;
     this.streamLineLen = 0;
-    console.log('');
     console.log('  ' + T.assistant('◆ XibeCode'));
-    console.log('');
   }
 
   streamText(text: string) {
@@ -215,7 +213,6 @@ export class EnhancedUI {
   endAssistantResponse() {
     if (this.isStreaming) {
       process.stdout.write('\n');
-      console.log('');
     }
     this.isStreaming = false;
     this.streamLineLen = 0;
@@ -224,14 +221,11 @@ export class EnhancedUI {
   // ─── Non-streaming response ───────────────────────────
   response(text: string) {
     this.stopSpinner();
-    console.log('');
     console.log('  ' + T.assistant('◆ XibeCode'));
-    console.log('');
     const lines = text.split('\n');
     lines.forEach(line => {
       console.log('    ' + T.text(line));
     });
-    console.log('');
   }
 
   // ─── Tool call ────────────────────────────────────────
@@ -244,7 +238,6 @@ export class EnhancedUI {
     const label = T.tool(toolName);
     const detail = summary ? ' ' + T.code(summary) : '';
 
-    console.log('');
     console.log('    ' + T.border('╭─') + ' ' + icon + '  ' + label + detail);
 
     if (this.verbose && input) {
@@ -290,7 +283,6 @@ export class EnhancedUI {
   // ─── Diff ─────────────────────────────────────────────
   showDiff(diff: string, file: string) {
     if (!this.verbose) return;
-    console.log('');
     console.log('    ' + T.bold(`changes: ${file}`));
     const lines = diff.split('\n').slice(0, 40);
     lines.forEach(line => {
@@ -316,12 +308,10 @@ export class EnhancedUI {
   // ─── Status messages ─────────────────────────────────
   error(message: string, error?: any) {
     this.stopSpinner();
-    console.log('');
     console.log('  ' + T.error('  ✘ ') + T.error.bold('Error: ') + T.text(message));
     if (error && this.verbose) {
       console.log('    ' + T.dim(error.stack || error.message || error));
     }
-    console.log('');
   }
 
   warning(message: string) {
@@ -349,7 +339,6 @@ export class EnhancedUI {
       high: T.error('HIGH RISK'),
     };
 
-    console.log('');
     console.log('  ' + icons[level] + labels[level] + ': ' + T.text(message));
     
     if (warnings.length > 0) {
@@ -370,7 +359,6 @@ export class EnhancedUI {
     const totalInsertions = files.reduce((sum, f) => sum + f.insertions, 0);
     const totalDeletions = files.reduce((sum, f) => sum + f.deletions, 0);
 
-    console.log('');
     console.log('    ' + T.bold(`Changes: ${files.length} file(s)`));
     console.log('       ' + T.success(`+${totalInsertions}`) + ' ' + T.error(`-${totalDeletions}`));
     
@@ -435,7 +423,6 @@ export class EnhancedUI {
     const icon = results.success ? T.success('✔') : T.error('✘');
     const status = results.success ? T.success('PASS') : T.error('FAIL');
     
-    console.log('');
     console.log('    ' + icon + ' ' + status);
     
     if (results.runner) {
@@ -464,7 +451,6 @@ export class EnhancedUI {
     this.stopSpinner();
     const elapsed = this.formatDuration(stats.duration);
 
-    console.log('');
     console.log('  ' + T.border('╭' + '─'.repeat(W) + '╮'));
     console.log('  ' + T.border('│') + pad('  ' + T.success.bold('✔ Task Complete'), W) + T.border('│'));
     console.log('  ' + T.border('│') + '                                                              ' + T.border('│'));
@@ -476,12 +462,10 @@ export class EnhancedUI {
     ) + T.border('│'));
     console.log('  ' + T.border('│') + '                                                              ' + T.border('│'));
     console.log('  ' + T.border('╰' + '─'.repeat(W) + '╯'));
-    console.log('');
   }
 
   failureSummary(errorMsg: string, stats: { iterations: number; duration: number }) {
     this.stopSpinner();
-    console.log('');
     console.log('  ' + T.border('╭' + '─'.repeat(W) + '╮'));
     console.log('  ' + T.border('│') + pad('  ' + T.error.bold('✘ Task Failed'), W) + T.border('│'));
     console.log('  ' + T.border('│') + pad('  ' + T.dim(errorMsg.slice(0, W - 4)), W) + T.border('│'));
@@ -490,7 +474,6 @@ export class EnhancedUI {
       T.dim('  ·  ') + T.text(this.formatDuration(stats.duration)), W
     ) + T.border('│'));
     console.log('  ' + T.border('╰' + '─'.repeat(W) + '╯'));
-    console.log('');
   }
 
   // ─── Utilities ────────────────────────────────────────
@@ -506,7 +489,6 @@ export class EnhancedUI {
 
   divider() {
     console.log('  ' + line());
-    console.log('');
   }
 
   clear() {
