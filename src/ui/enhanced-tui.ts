@@ -1,24 +1,47 @@
 import chalk from 'chalk';
 import ora, { Ora } from 'ora';
 
-// ─── Theme ──────────────────────────────────────────────────────
+// ─── Version ────────────────────────────────────────────────────
+const VERSION = '1.0.0';
+
+// ─── Theme (Gemini CLI / OpenCode inspired) ─────────────────────
 const T = {
-  primary:  chalk.cyan,
-  accent:   chalk.hex('#7C3AED'),   // purple accent
+  // Brand
+  brand:    chalk.hex('#00D4FF').bold, // bright cyan brand
+  brandDim: chalk.hex('#0099BB'),
+  // UI chrome
+  border:   chalk.hex('#3A3A4A'),      // subtle dark border
+  panel:    chalk.hex('#555577'),       // panel accents
+  // Content
   text:     chalk.white,
-  dim:      chalk.gray,
-  dimBold:  chalk.gray.bold,
-  success:  chalk.green,
-  error:    chalk.red,
-  warn:     chalk.yellow,
-  tool:     chalk.magenta,
-  user:     chalk.green.bold,
-  assistant: chalk.cyan.bold,
+  dim:      chalk.hex('#6B6B7B'),
+  dimBold:  chalk.hex('#8888AA').bold,
+  muted:    chalk.hex('#4A4A5A'),
+  // Semantic
+  success:  chalk.hex('#00E676'),       // vivid green
+  error:    chalk.hex('#FF5252'),       // vivid red
+  warn:     chalk.hex('#FFD740'),       // amber
+  info:     chalk.hex('#40C4FF'),       // light blue
+  // Roles
+  tool:     chalk.hex('#BB86FC'),       // purple (material)
+  toolDim:  chalk.hex('#7B5EA7'),
+  user:     chalk.hex('#00E676').bold,
+  assistant: chalk.hex('#00D4FF').bold,
+  // Emphasis
   bold:     chalk.bold.white,
-  border:   chalk.gray,
+  code:     chalk.hex('#CE93D8'),       // light purple for paths
 };
 
-const BOX_WIDTH = 58;
+const W = 62; // box width
+
+// ─── Helpers ────────────────────────────────────────────────────
+function pad(str: string, len: number): string {
+  const raw = str.replace(/\u001b\[[0-9;]*m/g, ''); // strip ANSI
+  return str + ' '.repeat(Math.max(0, len - raw.length));
+}
+
+function line(ch = '─') { return T.border(ch.repeat(W)); }
+function thinLine() { return T.muted('·'.repeat(W)); }
 
 // ─── UI Class ───────────────────────────────────────────────────
 export class EnhancedUI {
@@ -27,81 +50,132 @@ export class EnhancedUI {
   private startTime: number = 0;
   private isStreaming = false;
   private streamLineLen = 0;
+  private toolCount = 0;
 
   constructor(verbose: boolean = false) {
     this.verbose = verbose;
   }
 
-  // ─── Header ───────────────────────────────────────────
-  header(version: string = '1.0.0') {
+  // ─── Header (XibeCode hero) ───────────────────────────
+  header(_version: string = VERSION) {
+    const v = VERSION;
     console.log('');
-    const title = '  ✦  XibeCode';
-    const ver = `v${version}  `;
-    const pad = BOX_WIDTH - title.length - ver.length;
-    const subtitle = '     AI-Powered Coding Assistant';
-    const subPad = BOX_WIDTH - subtitle.length;
 
-    console.log(T.primary('  ╭' + '─'.repeat(BOX_WIDTH) + '╮'));
-    console.log(T.primary('  │') + T.bold(title) + ' '.repeat(Math.max(pad, 1)) + T.dim(ver) + T.primary('│'));
-    console.log(T.primary('  │') + T.dim(subtitle) + ' '.repeat(Math.max(subPad, 1)) + T.primary('│'));
-    console.log(T.primary('  ╰' + '─'.repeat(BOX_WIDTH) + '╯'));
+    // Gemini-style gradient logo (user-provided)
+    const logoLines = [
+      '██╗  ██╗██╗██████╗ ███████╗ ██████╗ ██████╗ ██████╗ ███████╗',
+      '╚██╗██╔╝██║██╔══██╗██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝',
+      ' ╚███╔╝ ██║██████╔╝█████╗  ██║     ██║   ██║██║  ██║█████╗  ',
+      ' ██╔██╗ ██║██╔══██╗██╔══╝  ██║     ██║   ██║██╔══██╗██╔══╝  ',
+      '██╔╝ ██╗██║██████╔╝███████╗╚██████╗╚██████╔╝██████╔╝███████╗',
+      '╚═╝  ╚═╝╚═╝╚═════╝ ╚══════╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝',
+    ];
+
+    function printGradient(lines: string[]) {
+      // Gemini colors: Blue (89, 149, 235) to Pink (224, 108, 117)
+      const start = { r: 89, g: 149, b: 235 };
+      const end = { r: 224, g: 108, b: 117 };
+
+      lines.forEach(line => {
+        let coloredLine = '';
+        const len = line.length;
+
+        for (let i = 0; i < len; i++) {
+          const ratio = i / len;
+          const r = Math.floor(start.r + (end.r - start.r) * ratio);
+          const g = Math.floor(start.g + (end.g - start.g) * ratio);
+          const b = Math.floor(start.b + (end.b - start.b) * ratio);
+
+          coloredLine += `\x1b[38;2;${r};${g};${b}m${line[i]}`;
+        }
+        console.log('  ' + coloredLine + '\x1b[0m');
+      });
+    }
+
+    printGradient(logoLines);
+
+    console.log('');
+    console.log('  ' + chalk.hex('#00D4FF').bold('XibeCode'));
+    console.log('  ' + T.dim('AI-powered autonomous coding assistant') + T.muted(`  ·  v${v}`));
     console.log('');
   }
 
   // ─── Model / endpoint info ────────────────────────────
   modelInfo(model: string, endpoint?: string) {
-    console.log(T.dim('  Model     ') + T.text(model));
-    if (endpoint) {
-      const host = endpoint.replace(/^https?:\/\//, '');
-      console.log(T.dim('  Endpoint  ') + T.text(host));
-    }
+    const host = endpoint ? endpoint.replace(/^https?:\/\//, '') : 'api.anthropic.com';
+    console.log('  ' + T.dim('  model') + '     ' + T.text(model));
+    console.log('  ' + T.dim('  endpoint') + '  ' + T.text(host));
+    console.log('  ' + T.dim('  version') + '   ' + T.muted(`v${VERSION}`));
     console.log('');
   }
 
-  // ─── Chat banner ─────────────────────────────────────
-  chatBanner() {
-    console.log(T.dim('  Commands: ') + T.text('exit') + T.dim(' · ') + T.text('clear') + T.dim(' · ') + T.text('tools on/off'));
+  // ─── Chat banner (tips + input bar + status) ─────────
+  chatBanner(cwd: string, model: string, endpoint?: string) {
+    console.log('  ' + T.bold('Tips for getting started:'));
+    console.log('  ' + T.text('1. Ask questions, edit files, or run commands.'));
+    console.log('  ' + T.text('2. Be specific for the best results.'));
+    console.log('  ' + T.text('3. Use ') + T.code('@path/to/file') + T.text(' to send files.'));
+    console.log('  ' + T.text('4. Type ') + T.code('/help') + T.text(' for more information.'));
     console.log('');
-    this.divider();
+
+    const label = '> Type your message or @path/to/file';
+    const boxWidth = Math.max(label.length + 2, 56);
+    const innerPad = boxWidth - label.length - 1;
+
+    console.log('  ' + T.border('┌' + '─'.repeat(boxWidth) + '┐'));
+    console.log('  ' + T.border('│') + ' ' + T.text(label) + ' '.repeat(innerPad) + T.border('│'));
+    console.log('  ' + T.border('└' + '─'.repeat(boxWidth) + '┘'));
+    console.log('');
+
+    const host = endpoint ? endpoint.replace(/^https?:\/\//, '') : 'no sandbox (see /docs)';
+    const left = T.muted(cwd || '~');
+    const mid = T.muted('no sandbox (see /docs)');
+    const right = T.muted(model);
+
+    console.log('  ' + left);
+    console.log('  ' + mid + '    ' + right);
+    console.log('');
   }
 
   // ─── Session info (run mode) ──────────────────────────
   startSession(task: string, config: { model: string; maxIterations: number }) {
     this.startTime = Date.now();
-    console.log(T.bold('  Task'));
-    const taskLines = this.wrapText(task, BOX_WIDTH - 4);
-    taskLines.forEach(l => console.log(T.text('  ' + l)));
+    console.log('  ' + T.dimBold('TASK'));
+    const taskLines = this.wrapText(task, W - 6);
+    taskLines.forEach(l => console.log('  ' + T.text('  ' + l)));
     console.log('');
-    console.log(T.dim('  Model        ') + T.text(config.model));
-    console.log(T.dim('  Iterations   ') + T.text(String(config.maxIterations)));
+    console.log('  ' + T.dim('  model') + '       ' + T.text(config.model));
+    console.log('  ' + T.dim('  iterations') + '  ' + T.text(isFinite(config.maxIterations) ? String(config.maxIterations) : 'unlimited'));
     console.log('');
-    this.divider();
+    console.log('  ' + line());
+    console.log('');
   }
 
   // ─── Iteration ────────────────────────────────────────
   iteration(current: number, total: number) {
     if (this.verbose) {
-      const pct = Math.floor((current / total) * 100);
       const elapsed = this.getElapsed();
+      const label = isFinite(total)
+        ? `step ${current}/${total}`
+        : `step ${current}`;
       console.log('');
-      console.log(T.dim(`  ── Iteration ${current}/${total} (${pct}%) · ${elapsed}`));
+      console.log('  ' + T.muted(`── ${label} · ${elapsed} ──`));
     }
   }
 
   // ─── Thinking spinner ────────────────────────────────
   thinking(message?: string) {
     if (this.spinner) this.spinner.stop();
-    // Big, obvious \"AI is working\" indicator using an animated spinner.
     this.spinner = ora({
-      text: T.dim(message || 'Thinking...'),
+      text: T.brandDim(message || 'Thinking...'),
       color: 'cyan',
-      spinner: 'dots',
-      prefixText: ' ',
+      spinner: 'dots12',
+      prefixText: '  ',
     }).start();
   }
 
   updateThinking(message: string) {
-    if (this.spinner) this.spinner.text = T.dim(message);
+    if (this.spinner) this.spinner.text = T.brandDim(message);
   }
 
   // ─── Streaming ────────────────────────────────────────
@@ -110,19 +184,18 @@ export class EnhancedUI {
     this.isStreaming = true;
     this.streamLineLen = 0;
     console.log('');
-    console.log('  ' + T.assistant('◆ Assistant'));
+    console.log('  ' + T.assistant('◆ XibeCode'));
+    console.log('');
   }
 
   streamText(text: string) {
-    // Indent first line if this is the beginning
     if (this.streamLineLen === 0) {
       process.stdout.write('    ');
     }
-
     const lines = text.split('\n');
     for (let i = 0; i < lines.length; i++) {
       if (i > 0) {
-        process.stdout.write('\n    '); // indent continuation lines
+        process.stdout.write('\n    ');
         this.streamLineLen = 0;
       }
       process.stdout.write(T.text(lines[i]));
@@ -143,8 +216,8 @@ export class EnhancedUI {
   response(text: string) {
     this.stopSpinner();
     console.log('');
-    console.log('  ' + T.assistant('◆ Assistant'));
-
+    console.log('  ' + T.assistant('◆ XibeCode'));
+    console.log('');
     const lines = text.split('\n');
     lines.forEach(line => {
       console.log('    ' + T.text(line));
@@ -155,35 +228,39 @@ export class EnhancedUI {
   // ─── Tool call ────────────────────────────────────────
   toolCall(toolName: string, input: any, _index?: number) {
     this.stopSpinner();
+    this.toolCount++;
 
     const icon = this.getToolIcon(toolName);
     const summary = this.summarizeInput(toolName, input);
-    const summaryStr = summary ? T.dim(' ' + summary) : '';
+    const label = T.tool(toolName);
+    const detail = summary ? ' ' + T.code(summary) : '';
 
-    console.log('    ' + T.dim('┌ ') + icon + ' ' + T.tool(toolName) + summaryStr);
+    console.log('');
+    console.log('    ' + T.border('╭─') + ' ' + icon + '  ' + label + detail);
 
     if (this.verbose && input) {
       const inputStr = JSON.stringify(input, null, 2);
       const lines = inputStr.split('\n').slice(0, 20);
       lines.forEach(line => {
-        console.log('    ' + T.dim('│ ') + T.dim(line));
+        console.log('    ' + T.border('│') + '  ' + T.dim(line));
       });
     }
   }
 
   // ─── Tool result ──────────────────────────────────────
   toolResult(toolName: string, result: any, success: boolean = true) {
-    const icon = success ? T.success('✓') : T.error('✗');
+    const icon = success ? T.success('✔') : T.error('✘');
     const summary = this.summarizeResult(toolName, result);
-    const summaryStr = summary ? ' ' + summary : '';
+    const summaryStr = summary ? '  ' + T.dim(summary) : '';
+    const elapsed = this.getElapsed();
 
-    console.log('    ' + T.dim('└ ') + icon + T.dim(summaryStr));
+    console.log('    ' + T.border('╰─') + ' ' + icon + summaryStr + T.muted('  ' + elapsed));
 
     if (!success && result) {
       const msg = typeof result === 'string' ? result : (result.message || JSON.stringify(result));
       const lines = msg.split('\n').slice(0, 5);
       lines.forEach((line: string) => {
-        console.log('      ' + T.error(line));
+        console.log('       ' + T.error(line));
       });
     }
 
@@ -193,10 +270,10 @@ export class EnhancedUI {
       const maxLines = 30;
       const display = lines.slice(0, maxLines);
       display.forEach(line => {
-        console.log('      ' + T.dim(line));
+        console.log('       ' + T.dim(line));
       });
       if (lines.length > maxLines) {
-        console.log('      ' + T.dim(`... ${lines.length - maxLines} more lines`));
+        console.log('       ' + T.dim(`... ${lines.length - maxLines} more lines`));
       }
     }
   }
@@ -205,7 +282,7 @@ export class EnhancedUI {
   showDiff(diff: string, file: string) {
     if (!this.verbose) return;
     console.log('');
-    console.log('    ' + T.bold(`Changes: ${file}`));
+    console.log('    ' + T.bold(`changes: ${file}`));
     const lines = diff.split('\n').slice(0, 40);
     lines.forEach(line => {
       if (line.startsWith('+') && !line.startsWith('+++')) {
@@ -213,7 +290,7 @@ export class EnhancedUI {
       } else if (line.startsWith('-') && !line.startsWith('---')) {
         console.log('    ' + T.error(line));
       } else if (line.startsWith('@@')) {
-        console.log('    ' + T.primary(line));
+        console.log('    ' + T.info(line));
       } else {
         console.log('    ' + T.dim(line));
       }
@@ -222,16 +299,16 @@ export class EnhancedUI {
 
   // ─── File change ──────────────────────────────────────
   fileChanged(action: 'created' | 'modified' | 'deleted', filePath: string, details?: string) {
-    const icons = { created: T.success('+'), modified: T.warn('~'), deleted: T.error('-') };
+    const icons = { created: T.success('+ new'), modified: T.warn('~ mod'), deleted: T.error('- del') };
     const colors = { created: T.success, modified: T.warn, deleted: T.error };
-    console.log('    ' + icons[action] + ' ' + colors[action](filePath) + (details ? T.dim(` (${details})`) : ''));
+    console.log('       ' + icons[action] + ' ' + colors[action](filePath) + (details ? T.dim(` (${details})`) : ''));
   }
 
   // ─── Status messages ─────────────────────────────────
   error(message: string, error?: any) {
     this.stopSpinner();
     console.log('');
-    console.log('  ' + T.error('✗ Error: ') + T.error(message));
+    console.log('  ' + T.error('  ✘ ') + T.error.bold('Error: ') + T.text(message));
     if (error && this.verbose) {
       console.log('    ' + T.dim(error.stack || error.message || error));
     }
@@ -239,15 +316,15 @@ export class EnhancedUI {
   }
 
   warning(message: string) {
-    console.log('  ' + T.warn('⚠ ') + T.warn(message));
+    console.log('  ' + T.warn('  ⚠ ') + T.text(message));
   }
 
   info(message: string) {
-    console.log('  ' + T.primary('ℹ ') + T.text(message));
+    console.log('  ' + T.info('  ℹ ') + T.text(message));
   }
 
   success(message: string) {
-    console.log('  ' + T.success('✓ ') + T.text(message));
+    console.log('  ' + T.success('  ✔ ') + T.text(message));
   }
 
   // ─── Completion summary ───────────────────────────────
@@ -258,40 +335,34 @@ export class EnhancedUI {
     toolCalls: number;
   }) {
     this.stopSpinner();
-
     const elapsed = this.formatDuration(stats.duration);
 
     console.log('');
-    console.log('  ' + T.dim('═'.repeat(BOX_WIDTH)));
-    console.log('');
-    console.log('  ' + T.success.bold('✓ Done'));
-    console.log('');
-    console.log(
-      '  ' + T.dim('Iterations ') + T.text(String(stats.iterations)) +
-      T.dim(' · Tools ') + T.text(String(stats.toolCalls)) +
-      T.dim(' · Files ') + T.text(String(stats.filesChanged)) +
-      T.dim(' · ') + T.text(elapsed)
-    );
-    console.log('');
-    console.log('  ' + T.dim('═'.repeat(BOX_WIDTH)));
+    console.log('  ' + T.border('╭' + '─'.repeat(W) + '╮'));
+    console.log('  ' + T.border('│') + pad('  ' + T.success.bold('✔ Task Complete'), W) + T.border('│'));
+    console.log('  ' + T.border('│') + '                                                              ' + T.border('│'));
+    console.log('  ' + T.border('│') + pad(
+      '  ' + T.dim('iterations ') + T.text(String(stats.iterations)) +
+      T.dim('  ·  tools ') + T.text(String(stats.toolCalls)) +
+      T.dim('  ·  files ') + T.text(String(stats.filesChanged)) +
+      T.dim('  ·  ') + T.text(elapsed), W
+    ) + T.border('│'));
+    console.log('  ' + T.border('│') + '                                                              ' + T.border('│'));
+    console.log('  ' + T.border('╰' + '─'.repeat(W) + '╯'));
     console.log('');
   }
 
   failureSummary(errorMsg: string, stats: { iterations: number; duration: number }) {
     this.stopSpinner();
-
     console.log('');
-    console.log('  ' + T.dim('═'.repeat(BOX_WIDTH)));
-    console.log('');
-    console.log('  ' + T.error.bold('✗ Failed'));
-    console.log('  ' + T.error(errorMsg));
-    console.log('');
-    console.log(
-      '  ' + T.dim('Iterations ') + T.text(String(stats.iterations)) +
-      T.dim(' · ') + T.text(this.formatDuration(stats.duration))
-    );
-    console.log('');
-    console.log('  ' + T.dim('═'.repeat(BOX_WIDTH)));
+    console.log('  ' + T.border('╭' + '─'.repeat(W) + '╮'));
+    console.log('  ' + T.border('│') + pad('  ' + T.error.bold('✘ Task Failed'), W) + T.border('│'));
+    console.log('  ' + T.border('│') + pad('  ' + T.dim(errorMsg.slice(0, W - 4)), W) + T.border('│'));
+    console.log('  ' + T.border('│') + pad(
+      '  ' + T.dim('iterations ') + T.text(String(stats.iterations)) +
+      T.dim('  ·  ') + T.text(this.formatDuration(stats.duration)), W
+    ) + T.border('│'));
+    console.log('  ' + T.border('╰' + '─'.repeat(W) + '╯'));
     console.log('');
   }
 
@@ -307,7 +378,7 @@ export class EnhancedUI {
   }
 
   divider() {
-    console.log('  ' + T.dim('─'.repeat(BOX_WIDTH)));
+    console.log('  ' + line());
     console.log('');
   }
 
@@ -318,19 +389,19 @@ export class EnhancedUI {
   // ─── Private helpers ──────────────────────────────────
   private getToolIcon(toolName: string): string {
     const icons: Record<string, string> = {
-      read_file: '📖',
+      read_file: '📄',
       read_multiple_files: '📚',
-      write_file: '📝',
-      edit_file: '✏️',
-      edit_lines: '✂️',
-      delete_file: '🗑️',
+      write_file: '✍️ ',
+      edit_file: '✏️ ',
+      edit_lines: '🔧',
+      delete_file: '🗑️ ',
       run_command: '⚡',
-      search_files: '🔍',
-      list_directory: '📁',
-      create_directory: '📂',
-      move_file: '↔️',
+      search_files: '🔎',
+      list_directory: '📂',
+      create_directory: '📁',
+      move_file: '📦',
       get_context: '🧠',
-      revert_file: '↩️',
+      revert_file: '↩️ ',
       insert_at_line: '➕',
     };
     return icons[toolName] || '🔧';
@@ -350,7 +421,7 @@ export class EnhancedUI {
       case 'edit_lines':
         return input.path || null;
       case 'run_command':
-        return input.command ? (input.command.length > 50 ? input.command.slice(0, 47) + '...' : input.command) : null;
+        return input.command ? (input.command.length > 45 ? input.command.slice(0, 42) + '...' : input.command) : null;
       case 'search_files':
         return input.pattern || null;
       case 'list_directory':
@@ -363,7 +434,7 @@ export class EnhancedUI {
   private summarizeResult(toolName: string, result: any): string | null {
     if (!result) return null;
     if (result.error || result.success === false) {
-      return result.message || 'Failed';
+      return result.message || 'failed';
     }
     switch (toolName) {
       case 'read_file':
@@ -371,17 +442,17 @@ export class EnhancedUI {
       case 'read_multiple_files':
         return result.files ? `${result.files.length} files read` : null;
       case 'write_file':
-        return result.lines ? `${result.lines} lines written` : 'Written';
+        return result.lines ? `${result.lines} lines written` : 'written';
       case 'edit_file':
-        return result.linesChanged ? `${result.linesChanged} lines changed` : 'Edited';
+        return result.linesChanged ? `${result.linesChanged} lines changed` : 'edited';
       case 'run_command':
-        return result.success ? 'OK' : 'Failed';
+        return result.success ? 'ok' : 'failed';
       case 'search_files':
         return `${result.count ?? 0} matches`;
       case 'list_directory':
         return `${result.count ?? 0} items`;
       default:
-        return 'OK';
+        return 'ok';
     }
   }
 

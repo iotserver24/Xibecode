@@ -54,7 +54,8 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   // Get model and base URL
   const model = options.model || config.getModel();
   const baseUrl = options.baseUrl || config.getBaseUrl();
-  const maxIterations = parseInt(options.maxIterations);
+  const parsedIterations = parseInt(options.maxIterations);
+  const maxIterations = parsedIterations > 0 ? parsedIterations : 150;
 
   // Show session info
   ui.startSession(finalPrompt, { model, maxIterations });

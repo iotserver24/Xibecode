@@ -431,4 +431,4 @@ Inspired by [Claude Code](https://www.anthropic.com/news/claude-code) and [Aider
 ---
 
 **Made with ❤️ for developers who love AI-assisted coding**
-# Xibecode
+# XibeCode

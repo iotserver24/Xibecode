@@ -155,7 +155,7 @@ export class EnhancedAgent extends EventEmitter {
     this.client = new Anthropic(clientConfig);
     this.config = {
       ...config,
-      maxIterations: config.maxIterations ?? 50,
+      maxIterations: config.maxIterations ?? 150,
       verbose: config.verbose ?? false,
       baseUrl: config.baseUrl ?? '',
     };
@@ -166,6 +166,11 @@ export class EnhancedAgent extends EventEmitter {
   }
 
   async run(initialPrompt: string, tools: Tool[], toolExecutor: any): Promise<void> {
+    // Reset per-turn state (keeps conversation history in this.messages)
+    this.iterationCount = 0;
+    this.toolCallCount = 0;
+    this.loopDetector.reset();
+
     this.messages.push({
       role: 'user',
       content: initialPrompt,
