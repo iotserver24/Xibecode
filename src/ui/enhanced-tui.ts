@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import ora, { Ora } from 'ora';
 
 // ─── Version ────────────────────────────────────────────────────
-const VERSION = '0.0.4';
+const VERSION = '0.0.5';
 
 // ─── Theme (Gemini CLI / OpenCode inspired) ─────────────────────
 const T = {

@@ -15,7 +15,7 @@ const program = new Command();
 program
   .name('xibecode')
   .description('XibeCode - AI-powered autonomous coding assistant')
-  .version('0.0.4');
+  .version('0.0.5');
 
 // Main run command
 program
@@ -62,12 +62,8 @@ const mcpCmd = program
 
 mcpCmd
   .command('add')
-  .description('Add an MCP server')
-  .argument('<name>', 'Server name')
-  .requiredOption('-c, --command <command>', 'Command to execute')
-  .option('-a, --args <args>', 'Command arguments (space-separated)')
-  .option('-e, --env <env>', 'Environment variables (key=value,key=value)')
-  .action((name, options) => mcpCommand('add', name, options));
+  .description('Open MCP servers configuration file to add servers')
+  .action(() => mcpCommand('add'));
 
 mcpCmd
   .command('list')
@@ -115,7 +111,7 @@ if (!process.argv.slice(2).length) {
   console.log('  ' + B('│') + '                                                              ' + B('│'));
   console.log('  ' + B('│') + '   ' + Cb('⚡ XibeCode') + '                                                ' + B('│'));
   console.log('  ' + B('│') + '   ' + D('AI-Powered Autonomous Coding Assistant') + '                      ' + B('│'));
-  console.log('  ' + B('│') + '   ' + M('v0.0.4 - Enhanced AI + MCP Integration') + '                    ' + B('│'));
+  console.log('  ' + B('│') + '   ' + M('v0.0.5 - File-Based MCP Config') + '                          ' + B('│'));
   console.log('  ' + B('│') + '                                                              ' + B('│'));
   console.log('  ' + B('╰──────────────────────────────────────────────────────────────╯'));
   console.log('');

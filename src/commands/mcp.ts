@@ -3,6 +3,65 @@ import { EnhancedUI } from '../ui/enhanced-tui.js';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
 
+/**
+ * Helper function to open a file in the default editor
+ */
+async function openFileInEditor(filePath: string, ui: EnhancedUI): Promise<void> {
+  console.log(chalk.bold.white('\n📝 MCP Servers Configuration File\n'));
+  console.log(chalk.cyan(`  File: ${filePath}\n`));
+  
+  // Check if we're in an interactive terminal
+  const isInteractive = process.stdin.isTTY && process.stdout.isTTY;
+  
+  if (!isInteractive) {
+    // Non-interactive terminal - just show the path
+    console.log(chalk.white('  Edit this file manually:\n'));
+    console.log(chalk.cyan(`    ${filePath}\n`));
+    console.log(chalk.gray('  After editing, run: xibecode mcp reload\n'));
+    return;
+  }
+  
+  // Try to open in editor
+  const editor = process.env.EDITOR || process.env.VISUAL;
+  
+  if (editor) {
+    console.log(chalk.gray(`  Opening in ${editor}...\n`));
+    
+    try {
+      const { spawn } = await import('child_process');
+      const editorProcess = spawn(editor, [filePath], {
+        stdio: 'inherit',
+        detached: false,
+      });
+      
+      editorProcess.on('error', (error: Error) => {
+        console.log(chalk.yellow(`\n⚠ Could not open ${editor}: ${error.message}\n`));
+        console.log(chalk.white('  Edit the file manually:\n'));
+        console.log(chalk.cyan(`    ${filePath}\n`));
+      });
+      
+      editorProcess.on('exit', (code) => {
+        if (code === 0 || code === null) {
+          console.log(chalk.green('\n✓ File saved. Run "xibecode mcp reload" to reload servers.\n'));
+        }
+      });
+    } catch (error: any) {
+      console.log(chalk.yellow(`\n⚠ Could not open editor: ${error.message}\n`));
+      console.log(chalk.white('  Edit the file manually:\n'));
+      console.log(chalk.cyan(`    ${filePath}\n`));
+    }
+  } else {
+    // No editor set, show instructions
+    console.log(chalk.white('  To edit this file:\n'));
+    console.log(chalk.cyan(`    1. Open: ${filePath}\n`));
+    console.log(chalk.gray('    2. Or set EDITOR environment variable:\n'));
+    console.log(chalk.cyan(`       export EDITOR=code  # VS Code`));
+    console.log(chalk.cyan(`       export EDITOR=nano   # Nano`));
+    console.log(chalk.cyan(`       export EDITOR=vim    # Vim\n`));
+    console.log(chalk.gray('    3. After editing, run: xibecode mcp reload\n'));
+  }
+}
+
 interface MCPAddOptions {
   command: string;
   args?: string;
@@ -15,97 +74,24 @@ interface MCPCommandOptions {
 
 export async function mcpCommand(
   action: 'add' | 'list' | 'remove' | 'file' | 'edit' | 'init' | 'reload',
-  nameOrOptions?: string | MCPCommandOptions,
-  options?: MCPAddOptions
+  nameOrOptions?: string
 ): Promise<void> {
   const ui = new EnhancedUI(false);
   const config = new ConfigManager();
 
   if (action === 'add') {
-    const serverName = nameOrOptions as string;
-    const addOptions = options as MCPAddOptions;
-
-    if (!serverName) {
-      ui.error('Server name is required');
-      console.log(chalk.white('\n  Usage: xibecode mcp add <name> --command <command> [--args <args>] [--env <env>]\n'));
-      process.exit(1);
+    // Same as edit - just open the file for editing
+    const fileManager = config.getMCPServersFileManager();
+    const filePath = fileManager.getFilePath();
+    
+    // Create file if it doesn't exist
+    if (!(await fileManager.fileExists())) {
+      await fileManager.createDefaultFile();
+      ui.success('Created default MCP servers file');
     }
 
-    if (!addOptions?.command) {
-      ui.error('--command flag is required');
-      console.log(chalk.white('\n  Usage: xibecode mcp add <name> --command <command> [--args <args>] [--env <env>]\n'));
-      process.exit(1);
-    }
-
-    // Check if server already exists
-    const existing = config.getMCPServer(serverName);
-    if (existing) {
-      ui.error(`MCP server "${serverName}" already exists`);
-      console.log(chalk.gray(`  Use "xibecode mcp remove ${serverName}" to remove it first\n`));
-      process.exit(1);
-    }
-
-    // Validate command exists (check if it's in PATH)
-    try {
-      // Try to resolve the command
-      const { exec } = await import('child_process');
-      const { promisify } = await import('util');
-      const execAsync = promisify(exec);
-      
-      // Check if command exists by trying to get its version or help
-      await execAsync(`which ${addOptions.command.split(' ')[0]}`, { timeout: 2000 });
-    } catch (error) {
-      ui.warning(`Command "${addOptions.command}" may not be in PATH`);
-      console.log(chalk.gray('  Make sure the command is installed and accessible\n'));
-    }
-
-    // Parse arguments
-    let args: string[] | undefined;
-    if (addOptions.args) {
-      // Handle both space-separated and quoted strings
-      args = addOptions.args.trim().split(/\s+/).filter(arg => arg.length > 0);
-    }
-
-    // Parse environment variables
-    let env: Record<string, string> | undefined;
-    if (addOptions.env) {
-      env = {};
-      const pairs = addOptions.env.split(',').map(pair => pair.trim());
-      for (const pair of pairs) {
-        const [key, ...valueParts] = pair.split('=');
-        if (key && valueParts.length > 0) {
-          env[key.trim()] = valueParts.join('=').trim();
-        }
-      }
-      if (Object.keys(env).length === 0) {
-        env = undefined;
-      }
-    }
-
-    // Create server configuration
-    const serverConfig: MCPServerConfig = {
-      name: serverName,
-      transport: 'stdio',
-      command: addOptions.command,
-      ...(args && args.length > 0 && { args }),
-      ...(env && Object.keys(env).length > 0 && { env }),
-    };
-
-    try {
-      config.addMCPServer(serverConfig);
-      ui.success(`MCP server "${serverName}" added successfully!`);
-      console.log(chalk.gray(`  Command: ${addOptions.command}`));
-      if (args && args.length > 0) {
-        console.log(chalk.gray(`  Args: ${args.join(' ')}`));
-      }
-      if (env && Object.keys(env).length > 0) {
-        console.log(chalk.gray(`  Env: ${Object.keys(env).join(', ')}`));
-      }
-      console.log('');
-    } catch (error: any) {
-      ui.error(`Failed to add MCP server: ${error.message}`);
-      process.exit(1);
-    }
+    // Open in editor
+    await openFileInEditor(filePath, ui);
 
   } else if (action === 'list') {
     const servers = await config.getMCPServers();
@@ -184,60 +170,8 @@ export async function mcpCommand(
       ui.success('Created default MCP servers file');
     }
 
-    // Show file path clearly
-    console.log(chalk.bold.white('\n📝 MCP Servers Configuration File\n'));
-    console.log(chalk.cyan(`  File: ${filePath}\n`));
-    
-    // Check if we're in an interactive terminal
-    const isInteractive = process.stdin.isTTY && process.stdout.isTTY;
-    
-    if (!isInteractive) {
-      // Non-interactive terminal - just show the path
-      console.log(chalk.white('  Edit this file manually:\n'));
-      console.log(chalk.cyan(`    ${filePath}\n`));
-      console.log(chalk.gray('  After editing, run: xibecode mcp reload\n'));
-      return;
-    }
-    
-    // Try to open in editor
-    const editor = process.env.EDITOR || process.env.VISUAL;
-    
-    if (editor) {
-      console.log(chalk.gray(`  Opening in ${editor}...\n`));
-      
-      try {
-        const { spawn } = await import('child_process');
-        const editorProcess = spawn(editor, [filePath], {
-          stdio: 'inherit',
-          detached: false,
-        });
-        
-        editorProcess.on('error', (error: Error) => {
-          console.log(chalk.yellow(`\n⚠ Could not open ${editor}: ${error.message}\n`));
-          console.log(chalk.white('  Edit the file manually:\n'));
-          console.log(chalk.cyan(`    ${filePath}\n`));
-        });
-        
-        editorProcess.on('exit', (code) => {
-          if (code === 0 || code === null) {
-            console.log(chalk.green('\n✓ File saved. Run "xibecode mcp reload" to reload servers.\n'));
-          }
-        });
-      } catch (error: any) {
-        console.log(chalk.yellow(`\n⚠ Could not open editor: ${error.message}\n`));
-        console.log(chalk.white('  Edit the file manually:\n'));
-        console.log(chalk.cyan(`    ${filePath}\n`));
-      }
-    } else {
-      // No editor set, show instructions
-      console.log(chalk.white('  To edit this file:\n'));
-      console.log(chalk.cyan(`    1. Open: ${filePath}\n`));
-      console.log(chalk.gray('    2. Or set EDITOR environment variable:\n'));
-      console.log(chalk.cyan(`       export EDITOR=code  # VS Code`));
-      console.log(chalk.cyan(`       export EDITOR=nano   # Nano`));
-      console.log(chalk.cyan(`       export EDITOR=vim    # Vim\n`));
-      console.log(chalk.gray('    3. After editing, run: xibecode mcp reload\n'));
-    }
+    // Open in editor
+    await openFileInEditor(filePath, ui);
 
   } else if (action === 'init') {
     const fileManager = config.getMCPServersFileManager();

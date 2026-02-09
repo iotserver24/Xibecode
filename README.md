@@ -721,22 +721,25 @@ xibecode mcp reload
 xibecode mcp file
 ```
 
-#### CLI Method
-
-Add servers via command line:
+#### Commands
 
 ```bash
-# Add a server (direct, no prompts)
-xibecode mcp add filesystem --command "mcp-server-filesystem" --args "--root /path/to/files"
-
-# Add with environment variables
-xibecode mcp add postgres --command "mcp-server-postgres" --args "--host localhost" --env "PGPASSWORD=secret,PGUSER=admin"
+# Open file to add/edit servers
+xibecode mcp add
+# or
+xibecode mcp edit
 
 # List all configured servers
 xibecode mcp list
 
-# Remove a server
+# Remove a server (or edit file manually)
 xibecode mcp remove filesystem
+
+# Show file path
+xibecode mcp file
+
+# Reload after editing
+xibecode mcp reload
 ```
 
 #### Alternative Methods
@@ -800,12 +803,22 @@ MCP tools are prefixed with the server name (e.g., `filesystem::read_file`, `rem
 # Install the GitHub MCP server
 npm install -g @modelcontextprotocol/server-github
 
-# Add to XibeCode (easy method - recommended)
-xibecode mcp add github --command "mcp-server-github" --args "--token YOUR_GITHUB_TOKEN"
+# Open the config file to add the server
+xibecode mcp add
+# Edit the file and add:
+# {
+#   "servers": [
+#     {
+#       "name": "github",
+#       "transport": "stdio",
+#       "command": "mcp-server-github",
+#       "args": ["--token", "YOUR_GITHUB_TOKEN"]
+#     }
+#   ]
+# }
 
-# Or use interactive method
-xibecode config --add-mcp-server github
-# Follow prompts: select "stdio", enter command and args
+# Reload servers
+xibecode mcp reload
 
 # Now XibeCode can use GitHub tools
 xibecode chat

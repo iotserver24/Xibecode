@@ -274,8 +274,12 @@ export class CodingToolExecutor implements ToolExecutor {
         return this.gitShowDiff(p.file_path, p.target);
       }
 
+      case 'get_mcp_status': {
+        return this.getMCPStatus();
+      }
+
       default:
-        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff` };
+        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status` };
     }
   }
 
@@ -662,6 +666,14 @@ export class CodingToolExecutor implements ToolExecutor {
               description: 'Optional: Target to compare against (default: HEAD)',
             },
           },
+        },
+      },
+      {
+        name: 'get_mcp_status',
+        description: 'Get status of MCP (Model Context Protocol) servers. Shows which servers are configured, connected, and what tools/resources/prompts are available. Use this to check what MCP capabilities you have access to.',
+        input_schema: {
+          type: 'object',
+          properties: {},
         },
       },
     ];
@@ -1275,6 +1287,66 @@ export class CodingToolExecutor implements ToolExecutor {
         error: true,
         success: false,
         message: `Failed to get diff: ${error.message}`,
+      };
+    }
+  }
+
+  private async getMCPStatus(): Promise<any> {
+    if (!this.mcpClientManager) {
+      return {
+        success: true,
+        configured: 0,
+        connected: 0,
+        servers: [],
+        tools: [],
+      };
+    }
+
+    try {
+      const connectedServers = this.mcpClientManager.getConnectedServers();
+      const allTools = this.mcpClientManager.getAvailableTools();
+      const allResources = this.mcpClientManager.getAvailableResources();
+      const allPrompts = this.mcpClientManager.getAvailablePrompts();
+
+      // Get configured servers from config
+      const { ConfigManager } = await import('../utils/config.js');
+      const config = new ConfigManager();
+      const configuredServers = await config.getMCPServers();
+
+      const servers = configuredServers.map(serverConfig => {
+        const isConnected = connectedServers.includes(serverConfig.name);
+        const serverTools = allTools.filter(t => t.serverName === serverConfig.name);
+        const serverResources = allResources.filter(r => r.serverName === serverConfig.name);
+        const serverPrompts = allPrompts.filter(p => p.serverName === serverConfig.name);
+
+        return {
+          name: serverConfig.name,
+          transport: serverConfig.transport,
+          command: serverConfig.command,
+          args: serverConfig.args || [],
+          connected: isConnected,
+          tools: serverTools.length,
+          resources: serverResources.length,
+          prompts: serverPrompts.length,
+          toolNames: serverTools.map(t => t.name),
+          error: isConnected ? null : 'Not connected (server executable may not be installed)',
+        };
+      });
+
+      return {
+        success: true,
+        configured: configuredServers.length,
+        connected: connectedServers.length,
+        servers,
+        totalTools: allTools.length,
+        totalResources: allResources.length,
+        totalPrompts: allPrompts.length,
+      };
+    } catch (error: any) {
+      return {
+        error: true,
+        success: false,
+        message: `Failed to get MCP status: ${error.message}`,
       };
     }
   }

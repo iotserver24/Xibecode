@@ -740,7 +740,7 @@ XibeCode can connect to external MCP servers to extend capabilities beyond built
 - External MCP servers may expose additional tools (e.g., database access, web scraping, specialized APIs)
 - MCP tools are discovered automatically and integrated with built-in tools
 - Use MCP tools when they provide capabilities not available in built-in tools
-- Tool names from MCP servers are prefixed with the server name for clarity
+- Tool names from MCP servers are prefixed with the server name (e.g., \`filesystem::read_file\`, \`github::create_issue\`)
 
 ### MCP Resources
 - Access external resources like files, databases, API data through MCP servers
@@ -752,10 +752,15 @@ XibeCode can connect to external MCP servers to extend capabilities beyond built
 - These prompts can guide you through complex multi-step operations
 - Leverage MCP prompts when available for standardized tasks
 
+### Checking MCP Status
+- Use \`get_mcp_status\` tool to see which MCP servers are configured and connected
+- This shows available tools, resources, and prompts from each server
+- Check MCP status when you need to know what external capabilities are available
+
 ### Configuration
-- MCP servers are configured via \`xibecode config\`
-- Check available MCP tools with built-in tool discovery
-- MCP connections are managed automatically
+- MCP servers are configured in \`~/.xibecode/mcp-servers.json\` file
+- Servers are automatically connected when XibeCode starts
+- If a server fails to connect, it may not be installed - check the error message
 
 ## Best Practices
 
