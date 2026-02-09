@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
 import { ContextManager } from './context.js';
@@ -121,7 +121,7 @@ export class CodingToolExecutor implements ToolExecutor {
         if (!p.command || typeof p.command !== 'string') {
           return { error: true, success: false, message: 'Missing required parameter: command (string)' };
         }
-        return this.runCommand(p.command, p.cwd);
+        return this.runCommand(p.command, p.cwd, p.input, p.timeout);
       }
 
       case 'create_directory': {
@@ -331,17 +331,25 @@ export class CodingToolExecutor implements ToolExecutor {
       },
       {
         name: 'run_command',
-        description: `Execute shell command. Platform: ${this.platform}. Use appropriate commands for this OS.`,
+        description: `Execute shell command. Platform: ${this.platform}. Commands have a timeout (default 120s). IMPORTANT: Always use non-interactive flags when available (e.g. --yes, --default, -y). For interactive prompts, use the "input" parameter to send stdin (newline-separated answers). Example: npx create-next-app@latest myapp --yes --typescript --tailwind --app --use-pnpm`,
         input_schema: {
           type: 'object',
           properties: {
             command: {
               type: 'string',
-              description: 'Command to execute',
+              description: 'Command to execute. Prefer non-interactive flags like --yes, -y, --default to avoid prompts.',
             },
             cwd: {
               type: 'string',
               description: 'Working directory (optional)',
+            },
+            input: {
+              type: 'string',
+              description: 'Stdin input to send to the command (for interactive prompts). Use \\n to separate multiple answers. Example: "yes\\n\\nmy-project\\n"',
+            },
+            timeout: {
+              type: 'number',
+              description: 'Timeout in seconds (default: 120). Increase for long-running commands like installs.',
             },
           },
           required: ['command'],
@@ -555,12 +563,67 @@ export class CodingToolExecutor implements ToolExecutor {
     }
   }
 
-  private async runCommand(command: string, cwd?: string): Promise<any> {
+  private async runCommand(command: string, cwd?: string, input?: string, timeout?: number): Promise<any> {
     const workDir = cwd ? this.resolvePath(cwd) : this.workingDir;
+    const timeoutMs = (timeout || 120) * 1000;
+    const shell = this.platform === 'win32' ? 'powershell.exe' : '/bin/sh';
+
+    // ── Use spawn when stdin input is provided ──
+    if (input) {
+      return new Promise((resolve) => {
+        const child = spawn(shell, this.platform === 'win32' ? ['-Command', command] : ['-c', command], {
+          cwd: workDir,
+          env: { ...process.env },
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+
+        let stdout = '';
+        let stderr = '';
+        let killed = false;
+
+        const timer = setTimeout(() => {
+          killed = true;
+          child.kill('SIGTERM');
+        }, timeoutMs);
+
+        child.stdout.on('data', (data: Buffer) => { stdout += data.toString(); });
+        child.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
+
+        // Pipe stdin input (supports \n for multiple answers)
+        const stdinData = input.replace(/\\n/g, '\n');
+        child.stdin.write(stdinData);
+        child.stdin.end();
+
+        child.on('close', (code: number | null) => {
+          clearTimeout(timer);
+          resolve({
+            stdout: stdout.trim(),
+            stderr: stderr.trim(),
+            success: !killed && code === 0,
+            exitCode: code,
+            timedOut: killed,
+            platform: this.platform,
+          });
+        });
+
+        child.on('error', (err: Error) => {
+          clearTimeout(timer);
+          resolve({
+            stdout: stdout.trim(),
+            stderr: err.message,
+            success: false,
+            platform: this.platform,
+          });
+        });
+      });
+    }
+
+    // ── Regular exec with timeout ──
     try {
       const { stdout, stderr } = await execAsync(command, {
         cwd: workDir,
         maxBuffer: 1024 * 1024 * 10,
+        timeout: timeoutMs,
         shell: this.platform === 'win32' ? 'powershell.exe' : undefined,
       });
       return {
@@ -570,6 +633,15 @@ export class CodingToolExecutor implements ToolExecutor {
         platform: this.platform,
       };
     } catch (error: any) {
+      if (error.killed) {
+        return {
+          stdout: error.stdout?.trim() || '',
+          stderr: 'Command timed out after ' + (timeout || 120) + 's. Try increasing the timeout parameter, or use non-interactive flags like --yes to avoid prompts.',
+          success: false,
+          timedOut: true,
+          platform: this.platform,
+        };
+      }
       return {
         stdout: error.stdout?.trim() || '',
         stderr: error.stderr?.trim() || error.message,

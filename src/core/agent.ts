@@ -410,6 +410,20 @@ Working directory: ${process.cwd()}
 - **For new files**: Use write_file
 - **Always verify**: Read the file after editing to confirm changes
 
+## Running Commands
+
+- Commands have a default timeout of 120 seconds.
+- **CRITICAL**: ALWAYS use non-interactive flags to avoid prompts that hang:
+  - npm/npx: use --yes or -y (e.g. \`npx create-next-app@latest myapp --yes --typescript --tailwind --app --use-pnpm\`)
+  - pip: use --yes or -y
+  - apt: use -y
+  - General: look for --default, --non-interactive, --batch, --quiet flags
+- If a command MUST be interactive, use the "input" parameter to pipe stdin answers.
+  Example: \`{"command": "npx some-cli", "input": "yes\\nmy-project\\n"}\`
+  Each \\n sends Enter. So "yes\\n\\n" sends "yes" + Enter + Enter.
+- For long-running commands (installs, builds), increase timeout: \`{"command": "npm install", "timeout": 300}\`
+- If a command times out, it was probably waiting for interactive input. Retry with --yes flags or input parameter.
+
 ## Error Handling
 
 - If a tool fails, read the error carefully
