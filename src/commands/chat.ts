@@ -22,21 +22,17 @@ export async function chatCommand(options: ChatOptions) {
   const apiKey = options.apiKey || config.getApiKey();
   if (!apiKey) {
     ui.error('No API key found!');
-    console.log(chalk.white('Set your API key:\n'));
-    console.log(chalk.cyan('  xibecode config --set-key YOUR_KEY\n'));
+    console.log(chalk.white('  Set your API key:\n'));
+    console.log(chalk.cyan('    xibecode config --set-key YOUR_KEY\n'));
     process.exit(1);
   }
 
   const model = options.model || config.getModel();
   const baseUrl = options.baseUrl || config.getBaseUrl();
 
-  console.log(chalk.white('💬 Interactive Chat Mode\n'));
-  console.log(chalk.gray('Commands:'));
-  console.log(chalk.gray('  exit, quit - Exit chat'));
-  console.log(chalk.gray('  clear - Clear screen'));
-  console.log(chalk.gray('  tools on/off - Enable/disable tool execution\n'));
-  ui.divider();
-  console.log('');
+  // Show model info
+  ui.modelInfo(model, baseUrl);
+  ui.chatBanner();
 
   let enableTools = true;
   const toolExecutor = new CodingToolExecutor(process.cwd());
@@ -47,7 +43,7 @@ export async function chatCommand(options: ChatOptions) {
       {
         type: 'input',
         name: 'message',
-        message: chalk.green('You:'),
+        message: chalk.green.bold('❯ You '),
         prefix: '',
       },
     ]);
@@ -57,14 +53,15 @@ export async function chatCommand(options: ChatOptions) {
     const lowerMessage = message.toLowerCase().trim();
     
     if (lowerMessage === 'exit' || lowerMessage === 'quit') {
-      console.log(chalk.cyan('\n👋 Goodbye!\n'));
+      console.log(chalk.cyan('\n  👋 Goodbye!\n'));
       break;
     }
 
     if (lowerMessage === 'clear') {
       ui.clear();
       ui.header('1.0.0');
-      console.log(chalk.white('💬 Interactive Chat Mode\n'));
+      ui.modelInfo(model, baseUrl);
+      ui.chatBanner();
       continue;
     }
 
@@ -85,19 +82,45 @@ export async function chatCommand(options: ChatOptions) {
       apiKey,
       baseUrl,
       model,
-      maxIterations: 10,
+      maxIterations: 15,
       verbose: false,
     });
 
     let hasResponse = false;
 
     // Set up event handlers
-    agent.on('event', (event) => {
+    agent.on('event', (event: any) => {
       switch (event.type) {
         case 'thinking':
-          ui.thinking(event.data.message);
+          if (!hasResponse) {
+            // Show a very visible, animated \"AI is working\" indicator.
+            ui.thinking(event.data.message || 'Analyzing your request...');
+          }
           break;
 
+        // ── Streaming ──
+        case 'stream_start':
+          ui.startAssistantResponse();
+          hasResponse = true;
+          break;
+
+        case 'stream_text':
+          ui.streamText(event.data.text);
+          break;
+
+        case 'stream_end':
+          ui.endAssistantResponse();
+          break;
+
+        // ── Non-streaming fallback ──
+        case 'response':
+          if (!hasResponse) {
+            ui.response(event.data.text);
+            hasResponse = true;
+          }
+          break;
+
+        // ── Tools ──
         case 'tool_call':
           if (enableTools) {
             ui.toolCall(event.data.name, event.data.input);
@@ -110,15 +133,17 @@ export async function chatCommand(options: ChatOptions) {
           }
           break;
 
-        case 'response':
-          ui.stopSpinner();
-          if (!hasResponse) {
-            console.log('\n' + chalk.cyan('Assistant:'));
-            console.log(chalk.white('  ' + event.data.text) + '\n');
-            hasResponse = true;
+        // ── Iteration ──
+        case 'iteration':
+          // Update spinner text so it feels alive while iterating
+          if (!hasResponse && event.data?.current && event.data?.total) {
+            ui.updateThinking(`Thinking... step ${event.data.current}/${event.data.total}`);
           }
+          // Reset response flag for each iteration so new text shows
+          hasResponse = false;
           break;
 
+        // ── Errors / Warnings ──
         case 'error':
           ui.error(event.data.message || event.data.error);
           break;
@@ -135,5 +160,7 @@ export async function chatCommand(options: ChatOptions) {
     } catch (error: any) {
       ui.error('Failed to process message', error);
     }
+
+    console.log(''); // spacing before next prompt
   }
 }

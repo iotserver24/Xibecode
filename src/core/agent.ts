@@ -11,14 +11,14 @@ export interface AgentConfig {
 }
 
 export interface AgentEvent {
-  type: 'thinking' | 'tool_call' | 'tool_result' | 'response' | 'error' | 'warning' | 'complete' | 'iteration';
+  type: 'thinking' | 'tool_call' | 'tool_result' | 'response' | 'error' | 'warning' | 'complete' | 'iteration' | 'stream_start' | 'stream_text' | 'stream_end';
   data: any;
 }
 
 export class LoopDetector {
   private history: Array<{ tool: string; input: string; timestamp: number }> = [];
   private readonly maxRepeats = 3;
-  private readonly timeWindow = 10000; // 10 seconds
+  private readonly timeWindow = 10000;
 
   check(toolName: string, toolInput: any): { allowed: boolean; reason?: string } {
     const signature = JSON.stringify({ tool: toolName, input: toolInput });
@@ -27,7 +27,6 @@ export class LoopDetector {
     this.history.push({ tool: toolName, input: signature, timestamp: now });
     this.history = this.history.filter(h => now - h.timestamp < this.timeWindow);
 
-    // Check for exact duplicates
     const recentDuplicates = this.history.filter(h => h.input === signature);
     if (recentDuplicates.length >= this.maxRepeats) {
       return {
@@ -36,7 +35,6 @@ export class LoopDetector {
       };
     }
 
-    // Check for same tool spam
     const sameTool = this.history.filter(h => h.tool === toolName);
     if (sameTool.length >= this.maxRepeats * 2) {
       return {
@@ -53,10 +51,94 @@ export class LoopDetector {
   }
 }
 
+// ─── Think-tag streaming filter ───────────────────────────────
+class ThinkTagFilter {
+  private insideThink = false;
+  private buffer = '';
+
+  reset() {
+    this.insideThink = false;
+    this.buffer = '';
+  }
+
+  /**
+   * Process a streaming text chunk. Returns the text that should be shown
+   * to the user (with <think>...</think> blocks removed in real-time).
+   */
+  push(chunk: string): string {
+    const combined = this.buffer + chunk;
+    this.buffer = '';
+    let output = '';
+    let i = 0;
+
+    while (i < combined.length) {
+      if (this.insideThink) {
+        const closeIdx = combined.indexOf('</think>', i);
+        if (closeIdx !== -1) {
+          this.insideThink = false;
+          i = closeIdx + 8;
+        } else {
+          // Still inside think block, consume everything
+          break;
+        }
+      } else {
+        const openIdx = combined.indexOf('<think>', i);
+        if (openIdx !== -1) {
+          output += combined.substring(i, openIdx);
+          this.insideThink = true;
+          i = openIdx + 7;
+        } else {
+          // Check for partial '<think' or '</think' at the end
+          const remaining = combined.substring(i);
+          const partialTag = this.findPartialTag(remaining);
+          if (partialTag > 0) {
+            output += remaining.substring(0, remaining.length - partialTag);
+            this.buffer = remaining.substring(remaining.length - partialTag);
+          } else {
+            output += remaining;
+          }
+          break;
+        }
+      }
+    }
+
+    return output;
+  }
+
+  /** Flush any remaining buffered text */
+  flush(): string {
+    const leftover = this.buffer;
+    this.buffer = '';
+    if (this.insideThink) return '';
+    return leftover;
+  }
+
+  /**
+   * Strip all think tags from a complete string (non-streaming).
+   */
+  static strip(text: string): string {
+    return text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+  }
+
+  private findPartialTag(text: string): number {
+    const tags = ['<think>', '</think>'];
+    for (const tag of tags) {
+      for (let len = tag.length - 1; len >= 1; len--) {
+        if (text.endsWith(tag.substring(0, len))) {
+          return len;
+        }
+      }
+    }
+    return 0;
+  }
+}
+
+// ─── Agent ────────────────────────────────────────────────────
 export class EnhancedAgent extends EventEmitter {
   private client: Anthropic;
   private messages: MessageParam[] = [];
   private loopDetector = new LoopDetector();
+  private thinkFilter = new ThinkTagFilter();
   private config: Required<AgentConfig>;
   private iterationCount = 0;
   private toolCallCount = 0;
@@ -99,16 +181,10 @@ export class EnhancedAgent extends EventEmitter {
         total: this.config.maxIterations,
       });
 
-      this.emit('thinking', { message: 'AI is analyzing...' });
+      this.emit('thinking', { message: 'AI is thinking...' });
 
       try {
-        const response = await this.client.messages.create({
-          model: this.config.model,
-          max_tokens: 8192,
-          messages: this.messages,
-          tools,
-          system: this.getSystemPrompt(),
-        });
+        const { message: response, streamed } = await this.callModel(tools);
 
         // Add assistant response
         this.messages.push({
@@ -117,13 +193,17 @@ export class EnhancedAgent extends EventEmitter {
         });
 
         // Process response
-        const textBlocks = response.content.filter((block): block is TextBlock => block.type === 'text');
-        const toolUseBlocks = response.content.filter((block): block is ToolUseBlock => block.type === 'tool_use');
+        const content: ContentBlock[] = response.content;
+        const textBlocks = content.filter((block): block is TextBlock => block.type === 'text');
+        const toolUseBlocks = content.filter((block): block is ToolUseBlock => block.type === 'tool_use');
 
-        // Show text responses
-        for (const block of textBlocks) {
-          if (block.text.trim()) {
-            this.emit('response', { text: block.text });
+        // Show text responses (only if not already streamed)
+        if (!streamed) {
+          for (const block of textBlocks) {
+            const cleanText = ThinkTagFilter.strip(block.text);
+            if (cleanText) {
+              this.emit('response', { text: cleanText });
+            }
           }
         }
 
@@ -227,6 +307,71 @@ export class EnhancedAgent extends EventEmitter {
     }
   }
 
+  /**
+   * Call the model with streaming (fallback to non-streaming).
+   */
+  private async callModel(tools: Tool[]): Promise<{ message: any; streamed: boolean }> {
+    const params: any = {
+      model: this.config.model,
+      max_tokens: 8192,
+      messages: this.messages,
+      system: this.getSystemPrompt(),
+    };
+
+    if (tools.length > 0) {
+      params.tools = tools;
+    }
+
+    // ── Try streaming first ──
+    try {
+      if (typeof this.client.messages.stream !== 'function') {
+        throw new Error('Streaming not available');
+      }
+
+      this.thinkFilter.reset();
+      let hasEmittedStart = false;
+
+      const stream = this.client.messages.stream(params);
+
+      stream.on('text', (chunk: string) => {
+        const filtered = this.thinkFilter.push(chunk);
+        if (filtered) {
+          if (!hasEmittedStart) {
+            this.emit('stream_start', {});
+            hasEmittedStart = true;
+          }
+          this.emit('stream_text', { text: filtered });
+        }
+      });
+
+      const message = await stream.finalMessage();
+
+      // Flush remaining buffered text
+      const remaining = this.thinkFilter.flush();
+      if (remaining) {
+        if (!hasEmittedStart) {
+          this.emit('stream_start', {});
+          hasEmittedStart = true;
+        }
+        this.emit('stream_text', { text: remaining });
+      }
+
+      if (hasEmittedStart) {
+        this.emit('stream_end', {});
+      }
+
+      return { message, streamed: hasEmittedStart };
+    } catch (_streamError) {
+      // ── Fallback to non-streaming ──
+      try {
+        const message = await this.client.messages.create(params);
+        return { message, streamed: false };
+      } catch (error: any) {
+        throw error;
+      }
+    }
+  }
+
   private getSystemPrompt(): string {
     const platform = process.platform;
     const platformNote = platform === 'win32'
@@ -239,6 +384,8 @@ export class EnhancedAgent extends EventEmitter {
 
 ${platformNote}
 
+Working directory: ${process.cwd()}
+
 ## Core Principles
 
 1. **Read Before Edit**: ALWAYS read files with read_file before modifying them
@@ -247,6 +394,15 @@ ${platformNote}
 4. **Incremental Changes**: Make small, tested changes rather than large rewrites
 5. **Error Recovery**: If something fails, analyze the error and try a different approach
 
+## Tool Usage
+
+- **IMPORTANT**: Always provide all required parameters as documented
+- For read_file: always include "path" as a string
+- For read_multiple_files: always include "paths" as an array of strings
+- For write_file: always include "path" and "content"
+- For edit_file: always include "path", "search", and "replace"
+- For run_command: always include "command" as a string
+
 ## File Editing Best Practices
 
 - **For small edits**: Use edit_file with unique search strings
@@ -254,27 +410,12 @@ ${platformNote}
 - **For new files**: Use write_file
 - **Always verify**: Read the file after editing to confirm changes
 
-## Tool Usage Strategy
-
-1. Start with get_context or search_files to understand the project
-2. Read relevant files to understand current state
-3. Make targeted edits using edit_file or edit_lines
-4. Test changes with run_command if applicable
-5. Verify success by reading modified files
-
 ## Error Handling
 
 - If a tool fails, read the error carefully
 - Don't repeat the exact same action - try alternatives
 - Use revert_file if you need to undo changes
 - Break down complex tasks into smaller steps
-
-## Context Management
-
-For large files:
-- Read in chunks using start_line/end_line parameters
-- Use edit_lines for precise modifications
-- Don't try to rewrite entire large files
 
 When you complete the task, provide a brief summary of what was accomplished.`;
   }

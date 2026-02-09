@@ -1,360 +1,325 @@
 import chalk from 'chalk';
 import ora, { Ora } from 'ora';
-import stripAnsi from 'strip-ansi';
 
-export interface ProgressState {
-  step: number;
-  totalSteps: number;
-  currentTask: string;
-  status: 'running' | 'success' | 'error' | 'warning';
-}
+// ─── Theme ──────────────────────────────────────────────────────
+const T = {
+  primary:  chalk.cyan,
+  accent:   chalk.hex('#7C3AED'),   // purple accent
+  text:     chalk.white,
+  dim:      chalk.gray,
+  dimBold:  chalk.gray.bold,
+  success:  chalk.green,
+  error:    chalk.red,
+  warn:     chalk.yellow,
+  tool:     chalk.magenta,
+  user:     chalk.green.bold,
+  assistant: chalk.cyan.bold,
+  bold:     chalk.bold.white,
+  border:   chalk.gray,
+};
 
+const BOX_WIDTH = 58;
+
+// ─── UI Class ───────────────────────────────────────────────────
 export class EnhancedUI {
   private spinner: Ora | null = null;
   private verbose: boolean;
-  private currentStep: number = 0;
-  private totalSteps: number = 0;
   private startTime: number = 0;
+  private isStreaming = false;
+  private streamLineLen = 0;
 
   constructor(verbose: boolean = false) {
     this.verbose = verbose;
   }
 
-  /**
-   * Show app header
-   */
+  // ─── Header ───────────────────────────────────────────
   header(version: string = '1.0.0') {
     console.log('');
-    console.log(chalk.cyan.bold('╔════════════════════════════════════════════════════════════╗'));
-    console.log(chalk.cyan.bold('║') + chalk.white.bold('                 XibeCode AI Agent                        ') + chalk.cyan.bold('║'));
-    console.log(chalk.cyan.bold('║') + chalk.gray(`              Autonomous Coding Assistant v${version.padEnd(10)}      `) + chalk.cyan.bold('║'));
-    console.log(chalk.cyan.bold('╚════════════════════════════════════════════════════════════╝'));
+    const title = '  ✦  XibeCode';
+    const ver = `v${version}  `;
+    const pad = BOX_WIDTH - title.length - ver.length;
+    const subtitle = '     AI-Powered Coding Assistant';
+    const subPad = BOX_WIDTH - subtitle.length;
+
+    console.log(T.primary('  ╭' + '─'.repeat(BOX_WIDTH) + '╮'));
+    console.log(T.primary('  │') + T.bold(title) + ' '.repeat(Math.max(pad, 1)) + T.dim(ver) + T.primary('│'));
+    console.log(T.primary('  │') + T.dim(subtitle) + ' '.repeat(Math.max(subPad, 1)) + T.primary('│'));
+    console.log(T.primary('  ╰' + '─'.repeat(BOX_WIDTH) + '╯'));
     console.log('');
   }
 
-  /**
-   * Start session with task info
-   */
-  startSession(task: string, config: { model: string; maxIterations: number }) {
-    this.startTime = Date.now();
-    console.log(chalk.bold.white('📋 Task:'));
-    console.log(chalk.white('  ' + task));
+  // ─── Model / endpoint info ────────────────────────────
+  modelInfo(model: string, endpoint?: string) {
+    console.log(T.dim('  Model     ') + T.text(model));
+    if (endpoint) {
+      const host = endpoint.replace(/^https?:\/\//, '');
+      console.log(T.dim('  Endpoint  ') + T.text(host));
+    }
     console.log('');
-    console.log(chalk.gray('⚙️  Configuration:'));
-    console.log(chalk.gray(`   Model: ${config.model}`));
-    console.log(chalk.gray(`   Max Iterations: ${config.maxIterations}`));
+  }
+
+  // ─── Chat banner ─────────────────────────────────────
+  chatBanner() {
+    console.log(T.dim('  Commands: ') + T.text('exit') + T.dim(' · ') + T.text('clear') + T.dim(' · ') + T.text('tools on/off'));
     console.log('');
     this.divider();
   }
 
-  /**
-   * Show iteration progress
-   */
-  iteration(current: number, total: number) {
-    this.currentStep = current;
-    this.totalSteps = total;
-    
-    const percentage = Math.floor((current / total) * 100);
-    const barLength = 30;
-    const filledLength = Math.floor((barLength * current) / total);
-    const emptyLength = barLength - filledLength;
-    
-    const bar = chalk.cyan('█'.repeat(filledLength)) + chalk.gray('░'.repeat(emptyLength));
-    const elapsed = this.getElapsed();
-    
+  // ─── Session info (run mode) ──────────────────────────
+  startSession(task: string, config: { model: string; maxIterations: number }) {
+    this.startTime = Date.now();
+    console.log(T.bold('  Task'));
+    const taskLines = this.wrapText(task, BOX_WIDTH - 4);
+    taskLines.forEach(l => console.log(T.text('  ' + l)));
     console.log('');
-    console.log(chalk.bold.white(`Iteration ${current}/${total}`) + chalk.gray(` (${percentage}%) - ${elapsed}`));
-    console.log(bar);
+    console.log(T.dim('  Model        ') + T.text(config.model));
+    console.log(T.dim('  Iterations   ') + T.text(String(config.maxIterations)));
+    console.log('');
+    this.divider();
   }
 
-  /**
-   * Show AI thinking with streaming text
-   */
-  thinking(message?: string) {
-    if (this.spinner) {
-      this.spinner.stop();
+  // ─── Iteration ────────────────────────────────────────
+  iteration(current: number, total: number) {
+    if (this.verbose) {
+      const pct = Math.floor((current / total) * 100);
+      const elapsed = this.getElapsed();
+      console.log('');
+      console.log(T.dim(`  ── Iteration ${current}/${total} (${pct}%) · ${elapsed}`));
     }
-    
-    const text = message || 'AI is thinking...';
+  }
+
+  // ─── Thinking spinner ────────────────────────────────
+  thinking(message?: string) {
+    if (this.spinner) this.spinner.stop();
+    // Big, obvious \"AI is working\" indicator using an animated spinner.
     this.spinner = ora({
-      text: chalk.cyan(text),
+      text: T.dim(message || 'Thinking...'),
       color: 'cyan',
       spinner: 'dots',
+      prefixText: ' ',
     }).start();
   }
 
-  /**
-   * Update thinking message (for streaming)
-   */
   updateThinking(message: string) {
-    if (this.spinner) {
-      this.spinner.text = chalk.cyan(message);
-    }
+    if (this.spinner) this.spinner.text = T.dim(message);
   }
 
-  /**
-   * Show tool execution
-   */
-  toolCall(toolName: string, input: any, index?: number) {
+  // ─── Streaming ────────────────────────────────────────
+  startAssistantResponse() {
     this.stopSpinner();
-    
-    const icon = this.getToolIcon(toolName);
-    const indexStr = index !== undefined ? chalk.gray(`[${index}] `) : '';
-    
+    this.isStreaming = true;
+    this.streamLineLen = 0;
     console.log('');
-    console.log(indexStr + icon + chalk.magenta.bold(` ${toolName}`));
-    
-    if (this.verbose) {
-      const inputStr = JSON.stringify(input, null, 2);
-      const lines = inputStr.split('\n');
-      console.log(chalk.gray('┌─ Input:'));
-      lines.forEach(line => {
-        console.log(chalk.gray('│ ') + chalk.gray(line));
-      });
-      console.log(chalk.gray('└─'));
-    } else {
-      // Show condensed input
-      const summary = this.summarizeInput(toolName, input);
-      if (summary) {
-        console.log(chalk.gray('  → ' + summary));
+    console.log('  ' + T.assistant('◆ Assistant'));
+  }
+
+  streamText(text: string) {
+    // Indent first line if this is the beginning
+    if (this.streamLineLen === 0) {
+      process.stdout.write('    ');
+    }
+
+    const lines = text.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      if (i > 0) {
+        process.stdout.write('\n    '); // indent continuation lines
+        this.streamLineLen = 0;
       }
+      process.stdout.write(T.text(lines[i]));
+      this.streamLineLen += lines[i].length;
     }
   }
 
-  /**
-   * Show tool result
-   */
-  toolResult(toolName: string, result: any, success: boolean = true) {
-    const icon = success ? chalk.green('✓') : chalk.red('✗');
-    const status = success ? chalk.green('Success') : chalk.red('Failed');
-    
-    console.log(icon + ' ' + status);
-    
-    if (this.verbose || !success) {
-      const resultStr = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-      const lines = resultStr.split('\n');
-      
-      // Limit output for large results
-      const maxLines = this.verbose ? 50 : 10;
-      const displayLines = lines.slice(0, maxLines);
-      const hasMore = lines.length > maxLines;
-      
-      console.log(chalk.gray('┌─ Result:'));
-      displayLines.forEach(line => {
-        console.log(chalk.gray('│ ') + (success ? chalk.white(line) : chalk.red(line)));
-      });
-      
-      if (hasMore) {
-        console.log(chalk.gray('│ ') + chalk.gray(`... (${lines.length - maxLines} more lines)`));
-      }
-      console.log(chalk.gray('└─'));
-    } else {
-      // Show condensed result
-      const summary = this.summarizeResult(toolName, result);
-      if (summary) {
-        console.log(chalk.gray('  ← ' + summary));
-      }
+  endAssistantResponse() {
+    if (this.isStreaming) {
+      process.stdout.write('\n');
+      console.log('');
     }
+    this.isStreaming = false;
+    this.streamLineLen = 0;
   }
 
-  /**
-   * Show AI response/message
-   */
-  response(text: string, isStreaming: boolean = false) {
+  // ─── Non-streaming response ───────────────────────────
+  response(text: string) {
     this.stopSpinner();
-    
-    if (!isStreaming) {
-      console.log('');
-      console.log(chalk.cyan('💬 ') + chalk.bold.white('Assistant:'));
-      console.log('');
-    }
-    
-    // Format the text nicely
+    console.log('');
+    console.log('  ' + T.assistant('◆ Assistant'));
+
     const lines = text.split('\n');
     lines.forEach(line => {
-      console.log(chalk.white('  ' + line));
+      console.log('    ' + T.text(line));
     });
-    
-    if (!isStreaming) {
-      console.log('');
+    console.log('');
+  }
+
+  // ─── Tool call ────────────────────────────────────────
+  toolCall(toolName: string, input: any, _index?: number) {
+    this.stopSpinner();
+
+    const icon = this.getToolIcon(toolName);
+    const summary = this.summarizeInput(toolName, input);
+    const summaryStr = summary ? T.dim(' ' + summary) : '';
+
+    console.log('    ' + T.dim('┌ ') + icon + ' ' + T.tool(toolName) + summaryStr);
+
+    if (this.verbose && input) {
+      const inputStr = JSON.stringify(input, null, 2);
+      const lines = inputStr.split('\n').slice(0, 20);
+      lines.forEach(line => {
+        console.log('    ' + T.dim('│ ') + T.dim(line));
+      });
     }
   }
 
-  /**
-   * Stream AI response character by character
-   */
-  streamResponse(chunk: string) {
-    process.stdout.write(chalk.white(chunk));
+  // ─── Tool result ──────────────────────────────────────
+  toolResult(toolName: string, result: any, success: boolean = true) {
+    const icon = success ? T.success('✓') : T.error('✗');
+    const summary = this.summarizeResult(toolName, result);
+    const summaryStr = summary ? ' ' + summary : '';
+
+    console.log('    ' + T.dim('└ ') + icon + T.dim(summaryStr));
+
+    if (!success && result) {
+      const msg = typeof result === 'string' ? result : (result.message || JSON.stringify(result));
+      const lines = msg.split('\n').slice(0, 5);
+      lines.forEach((line: string) => {
+        console.log('      ' + T.error(line));
+      });
+    }
+
+    if (this.verbose && success && result) {
+      const resultStr = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+      const lines = resultStr.split('\n');
+      const maxLines = 30;
+      const display = lines.slice(0, maxLines);
+      display.forEach(line => {
+        console.log('      ' + T.dim(line));
+      });
+      if (lines.length > maxLines) {
+        console.log('      ' + T.dim(`... ${lines.length - maxLines} more lines`));
+      }
+    }
   }
 
-  /**
-   * Show code diff
-   */
+  // ─── Diff ─────────────────────────────────────────────
   showDiff(diff: string, file: string) {
+    if (!this.verbose) return;
     console.log('');
-    console.log(chalk.bold.white(`📝 Changes to ${file}:`));
-    console.log('');
-    
-    const lines = diff.split('\n');
+    console.log('    ' + T.bold(`Changes: ${file}`));
+    const lines = diff.split('\n').slice(0, 40);
     lines.forEach(line => {
       if (line.startsWith('+') && !line.startsWith('+++')) {
-        console.log(chalk.green(line));
+        console.log('    ' + T.success(line));
       } else if (line.startsWith('-') && !line.startsWith('---')) {
-        console.log(chalk.red(line));
+        console.log('    ' + T.error(line));
       } else if (line.startsWith('@@')) {
-        console.log(chalk.cyan(line));
+        console.log('    ' + T.primary(line));
       } else {
-        console.log(chalk.gray(line));
+        console.log('    ' + T.dim(line));
       }
     });
-    console.log('');
   }
 
-  /**
-   * Show file created/modified
-   */
-  fileChanged(action: 'created' | 'modified' | 'deleted', path: string, details?: string) {
-    const icons = {
-      created: chalk.green('✚'),
-      modified: chalk.yellow('✎'),
-      deleted: chalk.red('✖'),
-    };
-    
-    const colors = {
-      created: chalk.green,
-      modified: chalk.yellow,
-      deleted: chalk.red,
-    };
-    
-    console.log(icons[action] + ' ' + colors[action](path) + (details ? chalk.gray(` (${details})`) : ''));
+  // ─── File change ──────────────────────────────────────
+  fileChanged(action: 'created' | 'modified' | 'deleted', filePath: string, details?: string) {
+    const icons = { created: T.success('+'), modified: T.warn('~'), deleted: T.error('-') };
+    const colors = { created: T.success, modified: T.warn, deleted: T.error };
+    console.log('    ' + icons[action] + ' ' + colors[action](filePath) + (details ? T.dim(` (${details})`) : ''));
   }
 
-  /**
-   * Show error
-   */
+  // ─── Status messages ─────────────────────────────────
   error(message: string, error?: any) {
-    this.stopSpinner(false);
+    this.stopSpinner();
     console.log('');
-    console.log(chalk.red.bold('✗ Error: ') + chalk.red(message));
-    
+    console.log('  ' + T.error('✗ Error: ') + T.error(message));
     if (error && this.verbose) {
-      console.log('');
-      console.log(chalk.gray(error.stack || error.message || error));
+      console.log('    ' + T.dim(error.stack || error.message || error));
     }
     console.log('');
   }
 
-  /**
-   * Show warning
-   */
   warning(message: string) {
-    console.log(chalk.yellow('⚠ Warning: ') + chalk.yellow(message));
+    console.log('  ' + T.warn('⚠ ') + T.warn(message));
   }
 
-  /**
-   * Show info
-   */
   info(message: string) {
-    console.log(chalk.blue('ℹ ') + chalk.white(message));
+    console.log('  ' + T.primary('ℹ ') + T.text(message));
   }
 
-  /**
-   * Show success
-   */
   success(message: string) {
-    console.log(chalk.green('✓ ') + chalk.white(message));
+    console.log('  ' + T.success('✓ ') + T.text(message));
   }
 
-  /**
-   * Show completion summary
-   */
+  // ─── Completion summary ───────────────────────────────
   completionSummary(stats: {
     iterations: number;
     duration: number;
     filesChanged: number;
     toolCalls: number;
   }) {
-    this.stopSpinner(true);
-    
-    console.log('');
-    this.divider('═');
-    console.log('');
-    console.log(chalk.bold.green('✓ Task Completed Successfully!'));
-    console.log('');
-    
+    this.stopSpinner();
+
     const elapsed = this.formatDuration(stats.duration);
-    const avgPerIteration = this.formatDuration(stats.duration / stats.iterations);
-    
-    console.log(chalk.white('📊 Summary:'));
+
     console.log('');
-    console.log(chalk.gray('  Iterations:      ') + chalk.white(stats.iterations));
-    console.log(chalk.gray('  Tool Calls:      ') + chalk.white(stats.toolCalls));
-    console.log(chalk.gray('  Files Changed:   ') + chalk.white(stats.filesChanged));
-    console.log(chalk.gray('  Total Time:      ') + chalk.white(elapsed));
-    console.log(chalk.gray('  Avg/Iteration:   ') + chalk.white(avgPerIteration));
+    console.log('  ' + T.dim('═'.repeat(BOX_WIDTH)));
     console.log('');
-    this.divider('═');
+    console.log('  ' + T.success.bold('✓ Done'));
+    console.log('');
+    console.log(
+      '  ' + T.dim('Iterations ') + T.text(String(stats.iterations)) +
+      T.dim(' · Tools ') + T.text(String(stats.toolCalls)) +
+      T.dim(' · Files ') + T.text(String(stats.filesChanged)) +
+      T.dim(' · ') + T.text(elapsed)
+    );
+    console.log('');
+    console.log('  ' + T.dim('═'.repeat(BOX_WIDTH)));
     console.log('');
   }
 
-  /**
-   * Show failure summary
-   */
-  failureSummary(error: string, stats: { iterations: number; duration: number }) {
-    this.stopSpinner(false);
-    
+  failureSummary(errorMsg: string, stats: { iterations: number; duration: number }) {
+    this.stopSpinner();
+
     console.log('');
-    this.divider('═');
+    console.log('  ' + T.dim('═'.repeat(BOX_WIDTH)));
     console.log('');
-    console.log(chalk.bold.red('✗ Task Failed'));
+    console.log('  ' + T.error.bold('✗ Failed'));
+    console.log('  ' + T.error(errorMsg));
     console.log('');
-    console.log(chalk.red('Error: ' + error));
+    console.log(
+      '  ' + T.dim('Iterations ') + T.text(String(stats.iterations)) +
+      T.dim(' · ') + T.text(this.formatDuration(stats.duration))
+    );
     console.log('');
-    console.log(chalk.gray('Iterations completed: ') + chalk.white(stats.iterations));
-    console.log(chalk.gray('Time elapsed: ') + chalk.white(this.formatDuration(stats.duration)));
-    console.log('');
-    this.divider('═');
+    console.log('  ' + T.dim('═'.repeat(BOX_WIDTH)));
     console.log('');
   }
 
-  /**
-   * Stop spinner
-   */
+  // ─── Utilities ────────────────────────────────────────
   stopSpinner(success?: boolean, text?: string) {
-    if (this.spinner) {
-      if (success !== undefined) {
-        if (success) {
-          this.spinner.succeed(text);
-        } else {
-          this.spinner.fail(text);
-        }
-      } else {
-        this.spinner.stop();
-      }
-      this.spinner = null;
+    if (!this.spinner) return;
+    if (success !== undefined) {
+      success ? this.spinner.succeed(text) : this.spinner.fail(text);
+    } else {
+      this.spinner.stop();
     }
+    this.spinner = null;
   }
 
-  /**
-   * Divider line
-   */
-  divider(char: string = '─') {
-    console.log(chalk.gray(char.repeat(60)));
+  divider() {
+    console.log('  ' + T.dim('─'.repeat(BOX_WIDTH)));
+    console.log('');
   }
 
-  /**
-   * Clear screen
-   */
   clear() {
     console.clear();
   }
 
-  /**
-   * Get tool icon
-   */
+  // ─── Private helpers ──────────────────────────────────
   private getToolIcon(toolName: string): string {
     const icons: Record<string, string> = {
       read_file: '📖',
+      read_multiple_files: '📚',
       write_file: '📝',
       edit_file: '✏️',
       edit_lines: '✂️',
@@ -366,76 +331,86 @@ export class EnhancedUI {
       move_file: '↔️',
       get_context: '🧠',
       revert_file: '↩️',
+      insert_at_line: '➕',
     };
-    
     return icons[toolName] || '🔧';
   }
 
-  /**
-   * Summarize tool input for compact display
-   */
   private summarizeInput(toolName: string, input: any): string | null {
+    if (!input) return null;
     switch (toolName) {
       case 'read_file':
-        return input.start_line 
-          ? `${input.path} (lines ${input.start_line}-${input.end_line})`
-          : input.path;
+        return input.start_line
+          ? `${input.path} (${input.start_line}-${input.end_line})`
+          : input.path || null;
+      case 'read_multiple_files':
+        return Array.isArray(input.paths) ? `${input.paths.length} files` : null;
       case 'write_file':
       case 'edit_file':
-        return `${input.path}`;
+      case 'edit_lines':
+        return input.path || null;
       case 'run_command':
-        return input.command;
+        return input.command ? (input.command.length > 50 ? input.command.slice(0, 47) + '...' : input.command) : null;
       case 'search_files':
-        return input.pattern;
+        return input.pattern || null;
+      case 'list_directory':
+        return input.path || '.';
       default:
         return null;
     }
   }
 
-  /**
-   * Summarize tool result for compact display
-   */
   private summarizeResult(toolName: string, result: any): string | null {
-    if (result.success === false) {
-      return chalk.red(result.message || 'Failed');
+    if (!result) return null;
+    if (result.error || result.success === false) {
+      return result.message || 'Failed';
     }
-    
     switch (toolName) {
       case 'read_file':
-        return `${result.lines} lines`;
+        return result.lines !== undefined ? `${result.lines} lines` : null;
+      case 'read_multiple_files':
+        return result.files ? `${result.files.length} files read` : null;
       case 'write_file':
-        return `${result.lines} lines written`;
+        return result.lines ? `${result.lines} lines written` : 'Written';
       case 'edit_file':
         return result.linesChanged ? `${result.linesChanged} lines changed` : 'Edited';
       case 'run_command':
-        return result.success ? 'Command executed' : chalk.red('Command failed');
+        return result.success ? 'OK' : 'Failed';
       case 'search_files':
-        return `${result.count} files found`;
+        return `${result.count ?? 0} matches`;
       case 'list_directory':
-        return `${result.count} items`;
+        return `${result.count ?? 0} items`;
       default:
-        return null;
+        return 'OK';
     }
   }
 
-  /**
-   * Format duration in human-readable format
-   */
   private formatDuration(ms: number): string {
-    const seconds = ms / 1000;
-    if (seconds < 60) {
-      return `${seconds.toFixed(2)}s`;
-    }
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}m ${remainingSeconds.toFixed(0)}s`;
+    const s = ms / 1000;
+    if (s < 60) return `${s.toFixed(1)}s`;
+    const m = Math.floor(s / 60);
+    const rs = s % 60;
+    return `${m}m ${rs.toFixed(0)}s`;
   }
 
-  /**
-   * Get elapsed time since session start
-   */
   private getElapsed(): string {
     if (!this.startTime) return '0s';
     return this.formatDuration(Date.now() - this.startTime);
+  }
+
+  private wrapText(text: string, width: number): string[] {
+    const words = text.split(' ');
+    const lines: string[] = [];
+    let current = '';
+    for (const word of words) {
+      if (current.length + word.length + 1 > width) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = current ? current + ' ' + word : word;
+      }
+    }
+    if (current) lines.push(current);
+    return lines;
   }
 }

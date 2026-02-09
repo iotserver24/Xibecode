@@ -27,52 +27,143 @@ export class CodingToolExecutor implements ToolExecutor {
     this.platform = os.platform();
   }
 
+  /**
+   * Safely parse tool input - handles string JSON, null, undefined
+   */
+  private parseInput(input: any): Record<string, any> {
+    if (!input) return {};
+    if (typeof input === 'string') {
+      try { return JSON.parse(input); } catch { return {}; }
+    }
+    if (typeof input === 'object') return input;
+    return {};
+  }
+
   async execute(toolName: string, input: any): Promise<any> {
+    const p = this.parseInput(input);
+
     switch (toolName) {
-      case 'read_file':
-        return this.readFile(input.path, input.start_line, input.end_line);
-      
-      case 'read_multiple_files':
-        return this.readMultipleFiles(input.paths);
-      
-      case 'write_file':
-        return this.writeFile(input.path, input.content);
-      
-      case 'edit_file':
-        return this.editFile(input.path, input.search, input.replace, input.all);
-      
-      case 'edit_lines':
-        return this.editLines(input.path, input.start_line, input.end_line, input.new_content);
-      
-      case 'insert_at_line':
-        return this.insertAtLine(input.path, input.line, input.content);
-      
+      case 'read_file': {
+        if (!p.path || typeof p.path !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: path (string). Example: {"path": "src/index.ts"}' };
+        }
+        return this.readFile(p.path, p.start_line, p.end_line);
+      }
+
+      case 'read_multiple_files': {
+        if (!Array.isArray(p.paths) || p.paths.length === 0) {
+          return { error: true, success: false, message: 'Missing required parameter: paths (non-empty array of strings). Example: {"paths": ["file1.ts", "file2.ts"]}' };
+        }
+        const validPaths = p.paths.filter((x: any) => typeof x === 'string');
+        if (validPaths.length === 0) {
+          return { error: true, success: false, message: 'paths array must contain strings. Example: {"paths": ["file1.ts", "file2.ts"]}' };
+        }
+        return this.readMultipleFiles(validPaths);
+      }
+
+      case 'write_file': {
+        if (!p.path || typeof p.path !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: path (string)' };
+        }
+        if (typeof p.content !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: content (string)' };
+        }
+        return this.writeFile(p.path, p.content);
+      }
+
+      case 'edit_file': {
+        if (!p.path || typeof p.path !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: path (string)' };
+        }
+        if (typeof p.search !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: search (string)' };
+        }
+        if (typeof p.replace !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: replace (string)' };
+        }
+        return this.editFile(p.path, p.search, p.replace, p.all);
+      }
+
+      case 'edit_lines': {
+        if (!p.path || typeof p.path !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: path (string)' };
+        }
+        if (typeof p.start_line !== 'number' || typeof p.end_line !== 'number') {
+          return { error: true, success: false, message: 'Missing required parameters: start_line, end_line (numbers)' };
+        }
+        if (typeof p.new_content !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: new_content (string)' };
+        }
+        return this.editLines(p.path, p.start_line, p.end_line, p.new_content);
+      }
+
+      case 'insert_at_line': {
+        if (!p.path || typeof p.path !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: path (string)' };
+        }
+        if (typeof p.line !== 'number') {
+          return { error: true, success: false, message: 'Missing required parameter: line (number)' };
+        }
+        return this.insertAtLine(p.path, p.line, p.content ?? '');
+      }
+
       case 'list_directory':
-        return this.listDirectory(input.path || '.');
-      
-      case 'search_files':
-        return this.searchFiles(input.pattern, input.path);
-      
-      case 'run_command':
-        return this.runCommand(input.command, input.cwd);
-      
-      case 'create_directory':
-        return this.createDirectory(input.path);
-      
-      case 'delete_file':
-        return this.deleteFile(input.path);
-      
-      case 'move_file':
-        return this.moveFile(input.source, input.destination);
-      
-      case 'get_context':
-        return this.getContext(input.files);
-      
-      case 'revert_file':
-        return this.revertFile(input.path, input.backup_index);
-      
+        return this.listDirectory(p.path || '.');
+
+      case 'search_files': {
+        if (!p.pattern || typeof p.pattern !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: pattern (string). Example: {"pattern": "**/*.ts"}' };
+        }
+        return this.searchFiles(p.pattern, p.path);
+      }
+
+      case 'run_command': {
+        if (!p.command || typeof p.command !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: command (string)' };
+        }
+        return this.runCommand(p.command, p.cwd);
+      }
+
+      case 'create_directory': {
+        if (!p.path || typeof p.path !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: path (string)' };
+        }
+        return this.createDirectory(p.path);
+      }
+
+      case 'delete_file': {
+        if (!p.path || typeof p.path !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: path (string)' };
+        }
+        return this.deleteFile(p.path);
+      }
+
+      case 'move_file': {
+        if (!p.source || typeof p.source !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: source (string)' };
+        }
+        if (!p.destination || typeof p.destination !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: destination (string)' };
+        }
+        return this.moveFile(p.source, p.destination);
+      }
+
+      case 'get_context': {
+        if (!Array.isArray(p.files)) {
+          return { error: true, success: false, message: 'Missing required parameter: files (array of strings)' };
+        }
+        return this.getContext(p.files.filter((f: any) => typeof f === 'string'));
+      }
+
+      case 'revert_file': {
+        if (!p.path || typeof p.path !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: path (string)' };
+        }
+        return this.revertFile(p.path, p.backup_index);
+      }
+
       default:
-        throw new Error(`Unknown tool: ${toolName}`);
+        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file` };
     }
   }
 
@@ -367,7 +458,7 @@ export class CodingToolExecutor implements ToolExecutor {
         size: content.length,
       };
     } catch (error: any) {
-      throw new Error(`Failed to read ${filePath}: ${error.message}`);
+      return { error: true, success: false, message: `Failed to read ${filePath}: ${error.message}` };
     }
   }
 
@@ -402,7 +493,7 @@ export class CodingToolExecutor implements ToolExecutor {
         size: content.length,
       };
     } catch (error: any) {
-      throw new Error(`Failed to write ${filePath}: ${error.message}`);
+      return { error: true, success: false, message: `Failed to write ${filePath}: ${error.message}` };
     }
   }
 
@@ -428,18 +519,26 @@ export class CodingToolExecutor implements ToolExecutor {
       const results = await Promise.all(
         entries.map(async (entry) => {
           const entryPath = path.join(fullPath, entry.name);
-          const stats = await fs.stat(entryPath);
-          return {
-            name: entry.name,
-            type: entry.isDirectory() ? 'directory' : 'file',
-            size: stats.size,
-            modified: stats.mtime,
-          };
+          try {
+            const stats = await fs.stat(entryPath);
+            return {
+              name: entry.name,
+              type: entry.isDirectory() ? 'directory' : 'file',
+              size: stats.size,
+              modified: stats.mtime,
+            };
+          } catch {
+            return {
+              name: entry.name,
+              type: entry.isDirectory() ? 'directory' : 'file',
+              size: 0,
+            };
+          }
         })
       );
       return { path: dirPath, entries: results, count: results.length };
     } catch (error: any) {
-      throw new Error(`Failed to list directory ${dirPath}: ${error.message}`);
+      return { error: true, success: false, message: `Failed to list directory ${dirPath}: ${error.message}` };
     }
   }
 
@@ -452,7 +551,7 @@ export class CodingToolExecutor implements ToolExecutor {
         count: files.length,
       };
     } catch (error: any) {
-      throw new Error(`Failed to search files: ${error.message}`);
+      return { error: true, success: false, message: `Failed to search files: ${error.message}` };
     }
   }
 
@@ -487,7 +586,7 @@ export class CodingToolExecutor implements ToolExecutor {
       await fs.mkdir(fullPath, { recursive: true });
       return { success: true, path: dirPath };
     } catch (error: any) {
-      throw new Error(`Failed to create directory ${dirPath}: ${error.message}`);
+      return { error: true, success: false, message: `Failed to create directory ${dirPath}: ${error.message}` };
     }
   }
 
@@ -502,7 +601,7 @@ export class CodingToolExecutor implements ToolExecutor {
       }
       return { success: true, path: filePath };
     } catch (error: any) {
-      throw new Error(`Failed to delete ${filePath}: ${error.message}`);
+      return { error: true, success: false, message: `Failed to delete ${filePath}: ${error.message}` };
     }
   }
 
@@ -513,22 +612,26 @@ export class CodingToolExecutor implements ToolExecutor {
       await fs.rename(sourcePath, destPath);
       return { success: true, source, destination };
     } catch (error: any) {
-      throw new Error(`Failed to move ${source}: ${error.message}`);
+      return { error: true, success: false, message: `Failed to move ${source}: ${error.message}` };
     }
   }
 
   private async getContext(files: string[]): Promise<any> {
-    const context = await this.contextManager.buildContext(files);
-    return {
-      files: context.files.map(f => ({
-        path: f.path,
-        lines: f.lines,
-        language: f.language,
-        size: f.size,
-      })),
-      totalFiles: context.files.length,
-      estimatedTokens: context.totalTokens,
-    };
+    try {
+      const context = await this.contextManager.buildContext(files);
+      return {
+        files: context.files.map(f => ({
+          path: f.path,
+          lines: f.lines,
+          language: f.language,
+          size: f.size,
+        })),
+        totalFiles: context.files.length,
+        estimatedTokens: context.totalTokens,
+      };
+    } catch (error: any) {
+      return { error: true, success: false, message: `Failed to get context: ${error.message}` };
+    }
   }
 
   private async revertFile(filePath: string, backupIndex: number = 0): Promise<any> {

@@ -7,6 +7,7 @@ yarn.lock
 dist/
 *.tsbuildinfo
 build/
+*.tgz
 
 # Environment
 .env
