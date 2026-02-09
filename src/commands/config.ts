@@ -1,4 +1,4 @@
-import { ConfigManager } from '../utils/config.js';
+import { ConfigManager, MCPServerConfig } from '../utils/config.js';
 import { EnhancedUI } from '../ui/enhanced-tui.js';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
@@ -9,6 +9,9 @@ interface ConfigOptions {
   setModel?: string;
   show?: boolean;
   reset?: boolean;
+  listMcpServers?: boolean;
+  addMcpServer?: string;
+  removeMcpServer?: string;
 }
 
 export async function configCommand(options: ConfigOptions) {
@@ -35,6 +38,74 @@ export async function configCommand(options: ConfigOptions) {
   if (options.setModel) {
     config.set('model', options.setModel);
     ui.success(`Default model set to: ${options.setModel}`);
+    return;
+  }
+
+  if (options.listMcpServers) {
+    const servers = await config.getMCPServers();
+    if (servers.length === 0) {
+      console.log(chalk.yellow('No MCP servers configured'));
+      return;
+    }
+
+    console.log(chalk.bold.white('\n📡 Configured MCP Servers\n'));
+    servers.forEach(server => {
+      console.log(chalk.cyan(`  ${server.name}`));
+      console.log(chalk.gray(`    Transport: ${server.transport}`));
+      console.log(chalk.gray(`    Command: ${server.command}`));
+      if (server.args) console.log(chalk.gray(`    Args: ${server.args.join(' ')}`));
+      console.log('');
+    });
+    return;
+  }
+
+  if (options.addMcpServer) {
+    const name = options.addMcpServer;
+    
+    const { command, args } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'command',
+        message: 'Command to execute:',
+        validate: (input) => input ? true : 'Command cannot be empty',
+      },
+      {
+        type: 'input',
+        name: 'args',
+        message: 'Arguments (space-separated, or leave empty):',
+      },
+    ]);
+    
+    const serverConfig: MCPServerConfig = {
+      name,
+      transport: 'stdio',
+      command,
+    };
+    
+    if (args.trim()) {
+      serverConfig.args = args.trim().split(/\s+/);
+    }
+
+    try {
+      config.addMCPServer(serverConfig);
+      ui.success(`MCP server "${name}" added successfully!`);
+    } catch (error: any) {
+      ui.error(`Failed to add MCP server: ${error.message}`);
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (options.removeMcpServer) {
+    const name = options.removeMcpServer;
+    const removed = config.removeMCPServer(name);
+    
+    if (removed) {
+      ui.success(`MCP server "${name}" removed successfully!`);
+    } else {
+      ui.error(`MCP server "${name}" not found`);
+      process.exit(1);
+    }
     return;
   }
 
@@ -97,6 +168,7 @@ export async function configCommand(options: ConfigOptions) {
         { name: '🔑 Set API Key', value: 'set_key' },
         { name: '🌐 Set Base URL (for custom endpoints)', value: 'set_url' },
         { name: '🤖 Set Default Model', value: 'set_model' },
+        { name: '📡 Manage MCP Servers', value: 'mcp_servers' },
         { name: '👀 View Current Config', value: 'view' },
         { name: '🗑️  Clear API Key', value: 'clear_key' },
         { name: '↩️  Reset All Settings', value: 'reset' },
@@ -173,6 +245,113 @@ export async function configCommand(options: ConfigOptions) {
       } else {
         config.set('model', model);
         ui.success(`Default model set to: ${model}`);
+      }
+      break;
+
+    case 'mcp_servers':
+      const { mcpAction } = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'mcpAction',
+          message: 'MCP Server Management:',
+          choices: [
+            { name: '➕ Add MCP Server', value: 'add' },
+            { name: '📋 List MCP Servers', value: 'list' },
+            { name: '🗑️  Remove MCP Server', value: 'remove' },
+            { name: '↩️  Back', value: 'back' },
+          ],
+        },
+      ]);
+
+      if (mcpAction === 'add') {
+        const { name } = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'name',
+            message: 'Server name:',
+            validate: (input) => {
+              if (!input) return 'Name cannot be empty';
+              const existing = config.getMCPServer(input);
+              if (existing) return 'Server with this name already exists';
+              return true;
+            },
+          },
+        ]);
+
+        const { command, args } = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'command',
+            message: 'Command to execute:',
+            validate: (input) => input ? true : 'Command cannot be empty',
+          },
+          {
+            type: 'input',
+            name: 'args',
+            message: 'Arguments (space-separated, or leave empty):',
+          },
+        ]);
+        
+        const serverConfig: MCPServerConfig = {
+          name,
+          transport: 'stdio',
+          command,
+        };
+        
+        if (args.trim()) {
+          serverConfig.args = args.trim().split(/\s+/);
+        }
+
+        try {
+          config.addMCPServer(serverConfig);
+          ui.success(`MCP server "${name}" added successfully!`);
+        } catch (error: any) {
+          ui.error(`Failed to add MCP server: ${error.message}`);
+        }
+
+      } else if (mcpAction === 'list') {
+        const servers = await config.getMCPServers();
+        if (servers.length === 0) {
+          console.log(chalk.yellow('No MCP servers configured\n'));
+        } else {
+          console.log(chalk.bold.white('\n📡 Configured MCP Servers\n'));
+          servers.forEach(server => {
+            console.log(chalk.cyan(`  ${server.name}`));
+            console.log(chalk.gray(`    Transport: ${server.transport}`));
+            console.log(chalk.gray(`    Command: ${server.command}`));
+            if (server.args) console.log(chalk.gray(`    Args: ${server.args.join(' ')}`));
+            console.log('');
+          });
+        }
+
+      } else if (mcpAction === 'remove') {
+        const servers = await config.getMCPServers();
+        if (servers.length === 0) {
+          console.log(chalk.yellow('No MCP servers configured\n'));
+        } else {
+          const { serverName } = await inquirer.prompt([
+            {
+              type: 'list',
+              name: 'serverName',
+              message: 'Select server to remove:',
+              choices: servers.map(s => s.name),
+            },
+          ]);
+
+          const { confirmRemove } = await inquirer.prompt([
+            {
+              type: 'confirm',
+              name: 'confirmRemove',
+              message: `Remove MCP server "${serverName}"?`,
+              default: false,
+            },
+          ]);
+
+          if (confirmRemove) {
+            config.removeMCPServer(serverName);
+            ui.success(`MCP server "${serverName}" removed!`);
+          }
+        }
       }
       break;
 

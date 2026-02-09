@@ -1,6 +1,15 @@
 import Conf from 'conf';
 import * as path from 'path';
 import * as os from 'os';
+import { MCPServersFileManager } from './mcp-servers-file.js';
+
+export interface MCPServerConfig {
+  name: string;
+  transport: 'stdio'; // Only stdio is currently supported
+  command: string; // Command to execute
+  args?: string[]; // Command arguments
+  env?: Record<string, string>; // Environment variables
+}
 
 export interface XibeCodeConfig {
   apiKey?: string;
@@ -13,14 +22,17 @@ export interface XibeCodeConfig {
   gitCheckpointStrategy?: 'stash' | 'commit';
   testCommandOverride?: string;
   plugins?: string[];
+  mcpServers?: MCPServerConfig[];
 }
 
 export class ConfigManager {
   private store: Conf<XibeCodeConfig>;
   private configPath: string;
+  private mcpFileManager: MCPServersFileManager;
 
   constructor() {
     this.configPath = path.join(os.homedir(), '.xibecode');
+    this.mcpFileManager = new MCPServersFileManager();
     
     this.store = new Conf<XibeCodeConfig>({
       projectName: 'xibecode',
@@ -33,6 +45,7 @@ export class ConfigManager {
         enableDryRunByDefault: false,
         gitCheckpointStrategy: 'stash',
         plugins: [],
+        mcpServers: [],
       },
     });
   }
@@ -178,5 +191,94 @@ export class ConfigManager {
       'Max Iterations': config.maxIterations?.toString() || '50',
       'Config Path': this.getConfigPath(),
     };
+  }
+
+  /**
+   * Get all MCP server configurations
+   * Loads from mcp-servers.json file first, falls back to config store
+   */
+  async getMCPServers(): Promise<MCPServerConfig[]> {
+    try {
+      // Try to load from file first
+      const fileServers = await this.mcpFileManager.loadMCPServers();
+      if (fileServers.length > 0 || await this.mcpFileManager.fileExists()) {
+        return fileServers;
+      }
+    } catch (error) {
+      // If file has errors, fall back to config store
+      console.warn(`Warning: Failed to load MCP servers from file, using config store: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    
+    // Fall back to config store
+    return this.get('mcpServers') || [];
+  }
+
+  /**
+   * Get MCP servers synchronously (for backward compatibility)
+   * Uses config store only
+   */
+  getMCPServersSync(): MCPServerConfig[] {
+    return this.get('mcpServers') || [];
+  }
+
+  /**
+   * Get MCP servers file manager
+   */
+  getMCPServersFileManager(): MCPServersFileManager {
+    return this.mcpFileManager;
+  }
+
+  /**
+   * Add an MCP server configuration
+   */
+  addMCPServer(serverConfig: MCPServerConfig): void {
+    const servers = this.getMCPServersSync();
+    
+    // Check if server with same name already exists
+    if (servers.some(s => s.name === serverConfig.name)) {
+      throw new Error(`MCP server with name "${serverConfig.name}" already exists`);
+    }
+
+    servers.push(serverConfig);
+    this.set('mcpServers', servers);
+  }
+
+  /**
+   * Remove an MCP server configuration
+   */
+  removeMCPServer(serverName: string): boolean {
+    const servers = this.getMCPServersSync();
+    const filtered = servers.filter(s => s.name !== serverName);
+    
+    if (filtered.length === servers.length) {
+      return false; // Server not found
+    }
+
+    this.set('mcpServers', filtered);
+    return true;
+  }
+
+  /**
+   * Get a specific MCP server configuration
+   */
+  getMCPServer(serverName: string): MCPServerConfig | undefined {
+    const servers = this.getMCPServersSync();
+    return servers.find(s => s.name === serverName);
+  }
+
+  /**
+   * Update an MCP server configuration
+   */
+  updateMCPServer(serverName: string, updates: Partial<Omit<MCPServerConfig, 'name'>>): boolean {
+    const servers = this.getMCPServersSync();
+    const index = servers.findIndex(s => s.name === serverName);
+    
+    if (index === -1) {
+      return false; // Server not found
+    }
+
+    servers[index] = { ...servers[index], ...updates };
+    this.set('mcpServers', servers);
+    return true;
   }
 }

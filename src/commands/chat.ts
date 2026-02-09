@@ -1,6 +1,7 @@
 import inquirer from 'inquirer';
 import { EnhancedAgent } from '../core/agent.js';
 import { CodingToolExecutor } from '../core/tools.js';
+import { MCPClientManager } from '../core/mcp-client.js';
 import { EnhancedUI } from '../ui/enhanced-tui.js';
 import { ConfigManager } from '../utils/config.js';
 import chalk from 'chalk';
@@ -32,11 +33,28 @@ export async function chatCommand(options: ChatOptions) {
   const model = options.model || config.getModel();
   const baseUrl = options.baseUrl || config.getBaseUrl();
 
+  // Load and connect to MCP servers
+  const mcpClientManager = new MCPClientManager();
+  const mcpServers = await config.getMCPServers();
+  if (mcpServers.length > 0) {
+    console.log(chalk.blue(`  ℹ Connecting to ${mcpServers.length} MCP server(s)...\n`));
+    for (const serverConfig of mcpServers) {
+      try {
+        await mcpClientManager.connect(serverConfig);
+        const tools = mcpClientManager.getAvailableTools().filter(t => t.serverName === serverConfig.name);
+        console.log(chalk.green(`  ✓ Connected to ${serverConfig.name} (${tools.length} tool(s))`));
+      } catch (error: any) {
+        console.log(chalk.yellow(`  ✗ Failed to connect to ${serverConfig.name}: ${error.message}`));
+      }
+    }
+    console.log('');
+  }
+
   // Gemini‑style intro screen
   ui.chatBanner(process.cwd(), model, baseUrl);
 
   let enableTools = true;
-  const toolExecutor = new CodingToolExecutor(process.cwd());
+  const toolExecutor = new CodingToolExecutor(process.cwd(), { mcpClientManager });
 
   // ── Create ONE agent for the entire chat session ──
   // This keeps conversation history (messages) across all turns,
@@ -170,6 +188,7 @@ export async function chatCommand(options: ChatOptions) {
     console.log(chalk.bold('  XibeCode chat commands'));
     console.log('  ' + chalk.hex('#6B6B7B')('────────────────────────────'));
     console.log('  ' + chalk.hex('#00D4FF')('/help') + chalk.hex('#6B6B7B')('      show this help, not an AI reply'));
+    console.log('  ' + chalk.hex('#00D4FF')('/mcp') + chalk.hex('#6B6B7B')('       show connected MCP servers and tools'));
     console.log('  ' + chalk.hex('#00D4FF')('@path') + chalk.hex('#6B6B7B')('      list files/folders under path (or cwd if just "@")'));
     console.log('  ' + chalk.hex('#00D4FF')('clear') + chalk.hex('#6B6B7B')('     clear screen and redraw header'));
     console.log('  ' + chalk.hex('#00D4FF')('tools on') + chalk.hex('#6B6B7B')('  enable editor & filesystem tools'));
@@ -248,6 +267,37 @@ export async function chatCommand(options: ChatOptions) {
       continue;
     }
 
+    if (lowerMessage === '/mcp') {
+      console.log('');
+      console.log(chalk.bold('  MCP Servers'));
+      console.log('  ' + chalk.hex('#6B6B7B')('────────────────────────────'));
+      
+      const connectedServers = mcpClientManager.getConnectedServers();
+      if (connectedServers.length === 0) {
+        console.log('  ' + chalk.hex('#6B6B7B')('No MCP servers connected'));
+        console.log('  ' + chalk.dim('Configure servers with: xibecode config --add-mcp-server'));
+      } else {
+        for (const serverName of connectedServers) {
+          const serverTools = mcpClientManager.getAvailableTools().filter(t => t.serverName === serverName);
+          const serverResources = mcpClientManager.getAvailableResources().filter(r => r.serverName === serverName);
+          const serverPrompts = mcpClientManager.getAvailablePrompts().filter(p => p.serverName === serverName);
+          
+          console.log('');
+          console.log('  ' + chalk.hex('#00D4FF')(serverName));
+          console.log('    ' + chalk.hex('#6B6B7B')(`Tools: ${serverTools.length} | Resources: ${serverResources.length} | Prompts: ${serverPrompts.length}`));
+          
+          if (serverTools.length > 0) {
+            console.log('    ' + chalk.dim('Tools:'));
+            serverTools.forEach(tool => {
+              console.log('      ' + chalk.hex('#00D4FF')(`${tool.name}`) + chalk.hex('#6B6B7B')(` - ${tool.description}`));
+            });
+          }
+        }
+      }
+      console.log('');
+      continue;
+    }
+
     if (trimmed.startsWith('@')) {
       await showPathSuggestions(trimmed);
       continue;
@@ -300,5 +350,10 @@ export async function chatCommand(options: ChatOptions) {
     }
 
     console.log('');
+  }
+
+  // Cleanup: disconnect from all MCP servers
+  if (mcpServers.length > 0) {
+    await mcpClientManager.disconnectAll();
   }
 }

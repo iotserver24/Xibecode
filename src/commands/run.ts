@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import { EnhancedAgent } from '../core/agent.js';
 import { CodingToolExecutor } from '../core/tools.js';
 import { PluginManager } from '../core/plugins.js';
+import { MCPClientManager } from '../core/mcp-client.js';
 import { EnhancedUI } from '../ui/enhanced-tui.js';
 import { ConfigManager } from '../utils/config.js';
 import chalk from 'chalk';
@@ -79,6 +80,22 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
     }
   }
 
+  // Load and connect to MCP servers
+  const mcpClientManager = new MCPClientManager();
+  const mcpServers = await config.getMCPServers();
+  if (mcpServers.length > 0) {
+    ui.info(`Connecting to ${mcpServers.length} MCP server(s)...`);
+    for (const serverConfig of mcpServers) {
+      try {
+        await mcpClientManager.connect(serverConfig);
+        const tools = mcpClientManager.getAvailableTools().filter(t => t.serverName === serverConfig.name);
+        ui.info(`  ✓ Connected to ${serverConfig.name} (${tools.length} tool(s))`);
+      } catch (error: any) {
+        ui.warning(`  ✗ Failed to connect to ${serverConfig.name}: ${error.message}`);
+      }
+    }
+  }
+
   // Show session info
   ui.startSession(finalPrompt, { model, maxIterations, dryRun });
 
@@ -87,6 +104,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
     dryRun,
     testCommandOverride,
     pluginManager,
+    mcpClientManager,
   });
   const agent = new EnhancedAgent({
     apiKey,
@@ -201,5 +219,10 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
     }
     
     process.exit(1);
+  } finally {
+    // Cleanup: disconnect from all MCP servers
+    if (mcpServers.length > 0) {
+      await mcpClientManager.disconnectAll();
+    }
   }
 }

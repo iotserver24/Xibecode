@@ -4,7 +4,7 @@
 
 XibeCode is a professional CLI tool that brings autonomous AI coding capabilities to your terminal. Like Claude Code, but open-source, customizable, and with advanced context management.
 
-## 🆕 What's New in v0.0.2
+## 🆕 What's New in Latest Version
 
 **Major Updates:**
 - 🧪 **Test Integration** - Auto-detect & run tests (Vitest, Jest, pytest, Go test)
@@ -12,6 +12,8 @@ XibeCode is a professional CLI tool that brings autonomous AI coding capabilitie
 - 🛡️ **Safety Controls** - Dry-run mode, risk assessment, command blocking
 - 🔌 **Plugin System** - Extend XibeCode with custom tools
 - 📦 **Smart Package Manager** - Prefers pnpm → bun → npm
+- 🧠 **Enhanced Reasoning** - Advanced problem-solving, pattern recognition, and error handling
+- 📡 **MCP Integration** - Connect to external MCP servers for extended capabilities
 
 ## 🎯 Key Features
 
@@ -637,7 +639,10 @@ XibeCode stores config in `~/.xibecode/`
   "enableDryRunByDefault": false,         // Enable dry-run mode by default
   "gitCheckpointStrategy": "stash",       // Git checkpoint: "stash" or "commit"
   "testCommandOverride": "",              // Custom test command (optional)
-  "plugins": []                           // Array of plugin paths
+  "plugins": [],                          // Array of plugin paths
+  
+  // Latest version
+  "mcpServers": []                        // MCP server configurations
 }
 ```
 
@@ -650,6 +655,190 @@ XIBECODE_MODEL=claude-opus-4-...  # Default model
 ```
 
 Config priority: CLI flags > Environment > Config file
+
+## 📡 MCP Integration (Model Context Protocol)
+
+XibeCode supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/), enabling connection to external servers that provide additional tools, resources, and capabilities.
+
+### What is MCP?
+
+MCP is an open protocol that standardizes how applications provide context to LLMs. With MCP, you can:
+- **Extend Tools**: Add tools from external servers (databases, APIs, etc.)
+- **Access Resources**: Read data from external sources
+- **Use Prompt Templates**: Leverage pre-built prompts from servers
+
+### Adding an MCP Server
+
+#### File-Based Configuration (Easiest - Recommended)
+
+Edit the MCP servers configuration file directly:
+
+```bash
+# Show file path
+xibecode mcp file
+
+# Open file in your editor
+xibecode mcp edit
+
+# Or edit manually
+nano ~/.xibecode/mcp-servers.json
+```
+
+**File Format** (`~/.xibecode/mcp-servers.json`):
+
+```json
+{
+  "servers": [
+    {
+      "name": "filesystem",
+      "transport": "stdio",
+      "command": "mcp-server-filesystem",
+      "args": ["--root", "/path/to/files"]
+    },
+    {
+      "name": "github",
+      "transport": "stdio",
+      "command": "mcp-server-github",
+      "args": ["--token", "YOUR_TOKEN"],
+      "env": {
+        "GITHUB_TOKEN": "your_token_here"
+      }
+    }
+  ]
+}
+```
+
+**File Management Commands:**
+
+```bash
+# Create default file with examples
+xibecode mcp init
+
+# Reload servers from file (after editing)
+xibecode mcp reload
+
+# Show file path and status
+xibecode mcp file
+```
+
+#### CLI Method
+
+Add servers via command line:
+
+```bash
+# Add a server (direct, no prompts)
+xibecode mcp add filesystem --command "mcp-server-filesystem" --args "--root /path/to/files"
+
+# Add with environment variables
+xibecode mcp add postgres --command "mcp-server-postgres" --args "--host localhost" --env "PGPASSWORD=secret,PGUSER=admin"
+
+# List all configured servers
+xibecode mcp list
+
+# Remove a server
+xibecode mcp remove filesystem
+```
+
+#### Alternative Methods
+
+**Via config command (interactive):**
+```bash
+xibecode config --add-mcp-server my-server
+# Follow interactive prompts
+```
+
+**Via config menu:**
+```bash
+xibecode config
+# Select "📡 Manage MCP Servers" → "➕ Add MCP Server"
+```
+
+### MCP Server Configuration
+
+MCP servers support two transport types:
+
+#### stdio Transport (Local Process)
+
+For local MCP servers that run as a subprocess. Currently only stdio transport is supported:
+
+```bash
+# Add via command line
+xibecode mcp add filesystem --command "mcp-server-filesystem" --args "--root /path/to/files"
+
+# Configuration format (stored automatically)
+{
+  "name": "filesystem",
+  "transport": "stdio",
+  "command": "mcp-server-filesystem",
+  "args": ["--root", "/path/to/files"]
+}
+```
+
+### Using MCP Tools
+
+Once configured, MCP tools are automatically available to XibeCode:
+
+```bash
+# In chat mode, view MCP servers and tools
+xibecode chat
+> /mcp
+```
+
+MCP tools are prefixed with the server name (e.g., `filesystem::read_file`, `remote-api::query`).
+
+### Popular MCP Servers
+
+- **@modelcontextprotocol/server-filesystem** - File system access
+- **@modelcontextprotocol/server-github** - GitHub API integration
+- **@modelcontextprotocol/server-postgres** - PostgreSQL database access
+- **@modelcontextprotocol/server-slack** - Slack integration
+- **Custom servers** - Build your own with the MCP SDK
+
+### Example: Adding GitHub MCP Server
+
+```bash
+# Install the GitHub MCP server
+npm install -g @modelcontextprotocol/server-github
+
+# Add to XibeCode (easy method - recommended)
+xibecode mcp add github --command "mcp-server-github" --args "--token YOUR_GITHUB_TOKEN"
+
+# Or use interactive method
+xibecode config --add-mcp-server github
+# Follow prompts: select "stdio", enter command and args
+
+# Now XibeCode can use GitHub tools
+xibecode chat
+> Create an issue in my repo about the bug we just found
+```
+
+## 🧠 Enhanced AI Capabilities
+
+XibeCode includes advanced reasoning capabilities that enable it to:
+
+### Systematic Problem Solving
+- **Problem Decomposition**: Breaks complex tasks into manageable steps
+- **Hypothesis-Driven Development**: Forms and tests hypotheses systematically
+- **Root Cause Analysis**: Traces issues to their source, not just symptoms
+- **Pattern Recognition**: Identifies design patterns and anti-patterns
+
+### Advanced Context Awareness
+- **Project Structure Understanding**: Maps dependencies and data flows
+- **Change Impact Analysis**: Considers downstream effects before modifications
+- **Historical Context**: Uses git history to understand code evolution
+- **Cross-File Dependencies**: Tracks relationships between files
+
+### Coding Best Practices
+- **SOLID Principles**: Applies proper software design principles
+- **Error Handling**: Structured error classification and recovery strategies
+- **Performance Optimization**: Data structure selection and algorithm analysis
+- **Security Best Practices**: Input validation, secure defaults, proper authentication
+
+### Multi-Step Planning
+- **Task Breakdown**: Decomposes large features into atomic steps
+- **Dependency Mapping**: Identifies prerequisites and execution order
+- **Milestone Definition**: Sets intermediate validation points
+- **Rollback Planning**: Plans for failure scenarios and recovery
 
 ## 🔒 Safety Features
 
@@ -694,6 +883,7 @@ MIT
 
 Built with:
 - [@anthropic-ai/sdk](https://www.npmjs.com/package/@anthropic-ai/sdk)
+- [@modelcontextprotocol/sdk](https://github.com/modelcontextprotocol/sdk)
 - [Commander.js](https://github.com/tj/commander.js/)
 - [Inquirer.js](https://github.com/SBoudrias/Inquirer.js/)
 - [Chalk](https://github.com/chalk/chalk)

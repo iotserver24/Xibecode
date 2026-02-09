@@ -5,6 +5,7 @@ import chalk from 'chalk';
 import { runCommand } from './commands/run.js';
 import { chatCommand } from './commands/chat.js';
 import { configCommand } from './commands/config.js';
+import { mcpCommand } from './commands/mcp.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -14,7 +15,7 @@ const program = new Command();
 program
   .name('xibecode')
   .description('XibeCode - AI-powered autonomous coding assistant')
-  .version('0.0.3');
+  .version('0.0.4');
 
 // Main run command
 program
@@ -49,7 +50,55 @@ program
   .option('--set-model <model>', 'Set default model')
   .option('--show', 'Show current configuration')
   .option('--reset', 'Reset all configuration')
+  .option('--list-mcp-servers', 'List configured MCP servers')
+  .option('--add-mcp-server <name>', 'Add an MCP server (interactive)')
+  .option('--remove-mcp-server <name>', 'Remove an MCP server')
   .action(configCommand);
+
+// MCP Server Management
+const mcpCmd = program
+  .command('mcp')
+  .description('Manage MCP servers (easier method)');
+
+mcpCmd
+  .command('add')
+  .description('Add an MCP server')
+  .argument('<name>', 'Server name')
+  .requiredOption('-c, --command <command>', 'Command to execute')
+  .option('-a, --args <args>', 'Command arguments (space-separated)')
+  .option('-e, --env <env>', 'Environment variables (key=value,key=value)')
+  .action((name, options) => mcpCommand('add', name, options));
+
+mcpCmd
+  .command('list')
+  .description('List all configured MCP servers')
+  .action(() => mcpCommand('list'));
+
+mcpCmd
+  .command('remove')
+  .description('Remove an MCP server')
+  .argument('<name>', 'Server name')
+  .action((name) => mcpCommand('remove', name));
+
+mcpCmd
+  .command('file')
+  .description('Show path to MCP servers configuration file')
+  .action(() => mcpCommand('file'));
+
+mcpCmd
+  .command('edit')
+  .description('Open MCP servers configuration file in editor')
+  .action(() => mcpCommand('edit'));
+
+mcpCmd
+  .command('init')
+  .description('Create default MCP servers configuration file')
+  .action(() => mcpCommand('init'));
+
+mcpCmd
+  .command('reload')
+  .description('Reload MCP servers from configuration file')
+  .action(() => mcpCommand('reload'));
 
 // Show help if no command
 if (!process.argv.slice(2).length) {
@@ -66,7 +115,7 @@ if (!process.argv.slice(2).length) {
   console.log('  ' + B('│') + '                                                              ' + B('│'));
   console.log('  ' + B('│') + '   ' + Cb('⚡ XibeCode') + '                                                ' + B('│'));
   console.log('  ' + B('│') + '   ' + D('AI-Powered Autonomous Coding Assistant') + '                      ' + B('│'));
-  console.log('  ' + B('│') + '   ' + M('v0.0.3 - Optimized TUI + Test & Git') + '                       ' + B('│'));
+  console.log('  ' + B('│') + '   ' + M('v0.0.4 - Enhanced AI + MCP Integration') + '                    ' + B('│'));
   console.log('  ' + B('│') + '                                                              ' + B('│'));
   console.log('  ' + B('╰──────────────────────────────────────────────────────────────╯'));
   console.log('');

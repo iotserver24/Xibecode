@@ -9,6 +9,7 @@ import { GitUtils } from '../utils/git.js';
 import { TestRunnerDetector } from '../utils/testRunner.js';
 import { SafetyChecker } from '../utils/safety.js';
 import { PluginManager } from './plugins.js';
+import { MCPClientManager } from './mcp-client.js';
 import * as os from 'os';
 
 const execAsync = promisify(exec);
@@ -26,6 +27,7 @@ export class CodingToolExecutor implements ToolExecutor {
   private testRunner: TestRunnerDetector;
   private safetyChecker: SafetyChecker;
   private pluginManager: PluginManager;
+  private mcpClientManager?: MCPClientManager;
   private platform: string;
   private dryRun: boolean;
   private testCommandOverride?: string;
@@ -36,6 +38,7 @@ export class CodingToolExecutor implements ToolExecutor {
       dryRun?: boolean; 
       testCommandOverride?: string;
       pluginManager?: PluginManager;
+      mcpClientManager?: MCPClientManager;
     }
   ) {
     this.workingDir = workingDir;
@@ -45,6 +48,7 @@ export class CodingToolExecutor implements ToolExecutor {
     this.testRunner = new TestRunnerDetector(workingDir);
     this.safetyChecker = new SafetyChecker();
     this.pluginManager = options?.pluginManager || new PluginManager();
+    this.mcpClientManager = options?.mcpClientManager;
     this.platform = os.platform();
     this.dryRun = options?.dryRun || false;
     this.testCommandOverride = options?.testCommandOverride;
@@ -64,6 +68,23 @@ export class CodingToolExecutor implements ToolExecutor {
 
   async execute(toolName: string, input: any): Promise<any> {
     const p = this.parseInput(input);
+
+    // Check if it's an MCP tool (format: serverName::toolName)
+    if (this.mcpClientManager && toolName.includes('::')) {
+      try {
+        const result = await this.mcpClientManager.executeMCPTool(toolName, p);
+        return {
+          success: true,
+          ...result,
+        };
+      } catch (error: any) {
+        return {
+          error: true,
+          success: false,
+          message: error.message,
+        };
+      }
+    }
 
     // Check if it's a plugin tool
     if (this.pluginManager.isPluginTool(toolName)) {
@@ -645,9 +666,22 @@ export class CodingToolExecutor implements ToolExecutor {
       },
     ];
 
+    // Merge MCP tools
+    const mcpTools: Tool[] = [];
+    if (this.mcpClientManager) {
+      const availableMCPTools = this.mcpClientManager.getAvailableTools();
+      for (const mcpTool of availableMCPTools) {
+        mcpTools.push({
+          name: `${mcpTool.serverName}::${mcpTool.name}`,
+          description: `[MCP: ${mcpTool.serverName}] ${mcpTool.description}`,
+          input_schema: mcpTool.inputSchema,
+        });
+      }
+    }
+
     // Merge plugin tools
     const pluginTools = this.pluginManager.getPluginTools();
-    return [...coreTools, ...pluginTools];
+    return [...coreTools, ...mcpTools, ...pluginTools];
   }
 
   private resolvePath(filePath: string): string {
