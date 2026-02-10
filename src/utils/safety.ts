@@ -198,19 +198,23 @@ export class SafetyChecker {
   suggestSaferAlternative(command: string): string | null {
     const cmd = command.toLowerCase().trim();
 
-    if (cmd.includes('git reset --hard')) {
+    // Normalize multiple spaces for simpler matching
+    const normalized = cmd.replace(/\s+/g, ' ');
+
+    if (normalized.includes('git reset --hard')) {
       return 'Use "git stash" to save changes, then "git stash drop" if you really want to discard them';
     }
 
-    if (cmd.includes('git push --force') || cmd.includes('git push -f')) {
+    if (normalized.includes('git push --force') || normalized.includes('git push -f')) {
       return 'Use "git push --force-with-lease" to avoid overwriting others\' work';
     }
 
-    if (cmd.match(/rm\s+-rf/)) {
+    if (normalized.match(/rm\s+-rf/)) {
       return 'Consider using "mv" to move files to a temporary location first';
     }
 
-    if (cmd.includes('npm install') && !cmd.includes('-g')) {
+    // Suggest alternative package managers only for explicit "npm install"
+    if (/^npm\s+install\b/.test(normalized) && !normalized.includes('-g')) {
       return 'Consider using "pnpm install" or "bun install" for faster, more efficient installs';
     }
 
