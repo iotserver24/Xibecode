@@ -247,6 +247,19 @@ export async function configCommand(options: ConfigOptions) {
       }
 
       case 'set_model': {
+        const fixedAnthropicModels = [
+          'claude-sonnet-4-5-20250929',
+          'claude-opus-4-5-20251101',
+          'claude-haiku-4-5-20251001',
+        ];
+        const fixedOpenAIModels = [
+          'gpt-4.1-mini',
+          'gpt-4.1',
+          'gpt-4o',
+          'o3-mini',
+        ];
+        const customModels = (config.get('customModels') || []) as { id: string; provider: 'anthropic' | 'openai' }[];
+
         const { model } = await inquirer.prompt([
           {
             type: 'list',
@@ -254,21 +267,32 @@ export async function configCommand(options: ConfigOptions) {
             message: 'Select default model:',
             choices: [
               new inquirer.Separator('── Anthropic (Claude) ──'),
-              { name: 'Claude Sonnet 4.5 (Recommended)', value: 'claude-sonnet-4-5-20250929' },
-              { name: 'Claude Opus 4.5 (Most Capable)', value: 'claude-opus-4-5-20251101' },
-              { name: 'Claude Haiku 4.5 (Fastest)', value: 'claude-haiku-4-5-20251001' },
+              { name: 'Claude Sonnet 4.5 (Recommended)', value: fixedAnthropicModels[0] },
+              { name: 'Claude Opus 4.5 (Most Capable)', value: fixedAnthropicModels[1] },
+              { name: 'Claude Haiku 4.5 (Fastest)', value: fixedAnthropicModels[2] },
               new inquirer.Separator('── OpenAI / OpenAI-compatible ──'),
-              { name: 'GPT-4.1 Mini', value: 'gpt-4.1-mini' },
-              { name: 'GPT-4.1', value: 'gpt-4.1' },
-              { name: 'GPT-4o (Omni)', value: 'gpt-4o' },
-              { name: 'o3-mini (reasoning)', value: 'o3-mini' },
+              { name: 'GPT-4.1 Mini', value: fixedOpenAIModels[0] },
+              { name: 'GPT-4.1', value: fixedOpenAIModels[1] },
+              { name: 'GPT-4o (Omni)', value: fixedOpenAIModels[2] },
+              { name: 'o3-mini (reasoning)', value: fixedOpenAIModels[3] },
+              ...(customModels.length
+                ? [
+                    new inquirer.Separator('── Saved custom models ──'),
+                    ...customModels.map(cm => ({
+                      name: `${cm.id} (${cm.provider})`,
+                      value: cm.id,
+                    })),
+                  ]
+                : []),
               new inquirer.Separator('──────────────────────────────'),
-              { name: 'Custom', value: 'custom' },
+              { name: 'Add new custom model', value: 'custom_new' },
             ],
           },
         ]);
 
-        if (model === 'custom') {
+        let chosenModelId = model;
+
+        if (model === 'custom_new') {
           const { customModel } = await inquirer.prompt([
             {
               type: 'input',
@@ -276,12 +300,11 @@ export async function configCommand(options: ConfigOptions) {
               message: 'Enter custom model ID:',
             },
           ]);
-          config.set('model', customModel);
-          ui.success(`Default model set to: ${customModel}`);
-        } else {
-          config.set('model', model);
-          ui.success(`Default model set to: ${model}`);
+          chosenModelId = customModel;
         }
+
+        config.set('model', chosenModelId);
+        ui.success(`Default model set to: ${chosenModelId}`);
 
         // Ask which API format this model uses
         const { provider } = await inquirer.prompt([
@@ -292,12 +315,36 @@ export async function configCommand(options: ConfigOptions) {
             choices: [
               { name: 'Anthropic format (Claude / Messages API)', value: 'anthropic' },
               { name: 'OpenAI-compatible format (chat/completions)', value: 'openai' },
+              { name: 'Both / auto-detect from model id', value: 'auto' },
             ],
           },
         ]);
 
-        config.set('provider', provider);
-        ui.success(`Provider set to: ${provider}`);
+        if (provider === 'auto') {
+          config.delete('provider');
+          ui.success('Provider set to: auto-detect from model id (supports both).');
+        } else {
+          config.set('provider', provider);
+          ui.success(`Provider set to: ${provider}`);
+        }
+
+        // Persist custom model entry (upsert) when it's not one of the fixed built-ins
+        const isFixed =
+          fixedAnthropicModels.includes(chosenModelId) || fixedOpenAIModels.includes(chosenModelId);
+        if (!isFixed) {
+          let updatedCustomModels = (config.get('customModels') || []) as {
+            id: string;
+            provider: 'anthropic' | 'openai';
+          }[];
+          // Remove any existing entry with same id
+          updatedCustomModels = updatedCustomModels.filter(m => m.id !== chosenModelId);
+          // Add new / updated entry (when provider is explicit; skip for auto)
+          if (provider === 'anthropic' || provider === 'openai') {
+            updatedCustomModels.push({ id: chosenModelId, provider });
+          }
+          config.set('customModels', updatedCustomModels);
+          ui.success(`Custom model saved: ${chosenModelId} (${provider})`);
+        }
 
         break;
       }
