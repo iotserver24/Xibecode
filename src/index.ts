@@ -6,6 +6,7 @@ import { runCommand } from './commands/run.js';
 import { chatCommand } from './commands/chat.js';
 import { configCommand } from './commands/config.js';
 import { mcpCommand } from './commands/mcp.js';
+import { tuiCommand } from './commands/tui.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -42,6 +43,17 @@ program
   .option('--theme <theme>', 'UI theme to use')
   .option('--session <id>', 'Resume a specific chat session by id')
   .action(chatCommand);
+
+// Ink-based full-screen TUI
+program
+  .command('tui')
+  .description('Start full-screen Ink-based chat TUI')
+  .option('-m, --model <model>', 'AI model to use')
+  .option('-b, --base-url <url>', 'Custom API base URL')
+  .option('-k, --api-key <key>', 'API key (overrides config)')
+  .option('--theme <theme>', 'UI theme to use')
+  .option('--session <id>', 'Resume a specific chat session by id')
+  .action(tuiCommand);
 
 // Configuration
 program
