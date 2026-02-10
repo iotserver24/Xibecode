@@ -448,8 +448,7 @@ export class EnhancedAgent extends EventEmitter {
 
   /**
    * Call an OpenAI-compatible chat completions endpoint.
-   * NOTE: For now this is response-only (no tool calls), so tools will
-   * be disabled when using OpenAI-style models.
+   * Uses streaming (SSE) when available, with a non-streaming fallback.
    */
   private async callOpenAI(_tools: Tool[]): Promise<{ message: any; streamed: boolean }> {
     if (!this.config.apiKey) {
@@ -494,39 +493,131 @@ export class EnhancedAgent extends EventEmitter {
       });
     }
 
-    const body = {
+    const baseBody: any = {
       model: this.config.model,
       messages: openAiMessages,
       max_tokens: 8192,
     };
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.config.apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
+    // ── Try streaming first (SSE) ─────────────────────────
+    try {
+      const streamResponse = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+          Authorization: `Bearer ${this.config.apiKey}`,
+        },
+        body: JSON.stringify({ ...baseBody, stream: true }),
+      });
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`OpenAI-compatible API error: ${response.status} ${text}`);
+      if (!streamResponse.ok || !streamResponse.body) {
+        throw new Error(`OpenAI-compatible streaming error: ${streamResponse.status}`);
+      }
+
+      const reader = (streamResponse.body as any).getReader
+        ? (streamResponse.body as any).getReader()
+        : null;
+      if (!reader) {
+        throw new Error('Streaming reader not available');
+      }
+
+      let fullText = '';
+      let hasEmittedStart = false;
+      let buffer = '';
+
+      const textDecoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += typeof value === 'string' ? value : textDecoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const dataStr = trimmed.slice('data:'.length).trim();
+          if (dataStr === '[DONE]') {
+            buffer = '';
+            break;
+          }
+
+          try {
+            const json = JSON.parse(dataStr);
+            const delta = json.choices?.[0]?.delta;
+            let chunkText = '';
+
+            if (typeof delta?.content === 'string') {
+              chunkText = delta.content;
+            } else if (Array.isArray(delta?.content)) {
+              // OpenAI beta format: array of content blocks
+              chunkText = delta.content
+                .filter((c: any) => c.type === 'text' && typeof c.text === 'string')
+                .map((c: any) => c.text)
+                .join('');
+            }
+
+            if (chunkText) {
+              fullText += chunkText;
+              if (!hasEmittedStart) {
+                this.emit('stream_start', {});
+                hasEmittedStart = true;
+              }
+              this.emit('stream_text', { text: chunkText });
+            }
+          } catch {
+            // Ignore malformed SSE lines
+          }
+        }
+      }
+
+      if (hasEmittedStart) {
+        this.emit('stream_end', {});
+      }
+
+      const message = {
+        content: [
+          {
+            type: 'text',
+            text: fullText,
+          } as TextBlock,
+        ],
+      };
+
+      return { message, streamed: hasEmittedStart };
+    } catch (_streamError) {
+      // ── Fallback to non-streaming ───────────────────────
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.config.apiKey}`,
+        },
+        body: JSON.stringify(baseBody),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`OpenAI-compatible API error: ${response.status} ${text}`);
+      }
+
+      const data: any = await response.json();
+      const content = data?.choices?.[0]?.message?.content ?? '';
+
+      const message = {
+        content: [
+          {
+            type: 'text',
+            text: typeof content === 'string' ? content : JSON.stringify(content),
+          } as TextBlock,
+        ],
+      };
+
+      return { message, streamed: false };
     }
-
-    const data: any = await response.json();
-    const content = data?.choices?.[0]?.message?.content ?? '';
-
-    const message = {
-      content: [
-        {
-          type: 'text',
-          text: typeof content === 'string' ? content : JSON.stringify(content),
-        } as TextBlock,
-      ],
-    };
-
-    return { message, streamed: false };
   }
 
   /**
