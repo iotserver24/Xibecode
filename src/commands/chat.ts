@@ -20,10 +20,9 @@ interface ChatOptions {
   apiKey?: string;
   theme?: string;
   session?: string;
-  classic?: boolean;
 }
 
-async function classicChat(options: ChatOptions) {
+export async function chatCommand(options: ChatOptions) {
   const config = new ConfigManager();
   const preferredTheme = (options.theme || config.getTheme()) as string;
   const themeName: ThemeName = isThemeName(preferredTheme) ? preferredTheme : 'default';
@@ -710,18 +709,3 @@ async function classicChat(options: ChatOptions) {
     await mcpClientManager.disconnectAll();
   }
 }
-
-export async function chatCommand(options: ChatOptions) {
-  if (options.classic) {
-    return classicChat(options);
-  }
-  const { runBlessedChat } = await import('../tui/blessed-chat.js');
-  return runBlessedChat({
-    model: options.model,
-    baseUrl: options.baseUrl,
-    apiKey: options.apiKey,
-    theme: options.theme,
-    session: options.session,
-  });
-}
-
