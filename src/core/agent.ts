@@ -795,4 +795,12 @@ When you complete the task, provide a comprehensive summary including:
   getMessages(): MessageParam[] {
     return this.messages;
   }
+
+  /**
+   * Replace the internal conversation history.
+   * Useful for restoring saved sessions or implementing undo/redo.
+   */
+  setMessages(messages: MessageParam[]) {
+    this.messages = messages;
+  }
 }

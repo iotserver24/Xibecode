@@ -35,6 +35,15 @@ export interface XibeCodeConfig {
   testCommandOverride?: string;
   plugins?: string[];
   mcpServers?: MCPServersConfig;
+  // UI / UX
+  theme?: string;
+  sessionDirectory?: string;
+  showDetails?: boolean;
+  showThinking?: boolean;
+  compactThreshold?: number;
+  defaultEditor?: string;
+  statusBarEnabled?: boolean;
+  headerMinimal?: boolean;
 }
 
 export class ConfigManager {
@@ -58,6 +67,12 @@ export class ConfigManager {
         gitCheckpointStrategy: 'stash',
         plugins: [],
         mcpServers: {},
+        theme: 'default',
+        showDetails: false,
+        showThinking: true,
+        compactThreshold: 50000,
+        statusBarEnabled: true,
+        headerMinimal: false,
       },
     });
   }
@@ -123,6 +138,47 @@ export class ConfigManager {
    */
   getModel(): string {
     return this.get('model') || process.env.XIBECODE_MODEL || 'claude-sonnet-4-5-20250929';
+  }
+
+  /**
+   * Get preferred theme name
+   */
+  getTheme(): string {
+    return this.get('theme') || 'default';
+  }
+
+  /**
+   * Get sessions directory override (if any)
+   */
+  getSessionDirectory(): string | undefined {
+    return this.get('sessionDirectory');
+  }
+
+  getShowDetails(): boolean {
+    const value = this.get('showDetails');
+    return value !== undefined ? value : (this.get('defaultVerbose') ?? false);
+  }
+
+  getShowThinking(): boolean {
+    const value = this.get('showThinking');
+    return value !== undefined ? value : true;
+  }
+
+  getCompactThreshold(): number {
+    return this.get('compactThreshold') || 50000;
+  }
+
+  getDefaultEditor(): string {
+    return this.get('defaultEditor') || process.env.EDITOR || 'vim';
+  }
+
+  isStatusBarEnabled(): boolean {
+    const value = this.get('statusBarEnabled');
+    return value !== undefined ? value : true;
+  }
+
+  isHeaderMinimal(): boolean {
+    return this.get('headerMinimal') || false;
   }
 
   /**
@@ -201,6 +257,9 @@ export class ConfigManager {
       'Base URL': config.baseUrl || 'Default (api.anthropic.com)',
       'Model': config.model || 'claude-sonnet-4-5-20250929',
       'Max Iterations': config.maxIterations?.toString() || '50',
+      'Theme': config.theme || 'default',
+      'Show Details': (config.showDetails ?? config.defaultVerbose ?? false).toString(),
+      'Show Thinking': (config.showThinking ?? true).toString(),
       'Config Path': this.getConfigPath(),
     };
   }

@@ -4,6 +4,10 @@ import { CodingToolExecutor } from '../core/tools.js';
 import { MCPClientManager } from '../core/mcp-client.js';
 import { EnhancedUI } from '../ui/enhanced-tui.js';
 import { ConfigManager } from '../utils/config.js';
+import { SessionManager, type ChatSession } from '../core/session-manager.js';
+import { exportSessionToMarkdown } from '../core/export.js';
+import { ContextManager } from '../core/context.js';
+import { isThemeName, THEME_NAMES, type ThemeName } from '../ui/themes.js';
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -12,14 +16,25 @@ interface ChatOptions {
   model?: string;
   baseUrl?: string;
   apiKey?: string;
+  theme?: string;
+  session?: string;
 }
 
 export async function chatCommand(options: ChatOptions) {
-  const ui = new EnhancedUI(false);
   const config = new ConfigManager();
+  const preferredTheme = (options.theme || config.getTheme()) as string;
+  const themeName: ThemeName = isThemeName(preferredTheme) ? preferredTheme : 'default';
+  const ui = new EnhancedUI(false, themeName);
+  ui.setShowDetails(config.getShowDetails());
+  ui.setShowThinking(config.getShowThinking());
+
+  const sessionManager = new SessionManager(config.getSessionDirectory());
+  const contextManager = new ContextManager(process.cwd());
   
   ui.clear();
-  ui.header('1.0.0');
+  if (!config.isHeaderMinimal()) {
+    ui.header('1.0.0');
+  }
 
   // Get API key
   const apiKey = options.apiKey || config.getApiKey();
@@ -61,87 +76,105 @@ export async function chatCommand(options: ChatOptions) {
   // ── Create ONE agent for the entire chat session ──
   // This keeps conversation history (messages) across all turns,
   // so the AI remembers everything you talked about.
-  const agent = new EnhancedAgent({
-    apiKey,
+  let agent = new EnhancedAgent({
+    apiKey: apiKey as string,
     baseUrl,
     model,
     maxIterations: 150,
     verbose: false,
   });
 
-  let hasResponse = false;
-
-  // Set up event handlers ONCE (agent is reused across turns)
-  agent.on('event', (event: any) => {
-    switch (event.type) {
-      case 'thinking':
-        if (!hasResponse) {
-          ui.thinking(event.data.message || 'Analyzing your request...');
-        }
-        break;
-
-      // ── Streaming ──
-      case 'stream_start':
-        ui.startAssistantResponse();
-        hasResponse = true;
-        break;
-
-      case 'stream_text':
-        ui.streamText(event.data.text);
-        break;
-
-      case 'stream_end':
-        ui.endAssistantResponse();
-        break;
-
-      // ── Non-streaming fallback ──
-      case 'response':
-        if (!hasResponse) {
-          ui.response(event.data.text);
-          hasResponse = true;
-        }
-        break;
-
-      // ── Tools ──
-      case 'tool_call':
-        if (enableTools) {
-          ui.toolCall(event.data.name, event.data.input);
-        }
-        break;
-
-      case 'tool_result':
-        if (enableTools) {
-          ui.toolResult(event.data.name, event.data.result, event.data.success);
-
-          const r = event.data.result;
-          if (r?.success && event.data.name === 'write_file') {
-            ui.fileChanged('created', r.path, r.lines ? `${r.lines} lines` : undefined);
-          } else if (r?.success && event.data.name === 'edit_file') {
-            ui.fileChanged('modified', r.path || '', r.linesChanged ? `${r.linesChanged} lines` : undefined);
-          } else if (r?.success && event.data.name === 'edit_lines') {
-            ui.fileChanged('modified', r.path || '', r.linesChanged ? `${r.linesChanged} lines` : undefined);
+  function setupAgentHandlers() {
+    agent.removeAllListeners('event');
+    agent.on('event', (event: any) => {
+      switch (event.type) {
+        case 'thinking':
+          if (!hasResponse) {
+            ui.thinking(event.data.message || 'Analyzing your request...');
           }
-        }
-        break;
+          break;
 
-      // ── Iteration ──
-      case 'iteration':
-        if (!hasResponse && event.data?.current) {
-          ui.updateThinking(`Thinking... step ${event.data.current}`);
-        }
-        hasResponse = false;
-        break;
+        // ── Streaming ──
+        case 'stream_start':
+          ui.startAssistantResponse();
+          hasResponse = true;
+          break;
 
-      // ── Errors / Warnings ──
-      case 'error':
-        ui.error(event.data.message || event.data.error);
-        break;
+        case 'stream_text':
+          ui.streamText(event.data.text);
+          break;
 
-      case 'warning':
-        ui.warning(event.data.message);
-        break;
+        case 'stream_end':
+          ui.endAssistantResponse();
+          break;
+
+        // ── Non-streaming fallback ──
+        case 'response':
+          if (!hasResponse) {
+            ui.response(event.data.text);
+            hasResponse = true;
+          }
+          break;
+
+        // ── Tools ──
+        case 'tool_call':
+          if (enableTools) {
+            ui.toolCall(event.data.name, event.data.input);
+          }
+          break;
+
+        case 'tool_result':
+          if (enableTools) {
+            ui.toolResult(event.data.name, event.data.result, event.data.success);
+
+            const r = event.data.result;
+            if (r?.success && event.data.name === 'write_file') {
+              ui.fileChanged('created', r.path, r.lines ? `${r.lines} lines` : undefined);
+            } else if (r?.success && event.data.name === 'edit_file') {
+              ui.fileChanged('modified', r.path || '', r.linesChanged ? `${r.linesChanged} lines` : undefined);
+            } else if (r?.success && event.data.name === 'edit_lines') {
+              ui.fileChanged('modified', r.path || '', r.linesChanged ? `${r.linesChanged} lines` : undefined);
+            }
+          }
+          break;
+
+        // ── Iteration ──
+        case 'iteration':
+          if (!hasResponse && event.data?.current) {
+            ui.updateThinking(`Thinking... step ${event.data.current}`);
+          }
+          hasResponse = false;
+          break;
+
+        // ── Errors / Warnings ──
+        case 'error':
+          ui.error(event.data.message || event.data.error);
+          break;
+
+        case 'warning':
+          ui.warning(event.data.message);
+          break;
+      }
+    });
+  }
+
+  let hasResponse = false;
+  setupAgentHandlers();
+
+  // ── Session bootstrap ──────────────────────────────────
+  let currentSession: ChatSession;
+  const existingId = options.session;
+  if (existingId) {
+    const loaded = await sessionManager.loadSession(existingId);
+    if (loaded) {
+      currentSession = loaded;
+      agent.setMessages(loaded.messages || []);
+    } else {
+      currentSession = await sessionManager.createSession({ model, cwd: process.cwd() });
     }
-  });
+  } else {
+    currentSession = await sessionManager.createSession({ model, cwd: process.cwd() });
+  }
 
   async function showPathSuggestions(raw: string) {
     const input = raw.trim().slice(1).trim(); // drop leading '@'
@@ -189,14 +222,209 @@ export async function chatCommand(options: ChatOptions) {
     console.log('');
     console.log(chalk.bold('  XibeCode chat commands'));
     console.log('  ' + chalk.hex('#6B6B7B')('────────────────────────────'));
-    console.log('  ' + chalk.hex('#00D4FF')('/help') + chalk.hex('#6B6B7B')('      show this help, not an AI reply'));
-    console.log('  ' + chalk.hex('#00D4FF')('/mcp') + chalk.hex('#6B6B7B')('       show connected MCP servers and tools'));
-    console.log('  ' + chalk.hex('#00D4FF')('@path') + chalk.hex('#6B6B7B')('      list files/folders under path (or cwd if just "@")'));
-    console.log('  ' + chalk.hex('#00D4FF')('clear') + chalk.hex('#6B6B7B')('     clear screen and redraw header'));
-    console.log('  ' + chalk.hex('#00D4FF')('tools on') + chalk.hex('#6B6B7B')('  enable editor & filesystem tools'));
-    console.log('  ' + chalk.hex('#00D4FF')('tools off') + chalk.hex('#6B6B7B')(' disable tools (chat only)'));
-    console.log('  ' + chalk.hex('#00D4FF')('exit / quit') + chalk.hex('#6B6B7B')(' end the chat session'));
+    console.log('  ' + chalk.hex('#00D4FF')('/help') + chalk.hex('#6B6B7B')('        show this help, not an AI reply'));
+    console.log('  ' + chalk.hex('#00D4FF')('/mcp') + chalk.hex('#6B6B7B')('         show connected MCP servers and tools'));
+    console.log('  ' + chalk.hex('#00D4FF')('/new') + chalk.hex('#6B6B7B')('         start a new chat session'));
+    console.log('  ' + chalk.hex('#00D4FF')('/sessions') + chalk.hex('#6B6B7B')('    list and switch saved sessions'));
+    console.log('  ' + chalk.hex('#00D4FF')('/models') + chalk.hex('#6B6B7B')('      show/switch models'));
+    console.log('  ' + chalk.hex('#00D4FF')('/export') + chalk.hex('#6B6B7B')('      export this session to Markdown'));
+    console.log('  ' + chalk.hex('#00D4FF')('/compact') + chalk.hex('#6B6B7B')('     compact long conversation history'));
+    console.log('  ' + chalk.hex('#00D4FF')('/details') + chalk.hex('#6B6B7B')('     toggle verbose tool details'));
+    console.log('  ' + chalk.hex('#00D4FF')('/thinking') + chalk.hex('#6B6B7B')('    toggle thinking spinner'));
+    console.log('  ' + chalk.hex('#00D4FF')('/themes') + chalk.hex('#6B6B7B')('      choose a color theme'));
+    console.log('  ' + chalk.hex('#00D4FF')('@path') + chalk.hex('#6B6B7B')('        list files/folders under path (or cwd if just "@")'));
+    console.log('  ' + chalk.hex('#00D4FF')('clear') + chalk.hex('#6B6B7B')('       clear screen and redraw header'));
+    console.log('  ' + chalk.hex('#00D4FF')('tools on/off') + chalk.hex('#6B6B7B')(' toggle tools (editor & filesystem)'));
+    console.log('  ' + chalk.hex('#00D4FF')('exit / quit') + chalk.hex('#6B6B7B')('   end the chat session'));
+    console.log('  ' + chalk.hex('#00D4FF')('!cmd') + chalk.hex('#6B6B7B')('         run a shell command and feed output to AI'));
     console.log('');
+  }
+
+  async function handleShellBang(input: string) {
+    const cmd = input.slice(1).trim();
+    if (!cmd) {
+      ui.warning('No command provided after "!". Example: !ls -la');
+      return;
+    }
+    ui.info(`Running shell command: ${cmd}`);
+    const result = await toolExecutor.execute('run_command', { command: cmd, cwd: process.cwd(), timeout: 300 });
+    const stdout = result.stdout || '';
+    const stderr = result.stderr || '';
+
+    console.log('');
+    console.log(chalk.bold('  Command Output'));
+    console.log('  ' + chalk.hex('#6B6B7B')('────────────────────────────'));
+    if (stdout) {
+      console.log(chalk.white(stdout));
+    }
+    if (stderr) {
+      console.log(chalk.red(stderr));
+    }
+    console.log('');
+
+    const summary = [
+      `Shell command: ${cmd}`,
+      '',
+      stdout ? stdout : '',
+      stderr ? `STDERR:\n${stderr}` : '',
+    ].join('\n');
+
+    const tools = enableTools ? toolExecutor.getTools() : [];
+    await agent.run(summary, tools, toolExecutor);
+    const stats = agent.getStats();
+    if (config.isStatusBarEnabled()) {
+      ui.renderStatusBar({
+        model,
+        sessionTitle: currentSession.title,
+        cwd: process.cwd(),
+        toolsEnabled: enableTools,
+        themeName: ui.getThemeName(),
+      });
+    }
+    await sessionManager.saveMessagesAndStats({
+      id: currentSession.id,
+      messages: agent.getMessages(),
+      stats,
+    });
+  }
+
+  async function handleSessionsCommand() {
+    const sessions = await sessionManager.listSessions();
+    if (sessions.length === 0) {
+      ui.info('No saved sessions yet.');
+      return;
+    }
+    const { picked } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'picked',
+        message: 'Select session',
+        choices: sessions.map(s => ({
+          name: `${s.title}  ·  ${s.model}  ·  ${s.updated}`,
+          value: s.id,
+        })),
+      },
+    ]);
+
+    const loaded = await sessionManager.loadSession(picked);
+    if (!loaded) {
+      ui.error('Failed to load selected session');
+      return;
+    }
+    currentSession = loaded;
+    agent.setMessages(loaded.messages || []);
+    ui.success(`Switched to session ${loaded.title}`);
+  }
+
+  async function handleNewSession() {
+    currentSession = await sessionManager.createSession({ model, cwd: process.cwd() });
+    agent = new EnhancedAgent({
+      apiKey: apiKey as string,
+      baseUrl,
+      model,
+      maxIterations: 150,
+      verbose: false,
+    });
+    setupAgentHandlers();
+    ui.success('Started new session');
+  }
+
+  async function handleModelsCommand() {
+    const current = model;
+    const models = [
+      current,
+      'claude-sonnet-4-5-20250929',
+      'claude-opus-4-5-20251101',
+      'claude-haiku-4-5-20251015',
+    ];
+    const unique = Array.from(new Set(models));
+    const { picked } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'picked',
+        message: 'Select model',
+        choices: unique.map(m => ({
+          name: m === current ? `${m} (current)` : m,
+          value: m,
+        })),
+      },
+    ]);
+    config.set('model', picked);
+    ui.success(`Model set to: ${picked}`);
+  }
+
+  async function handleThemesCommand() {
+    const current = ui.getThemeName();
+    const { picked } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'picked',
+        message: 'Select theme',
+        choices: THEME_NAMES.map(name => ({
+          name: name === current ? `${name} (current)` : name,
+          value: name,
+        })),
+      },
+    ]);
+    ui.setTheme(picked);
+    config.set('theme', picked);
+    ui.success(`Theme set to: ${picked}`);
+  }
+
+  async function handleExportCommand() {
+    const session: ChatSession = {
+      ...currentSession,
+      messages: agent.getMessages(),
+    };
+    const markdown = exportSessionToMarkdown(session);
+    const exportsDir = path.join(config['getConfigPath' as keyof ConfigManager] as any, '..', 'sessions');
+    const fileName = `${session.id}.md`;
+    const fullPath = path.join(exportsDir, fileName);
+    await fs.mkdir(exportsDir, { recursive: true });
+    await fs.writeFile(fullPath, markdown, 'utf-8');
+    ui.success(`Session exported to ${fullPath}`);
+  }
+
+  async function handleCompactCommand() {
+    const messages = agent.getMessages();
+    if (messages.length <= 10) {
+      ui.info('Conversation is short; no compaction needed.');
+      return;
+    }
+    const preserved = messages.slice(-6);
+    const summaryMessage: any = {
+      role: 'assistant',
+      content: 'Earlier conversation has been compacted to save context. Key details from the last messages are preserved.',
+    };
+    const compacted = [summaryMessage, ...preserved];
+    agent.setMessages(compacted);
+    await sessionManager.saveMessagesAndStats({
+      id: currentSession.id,
+      messages: compacted,
+      stats: agent.getStats(),
+    });
+    ui.success('Conversation compacted.');
+  }
+
+  async function handleAtPathFuzzy(raw: string) {
+    const input = raw.trim().slice(1).trim();
+    const pattern = input ? `**/*${input}*` : '**/*';
+    try {
+      const files = await contextManager.searchFiles(pattern, { maxResults: 100 });
+      if (!files.length) {
+        ui.info(`No matches for pattern ${pattern}`);
+        return;
+      }
+      console.log('');
+      console.log('  ' + chalk.bold('Files'));
+      console.log('  ' + chalk.hex('#6B6B7B')('────────────────────────────'));
+      files.forEach(f => {
+        console.log('  ' + chalk.hex('#CE93D8')('📄') + ' ' + chalk.white(f));
+      });
+      console.log('');
+    } catch (error: any) {
+      ui.error('Failed to search files for @ path', error);
+    }
   }
 
   // ── Chat loop ──
@@ -269,6 +497,52 @@ export async function chatCommand(options: ChatOptions) {
       continue;
     }
 
+    if (lowerMessage === '/new') {
+      await handleNewSession();
+      continue;
+    }
+
+    if (lowerMessage === '/sessions') {
+      await handleSessionsCommand();
+      continue;
+    }
+
+    if (lowerMessage === '/models') {
+      await handleModelsCommand();
+      continue;
+    }
+
+    if (lowerMessage === '/themes') {
+      await handleThemesCommand();
+      continue;
+    }
+
+    if (lowerMessage === '/export') {
+      await handleExportCommand();
+      continue;
+    }
+
+    if (lowerMessage === '/compact') {
+      await handleCompactCommand();
+      continue;
+    }
+
+    if (lowerMessage === '/details') {
+      const next = !ui.getShowDetails();
+      ui.setShowDetails(next);
+      config.set('showDetails', next);
+      ui.success(`Details ${next ? 'enabled' : 'disabled'}`);
+      continue;
+    }
+
+    if (lowerMessage === '/thinking') {
+      const next = !ui.getShowThinking();
+      ui.setShowThinking(next);
+      config.set('showThinking', next);
+      ui.success(`Thinking display ${next ? 'enabled' : 'disabled'}`);
+      continue;
+    }
+
     if (lowerMessage === '/mcp') {
       console.log('');
       console.log(chalk.bold('  MCP Servers'));
@@ -301,7 +575,13 @@ export async function chatCommand(options: ChatOptions) {
     }
 
     if (trimmed.startsWith('@')) {
-      await showPathSuggestions(trimmed);
+      await handleAtPathFuzzy(trimmed);
+      continue;
+    }
+
+    if (trimmed.startsWith('!')) {
+      await handleShellBang(trimmed);
+      console.log('');
       continue;
     }
 
@@ -316,12 +596,19 @@ export async function chatCommand(options: ChatOptions) {
       console.log(chalk.hex('#3A3A4A')('  │') + chalk.hex('#00D4FF')('  👋 See you next time!             ') + chalk.hex('#3A3A4A')('│'));
       console.log(chalk.hex('#3A3A4A')('  ╰──────────────────────────────────╯'));
       console.log('');
+      await sessionManager.saveMessagesAndStats({
+        id: currentSession.id,
+        messages: agent.getMessages(),
+        stats,
+      });
       break;
     }
 
     if (lowerMessage === 'clear') {
       ui.clear();
-      ui.header('1.0.0');
+      if (!config.isHeaderMinimal()) {
+        ui.header('1.0.0');
+      }
       ui.chatBanner(process.cwd(), model, baseUrl);
       continue;
     }
@@ -347,6 +634,21 @@ export async function chatCommand(options: ChatOptions) {
       // the conversation history (this.messages), so the AI has
       // full context of everything discussed in this session.
       await agent.run(message, tools, toolExecutor);
+      const stats = agent.getStats();
+      if (config.isStatusBarEnabled()) {
+        ui.renderStatusBar({
+          model,
+          sessionTitle: currentSession.title,
+          cwd: process.cwd(),
+          toolsEnabled: enableTools,
+          themeName: ui.getThemeName(),
+        });
+      }
+      await sessionManager.saveMessagesAndStats({
+        id: currentSession.id,
+        messages: agent.getMessages(),
+        stats,
+      });
     } catch (error: any) {
       ui.error('Failed to process message', error);
     }

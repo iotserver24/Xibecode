@@ -1,36 +1,9 @@
 import chalk from 'chalk';
 import ora, { Ora } from 'ora';
+import { getTheme, type ThemeName, type ThemeTokens } from './themes.js';
 
 // ─── Version ────────────────────────────────────────────────────
-const VERSION = '0.0.5';
-
-// ─── Theme (Gemini CLI / OpenCode inspired) ─────────────────────
-const T = {
-  // Brand
-  brand:    chalk.hex('#00D4FF').bold, // bright cyan brand
-  brandDim: chalk.hex('#0099BB'),
-  // UI chrome
-  border:   chalk.hex('#3A3A4A'),      // subtle dark border
-  panel:    chalk.hex('#555577'),       // panel accents
-  // Content
-  text:     chalk.white,
-  dim:      chalk.hex('#6B6B7B'),
-  dimBold:  chalk.hex('#8888AA').bold,
-  muted:    chalk.hex('#4A4A5A'),
-  // Semantic
-  success:  chalk.hex('#00E676'),       // vivid green
-  error:    chalk.hex('#FF5252'),       // vivid red
-  warn:     chalk.hex('#FFD740'),       // amber
-  info:     chalk.hex('#40C4FF'),       // light blue
-  // Roles
-  tool:     chalk.hex('#BB86FC'),       // purple (material)
-  toolDim:  chalk.hex('#7B5EA7'),
-  user:     chalk.hex('#00E676').bold,
-  assistant: chalk.hex('#00D4FF').bold,
-  // Emphasis
-  bold:     chalk.bold.white,
-  code:     chalk.hex('#CE93D8'),       // light purple for paths
-};
+const VERSION = '0.0.7';
 
 const W = 62; // box width
 
@@ -40,21 +13,88 @@ function pad(str: string, len: number): string {
   return str + ' '.repeat(Math.max(0, len - raw.length));
 }
 
-function line(ch = '─') { return T.border(ch.repeat(W)); }
-function thinLine() { return T.muted('·'.repeat(W)); }
-
 // ─── UI Class ───────────────────────────────────────────────────
 export class EnhancedUI {
   private spinner: Ora | null = null;
   private verbose: boolean;
+  private showDetails: boolean;
+  private showThinking: boolean;
+  private themeName: ThemeName;
+  private T: ThemeTokens;
   private startTime: number = 0;
   private isStreaming = false;
   private streamLineLen = 0;
   private toolCount = 0;
 
-  constructor(verbose: boolean = false) {
+  constructor(verbose: boolean = false, themeName: ThemeName = 'default') {
     this.verbose = verbose;
+    this.showDetails = verbose;
+    this.showThinking = true;
+    this.themeName = themeName;
+    this.T = getTheme(themeName);
   }
+
+  setTheme(themeName: ThemeName) {
+    this.themeName = themeName;
+    this.T = getTheme(themeName);
+  }
+
+  getThemeName(): ThemeName {
+    return this.themeName;
+  }
+
+  setShowDetails(show: boolean) {
+    this.showDetails = show;
+  }
+
+  getShowDetails(): boolean {
+    return this.showDetails;
+  }
+
+  setShowThinking(show: boolean) {
+    this.showThinking = show;
+    if (!show) this.stopSpinner();
+  }
+
+  getShowThinking(): boolean {
+    return this.showThinking;
+  }
+
+  // ─── Status bar ─────────────────────────────────────────
+
+  renderStatusBar(info: {
+    model: string;
+    sessionTitle?: string;
+    tokensLabel?: string;
+    cwd?: string;
+    toolsEnabled?: boolean;
+    themeName?: string;
+  }) {
+    const left = info.cwd ? this.T.muted(info.cwd) : '';
+    const session = info.sessionTitle ? `session: ${info.sessionTitle}` : '';
+    const model = `model: ${info.model}`;
+    const tokens = info.tokensLabel ? `tokens: ${info.tokensLabel}` : '';
+    const tools = info.toolsEnabled === undefined ? '' : `tools: ${info.toolsEnabled ? 'on' : 'off'}`;
+    const theme = info.themeName ? `theme: ${info.themeName}` : '';
+
+    const line1Parts = [model, session].filter(Boolean);
+    const line2Parts = [tokens, tools, theme].filter(Boolean);
+
+    console.log('  ' + this.line('─'));
+    if (left) {
+      console.log('  ' + left);
+    }
+    if (line1Parts.length) {
+      console.log('  ' + this.T.dim(line1Parts.join('  |  ')));
+    }
+    if (line2Parts.length) {
+      console.log('  ' + this.T.dim(line2Parts.join('  |  ')));
+    }
+    console.log('');
+  }
+
+  private line(ch = '─') { return this.T.border(ch.repeat(W)); }
+  private thinLine() { return this.T.muted('·'.repeat(W)); }
 
   // ─── Header (XibeCode hero) ───────────────────────────
   header(_version: string = VERSION) {
@@ -96,41 +136,41 @@ export class EnhancedUI {
 
     console.log('');
     console.log('  ' + chalk.hex('#00D4FF').bold('XibeCode'));
-    console.log('  ' + T.dim('AI-powered autonomous coding assistant') + T.muted(`  ·  v${v}`));
+    console.log('  ' + this.T.dim('AI-powered autonomous coding assistant') + this.T.muted(`  ·  v${v}`));
     console.log('');
   }
 
   // ─── Model / endpoint info ────────────────────────────
   modelInfo(model: string, endpoint?: string) {
     const host = endpoint ? endpoint.replace(/^https?:\/\//, '') : 'api.anthropic.com';
-    console.log('  ' + T.dim('  model') + '     ' + T.text(model));
-    console.log('  ' + T.dim('  endpoint') + '  ' + T.text(host));
-    console.log('  ' + T.dim('  version') + '   ' + T.muted(`v${VERSION}`));
+    console.log('  ' + this.T.dim('  model') + '     ' + this.T.text(model));
+    console.log('  ' + this.T.dim('  endpoint') + '  ' + this.T.text(host));
+    console.log('  ' + this.T.dim('  version') + '   ' + this.T.muted(`v${VERSION}`));
     console.log('');
   }
 
   // ─── Chat banner (tips + input bar + status) ─────────
   chatBanner(cwd: string, model: string, endpoint?: string) {
-    console.log('  ' + T.bold('Tips for getting started:'));
-    console.log('  ' + T.text('1. Ask questions, edit files, or run commands.'));
-    console.log('  ' + T.text('2. Be specific for the best results.'));
-    console.log('  ' + T.text('3. Use ') + T.code('@path/to/file') + T.text(' to send files.'));
-    console.log('  ' + T.text('4. Type ') + T.code('/help') + T.text(' for more information.'));
+    console.log('  ' + this.T.bold('Tips for getting started:'));
+    console.log('  ' + this.T.text('1. Ask questions, edit files, or run commands.'));
+    console.log('  ' + this.T.text('2. Be specific for the best results.'));
+    console.log('  ' + this.T.text('3. Use ') + this.T.code('@path/to/file') + this.T.text(' to send files.'));
+    console.log('  ' + this.T.text('4. Type ') + this.T.code('/help') + this.T.text(' for more information.'));
     console.log('');
 
     const label = '> Type your message or @path/to/file';
     const boxWidth = Math.max(label.length + 2, 56);
     const innerPad = boxWidth - label.length - 1;
 
-    console.log('  ' + T.border('┌' + '─'.repeat(boxWidth) + '┐'));
-    console.log('  ' + T.border('│') + ' ' + T.text(label) + ' '.repeat(innerPad) + T.border('│'));
-    console.log('  ' + T.border('└' + '─'.repeat(boxWidth) + '┘'));
+    console.log('  ' + this.T.border('┌' + '─'.repeat(boxWidth) + '┐'));
+    console.log('  ' + this.T.border('│') + ' ' + this.T.text(label) + ' '.repeat(innerPad) + this.T.border('│'));
+    console.log('  ' + this.T.border('└' + '─'.repeat(boxWidth) + '┘'));
     console.log('');
 
     const host = endpoint ? endpoint.replace(/^https?:\/\//, '') : 'no sandbox (see /docs)';
-    const left = T.muted(cwd || '~');
-    const mid = T.muted('no sandbox (see /docs)');
-    const right = T.muted(model);
+    const left = this.T.muted(cwd || '~');
+    const mid = this.T.muted('no sandbox (see /docs)');
+    const right = this.T.muted(model);
 
     console.log('  ' + left);
     console.log('  ' + mid + '    ' + right);
@@ -140,15 +180,15 @@ export class EnhancedUI {
   // ─── Session info (run mode) ──────────────────────────
   startSession(task: string, config: { model: string; maxIterations: number; dryRun?: boolean; gitStatus?: any }) {
     this.startTime = Date.now();
-    console.log('  ' + T.dimBold('TASK'));
+    console.log('  ' + this.T.dimBold('TASK'));
     const taskLines = this.wrapText(task, W - 6);
-    taskLines.forEach(l => console.log('  ' + T.text('  ' + l)));
+    taskLines.forEach(l => console.log('  ' + this.T.text('  ' + l)));
     console.log('');
-    console.log('  ' + T.dim('  model') + '       ' + T.text(config.model));
-    console.log('  ' + T.dim('  iterations') + '  ' + T.text(isFinite(config.maxIterations) ? String(config.maxIterations) : 'unlimited'));
+    console.log('  ' + this.T.dim('  model') + '       ' + this.T.text(config.model));
+    console.log('  ' + this.T.dim('  iterations') + '  ' + this.T.text(isFinite(config.maxIterations) ? String(config.maxIterations) : 'unlimited'));
     
     if (config.dryRun) {
-      console.log('  ' + T.dim('  mode') + '        ' + T.info('DRY RUN (no changes will be made)'));
+      console.log('  ' + this.T.dim('  mode') + '        ' + this.T.info('DRY RUN (no changes will be made)'));
     }
     
     if (config.gitStatus && config.gitStatus.isGitRepo) {
@@ -156,7 +196,7 @@ export class EnhancedUI {
     }
     
     console.log('');
-    console.log('  ' + line());
+    console.log('  ' + this.line());
     console.log('');
   }
 
@@ -168,15 +208,16 @@ export class EnhancedUI {
         ? `step ${current}/${total}`
         : `step ${current}`;
       console.log('');
-      console.log('  ' + T.muted(`── ${label} · ${elapsed} ──`));
+      console.log('  ' + this.T.muted(`── ${label} · ${elapsed} ──`));
     }
   }
 
   // ─── Thinking spinner ────────────────────────────────
   thinking(message?: string) {
+    if (!this.showThinking) return;
     if (this.spinner) this.spinner.stop();
     this.spinner = ora({
-      text: T.brandDim(message || 'Thinking...'),
+      text: this.T.brandDim(message || 'Thinking...'),
       color: 'cyan',
       spinner: 'dots12',
       prefixText: '  ',
@@ -184,7 +225,8 @@ export class EnhancedUI {
   }
 
   updateThinking(message: string) {
-    if (this.spinner) this.spinner.text = T.brandDim(message);
+    if (!this.showThinking) return;
+    if (this.spinner) this.spinner.text = this.T.brandDim(message);
   }
 
   // ─── Streaming ────────────────────────────────────────
@@ -192,7 +234,7 @@ export class EnhancedUI {
     this.stopSpinner();
     this.isStreaming = true;
     this.streamLineLen = 0;
-    console.log('  ' + T.assistant('◆ XibeCode'));
+    console.log('  ' + this.T.assistant('◆ XibeCode'));
   }
 
   streamText(text: string) {
@@ -205,7 +247,7 @@ export class EnhancedUI {
         process.stdout.write('\n    ');
         this.streamLineLen = 0;
       }
-      process.stdout.write(T.text(lines[i]));
+      process.stdout.write(this.T.text(lines[i]));
       this.streamLineLen += lines[i].length;
     }
   }
@@ -221,10 +263,10 @@ export class EnhancedUI {
   // ─── Non-streaming response ───────────────────────────
   response(text: string) {
     this.stopSpinner();
-    console.log('  ' + T.assistant('◆ XibeCode'));
+    console.log('  ' + this.T.assistant('◆ XibeCode'));
     const lines = text.split('\n');
     lines.forEach(line => {
-      console.log('    ' + T.text(line));
+      console.log('    ' + this.T.text(line));
     });
   }
 
@@ -235,121 +277,121 @@ export class EnhancedUI {
 
     const icon = this.getToolIcon(toolName);
     const summary = this.summarizeInput(toolName, input);
-    const label = T.tool(toolName);
-    const detail = summary ? ' ' + T.code(summary) : '';
+    const label = this.T.tool(toolName);
+    const detail = summary ? ' ' + this.T.code(summary) : '';
 
-    console.log('    ' + T.border('╭─') + ' ' + icon + '  ' + label + detail);
+    console.log('    ' + this.T.border('╭─') + ' ' + icon + '  ' + label + detail);
 
-    if (this.verbose && input) {
+    if (this.showDetails && input) {
       const inputStr = JSON.stringify(input, null, 2);
       const lines = inputStr.split('\n').slice(0, 20);
       lines.forEach(line => {
-        console.log('    ' + T.border('│') + '  ' + T.dim(line));
+        console.log('    ' + this.T.border('│') + '  ' + this.T.dim(line));
       });
     }
   }
 
   // ─── Tool result ──────────────────────────────────────
   toolResult(toolName: string, result: any, success: boolean = true) {
-    const icon = success ? T.success('✔') : T.error('✘');
+    const icon = success ? this.T.success('✔') : this.T.error('✘');
     const summary = this.summarizeResult(toolName, result);
-    const summaryStr = summary ? '  ' + T.dim(summary) : '';
+    const summaryStr = summary ? '  ' + this.T.dim(summary) : '';
     const elapsed = this.getElapsed();
 
-    console.log('    ' + T.border('╰─') + ' ' + icon + summaryStr + T.muted('  ' + elapsed));
+    console.log('    ' + this.T.border('╰─') + ' ' + icon + summaryStr + this.T.muted('  ' + elapsed));
 
     if (!success && result) {
       const msg = typeof result === 'string' ? result : (result.message || JSON.stringify(result));
       const lines = msg.split('\n').slice(0, 5);
       lines.forEach((line: string) => {
-        console.log('       ' + T.error(line));
+        console.log('       ' + this.T.error(line));
       });
     }
 
-    if (this.verbose && success && result) {
+    if (this.showDetails && success && result) {
       const resultStr = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
       const lines = resultStr.split('\n');
       const maxLines = 30;
       const display = lines.slice(0, maxLines);
       display.forEach(line => {
-        console.log('       ' + T.dim(line));
+        console.log('       ' + this.T.dim(line));
       });
       if (lines.length > maxLines) {
-        console.log('       ' + T.dim(`... ${lines.length - maxLines} more lines`));
+        console.log('       ' + this.T.dim(`... ${lines.length - maxLines} more lines`));
       }
     }
   }
 
   // ─── Diff ─────────────────────────────────────────────
   showDiff(diff: string, file: string) {
-    if (!this.verbose) return;
-    console.log('    ' + T.bold(`changes: ${file}`));
+    if (!this.showDetails) return;
+    console.log('    ' + this.T.bold(`changes: ${file}`));
     const lines = diff.split('\n').slice(0, 40);
     lines.forEach(line => {
       if (line.startsWith('+') && !line.startsWith('+++')) {
-        console.log('    ' + T.success(line));
+        console.log('    ' + this.T.success(line));
       } else if (line.startsWith('-') && !line.startsWith('---')) {
-        console.log('    ' + T.error(line));
+        console.log('    ' + this.T.error(line));
       } else if (line.startsWith('@@')) {
-        console.log('    ' + T.info(line));
+        console.log('    ' + this.T.info(line));
       } else {
-        console.log('    ' + T.dim(line));
+        console.log('    ' + this.T.dim(line));
       }
     });
   }
 
   // ─── File change ──────────────────────────────────────
   fileChanged(action: 'created' | 'modified' | 'deleted', filePath: string, details?: string) {
-    const icons = { created: T.success('+ new'), modified: T.warn('~ mod'), deleted: T.error('- del') };
-    const colors = { created: T.success, modified: T.warn, deleted: T.error };
-    console.log('       ' + icons[action] + ' ' + colors[action](filePath) + (details ? T.dim(` (${details})`) : ''));
+    const icons = { created: this.T.success('+ new'), modified: this.T.warn('~ mod'), deleted: this.T.error('- del') };
+    const colors = { created: this.T.success, modified: this.T.warn, deleted: this.T.error };
+    console.log('       ' + icons[action] + ' ' + colors[action](filePath) + (details ? this.T.dim(` (${details})`) : ''));
   }
 
   // ─── Status messages ─────────────────────────────────
   error(message: string, error?: any) {
     this.stopSpinner();
-    console.log('  ' + T.error('  ✘ ') + T.error.bold('Error: ') + T.text(message));
-    if (error && this.verbose) {
-      console.log('    ' + T.dim(error.stack || error.message || error));
+    console.log('  ' + this.T.error('  ✘ ') + chalk.redBright.bold('Error: ') + this.T.text(message));
+    if (error && this.showDetails) {
+      console.log('    ' + this.T.dim(error.stack || error.message || error));
     }
   }
 
   warning(message: string) {
-    console.log('  ' + T.warn('  ⚠ ') + T.text(message));
+    console.log('  ' + this.T.warn('  ⚠ ') + this.T.text(message));
   }
 
   info(message: string) {
-    console.log('  ' + T.info('  ℹ ') + T.text(message));
+    console.log('  ' + this.T.info('  ℹ ') + this.T.text(message));
   }
 
   success(message: string) {
-    console.log('  ' + T.success('  ✔ ') + T.text(message));
+    console.log('  ' + this.T.success('  ✔ ') + this.T.text(message));
   }
 
   // ─── Safety & Risk ────────────────────────────────────
   safetyWarning(level: 'low' | 'medium' | 'high', message: string, warnings: string[] = []) {
     const icons = {
-      low: T.info('  ℹ '),
-      medium: T.warn('  ⚠ '),
-      high: T.error('  ⚠ '),
+      low: this.T.info('  ℹ '),
+      medium: this.T.warn('  ⚠ '),
+      high: this.T.error('  ⚠ '),
     };
     const labels = {
-      low: T.info('Low Risk'),
-      medium: T.warn('Medium Risk'),
-      high: T.error('HIGH RISK'),
+      low: this.T.info('Low Risk'),
+      medium: this.T.warn('Medium Risk'),
+      high: this.T.error('HIGH RISK'),
     };
 
-    console.log('  ' + icons[level] + labels[level] + ': ' + T.text(message));
+    console.log('  ' + icons[level] + labels[level] + ': ' + this.T.text(message));
     
     if (warnings.length > 0) {
       warnings.forEach(w => {
-        console.log('       ' + T.dim('• ' + w));
+        console.log('       ' + this.T.dim('• ' + w));
       });
     }
   }
 
   dryRunIndicator(message: string) {
-    console.log('       ' + T.info('[DRY RUN]') + ' ' + T.dim(message));
+    console.log('       ' + this.T.info('[DRY RUN]') + ' ' + this.T.dim(message));
   }
 
   // ─── Improved Diff Summary ────────────────────────────
@@ -359,17 +401,17 @@ export class EnhancedUI {
     const totalInsertions = files.reduce((sum, f) => sum + f.insertions, 0);
     const totalDeletions = files.reduce((sum, f) => sum + f.deletions, 0);
 
-    console.log('    ' + T.bold(`Changes: ${files.length} file(s)`));
-    console.log('       ' + T.success(`+${totalInsertions}`) + ' ' + T.error(`-${totalDeletions}`));
+    console.log('    ' + this.T.bold(`Changes: ${files.length} file(s)`));
+    console.log('       ' + this.T.success(`+${totalInsertions}`) + ' ' + this.T.error(`-${totalDeletions}`));
     
-    if (this.verbose) {
+    if (this.showDetails) {
       files.slice(0, 10).forEach(f => {
-        const stats = T.success(`+${f.insertions}`) + ' ' + T.error(`-${f.deletions}`);
-        console.log('       ' + stats + ' ' + T.text(f.path));
+        const stats = this.T.success(`+${f.insertions}`) + ' ' + this.T.error(`-${f.deletions}`);
+        console.log('       ' + stats + ' ' + this.T.text(f.path));
       });
       
       if (files.length > 10) {
-        console.log('       ' + T.dim(`... and ${files.length - 10} more files`));
+        console.log('       ' + this.T.dim(`... and ${files.length - 10} more files`));
       }
     }
   }
@@ -385,21 +427,21 @@ export class EnhancedUI {
     const parts: string[] = [];
     
     if (status.branch) {
-      parts.push(T.info(`branch: ${status.branch}`));
+      parts.push(this.T.info(`branch: ${status.branch}`));
     }
     
     if (status.isClean) {
-      parts.push(T.success('clean'));
+      parts.push(this.T.success('clean'));
     } else {
       const counts = [];
       if (status.staged && status.staged.length > 0) {
-        counts.push(T.success(`${status.staged.length} staged`));
+        counts.push(this.T.success(`${status.staged.length} staged`));
       }
       if (status.unstaged && status.unstaged.length > 0) {
-        counts.push(T.warn(`${status.unstaged.length} unstaged`));
+        counts.push(this.T.warn(`${status.unstaged.length} unstaged`));
       }
       if (status.untracked && status.untracked.length > 0) {
-        counts.push(T.dim(`${status.untracked.length} untracked`));
+        counts.push(this.T.dim(`${status.untracked.length} untracked`));
       }
       if (counts.length > 0) {
         parts.push(counts.join(', '));
@@ -407,7 +449,7 @@ export class EnhancedUI {
     }
 
     if (parts.length > 0) {
-      console.log('    ' + T.dim('git: ') + parts.join(' | '));
+      console.log('    ' + this.T.dim('git: ') + parts.join(' | '));
     }
   }
 
@@ -420,24 +462,24 @@ export class EnhancedUI {
     testsFailed?: number;
     duration?: number;
   }) {
-    const icon = results.success ? T.success('✔') : T.error('✘');
-    const status = results.success ? T.success('PASS') : T.error('FAIL');
+    const icon = results.success ? this.T.success('✔') : this.T.error('✘');
+    const status = results.success ? this.T.success('PASS') : this.T.error('FAIL');
     
     console.log('    ' + icon + ' ' + status);
     
     if (results.runner) {
-      console.log('       ' + T.dim(`runner: ${results.runner}`));
+      console.log('       ' + this.T.dim(`runner: ${results.runner}`));
     }
     
     if (results.testsRun !== undefined) {
       const passed = results.testsPassed || 0;
       const failed = results.testsFailed || 0;
-      console.log('       ' + T.success(`${passed} passed`) + ' ' + (failed > 0 ? T.error(`${failed} failed`) : ''));
+      console.log('       ' + this.T.success(`${passed} passed`) + ' ' + (failed > 0 ? this.T.error(`${failed} failed`) : ''));
     }
     
     if (results.duration) {
       const seconds = (results.duration / 1000).toFixed(2);
-      console.log('       ' + T.dim(`duration: ${seconds}s`));
+      console.log('       ' + this.T.dim(`duration: ${seconds}s`));
     }
   }
 
@@ -451,29 +493,29 @@ export class EnhancedUI {
     this.stopSpinner();
     const elapsed = this.formatDuration(stats.duration);
 
-    console.log('  ' + T.border('╭' + '─'.repeat(W) + '╮'));
-    console.log('  ' + T.border('│') + pad('  ' + T.success.bold('✔ Task Complete'), W) + T.border('│'));
-    console.log('  ' + T.border('│') + '                                                              ' + T.border('│'));
-    console.log('  ' + T.border('│') + pad(
-      '  ' + T.dim('iterations ') + T.text(String(stats.iterations)) +
-      T.dim('  ·  tools ') + T.text(String(stats.toolCalls)) +
-      T.dim('  ·  files ') + T.text(String(stats.filesChanged)) +
-      T.dim('  ·  ') + T.text(elapsed), W
-    ) + T.border('│'));
-    console.log('  ' + T.border('│') + '                                                              ' + T.border('│'));
-    console.log('  ' + T.border('╰' + '─'.repeat(W) + '╯'));
+    console.log('  ' + this.T.border('╭' + '─'.repeat(W) + '╮'));
+    console.log('  ' + this.T.border('│') + pad('  ' + chalk.greenBright.bold('✔ Task Complete'), W) + this.T.border('│'));
+    console.log('  ' + this.T.border('│') + '                                                              ' + this.T.border('│'));
+    console.log('  ' + this.T.border('│') + pad(
+      '  ' + this.T.dim('iterations ') + this.T.text(String(stats.iterations)) +
+      this.T.dim('  ·  tools ') + this.T.text(String(stats.toolCalls)) +
+      this.T.dim('  ·  files ') + this.T.text(String(stats.filesChanged)) +
+      this.T.dim('  ·  ') + this.T.text(elapsed), W
+    ) + this.T.border('│'));
+    console.log('  ' + this.T.border('│') + '                                                              ' + this.T.border('│'));
+    console.log('  ' + this.T.border('╰' + '─'.repeat(W) + '╯'));
   }
 
   failureSummary(errorMsg: string, stats: { iterations: number; duration: number }) {
     this.stopSpinner();
-    console.log('  ' + T.border('╭' + '─'.repeat(W) + '╮'));
-    console.log('  ' + T.border('│') + pad('  ' + T.error.bold('✘ Task Failed'), W) + T.border('│'));
-    console.log('  ' + T.border('│') + pad('  ' + T.dim(errorMsg.slice(0, W - 4)), W) + T.border('│'));
-    console.log('  ' + T.border('│') + pad(
-      '  ' + T.dim('iterations ') + T.text(String(stats.iterations)) +
-      T.dim('  ·  ') + T.text(this.formatDuration(stats.duration)), W
-    ) + T.border('│'));
-    console.log('  ' + T.border('╰' + '─'.repeat(W) + '╯'));
+    console.log('  ' + this.T.border('╭' + '─'.repeat(W) + '╮'));
+    console.log('  ' + this.T.border('│') + pad('  ' + chalk.redBright.bold('✘ Task Failed'), W) + this.T.border('│'));
+    console.log('  ' + this.T.border('│') + pad('  ' + this.T.dim(errorMsg.slice(0, W - 4)), W) + this.T.border('│'));
+    console.log('  ' + this.T.border('│') + pad(
+      '  ' + this.T.dim('iterations ') + this.T.text(String(stats.iterations)) +
+      this.T.dim('  ·  ') + this.T.text(this.formatDuration(stats.duration)), W
+    ) + this.T.border('│'));
+    console.log('  ' + this.T.border('╰' + '─'.repeat(W) + '╯'));
   }
 
   // ─── Utilities ────────────────────────────────────────
@@ -488,7 +530,7 @@ export class EnhancedUI {
   }
 
   divider() {
-    console.log('  ' + line());
+    console.log('  ' + this.line());
   }
 
   clear() {

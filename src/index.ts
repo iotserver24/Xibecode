@@ -15,7 +15,7 @@ const program = new Command();
 program
   .name('xibecode')
   .description('XibeCode - AI-powered autonomous coding assistant')
-  .version('0.0.5');
+  .version('0.0.7');
 
 // Main run command
 program
@@ -39,6 +39,8 @@ program
   .option('-m, --model <model>', 'AI model to use')
   .option('-b, --base-url <url>', 'Custom API base URL')
   .option('-k, --api-key <key>', 'API key (overrides config)')
+  .option('--theme <theme>', 'UI theme to use')
+  .option('--session <id>', 'Resume a specific chat session by id')
   .action(chatCommand);
 
 // Configuration
