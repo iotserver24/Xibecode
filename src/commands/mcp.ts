@@ -95,27 +95,28 @@ export async function mcpCommand(
 
   } else if (action === 'list') {
     const servers = await config.getMCPServers();
-    
-    if (servers.length === 0) {
+
+    if (Object.keys(servers).length === 0) {
       console.log(chalk.yellow('No MCP servers configured\n'));
-      console.log(chalk.white('  Add a server with: xibecode mcp add <name> --command <command>\n'));
+      console.log(chalk.white('  Add a server by editing the config file: xibecode mcp edit\n'));
       return;
     }
 
     console.log(chalk.bold.white('\n📡 Configured MCP Servers\n'));
-    servers.forEach((server, index) => {
-      console.log(chalk.cyan(`  ${index + 1}. ${server.name}`));
-      console.log(chalk.gray(`     Transport: ${server.transport}`));
-      console.log(chalk.gray(`     Command: ${server.command}`));
-      if (server.args && server.args.length > 0) {
-        console.log(chalk.gray(`     Args: ${server.args.join(' ')}`));
+    let index = 1;
+    for (const [serverName, serverConfig] of Object.entries(servers)) {
+      console.log(chalk.cyan(`  ${index}. ${serverName}`));
+      console.log(chalk.gray(`     Command: ${serverConfig.command}`));
+      if (serverConfig.args && serverConfig.args.length > 0) {
+        console.log(chalk.gray(`     Args: ${serverConfig.args.join(' ')}`));
       }
-      if (server.env && Object.keys(server.env).length > 0) {
-        const envKeys = Object.keys(server.env);
+      if (serverConfig.env && Object.keys(serverConfig.env).length > 0) {
+        const envKeys = Object.keys(serverConfig.env);
         console.log(chalk.gray(`     Env: ${envKeys.join(', ')}`));
       }
       console.log('');
-    });
+      index++;
+    }
 
   } else if (action === 'remove') {
     const serverName = nameOrOptions as string;

@@ -83,15 +83,17 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   // Load and connect to MCP servers
   const mcpClientManager = new MCPClientManager();
   const mcpServers = await config.getMCPServers();
-  if (mcpServers.length > 0) {
-    ui.info(`Connecting to ${mcpServers.length} MCP server(s)...`);
-    for (const serverConfig of mcpServers) {
+  const serverNames = Object.keys(mcpServers);
+  if (serverNames.length > 0) {
+    ui.info(`Connecting to ${serverNames.length} MCP server(s)...`);
+    for (const serverName of serverNames) {
+      const serverConfig = mcpServers[serverName];
       try {
-        await mcpClientManager.connect(serverConfig);
-        const tools = mcpClientManager.getAvailableTools().filter(t => t.serverName === serverConfig.name);
-        ui.info(`  ✓ Connected to ${serverConfig.name} (${tools.length} tool(s))`);
+        await mcpClientManager.connect(serverName, serverConfig);
+        const tools = mcpClientManager.getAvailableTools().filter(t => t.serverName === serverName);
+        ui.info(`  ✓ Connected to ${serverName} (${tools.length} tool(s))`);
       } catch (error: any) {
-        ui.warning(`  ✗ Failed to connect to ${serverConfig.name}: ${error.message}`);
+        ui.warning(`  ✗ Failed to connect to ${serverName}: ${error.message}`);
       }
     }
   }
@@ -221,7 +223,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
     process.exit(1);
   } finally {
     // Cleanup: disconnect from all MCP servers
-    if (mcpServers.length > 0) {
+    if (serverNames.length > 0) {
       await mcpClientManager.disconnectAll();
     }
   }

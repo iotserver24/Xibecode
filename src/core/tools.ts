@@ -1313,15 +1313,14 @@ export class CodingToolExecutor implements ToolExecutor {
       const config = new ConfigManager();
       const configuredServers = await config.getMCPServers();
 
-      const servers = configuredServers.map(serverConfig => {
-        const isConnected = connectedServers.includes(serverConfig.name);
-        const serverTools = allTools.filter(t => t.serverName === serverConfig.name);
-        const serverResources = allResources.filter(r => r.serverName === serverConfig.name);
-        const serverPrompts = allPrompts.filter(p => p.serverName === serverConfig.name);
+      const servers = Object.entries(configuredServers).map(([serverName, serverConfig]) => {
+        const isConnected = connectedServers.includes(serverName);
+        const serverTools = allTools.filter(t => t.serverName === serverName);
+        const serverResources = allResources.filter(r => r.serverName === serverName);
+        const serverPrompts = allPrompts.filter(p => p.serverName === serverName);
 
         return {
-          name: serverConfig.name,
-          transport: serverConfig.transport,
+          name: serverName,
           command: serverConfig.command,
           args: serverConfig.args || [],
           connected: isConnected,
