@@ -456,8 +456,14 @@ export class EnhancedAgent extends EventEmitter {
       throw new Error('API key is required for OpenAI-compatible provider');
     }
 
-    const base = (this.config.baseUrl || 'https://api.openai.com').replace(/\/+$/, '');
-    const url = `${base}/v1/chat/completions`;
+    let base = (this.config.baseUrl || 'https://api.openai.com').replace(/\/+$/, '');
+    // If user provided a base URL that already includes /v1, avoid double /v1/v1
+    let url: string;
+    if (base.endsWith('/v1')) {
+      url = `${base}/chat/completions`;
+    } else {
+      url = `${base}/v1/chat/completions`;
+    }
 
     // Build OpenAI-style messages from our internal history.
     const openAiMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
