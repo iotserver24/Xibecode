@@ -1,4 +1,5 @@
 import inquirer from 'inquirer';
+import readline from 'readline';
 import { EnhancedAgent } from '../core/agent.js';
 import { CodingToolExecutor } from '../core/tools.js';
 import { MCPClientManager } from '../core/mcp-client.js';
@@ -7,6 +8,7 @@ import { ConfigManager } from '../utils/config.js';
 import { SessionManager, type ChatSession } from '../core/session-manager.js';
 import { exportSessionToMarkdown } from '../core/export.js';
 import { ContextManager } from '../core/context.js';
+import { getAllModes, type AgentMode } from '../core/modes.js';
 import { isThemeName, THEME_NAMES, type ThemeName } from '../ui/themes.js';
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
@@ -84,6 +86,9 @@ export async function chatCommand(options: ChatOptions) {
     verbose: false,
   });
 
+  const allModes = getAllModes();
+  let currentMode: AgentMode = agent.getMode();
+
   function setupAgentHandlers() {
     agent.removeAllListeners('event');
     agent.on('event', (event: any) => {
@@ -153,6 +158,11 @@ export async function chatCommand(options: ChatOptions) {
 
         case 'warning':
           ui.warning(event.data.message);
+          break;
+
+        case 'mode_changed':
+          currentMode = event.data.to as AgentMode;
+          ui.info(`Mode: ${currentMode}`);
           break;
       }
     });
@@ -279,6 +289,7 @@ export async function chatCommand(options: ChatOptions) {
         cwd: process.cwd(),
         toolsEnabled: enableTools,
         themeName: ui.getThemeName(),
+        mode: currentMode,
       });
     }
     await sessionManager.saveMessagesAndStats({
@@ -326,6 +337,7 @@ export async function chatCommand(options: ChatOptions) {
       verbose: false,
     });
     setupAgentHandlers();
+    currentMode = agent.getMode();
     ui.success('Started new session');
   }
 
@@ -425,6 +437,41 @@ export async function chatCommand(options: ChatOptions) {
     } catch (error: any) {
       ui.error('Failed to search files for @ path', error);
     }
+  }
+
+  // ── Global key handler for mode cycling (Tab) ───────────
+  if (process.stdin.isTTY) {
+    readline.emitKeypressEvents(process.stdin);
+    if (typeof (process.stdin as any).setRawMode === 'function') {
+      try {
+        (process.stdin as any).setRawMode(true);
+      } catch {
+        // ignore if raw mode cannot be set (e.g. non‑TTY env)
+      }
+    }
+
+    process.stdin.on('keypress', (_str, key: any) => {
+      if (!key) return;
+      if (key.name === 'tab') {
+        const idx = allModes.indexOf(currentMode);
+        const next = allModes[(idx + 1) % allModes.length];
+        currentMode = next;
+        if (typeof (agent as any).setModeFromUser === 'function') {
+          (agent as any).setModeFromUser(next, 'User pressed Tab to cycle mode');
+        }
+        ui.info(`Mode: ${currentMode} (press Tab to cycle)`);
+        if (config.isStatusBarEnabled()) {
+          ui.renderStatusBar({
+            model,
+            sessionTitle: currentSession.title,
+            cwd: process.cwd(),
+            toolsEnabled: enableTools,
+            themeName: ui.getThemeName(),
+            mode: currentMode,
+          });
+        }
+      }
+    });
   }
 
   // ── Chat loop ──
@@ -642,6 +689,7 @@ export async function chatCommand(options: ChatOptions) {
           cwd: process.cwd(),
           toolsEnabled: enableTools,
           themeName: ui.getThemeName(),
+          mode: currentMode,
         });
       }
       await sessionManager.saveMessagesAndStats({

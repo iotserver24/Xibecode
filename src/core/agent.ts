@@ -803,4 +803,25 @@ When you complete the task, provide a comprehensive summary including:
   setMessages(messages: MessageParam[]) {
     this.messages = messages;
   }
+
+  /**
+   * Get the current agent mode.
+   */
+  getMode(): AgentMode {
+    return this.modeState.current;
+  }
+
+  /**
+   * Explicit user-driven mode change (e.g. hotkey or /mode).
+   */
+  setModeFromUser(mode: AgentMode, reason: string) {
+    const oldMode = this.modeState.current;
+    this.modeState = transitionMode(this.modeState, mode, reason);
+    this.emit('mode_changed', {
+      from: oldMode,
+      to: mode,
+      reason,
+      auto: false,
+    });
+  }
 }
