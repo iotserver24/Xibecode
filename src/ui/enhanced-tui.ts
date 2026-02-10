@@ -69,6 +69,7 @@ export class EnhancedUI {
     cwd?: string;
     toolsEnabled?: boolean;
     themeName?: string;
+    mode?: string;
   }) {
     const left = info.cwd ? this.T.muted(info.cwd) : '';
     const session = info.sessionTitle ? `session: ${info.sessionTitle}` : '';
@@ -76,8 +77,9 @@ export class EnhancedUI {
     const tokens = info.tokensLabel ? `tokens: ${info.tokensLabel}` : '';
     const tools = info.toolsEnabled === undefined ? '' : `tools: ${info.toolsEnabled ? 'on' : 'off'}`;
     const theme = info.themeName ? `theme: ${info.themeName}` : '';
+    const mode = info.mode ? `mode: ${info.mode}` : '';
 
-    const line1Parts = [model, session].filter(Boolean);
+    const line1Parts = [model, mode, session].filter(Boolean);
     const line2Parts = [tokens, tools, theme].filter(Boolean);
 
     console.log('  ' + this.line('─'));
