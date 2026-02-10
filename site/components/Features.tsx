@@ -20,112 +20,141 @@ const features = [
   {
     icon: Brain,
     title: 'Smart Context Management',
-    description: 'Automatically loads related files, imports, tests, and configs for intelligent coding decisions.',
-    color: 'from-blue-500 to-cyan-500',
+    description: 'Automatically discovers and loads related files — imports, tests, and configs — for intelligent coding decisions.',
+    accent: 'violet',
   },
   {
     icon: Code2,
     title: 'Advanced File Editing',
-    description: 'Multiple edit methods: search/replace, line-range edits, and automatic backups with revert capability.',
-    color: 'from-purple-500 to-pink-500',
+    description: 'Four edit methods: search/replace, line-range edits, insert, and revert. Automatic backups on every change.',
+    accent: 'fuchsia',
   },
   {
     icon: TestTube,
     title: 'Test Integration',
-    description: 'Auto-detect and run tests with Vitest, Jest, pytest, or Go test. Ensures all tests pass.',
-    color: 'from-green-500 to-emerald-500',
+    description: 'Auto-detects and runs tests with Vitest, Jest, pytest, or Go test. Iterates until all tests pass.',
+    accent: 'emerald',
   },
   {
     icon: GitBranch,
     title: 'Git Awareness',
-    description: 'Check status, create checkpoints, focus on changed files, and revert changes safely.',
-    color: 'from-orange-500 to-red-500',
+    description: 'Check status, create checkpoints, focus on changed files, and revert changes safely with stash or commit strategies.',
+    accent: 'cyan',
   },
   {
     icon: Plug,
     title: 'MCP Integration',
-    description: 'Connect to external MCP servers for extended capabilities like file systems, GitHub, databases.',
-    color: 'from-indigo-500 to-purple-500',
+    description: 'Connect to external MCP servers for extended capabilities — file systems, GitHub, databases, and more.',
+    accent: 'violet',
   },
   {
     icon: FileSearch,
     title: 'Plugin System',
     description: 'Extend functionality with custom tools and domain-specific logic through a powerful plugin API.',
-    color: 'from-teal-500 to-green-500',
+    accent: 'fuchsia',
   },
   {
     icon: Shield,
     title: 'Safety Controls',
-    description: 'Dry-run mode, risk assessment, and command blocking for dangerous operations.',
-    color: 'from-yellow-500 to-orange-500',
+    description: 'Built-in dry-run mode, risk assessment, and automatic blocking of dangerous commands and operations.',
+    accent: 'amber',
   },
   {
     icon: Zap,
-    title: 'Autonomous Loop',
-    description: 'AI iteratively works on tasks until completion with loop detection and max iteration limits.',
-    color: 'from-pink-500 to-rose-500',
+    title: 'Autonomous Agent Loop',
+    description: 'AI iteratively works on tasks until completion with intelligent loop detection and configurable iteration limits.',
+    accent: 'rose',
   },
   {
     icon: Layers,
     title: 'Cross-Platform',
-    description: 'Works identically on Windows, macOS, and Linux with automatic command adaptation.',
-    color: 'from-violet-500 to-purple-500',
+    description: 'Works identically on Windows, macOS, and Linux with automatic OS detection and command adaptation.',
+    accent: 'cyan',
   },
   {
     icon: Terminal,
     title: 'Beautiful TUI',
-    description: 'Real-time progress tracking, colored output, and clear visualization of all operations.',
-    color: 'from-cyan-500 to-blue-500',
+    description: 'Real-time progress bars, colored output, spinners, and clear visualization of every operation.',
+    accent: 'violet',
   },
   {
     icon: Sparkles,
     title: 'Enhanced Reasoning',
-    description: 'Advanced problem-solving, pattern recognition, and systematic error handling.',
-    color: 'from-fuchsia-500 to-pink-500',
+    description: 'Systematic problem solving, pattern recognition, root cause analysis, and multi-step planning.',
+    accent: 'fuchsia',
   },
   {
     icon: Lock,
     title: 'Production Ready',
-    description: 'Battle-tested with comprehensive error handling, automatic backups, and revert capabilities.',
-    color: 'from-red-500 to-orange-500',
+    description: 'Battle-tested with comprehensive error handling, automatic backups, and full revert capabilities.',
+    accent: 'emerald',
   },
 ];
+
+const accentColors: Record<string, string> = {
+  violet: 'from-violet-500 to-violet-600',
+  fuchsia: 'from-fuchsia-500 to-fuchsia-600',
+  emerald: 'from-emerald-500 to-emerald-600',
+  cyan: 'from-cyan-500 to-cyan-600',
+  amber: 'from-amber-500 to-amber-600',
+  rose: 'from-rose-500 to-rose-600',
+};
+
+const accentBorder: Record<string, string> = {
+  violet: 'group-hover:border-violet-500/30',
+  fuchsia: 'group-hover:border-fuchsia-500/30',
+  emerald: 'group-hover:border-emerald-500/30',
+  cyan: 'group-hover:border-cyan-500/30',
+  amber: 'group-hover:border-amber-500/30',
+  rose: 'group-hover:border-rose-500/30',
+};
+
+const accentGlow: Record<string, string> = {
+  violet: 'group-hover:shadow-violet-500/5',
+  fuchsia: 'group-hover:shadow-fuchsia-500/5',
+  emerald: 'group-hover:shadow-emerald-500/5',
+  cyan: 'group-hover:shadow-cyan-500/5',
+  amber: 'group-hover:shadow-amber-500/5',
+  rose: 'group-hover:shadow-rose-500/5',
+};
 
 const container = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-    },
+    transition: { staggerChildren: 0.06 },
   },
 };
 
 const item = {
   hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.5 } },
 };
 
 export default function Features() {
   return (
-    <section className="py-20 md:py-32 bg-muted/30">
+    <section className="relative py-24 md:py-36">
+      {/* Subtle divider */}
+      <div className="absolute top-0 inset-x-0 glow-line" />
+
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-16"
+          transition={{ duration: 0.7 }}
+          className="text-center mb-20"
         >
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-            Powerful Features for
-            <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              {' '}
-              Modern Development
-            </span>
+          <p className="text-sm font-medium text-violet-400 tracking-wider uppercase mb-4">
+            Capabilities
+          </p>
+          <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 tracking-tight">
+            Everything you need.
+            <br />
+            <span className="text-zinc-500">Nothing you don&apos;t.</span>
           </h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Everything you need for autonomous AI-assisted coding, from context management to test integration.
+          <p className="text-lg text-zinc-400 max-w-2xl mx-auto">
+            From smart context management to autonomous test execution — XibeCode handles the heavy lifting so you can focus on shipping.
           </p>
         </motion.div>
 
@@ -134,29 +163,20 @@ export default function Features() {
           initial="hidden"
           whileInView="show"
           viewport={{ once: true }}
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
         >
           {features.map((feature, index) => (
             <motion.div
               key={index}
               variants={item}
-              whileHover={{
-                scale: 1.05,
-                transition: { type: 'spring', stiffness: 300 },
-              }}
-              className="group relative overflow-hidden rounded-xl bg-card border border-border p-6 hover:shadow-lg transition-shadow"
+              className={`group relative rounded-xl border border-white/5 bg-white/[0.02] p-6 hover:bg-white/[0.04] ${accentBorder[feature.accent]} ${accentGlow[feature.accent]} shadow-lg shadow-transparent transition-all duration-300`}
             >
-              {/* Gradient Background on Hover */}
-              <div className={`absolute inset-0 bg-gradient-to-br ${feature.color} opacity-0 group-hover:opacity-5 transition-opacity`} />
-
-              <div className="relative">
-                <div className={`inline-flex p-3 rounded-lg bg-gradient-to-br ${feature.color} mb-4`}>
-                  <feature.icon className="h-6 w-6 text-white" />
-                </div>
-
-                <h3 className="text-xl font-semibold mb-2">{feature.title}</h3>
-                <p className="text-muted-foreground text-sm leading-relaxed">{feature.description}</p>
+              <div className={`inline-flex p-2.5 rounded-lg bg-gradient-to-br ${accentColors[feature.accent]} mb-4 shadow-lg`}>
+                <feature.icon className="h-5 w-5 text-white" />
               </div>
+
+              <h3 className="text-lg font-semibold text-white mb-2">{feature.title}</h3>
+              <p className="text-sm text-zinc-400 leading-relaxed">{feature.description}</p>
             </motion.div>
           ))}
         </motion.div>
