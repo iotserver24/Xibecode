@@ -50,24 +50,10 @@ export async function chatCommand(options: ChatOptions) {
   const model = options.model || config.getModel();
   const baseUrl = options.baseUrl || config.getBaseUrl();
 
-  // Load and connect to MCP servers
+  // Initialize MCP client manager.
+  // Connections are established on-demand (for example when the user runs /mcp),
+  // instead of eagerly on startup.
   const mcpClientManager = new MCPClientManager();
-  const mcpServers = await config.getMCPServers();
-  const serverNames = Object.keys(mcpServers);
-  if (serverNames.length > 0) {
-    console.log(chalk.blue(`  ℹ Connecting to ${serverNames.length} MCP server(s)...\n`));
-    for (const serverName of serverNames) {
-      const serverConfig = mcpServers[serverName];
-      try {
-        await mcpClientManager.connect(serverName, serverConfig);
-        const tools = mcpClientManager.getAvailableTools().filter(t => t.serverName === serverName);
-        console.log(chalk.green(`  ✓ Connected to ${serverName} (${tools.length} tool(s))`));
-      } catch (error: any) {
-        console.log(chalk.yellow(`  ✗ Failed to connect to ${serverName}: ${error.message}`));
-      }
-    }
-    console.log('');
-  }
 
   // Gemini‑style intro screen
   ui.chatBanner(process.cwd(), model, baseUrl);
@@ -594,29 +580,61 @@ export async function chatCommand(options: ChatOptions) {
       console.log('');
       console.log(chalk.bold('  MCP Servers'));
       console.log('  ' + chalk.hex('#6B6B7B')('────────────────────────────'));
-      
-      const connectedServers = mcpClientManager.getConnectedServers();
-      if (connectedServers.length === 0) {
-        console.log('  ' + chalk.hex('#6B6B7B')('No MCP servers connected'));
-        console.log('  ' + chalk.dim('Configure servers with: xibecode config --add-mcp-server'));
-      } else {
-        for (const serverName of connectedServers) {
-          const serverTools = mcpClientManager.getAvailableTools().filter(t => t.serverName === serverName);
-          const serverResources = mcpClientManager.getAvailableResources().filter(r => r.serverName === serverName);
-          const serverPrompts = mcpClientManager.getAvailablePrompts().filter(p => p.serverName === serverName);
-          
-          console.log('');
-          console.log('  ' + chalk.hex('#00D4FF')(serverName));
-          console.log('    ' + chalk.hex('#6B6B7B')(`Tools: ${serverTools.length} | Resources: ${serverResources.length} | Prompts: ${serverPrompts.length}`));
-          
-          if (serverTools.length > 0) {
-            console.log('    ' + chalk.dim('Tools:'));
-            serverTools.forEach(tool => {
-              console.log('      ' + chalk.hex('#00D4FF')(`${tool.name}`) + chalk.hex('#6B6B7B')(` - ${tool.description}`));
-            });
+
+      try {
+        // Load configured servers and establish connections on-demand
+        const mcpServers = await config.getMCPServers();
+        const serverNames = Object.keys(mcpServers);
+
+        if (serverNames.length === 0) {
+          console.log('  ' + chalk.hex('#6B6B7B')('No MCP servers configured'));
+          console.log('  ' + chalk.dim('Configure servers with: xibecode mcp add'));
+        } else {
+          console.log('  ' + chalk.hex('#6B6B7B')(`Connecting to ${serverNames.length} MCP server(s)...`));
+          for (const serverName of serverNames) {
+            const serverConfig = mcpServers[serverName];
+
+            // Skip servers that are already connected in this session
+            if (!mcpClientManager.getConnectedServers().includes(serverName)) {
+              try {
+                await mcpClientManager.connect(serverName, serverConfig);
+                const tools = mcpClientManager
+                  .getAvailableTools()
+                  .filter(t => t.serverName === serverName);
+                console.log('  ' + chalk.green(`✓ ${serverName} (${tools.length} tool(s))`));
+              } catch (error: any) {
+                console.log('  ' + chalk.yellow(`✗ Failed to connect to ${serverName}: ${error.message}`));
+              }
+            }
           }
         }
+
+        const connectedServers = mcpClientManager.getConnectedServers();
+        if (connectedServers.length === 0) {
+          console.log('  ' + chalk.hex('#6B6B7B')('No MCP servers connected'));
+          console.log('  ' + chalk.dim('Configure servers with: xibecode config --add-mcp-server'));
+        } else {
+          for (const serverName of connectedServers) {
+            const serverTools = mcpClientManager.getAvailableTools().filter(t => t.serverName === serverName);
+            const serverResources = mcpClientManager.getAvailableResources().filter(r => r.serverName === serverName);
+            const serverPrompts = mcpClientManager.getAvailablePrompts().filter(p => p.serverName === serverName);
+
+            console.log('');
+            console.log('  ' + chalk.hex('#00D4FF')(serverName));
+            console.log('    ' + chalk.hex('#6B6B7B')(`Tools: ${serverTools.length} | Resources: ${serverResources.length} | Prompts: ${serverPrompts.length}`));
+
+            if (serverTools.length > 0) {
+              console.log('    ' + chalk.dim('Tools:'));
+              serverTools.forEach(tool => {
+                console.log('      ' + chalk.hex('#00D4FF')(`${tool.name}`) + chalk.hex('#6B6B7B')(` - ${tool.description}`));
+              });
+            }
+          }
+        }
+      } catch (error: any) {
+        console.log('  ' + chalk.yellow(`Failed to load MCP configuration: ${error.message}`));
       }
+
       console.log('');
       continue;
     }
@@ -704,8 +722,6 @@ export async function chatCommand(options: ChatOptions) {
     console.log('');
   }
 
-  // Cleanup: disconnect from all MCP servers
-  if (serverNames.length > 0) {
-    await mcpClientManager.disconnectAll();
-  }
+  // Cleanup: disconnect from any MCP servers connected during this session
+  await mcpClientManager.disconnectAll();
 }

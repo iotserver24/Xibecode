@@ -759,8 +759,7 @@ XibeCode can connect to external MCP servers to extend capabilities beyond built
 
 ### Configuration
 - MCP servers are configured in \`~/.xibecode/mcp-servers.json\` file
-- Servers are automatically connected when XibeCode starts
-- If a server fails to connect, it may not be installed - check the error message
+- Servers are connected on-demand when the user requests MCP usage (for example by running \`/mcp\` in chat or calling an MCP tool)
 
 ## Best Practices
 
