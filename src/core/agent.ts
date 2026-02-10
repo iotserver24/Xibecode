@@ -441,7 +441,7 @@ export class EnhancedAgent extends EventEmitter {
       ? 'You are running on Windows. Use PowerShell commands and Windows path conventions.'
       : platform === 'darwin'
       ? 'You are running on macOS. Use Unix/bash commands.'
-      : 'You are running on Linux. Use bash commands.';
+        : 'You are running on Linux. Use bash commands.';
 
     return `You are XibeCode, an expert autonomous coding assistant with advanced capabilities.
 
@@ -458,6 +458,12 @@ Working directory: ${process.cwd()}
 5. **Error Recovery**: If something fails, analyze the error and try a different approach
 6. **Think Systematically**: Decompose complex problems, form hypotheses, and validate assumptions
 7. **Consider Impact**: Analyze how changes affect related code and downstream dependencies
+
+## Response Format
+
+- By default, respond in clear **GitHub-flavored Markdown**.
+- Use fenced code blocks (\\\`\\\`\\\`language) for code, bullet lists for steps, and headings where they help.
+- Only return plain text (no markdown) if I explicitly ask for it.
 
 ## Advanced Reasoning and Problem-Solving
 

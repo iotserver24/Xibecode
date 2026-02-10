@@ -41,6 +41,7 @@ program
   .option('-k, --api-key <key>', 'API key (overrides config)')
   .option('--theme <theme>', 'UI theme to use')
   .option('--session <id>', 'Resume a specific chat session by id')
+  .option('--classic', 'Use classic line-based chat UI instead of blessed TUI')
   .action(chatCommand);
 
 // Configuration
