@@ -159,8 +159,6 @@ export async function runBlessedChat(options: BlessedChatOptions): Promise<void>
       fg: 'white',
       bg: 'black',
     },
-    content:
-      ' Tab: {green-fg}mode{/green-fg}  |  /help: {green-fg}commands{/green-fg}  |  {red-fg}q{/red-fg}: quit',
   });
 
   const messagesBox = blessed.box({
@@ -193,6 +191,18 @@ export async function runBlessedChat(options: BlessedChatOptions): Promise<void>
     },
   });
 
+  const thinkingBox = blessed.box({
+    bottom: 3,
+    right: 2,
+    width: 20,
+    height: 1,
+    tags: true,
+    style: {
+      fg: 'cyan',
+      bg: 'black',
+    },
+  });
+
   const input = blessed.textbox({
     bottom: 0,
     left: 0,
@@ -217,11 +227,16 @@ export async function runBlessedChat(options: BlessedChatOptions): Promise<void>
   screen.append(header);
   screen.append(messagesBox);
   screen.append(statusBar);
+  screen.append(thinkingBox);
   screen.append(input);
 
   const lines: ChatLine[] = [];
   let showDetails = config.getShowDetails();
   let showThinking = config.getShowThinking();
+  let thinkingInterval: NodeJS.Timeout | null = null;
+  let thinkingFrame = 0;
+
+  const thinkingFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
   function getToolIcon(name: string): string {
     const icons: Record<string, string> = {
@@ -356,7 +371,6 @@ export async function runBlessedChat(options: BlessedChatOptions): Promise<void>
   }
 
   function updateStatus() {
-    if (!config.isStatusBarEnabled()) return;
     const parts: string[] = [];
     parts.push(`model: ${model}`);
     parts.push(`mode: ${currentMode}`);
@@ -369,11 +383,37 @@ export async function runBlessedChat(options: BlessedChatOptions): Promise<void>
     );
   }
 
+  function updateHeader() {
+    header.setContent(
+      ` Tab: {green-fg}mode{/green-fg} (${currentMode})  |  /help: {green-fg}commands{/green-fg}  |  {red-fg}q{/red-fg}: quit`,
+    );
+  }
+
+  function startThinking(label = 'Thinking') {
+    if (!showThinking) return;
+    if (thinkingInterval) clearInterval(thinkingInterval);
+    thinkingInterval = setInterval(() => {
+      const frame = thinkingFrames[thinkingFrame % thinkingFrames.length];
+      thinkingFrame += 1;
+      thinkingBox.setContent(` {cyan-fg}${label} ${frame}{/cyan-fg}`);
+      screen.render();
+    }, 120);
+  }
+
+  function stopThinking() {
+    if (thinkingInterval) {
+      clearInterval(thinkingInterval);
+      thinkingInterval = null;
+    }
+    thinkingBox.setContent('');
+  }
+
   function cycleMode() {
     const idx = allModes.indexOf(currentMode);
     const next = allModes[(idx + 1) % allModes.length];
     agent.setModeFromUser(next, 'User pressed Tab to cycle mode');
     currentMode = next;
+    updateHeader();
     pushLine({
       role: 'system',
       text: `Mode changed to ${next}`,
@@ -589,6 +629,7 @@ export async function runBlessedChat(options: BlessedChatOptions): Promise<void>
     if (trimmed === '/thinking') {
       showThinking = !showThinking;
       config.set('showThinking', showThinking);
+      if (!showThinking) stopThinking();
       pushLine({ role: 'system', text: `Thinking display ${showThinking ? 'enabled' : 'disabled'}.` });
       return;
     }
@@ -678,6 +719,142 @@ export async function runBlessedChat(options: BlessedChatOptions): Promise<void>
   }
 
   function setupInput() {
+    // Slash and @ suggestion popups
+    let slashList: blessed.Widgets.ListElement | null = null;
+    let atList: blessed.Widgets.ListElement | null = null;
+
+    function closeSlashList() {
+      if (slashList) {
+        slashList.destroy();
+        slashList = null;
+        screen.render();
+      }
+    }
+
+    function closeAtList() {
+      if (atList) {
+        atList.destroy();
+        atList = null;
+        screen.render();
+      }
+    }
+
+    const slashCommands = [
+      '/help',
+      '/new',
+      '/sessions',
+      '/models',
+      '/themes',
+      '/export',
+      '/compact',
+      '/details',
+      '/thinking',
+      '/mcp',
+    ];
+
+    // Use change event instead of keypress to avoid interfering with typing
+    input.on('change', async () => {
+      const current = (input.getValue() || '') as string;
+
+      // Slash suggestions only when input is exactly "/"
+      if (current === '/') {
+        if (!slashList) {
+          slashList = blessed.list({
+            parent: screen,
+            bottom: 6,
+            left: 2,
+            width: 24,
+            height: 10,
+            border: 'line',
+            label: ' Commands ',
+            keys: true,
+            mouse: true,
+            items: slashCommands,
+            style: {
+              selected: { bg: 'blue', fg: 'white' },
+            },
+          });
+          slashList.focus();
+          slashList.key(['up', 'k'], () => {
+            slashList?.up(1);
+            screen.render();
+          });
+          slashList.key(['down', 'j'], () => {
+            slashList?.down(1);
+            screen.render();
+          });
+          slashList.on('select', item => {
+            const text = item.getText() as string;
+            input.setValue(text + ' ');
+            closeSlashList();
+            input.focus();
+            screen.render();
+          });
+          slashList.key(['escape', 'q'], () => {
+            closeSlashList();
+            input.focus();
+          });
+          screen.render();
+        }
+      } else {
+        closeSlashList();
+      }
+
+      // File suggestions when starting with '@'
+      if (current.startsWith('@')) {
+        const patternText = current.slice(1).trim();
+        const pattern = patternText ? `**/*${patternText}*` : '**/*';
+        try {
+          const files = await contextManager.searchFiles(pattern, { maxResults: 30 });
+          if (!files.length) {
+            closeAtList();
+          } else {
+            if (!atList) {
+              atList = blessed.list({
+                parent: screen,
+                bottom: 6,
+                left: 28,
+                width: 40,
+                height: 12,
+                border: 'line',
+                label: ' Files ',
+                keys: true,
+                mouse: true,
+                style: {
+                  selected: { bg: 'blue', fg: 'white' },
+                },
+              });
+              atList.key(['up', 'k'], () => {
+                atList?.up(1);
+                screen.render();
+              });
+              atList.key(['down', 'j'], () => {
+                atList?.down(1);
+                screen.render();
+              });
+              atList.on('select', item => {
+                const text = item.getText() as string;
+                input.setValue('@' + text);
+                closeAtList();
+                input.focus();
+                screen.render();
+              });
+              atList.key(['escape', 'q'], () => {
+                closeAtList();
+                input.focus();
+              });
+            }
+            atList.setItems(files);
+            screen.render();
+          }
+        } catch {
+          // ignore search errors in suggestions
+        }
+      } else {
+        closeAtList();
+      }
+    });
+
     input.on('submit', async (value: string) => {
       input.clearValue();
       screen.render();
@@ -689,6 +866,10 @@ export async function runBlessedChat(options: BlessedChatOptions): Promise<void>
       shutdown();
     });
 
+    // Tab should work even when textbox is focused
+    input.key(['tab'], () => {
+      cycleMode();
+    });
     screen.key(['tab'], () => {
       cycleMode();
     });
@@ -718,8 +899,10 @@ export async function runBlessedChat(options: BlessedChatOptions): Promise<void>
     agent.on('event', (event: any) => {
       switch (event.type) {
         case 'thinking':
+          startThinking('Thinking');
           break;
         case 'stream_start':
+          startThinking('Thinking');
           lines.push({ role: 'assistant', text: '' });
           break;
         case 'stream_text': {
@@ -731,9 +914,11 @@ export async function runBlessedChat(options: BlessedChatOptions): Promise<void>
           break;
         }
         case 'stream_end':
+          stopThinking();
           renderMessages();
           break;
         case 'response':
+          stopThinking();
           lines.push({ role: 'assistant', text: event.data.text });
           renderMessages();
           break;
@@ -757,9 +942,11 @@ export async function runBlessedChat(options: BlessedChatOptions): Promise<void>
           break;
         case 'mode_changed':
           currentMode = event.data.to as AgentMode;
+          updateHeader();
           pushLine({ role: 'system', text: `Mode changed to ${currentMode}` });
           break;
         case 'error':
+          stopThinking();
           pushLine({ role: 'system', text: `Error: ${event.data.message || event.data.error}` });
           break;
         case 'warning':
@@ -773,6 +960,7 @@ export async function runBlessedChat(options: BlessedChatOptions): Promise<void>
   setupInput();
 
   input.focus();
+  updateHeader();
   updateStatus();
   screen.render();
 }
