@@ -5,6 +5,8 @@ import { PluginManager } from '../core/plugins.js';
 import { MCPClientManager } from '../core/mcp-client.js';
 import { EnhancedUI } from '../ui/enhanced-tui.js';
 import { ConfigManager } from '../utils/config.js';
+import { PlanMode } from '../core/planMode.js';
+import { TodoManager } from '../utils/todoManager.js';
 import chalk from 'chalk';
 
 interface RunOptions {
@@ -67,6 +69,34 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   const dryRun = options.dryRun ?? config.get('enableDryRunByDefault') ?? false;
   const testCommandOverride = config.get('testCommandOverride');
 
+  // Plan mode: decide if this is a large/complex task and, if so,
+  // create/extend todo.md before starting the agent.
+  const planMode = new PlanMode(process.cwd());
+  const isLarge = planMode.isLargeTask(finalPrompt);
+  let effectivePrompt = finalPrompt;
+  let activeTodoId: string | undefined;
+
+  if (isLarge) {
+    const plan = await planMode.buildPlan(finalPrompt);
+    const todoManager = new TodoManager(process.cwd());
+    const next = todoManager.getNextPending(plan.doc);
+
+    ui.info(`Created/updated todo.md with ${plan.tasks.length} task(s).`);
+    if (next) {
+      activeTodoId = next.id;
+      ui.info(`Focusing on TODO [id:${next.id}]: ${next.title}`);
+      effectivePrompt = [
+        'High-level request:',
+        finalPrompt,
+        '',
+        `Current TODO from todo.md [id:${next.id}]:`,
+        next.title,
+        '',
+        'Focus on completing this TODO first. When it is complete, suggest next steps.',
+      ].join('\n');
+    }
+  }
+
   // Load plugins
   const pluginManager = new PluginManager();
   const pluginPaths = config.get('plugins') || [];
@@ -101,7 +131,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   }
 
   // Show session info
-  ui.startSession(finalPrompt, { model, maxIterations, dryRun });
+  ui.startSession(effectivePrompt, { model, maxIterations, dryRun });
 
   // Initialize components
   const toolExecutor = new CodingToolExecutor(process.cwd(), {
@@ -191,10 +221,16 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
 
   // Run the agent
   try {
-    await agent.run(finalPrompt, toolExecutor.getTools(), toolExecutor);
+    await agent.run(effectivePrompt, toolExecutor.getTools(), toolExecutor);
     
     const stats = agent.getStats();
     const duration = Date.now() - startTime;
+
+    // If we were working on a specific TODO, mark it as done now.
+    if (activeTodoId) {
+      const todoManager = new TodoManager(process.cwd());
+      await todoManager.updateStatus(activeTodoId, 'done');
+    }
     
     ui.completionSummary({
       iterations: stats.iterations,

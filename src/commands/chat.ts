@@ -8,6 +8,8 @@ import { ConfigManager } from '../utils/config.js';
 import { SessionManager, type ChatSession } from '../core/session-manager.js';
 import { exportSessionToMarkdown } from '../core/export.js';
 import { ContextManager } from '../core/context.js';
+import { PlanMode } from '../core/planMode.js';
+import { TodoManager } from '../utils/todoManager.js';
 import { getAllModes, type AgentMode } from '../core/modes.js';
 import { isThemeName, THEME_NAMES, type ThemeName } from '../ui/themes.js';
 import chalk from 'chalk';
@@ -33,6 +35,7 @@ export async function chatCommand(options: ChatOptions) {
 
   const sessionManager = new SessionManager(config.getSessionDirectory());
   const contextManager = new ContextManager(process.cwd());
+  const planMode = new PlanMode(process.cwd());
   
   ui.clear();
   if (!config.isHeaderMinimal()) {
@@ -232,6 +235,7 @@ export async function chatCommand(options: ChatOptions) {
     console.log('  ' + chalk.hex('#00D4FF')('/provider') + chalk.hex('#6B6B7B')('   switch between Anthropic/OpenAI format'));
     console.log('  ' + chalk.hex('#00D4FF')('/format <claude|openai>') + chalk.hex('#6B6B7B')(' quick alias to set provider'));
     console.log('  ' + chalk.hex('#00D4FF')('/export') + chalk.hex('#6B6B7B')('      export this session to Markdown'));
+    console.log('  ' + chalk.hex('#00D4FF')('/plan') + chalk.hex('#6B6B7B')('        create or update todo.md from a high-level goal'));
     console.log('  ' + chalk.hex('#00D4FF')('/compact') + chalk.hex('#6B6B7B')('     compact long conversation history'));
     console.log('  ' + chalk.hex('#00D4FF')('/details') + chalk.hex('#6B6B7B')('     toggle verbose tool details'));
     console.log('  ' + chalk.hex('#00D4FF')('/thinking') + chalk.hex('#6B6B7B')('    toggle thinking spinner'));
@@ -395,6 +399,23 @@ export async function chatCommand(options: ChatOptions) {
     await fs.mkdir(exportsDir, { recursive: true });
     await fs.writeFile(fullPath, markdown, 'utf-8');
     ui.success(`Session exported to ${fullPath}`);
+  }
+
+  async function handlePlanCommand(raw: string) {
+    const description = raw.replace(/^\/plan\s*/i, '').trim();
+    if (!description) {
+      ui.info('Usage: /plan your high-level goal here');
+      return;
+    }
+
+    const result = await planMode.buildPlan(description);
+    const todoManager = new TodoManager(process.cwd());
+    const next = todoManager.getNextPending(result.doc);
+
+    ui.success(`Created/updated todo.md with ${result.tasks.length} task(s).`);
+    if (next) {
+      ui.info(`Next TODO [id:${next.id}]: ${next.title}`);
+    }
   }
 
   async function handleCompactCommand() {
@@ -634,6 +655,11 @@ export async function chatCommand(options: ChatOptions) {
       currentMode = agent.getMode();
 
       ui.success(`Provider/format set via /format: ${pickedProvider}`);
+      continue;
+    }
+
+    if (lowerMessage.startsWith('/plan')) {
+      await handlePlanCommand(trimmed);
       continue;
     }
 
