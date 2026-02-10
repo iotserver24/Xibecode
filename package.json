@@ -39,6 +39,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "blessed": "^0.1.81",
     "chalk": "^5.3.0",
     "commander": "^12.0.0",
     "conf": "^12.0.0",
@@ -46,12 +47,15 @@
     "dotenv": "^16.3.1",
     "fast-glob": "^3.3.2",
     "inquirer": "^9.2.12",
+    "marked": "^17.0.1",
+    "marked-terminal": "^7.3.0",
     "node-fetch": "^3.3.2",
     "ora": "^8.0.1",
     "strip-ansi": "^7.1.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/blessed": "^0.1.27",
     "@types/diff": "^5.0.8",
     "@types/inquirer": "^9.0.7",
     "@types/node": "^20.10.0",
