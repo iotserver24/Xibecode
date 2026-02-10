@@ -230,6 +230,7 @@ export async function chatCommand(options: ChatOptions) {
     console.log('  ' + chalk.hex('#00D4FF')('/sessions') + chalk.hex('#6B6B7B')('    list and switch saved sessions'));
     console.log('  ' + chalk.hex('#00D4FF')('/models') + chalk.hex('#6B6B7B')('      show/switch models'));
     console.log('  ' + chalk.hex('#00D4FF')('/provider') + chalk.hex('#6B6B7B')('   switch between Anthropic/OpenAI format'));
+    console.log('  ' + chalk.hex('#00D4FF')('/format <claude|openai>') + chalk.hex('#6B6B7B')(' quick alias to set provider'));
     console.log('  ' + chalk.hex('#00D4FF')('/export') + chalk.hex('#6B6B7B')('      export this session to Markdown'));
     console.log('  ' + chalk.hex('#00D4FF')('/compact') + chalk.hex('#6B6B7B')('     compact long conversation history'));
     console.log('  ' + chalk.hex('#00D4FF')('/details') + chalk.hex('#6B6B7B')('     toggle verbose tool details'));
@@ -339,22 +340,25 @@ export async function chatCommand(options: ChatOptions) {
 
   async function handleModelsCommand() {
     const current = model;
-    const models = [
-      current,
+    const fixedModels = [
       'claude-sonnet-4-5-20250929',
       'claude-opus-4-5-20251101',
       'claude-haiku-4-5-20251015',
     ];
-    const unique = Array.from(new Set(models));
+    const customModels = (config.get('customModels') || []) as { id: string; provider: string }[];
+    const unique = Array.from(new Set([current, ...fixedModels, ...customModels.map(m => m.id)]));
+
     const { picked } = await inquirer.prompt([
       {
         type: 'list',
         name: 'picked',
         message: 'Select model',
-        choices: unique.map(m => ({
-          name: m === current ? `${m} (current)` : m,
-          value: m,
-        })),
+        choices: unique.map(m => {
+          const cm = customModels.find(x => x.id === m);
+          const labelBase = cm ? `${m} (${cm.provider})` : m;
+          const name = m === current ? `${labelBase} (current)` : labelBase;
+          return { name, value: m };
+        }),
       },
     ]);
     config.set('model', picked);
@@ -588,6 +592,48 @@ export async function chatCommand(options: ChatOptions) {
       currentMode = agent.getMode();
 
       ui.success(`Provider set to: ${picked}`);
+      continue;
+    }
+
+    if (lowerMessage.startsWith('/format')) {
+      const parts = trimmed.split(/\s+/);
+      const arg = (parts[1] || '').toLowerCase();
+
+      if (!arg) {
+        ui.info('Usage: /format claude   or   /format openai');
+        continue;
+      }
+
+      let pickedProvider: 'anthropic' | 'openai' | null = null;
+      if (arg === 'claude' || arg === 'anthropic') {
+        pickedProvider = 'anthropic';
+      } else if (arg === 'openai') {
+        pickedProvider = 'openai';
+      } else {
+        ui.warning('Unknown format. Use "claude" or "openai".');
+        continue;
+      }
+
+      currentProvider = pickedProvider;
+      config.set('provider', pickedProvider);
+
+      // Recreate agent with new provider but keep conversation history
+      const previousMessages = agent.getMessages();
+      agent = new EnhancedAgent(
+        {
+          apiKey: apiKey as string,
+          baseUrl: config.getBaseUrl() || baseUrl,
+          model,
+          maxIterations: 150,
+          verbose: false,
+        },
+        currentProvider
+      );
+      agent.setMessages(previousMessages);
+      setupAgentHandlers();
+      currentMode = agent.getMode();
+
+      ui.success(`Provider/format set via /format: ${pickedProvider}`);
       continue;
     }
 

@@ -39,6 +39,7 @@ export interface XibeCodeConfig {
   provider?: 'anthropic' | 'openai';
   anthropicBaseUrl?: string;
   openaiBaseUrl?: string;
+   customModels?: { id: string; provider: 'anthropic' | 'openai' }[];
   // UI / UX
   theme?: string;
   sessionDirectory?: string;
