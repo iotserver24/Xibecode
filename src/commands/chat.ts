@@ -18,6 +18,7 @@ interface ChatOptions {
   model?: string;
   baseUrl?: string;
   apiKey?: string;
+  provider?: string;
   theme?: string;
   session?: string;
 }
@@ -49,6 +50,8 @@ export async function chatCommand(options: ChatOptions) {
 
   const model = options.model || config.getModel();
   const baseUrl = options.baseUrl || config.getBaseUrl();
+  let currentProvider: 'anthropic' | 'openai' | undefined =
+    (options.provider as 'anthropic' | 'openai' | undefined) || config.get('provider');
 
   // Initialize MCP client manager.
   // Connections are established on-demand (for example when the user runs /mcp),
@@ -64,13 +67,16 @@ export async function chatCommand(options: ChatOptions) {
   // ── Create ONE agent for the entire chat session ──
   // This keeps conversation history (messages) across all turns,
   // so the AI remembers everything you talked about.
-  let agent = new EnhancedAgent({
-    apiKey: apiKey as string,
-    baseUrl,
-    model,
-    maxIterations: 150,
-    verbose: false,
-  });
+  let agent = new EnhancedAgent(
+    {
+      apiKey: apiKey as string,
+      baseUrl,
+      model,
+      maxIterations: 150,
+      verbose: false,
+    },
+    currentProvider
+  );
 
   const allModes = getAllModes();
   let currentMode: AgentMode = agent.getMode();
@@ -223,6 +229,7 @@ export async function chatCommand(options: ChatOptions) {
     console.log('  ' + chalk.hex('#00D4FF')('/new') + chalk.hex('#6B6B7B')('         start a new chat session'));
     console.log('  ' + chalk.hex('#00D4FF')('/sessions') + chalk.hex('#6B6B7B')('    list and switch saved sessions'));
     console.log('  ' + chalk.hex('#00D4FF')('/models') + chalk.hex('#6B6B7B')('      show/switch models'));
+    console.log('  ' + chalk.hex('#00D4FF')('/provider') + chalk.hex('#6B6B7B')('   switch between Anthropic/OpenAI format'));
     console.log('  ' + chalk.hex('#00D4FF')('/export') + chalk.hex('#6B6B7B')('      export this session to Markdown'));
     console.log('  ' + chalk.hex('#00D4FF')('/compact') + chalk.hex('#6B6B7B')('     compact long conversation history'));
     console.log('  ' + chalk.hex('#00D4FF')('/details') + chalk.hex('#6B6B7B')('     toggle verbose tool details'));
@@ -315,13 +322,16 @@ export async function chatCommand(options: ChatOptions) {
 
   async function handleNewSession() {
     currentSession = await sessionManager.createSession({ model, cwd: process.cwd() });
-    agent = new EnhancedAgent({
-      apiKey: apiKey as string,
-      baseUrl,
-      model,
-      maxIterations: 150,
-      verbose: false,
-    });
+    agent = new EnhancedAgent(
+      {
+        apiKey: apiKey as string,
+        baseUrl,
+        model,
+        maxIterations: 150,
+        verbose: false,
+      },
+      currentProvider || config.get('provider')
+    );
     setupAgentHandlers();
     currentMode = agent.getMode();
     ui.success('Started new session');
@@ -542,6 +552,42 @@ export async function chatCommand(options: ChatOptions) {
 
     if (lowerMessage === '/models') {
       await handleModelsCommand();
+      continue;
+    }
+
+    if (lowerMessage === '/provider') {
+      const { picked } = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'picked',
+          message: 'Select provider / API format',
+          choices: [
+            { name: 'Anthropic format (Claude / Messages API)', value: 'anthropic' },
+            { name: 'OpenAI-compatible format (chat/completions)', value: 'openai' },
+          ],
+        },
+      ]);
+
+      currentProvider = picked;
+      config.set('provider', picked);
+
+      // Recreate agent with new provider but keep conversation history
+      const previousMessages = agent.getMessages();
+      agent = new EnhancedAgent(
+        {
+          apiKey: apiKey as string,
+          baseUrl: config.getBaseUrl() || baseUrl,
+          model,
+          maxIterations: 150,
+          verbose: false,
+        },
+        currentProvider
+      );
+      agent.setMessages(previousMessages);
+      setupAgentHandlers();
+      currentMode = agent.getMode();
+
+      ui.success(`Provider set to: ${picked}`);
       continue;
     }
 
