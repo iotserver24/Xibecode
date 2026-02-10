@@ -36,15 +36,17 @@ export async function chatCommand(options: ChatOptions) {
   // Load and connect to MCP servers
   const mcpClientManager = new MCPClientManager();
   const mcpServers = await config.getMCPServers();
-  if (mcpServers.length > 0) {
-    console.log(chalk.blue(`  ℹ Connecting to ${mcpServers.length} MCP server(s)...\n`));
-    for (const serverConfig of mcpServers) {
+  const serverNames = Object.keys(mcpServers);
+  if (serverNames.length > 0) {
+    console.log(chalk.blue(`  ℹ Connecting to ${serverNames.length} MCP server(s)...\n`));
+    for (const serverName of serverNames) {
+      const serverConfig = mcpServers[serverName];
       try {
-        await mcpClientManager.connect(serverConfig);
-        const tools = mcpClientManager.getAvailableTools().filter(t => t.serverName === serverConfig.name);
-        console.log(chalk.green(`  ✓ Connected to ${serverConfig.name} (${tools.length} tool(s))`));
+        await mcpClientManager.connect(serverName, serverConfig);
+        const tools = mcpClientManager.getAvailableTools().filter(t => t.serverName === serverName);
+        console.log(chalk.green(`  ✓ Connected to ${serverName} (${tools.length} tool(s))`));
       } catch (error: any) {
-        console.log(chalk.yellow(`  ✗ Failed to connect to ${serverConfig.name}: ${error.message}`));
+        console.log(chalk.yellow(`  ✗ Failed to connect to ${serverName}: ${error.message}`));
       }
     }
     console.log('');
@@ -353,7 +355,7 @@ export async function chatCommand(options: ChatOptions) {
   }
 
   // Cleanup: disconnect from all MCP servers
-  if (mcpServers.length > 0) {
+  if (serverNames.length > 0) {
     await mcpClientManager.disconnectAll();
   }
 }
