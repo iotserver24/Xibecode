@@ -1,6 +1,6 @@
 {
   "name": "xibecode",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "AI-powered autonomous coding assistant with test integration, git awareness, and plugin support",
   "main": "dist/index.js",
   "type": "module",
@@ -39,15 +39,20 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
     "@modelcontextprotocol/sdk": "^1.26.0",
-    "chalk": "^5.3.0",
+    "chalk": "^4.1.2",
     "commander": "^12.0.0",
     "conf": "^12.0.0",
     "diff": "^5.1.0",
     "dotenv": "^16.3.1",
     "fast-glob": "^3.3.2",
+    "ink": "^6.7.0",
+    "ink-markdown": "^1.0.4",
+    "ink-select-input": "^6.2.0",
+    "ink-text-input": "^6.0.0",
     "inquirer": "^9.2.12",
     "node-fetch": "^3.3.2",
     "ora": "^8.0.1",
+    "react": "^19.2.4",
     "strip-ansi": "^7.1.0",
     "zod": "^4.3.6"
   },
@@ -55,12 +60,18 @@
     "@types/diff": "^5.0.8",
     "@types/inquirer": "^9.0.7",
     "@types/node": "^20.10.0",
+    "@types/react": "^19.2.13",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3",
     "vitest": "^1.0.4"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "chalk": "4.1.2"
+    }
   },
   "files": [
     "dist",
