@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { MessageParam, Tool, ToolUseBlock, TextBlock, ContentBlock } from '@anthropic-ai/sdk/resources/messages';
+import fetch from 'node-fetch';
 import { EventEmitter } from 'events';
 import { AgentMode, MODE_CONFIG, ModeState, createModeState, transitionMode, ModeOrchestrator, parseModeRequest, stripModeRequests, ModeTransitionPolicy } from './modes.js';
 
@@ -147,6 +148,7 @@ export class EnhancedAgent extends EventEmitter {
   private filesChanged: Set<string> = new Set();
   private modeState: ModeState;
   private modeOrchestrator: ModeOrchestrator;
+  private provider: 'anthropic' | 'openai';
 
   constructor(config: AgentConfig) {
     super();
@@ -172,6 +174,9 @@ export class EnhancedAgent extends EventEmitter {
       autoApprovalPolicy: 'always', // Allow AI to switch modes autonomously
       allowAutoEscalation: true,
     });
+
+    // Detect provider from model id so we can support multiple backends
+    this.provider = this.detectProvider(this.config.model, this.config.baseUrl);
   }
 
   emit(event: AgentEvent['type'], data: any): boolean {
@@ -202,7 +207,9 @@ export class EnhancedAgent extends EventEmitter {
       this.emit('thinking', { message: 'AI is thinking...' });
 
       try {
-        const { message: response, streamed } = await this.callModel(tools);
+        // Tools are currently supported only for Anthropic-format models.
+        const effectiveTools = this.provider === 'anthropic' ? tools : [];
+        const { message: response, streamed } = await this.callModel(effectiveTools);
 
         // Add assistant response
         this.messages.push({
@@ -374,6 +381,11 @@ export class EnhancedAgent extends EventEmitter {
    * Call the model with streaming (fallback to non-streaming).
    */
   private async callModel(tools: Tool[]): Promise<{ message: any; streamed: boolean }> {
+    // Route to provider-specific implementation
+    if (this.provider === 'openai') {
+      return this.callOpenAI(tools);
+    }
+
     const params: any = {
       model: this.config.model,
       max_tokens: 8192,
@@ -433,6 +445,96 @@ export class EnhancedAgent extends EventEmitter {
         throw error;
       }
     }
+  }
+
+  /**
+   * Call an OpenAI-compatible chat completions endpoint.
+   * NOTE: For now this is response-only (no tool calls), so tools will
+   * be disabled when using OpenAI-style models.
+   */
+  private async callOpenAI(_tools: Tool[]): Promise<{ message: any; streamed: boolean }> {
+    if (!this.config.apiKey) {
+      throw new Error('API key is required for OpenAI-compatible provider');
+    }
+
+    const base = (this.config.baseUrl || 'https://api.openai.com').replace(/\/+$/, '');
+    const url = `${base}/v1/chat/completions`;
+
+    // Build OpenAI-style messages from our internal history.
+    const openAiMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
+
+    // Inject system prompt explicitly
+    openAiMessages.push({
+      role: 'system',
+      content: this.getSystemPrompt(),
+    });
+
+    for (const msg of this.messages) {
+      // Map Anthropic roles to OpenAI roles (ignore tool-specific roles)
+      if (msg.role !== 'user' && msg.role !== 'assistant') continue;
+
+      let contentText = '';
+      if (typeof msg.content === 'string') {
+        contentText = msg.content;
+      } else if (Array.isArray(msg.content)) {
+        const textBlocks = (msg.content as ContentBlock[]).filter((b) => b.type === 'text') as TextBlock[];
+        contentText = textBlocks.map((b) => b.text).join('\n');
+      }
+
+      if (!contentText) continue;
+
+      openAiMessages.push({
+        role: msg.role,
+        content: contentText,
+      });
+    }
+
+    const body = {
+      model: this.config.model,
+      messages: openAiMessages,
+      max_tokens: 8192,
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.config.apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`OpenAI-compatible API error: ${response.status} ${text}`);
+    }
+
+    const data: any = await response.json();
+    const content = data?.choices?.[0]?.message?.content ?? '';
+
+    const message = {
+      content: [
+        {
+          type: 'text',
+          text: typeof content === 'string' ? content : JSON.stringify(content),
+        } as TextBlock,
+      ],
+    };
+
+    return { message, streamed: false };
+  }
+
+  /**
+   * Very small heuristic to decide which provider to use based on model id.
+   * - Models starting with "gpt-" or "o1-" / "o3-" use OpenAI format.
+   * - Everything else defaults to Anthropic format.
+   */
+  private detectProvider(model: string, _baseUrl?: string): 'anthropic' | 'openai' {
+    const m = model.toLowerCase();
+    if (m.startsWith('gpt-') || m.startsWith('gpt4') || m.startsWith('o1-') || m.startsWith('o3-')) {
+      return 'openai';
+    }
+    return 'anthropic';
   }
 
   private getSystemPrompt(): string {

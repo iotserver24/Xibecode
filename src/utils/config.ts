@@ -120,17 +120,28 @@ export class ConfigManager {
   }
 
   /**
-   * Get API key from config or environment
+   * Get API key from config or environment.
+   * Supports both Anthropic and OpenAI style environment variables so
+   * you can switch providers just by changing the model id.
    */
   getApiKey(): string | undefined {
-    return this.get('apiKey') || process.env.ANTHROPIC_API_KEY;
+    return (
+      this.get('apiKey') ||
+      process.env.ANTHROPIC_API_KEY ||
+      process.env.OPENAI_API_KEY
+    );
   }
 
   /**
-   * Get base URL from config or environment
+   * Get base URL from config or environment.
+   * Supports both Anthropic and OpenAI style environment variables.
    */
   getBaseUrl(): string | undefined {
-    return this.get('baseUrl') || process.env.ANTHROPIC_BASE_URL;
+    return (
+      this.get('baseUrl') ||
+      process.env.ANTHROPIC_BASE_URL ||
+      process.env.OPENAI_BASE_URL
+    );
   }
 
   /**
