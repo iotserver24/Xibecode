@@ -15,7 +15,7 @@ const program = new Command();
 program
   .name('xibecode')
   .description('XibeCode - AI-powered autonomous coding assistant')
-  .version('0.0.9');
+  .version('0.1.0');
 
 // Main run command
 program
