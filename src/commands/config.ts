@@ -155,207 +155,264 @@ export async function configCommand(options: ConfigOptions) {
     return;
   }
 
-  // Interactive configuration
+  // Interactive configuration (loop until user chooses Exit)
   ui.header('1.0.0');
   console.log(chalk.bold.white('⚙️  Configuration Setup\n'));
 
-  const { action } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'action',
-      message: 'What would you like to configure?',
-      choices: [
-        { name: '🔑 Set API Key', value: 'set_key' },
-        { name: '🌐 Set Base URL (for custom endpoints)', value: 'set_url' },
-        { name: '🤖 Set Default Model', value: 'set_model' },
-        { name: '📡 Manage MCP Servers', value: 'mcp_servers' },
-        { name: '👀 View Current Config', value: 'view' },
-        { name: '🗑️  Clear API Key', value: 'clear_key' },
-        { name: '↩️  Reset All Settings', value: 'reset' },
-        { name: '❌ Exit', value: 'exit' },
-      ],
-    },
-  ]);
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { action } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'action',
+        message: 'What would you like to configure?',
+        choices: [
+          { name: '🔑 Set API Key', value: 'set_key' },
+          { name: '🌐 Set Base URL (for custom endpoints)', value: 'set_url' },
+          { name: '🤖 Set Default Model (Anthropic & OpenAI)', value: 'set_model' },
+          { name: '📡 Manage MCP Servers', value: 'mcp_servers' },
+          { name: '👀 View Current Config', value: 'view' },
+          { name: '🗑️  Clear API Key', value: 'clear_key' },
+          { name: '↩️  Reset All Settings', value: 'reset' },
+          { name: '❌ Exit', value: 'exit' },
+        ],
+      },
+    ]);
 
-  console.log('');
+    console.log('');
 
-  switch (action) {
-    case 'set_key':
-      const { apiKey } = await inquirer.prompt([
-        {
-          type: 'password',
-          name: 'apiKey',
-          message: 'Enter your Anthropic API key:',
-          mask: '*',
-          validate: (input) => {
-            if (!input) return 'API key cannot be empty';
-            if (input.length < 20) return 'API key seems too short';
-            return true;
-          },
-        },
-      ]);
-      config.set('apiKey', apiKey);
-      ui.success('API key saved!');
+    if (action === 'exit') {
       break;
+    }
 
-    case 'set_url':
-      const { baseUrl } = await inquirer.prompt([
-        {
-          type: 'input',
-          name: 'baseUrl',
-          message: 'Enter custom base URL:',
-          default: 'https://api.anthropic.com',
-          validate: (input) => {
-            if (!input.startsWith('http')) {
-              return 'URL must start with http:// or https://';
-            }
-            return true;
-          },
-        },
-      ]);
-      config.set('baseUrl', baseUrl);
-      ui.success(`Base URL set to: ${baseUrl}`);
-      break;
-
-    case 'set_model':
-      const { model } = await inquirer.prompt([
-        {
-          type: 'list',
-          name: 'model',
-          message: 'Select default model:',
-          choices: [
-            { name: 'Claude Sonnet 4.5 (Recommended)', value: 'claude-sonnet-4-5-20250929' },
-            { name: 'Claude Opus 4.5 (Most Capable)', value: 'claude-opus-4-5-20251101' },
-            { name: 'Claude Haiku 4.5 (Fastest)', value: 'claude-haiku-4-5-20251001' },
-            { name: 'Custom', value: 'custom' },
-          ],
-        },
-      ]);
-
-      if (model === 'custom') {
-        const { customModel } = await inquirer.prompt([
+    switch (action) {
+      case 'set_key': {
+        const { apiKey } = await inquirer.prompt([
           {
-            type: 'input',
-            name: 'customModel',
-            message: 'Enter custom model ID:',
+            type: 'password',
+            name: 'apiKey',
+            message: 'Enter your API key (Anthropic or OpenAI):',
+            mask: '*',
+            validate: (input) => {
+              if (!input) return 'API key cannot be empty';
+              if (input.length < 20) return 'API key seems too short';
+              return true;
+            },
           },
         ]);
-        config.set('model', customModel);
-        ui.success(`Default model set to: ${customModel}`);
-      } else {
-        config.set('model', model);
-        ui.success(`Default model set to: ${model}`);
+        config.set('apiKey', apiKey);
+        ui.success('API key saved!');
+        break;
       }
-      break;
 
-    case 'mcp_servers':
-      const { mcpAction } = await inquirer.prompt([
-        {
-          type: 'list',
-          name: 'mcpAction',
-          message: 'MCP Server Management:',
-          choices: [
-            { name: '➕ Add / Edit MCP Servers (open config file)', value: 'add' },
-            { name: '📋 List MCP Servers', value: 'list' },
-            { name: '🗑️  Remove MCP Server', value: 'remove' },
-            { name: '↩️  Back', value: 'back' },
-          ],
-        },
-      ]);
+      case 'set_url': {
+        const answers = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'anthropicBaseUrl',
+            message: 'Anthropic base URL (leave empty for default https://api.anthropic.com):',
+            default: '',
+            validate: (input) => {
+              if (!input) return true;
+              if (!input.startsWith('http')) {
+                return 'URL must start with http:// or https://';
+              }
+              return true;
+            },
+          },
+          {
+            type: 'input',
+            name: 'openaiBaseUrl',
+            message: 'OpenAI base URL (leave empty for default https://api.openai.com):',
+            default: '',
+            validate: (input) => {
+              if (!input) return true;
+              if (!input.startsWith('http')) {
+                return 'URL must start with http:// or https://';
+              }
+              return true;
+            },
+          },
+        ]);
 
-      if (mcpAction === 'add') {
-        // Delegate to the dedicated MCP command, which opens
-        // ~/.xibecode/mcp-servers.json in the user's editor.
-        await mcpCommand('add');
-
-      } else if (mcpAction === 'list') {
-        const servers = await config.getMCPServers();
-        const serverNames = Object.keys(servers);
-        if (serverNames.length === 0) {
-          console.log(chalk.yellow('No MCP servers configured\n'));
-        } else {
-          console.log(chalk.bold.white('\n📡 Configured MCP Servers\n'));
-          for (const serverName of serverNames) {
-            const server = servers[serverName];
-            console.log(chalk.cyan(`  ${serverName}`));
-            console.log(chalk.gray(`    Command: ${server.command}`));
-            if (server.args) console.log(chalk.gray(`    Args: ${server.args.join(' ')}`));
-            console.log('');
-          }
+        if (answers.anthropicBaseUrl.trim()) {
+          config.set('anthropicBaseUrl', answers.anthropicBaseUrl.trim());
+        }
+        if (answers.openaiBaseUrl.trim()) {
+          config.set('openaiBaseUrl', answers.openaiBaseUrl.trim());
         }
 
-      } else if (mcpAction === 'remove') {
-        const servers = await config.getMCPServers();
-        const serverNames = Object.keys(servers);
-        if (serverNames.length === 0) {
-          console.log(chalk.yellow('No MCP servers configured\n'));
+        ui.success('Base URLs updated!');
+        break;
+      }
+
+      case 'set_model': {
+        const { model } = await inquirer.prompt([
+          {
+            type: 'list',
+            name: 'model',
+            message: 'Select default model:',
+            choices: [
+              new inquirer.Separator('── Anthropic (Claude) ──'),
+              { name: 'Claude Sonnet 4.5 (Recommended)', value: 'claude-sonnet-4-5-20250929' },
+              { name: 'Claude Opus 4.5 (Most Capable)', value: 'claude-opus-4-5-20251101' },
+              { name: 'Claude Haiku 4.5 (Fastest)', value: 'claude-haiku-4-5-20251001' },
+              new inquirer.Separator('── OpenAI / OpenAI-compatible ──'),
+              { name: 'GPT-4.1 Mini', value: 'gpt-4.1-mini' },
+              { name: 'GPT-4.1', value: 'gpt-4.1' },
+              { name: 'GPT-4o (Omni)', value: 'gpt-4o' },
+              { name: 'o3-mini (reasoning)', value: 'o3-mini' },
+              new inquirer.Separator('──────────────────────────────'),
+              { name: 'Custom', value: 'custom' },
+            ],
+          },
+        ]);
+
+        if (model === 'custom') {
+          const { customModel } = await inquirer.prompt([
+            {
+              type: 'input',
+              name: 'customModel',
+              message: 'Enter custom model ID:',
+            },
+          ]);
+          config.set('model', customModel);
+          ui.success(`Default model set to: ${customModel}`);
         } else {
-          const { serverName } = await inquirer.prompt([
-            {
-              type: 'list',
-              name: 'serverName',
-              message: 'Select server to remove:',
-              choices: serverNames,
-            },
-          ]);
+          config.set('model', model);
+          ui.success(`Default model set to: ${model}`);
+        }
 
-          const { confirmRemove } = await inquirer.prompt([
-            {
-              type: 'confirm',
-              name: 'confirmRemove',
-              message: `Remove MCP server "${serverName}"?`,
-              default: false,
-            },
-          ]);
+        // Ask which API format this model uses
+        const { provider } = await inquirer.prompt([
+          {
+            type: 'list',
+            name: 'provider',
+            message: 'Which API format does this model use?',
+            choices: [
+              { name: 'Anthropic format (Claude / Messages API)', value: 'anthropic' },
+              { name: 'OpenAI-compatible format (chat/completions)', value: 'openai' },
+            ],
+          },
+        ]);
 
-          if (confirmRemove) {
-            config.removeMCPServer(serverName);
-            ui.success(`MCP server "${serverName}" removed!`);
+        config.set('provider', provider);
+        ui.success(`Provider set to: ${provider}`);
+
+        break;
+      }
+
+      case 'mcp_servers': {
+        const { mcpAction } = await inquirer.prompt([
+          {
+            type: 'list',
+            name: 'mcpAction',
+            message: 'MCP Server Management:',
+            choices: [
+              { name: '➕ Add / Edit MCP Servers (open config file)', value: 'add' },
+              { name: '📋 List MCP Servers', value: 'list' },
+              { name: '🗑️  Remove MCP Server', value: 'remove' },
+              { name: '↩️  Back', value: 'back' },
+            ],
+          },
+        ]);
+
+        if (mcpAction === 'add') {
+          // Delegate to the dedicated MCP command, which opens
+          // ~/.xibecode/mcp-servers.json in the user's editor.
+          await mcpCommand('add');
+        } else if (mcpAction === 'list') {
+          const servers = await config.getMCPServers();
+          const serverNames = Object.keys(servers);
+          if (serverNames.length === 0) {
+            console.log(chalk.yellow('No MCP servers configured\n'));
+          } else {
+            console.log(chalk.bold.white('\n📡 Configured MCP Servers\n'));
+            for (const serverName of serverNames) {
+              const server = servers[serverName];
+              console.log(chalk.cyan(`  ${serverName}`));
+              console.log(chalk.gray(`    Command: ${server.command}`));
+              if (server.args) console.log(chalk.gray(`    Args: ${server.args.join(' ')}`));
+              console.log('');
+            }
+          }
+        } else if (mcpAction === 'remove') {
+          const servers = await config.getMCPServers();
+          const serverNames = Object.keys(servers);
+          if (serverNames.length === 0) {
+            console.log(chalk.yellow('No MCP servers configured\n'));
+          } else {
+            const { serverName } = await inquirer.prompt([
+              {
+                type: 'list',
+                name: 'serverName',
+                message: 'Select server to remove:',
+                choices: serverNames,
+              },
+            ]);
+
+            const { confirmRemove } = await inquirer.prompt([
+              {
+                type: 'confirm',
+                name: 'confirmRemove',
+                message: `Remove MCP server "${serverName}"?`,
+                default: false,
+              },
+            ]);
+
+            if (confirmRemove) {
+              config.removeMCPServer(serverName);
+              ui.success(`MCP server "${serverName}" removed!`);
+            }
           }
         }
+        // mcpAction === 'back' just returns to main config menu
+        break;
       }
-      break;
 
-    case 'view':
-      const displayConfig = config.getDisplayConfig();
-      console.log(chalk.bold.white('Current Configuration:\n'));
-      Object.entries(displayConfig).forEach(([key, value]) => {
-        console.log(chalk.gray(`  ${key.padEnd(20)}: `) + chalk.white(value));
-      });
-      console.log('');
-      break;
-
-    case 'clear_key':
-      const { confirmClear } = await inquirer.prompt([
-        {
-          type: 'confirm',
-          name: 'confirmClear',
-          message: 'Clear API key?',
-          default: false,
-        },
-      ]);
-      if (confirmClear) {
-        config.delete('apiKey');
-        ui.success('API key cleared!');
+      case 'view': {
+        const displayConfig = config.getDisplayConfig();
+        console.log(chalk.bold.white('Current Configuration:\n'));
+        Object.entries(displayConfig).forEach(([key, value]) => {
+          console.log(chalk.gray(`  ${key.padEnd(20)}: `) + chalk.white(value));
+        });
+        console.log('');
+        break;
       }
-      break;
 
-    case 'reset':
-      const { confirmReset } = await inquirer.prompt([
-        {
-          type: 'confirm',
-          name: 'confirmReset',
-          message: 'Reset all configuration?',
-          default: false,
-        },
-      ]);
-      if (confirmReset) {
-        config.clear();
-        ui.success('Configuration reset!');
+      case 'clear_key': {
+        const { confirmClear } = await inquirer.prompt([
+          {
+            type: 'confirm',
+            name: 'confirmClear',
+            message: 'Clear API key?',
+            default: false,
+          },
+        ]);
+        if (confirmClear) {
+          config.delete('apiKey');
+          ui.success('API key cleared!');
+        }
+        break;
       }
-      break;
 
-    case 'exit':
-      break;
+      case 'reset': {
+        const { confirmReset } = await inquirer.prompt([
+          {
+            type: 'confirm',
+            name: 'confirmReset',
+            message: 'Reset all configuration?',
+            default: false,
+          },
+        ]);
+        if (confirmReset) {
+          config.clear();
+          ui.success('Configuration reset!');
+        }
+        break;
+      }
+    }
+
+    console.log('');
   }
 }

@@ -150,7 +150,7 @@ export class EnhancedAgent extends EventEmitter {
   private modeOrchestrator: ModeOrchestrator;
   private provider: 'anthropic' | 'openai';
 
-  constructor(config: AgentConfig) {
+  constructor(config: AgentConfig, providerOverride?: 'anthropic' | 'openai') {
     super();
     
     const clientConfig: any = { apiKey: config.apiKey };
@@ -174,9 +174,8 @@ export class EnhancedAgent extends EventEmitter {
       autoApprovalPolicy: 'always', // Allow AI to switch modes autonomously
       allowAutoEscalation: true,
     });
-
-    // Detect provider from model id so we can support multiple backends
-    this.provider = this.detectProvider(this.config.model, this.config.baseUrl);
+    // Prefer explicit provider override from config, otherwise auto-detect
+    this.provider = providerOverride ?? this.detectProvider(this.config.model, this.config.baseUrl);
   }
 
   emit(event: AgentEvent['type'], data: any): boolean {

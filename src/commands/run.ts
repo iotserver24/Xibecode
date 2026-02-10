@@ -12,6 +12,7 @@ interface RunOptions {
   model?: string;
   baseUrl?: string;
   apiKey?: string;
+  provider?: string;
   maxIterations: string;
   verbose: boolean;
   dryRun?: boolean;
@@ -58,6 +59,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   // Get model and base URL
   const model = options.model || config.getModel();
   const baseUrl = options.baseUrl || config.getBaseUrl();
+  const provider = (options.provider as 'anthropic' | 'openai' | undefined) || config.get('provider');
   const parsedIterations = parseInt(options.maxIterations);
   const maxIterations = parsedIterations > 0 ? parsedIterations : 150;
 
@@ -108,13 +110,16 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
     pluginManager,
     mcpClientManager,
   });
-  const agent = new EnhancedAgent({
-    apiKey,
-    baseUrl,
-    model,
-    maxIterations,
-    verbose: options.verbose,
-  });
+  const agent = new EnhancedAgent(
+    {
+      apiKey,
+      baseUrl,
+      model,
+      maxIterations,
+      verbose: options.verbose,
+    },
+    provider
+  );
 
   const startTime = Date.now();
   let currentIteration = 0;

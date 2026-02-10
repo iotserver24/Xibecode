@@ -26,6 +26,7 @@ program
   .option('-m, --model <model>', 'AI model to use')
   .option('-b, --base-url <url>', 'Custom API base URL')
   .option('-k, --api-key <key>', 'API key (overrides config)')
+  .option('--provider <provider>', 'Model API format: anthropic or openai')
   .option('-d, --max-iterations <number>', 'Maximum iterations (0 = unlimited, default 150)', '150')
   .option('-v, --verbose', 'Show detailed logs', false)
   .option('--dry-run', 'Preview changes without making them', false)
@@ -39,6 +40,7 @@ program
   .option('-m, --model <model>', 'AI model to use')
   .option('-b, --base-url <url>', 'Custom API base URL')
   .option('-k, --api-key <key>', 'API key (overrides config)')
+  .option('--provider <provider>', 'Model API format: anthropic or openai')
   .option('--theme <theme>', 'UI theme to use')
   .option('--session <id>', 'Resume a specific chat session by id')
   .action(chatCommand);
