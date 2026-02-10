@@ -1,7 +1,33 @@
+'use client';
+
 import Hero from '@/components/Hero';
 import Features from '@/components/Features';
 import Link from 'next/link';
-import { ArrowRight, Check, X } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { ArrowRight, Check, X, Minus } from 'lucide-react';
+
+const comparisonData = [
+  { feature: 'Open Source', xibecode: true, claude: false, aider: true },
+  { feature: 'Free to Use', xibecode: true, claude: false, aider: true },
+  { feature: 'Custom API Endpoint', xibecode: true, claude: false, aider: true },
+  { feature: 'Smart Context Discovery', xibecode: true, claude: true, aider: 'partial' },
+  { feature: 'Advanced File Editing (4 methods)', xibecode: true, claude: false, aider: false },
+  { feature: 'Cross-Platform', xibecode: true, claude: true, aider: true },
+  { feature: 'Loop Detection', xibecode: true, claude: true, aider: false },
+  { feature: 'Automatic Backups & Revert', xibecode: true, claude: 'partial', aider: false },
+  { feature: 'Test Integration', xibecode: true, claude: false, aider: false },
+  { feature: 'Git Awareness', xibecode: true, claude: false, aider: 'partial' },
+  { feature: 'MCP Protocol Support', xibecode: true, claude: false, aider: false },
+  { feature: 'Plugin System', xibecode: true, claude: false, aider: false },
+  { feature: 'Dry-Run Mode', xibecode: true, claude: false, aider: false },
+  { feature: 'Risk Assessment', xibecode: true, claude: false, aider: false },
+];
+
+function CellIcon({ value }: { value: boolean | string }) {
+  if (value === true) return <Check className="h-4 w-4 text-emerald-400 mx-auto" />;
+  if (value === false) return <X className="h-4 w-4 text-zinc-700 mx-auto" />;
+  return <Minus className="h-4 w-4 text-zinc-500 mx-auto" />;
+}
 
 export default function HomePage() {
   return (
@@ -10,106 +36,129 @@ export default function HomePage() {
       <Features />
 
       {/* Comparison Section */}
-      <section className="py-20 md:py-32">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-              How We Compare
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              See how Xoding AI Tool stacks up against other AI coding assistants
-            </p>
-          </div>
+      <section className="relative py-24 md:py-36">
+        <div className="absolute top-0 inset-x-0 glow-line" />
 
-          <div className="overflow-x-auto">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7 }}
+            className="text-center mb-16"
+          >
+            <p className="text-sm font-medium text-violet-400 tracking-wider uppercase mb-4">
+              Comparison
+            </p>
+            <h2 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight">
+              How XibeCode
+              <span className="text-zinc-500"> stacks up</span>
+            </h2>
+            <p className="text-lg text-zinc-400 max-w-2xl mx-auto">
+              Feature-by-feature comparison with other AI coding assistants.
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7, delay: 0.2 }}
+            className="overflow-x-auto"
+          >
             <table className="w-full border-collapse">
               <thead>
-                <tr className="border-b-2 border-border">
-                  <th className="text-left py-4 px-4 font-semibold">Feature</th>
-                  <th className="text-center py-4 px-4 font-semibold">Xoding AI Tool</th>
-                  <th className="text-center py-4 px-4 font-semibold text-muted-foreground">Claude Code</th>
-                  <th className="text-center py-4 px-4 font-semibold text-muted-foreground">Aider</th>
+                <tr className="border-b border-white/10">
+                  <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400 uppercase tracking-wider">Feature</th>
+                  <th className="text-center py-4 px-4">
+                    <span className="text-sm font-bold text-gradient">XibeCode</span>
+                  </th>
+                  <th className="text-center py-4 px-4 text-sm font-medium text-zinc-500">Claude Code</th>
+                  <th className="text-center py-4 px-4 text-sm font-medium text-zinc-500">Aider</th>
                 </tr>
               </thead>
               <tbody>
-                {[
-                  { feature: 'Open Source', xoding: true, claude: false, aider: true },
-                  { feature: 'Custom API URL', xoding: true, claude: false, aider: true },
-                  { feature: 'Smart Context', xoding: true, claude: true, aider: 'partial' },
-                  { feature: 'File Editing', xoding: 'advanced', claude: true, aider: true },
-                  { feature: 'Cross-Platform', xoding: true, claude: true, aider: true },
-                  { feature: 'Loop Detection', xoding: true, claude: true, aider: false },
-                  { feature: 'Auto Backups', xoding: true, claude: 'partial', aider: false },
-                  { feature: 'Test Integration', xoding: true, claude: false, aider: false },
-                  { feature: 'Git Awareness', xoding: true, claude: false, aider: 'partial' },
-                  { feature: 'MCP Support', xoding: true, claude: false, aider: false },
-                  { feature: 'Plugin System', xoding: true, claude: false, aider: false },
-                  { feature: 'Beautiful TUI', xoding: true, claude: true, aider: 'partial' },
-                ].map((row, idx) => (
-                  <tr key={idx} className="border-b border-border hover:bg-muted/50 transition-colors">
-                    <td className="py-4 px-4">{row.feature}</td>
-                    <td className="text-center py-4 px-4">
-                      {row.xoding === true ? (
-                        <Check className="h-5 w-5 text-green-500 mx-auto" />
-                      ) : row.xoding === false ? (
-                        <X className="h-5 w-5 text-gray-400 mx-auto" />
-                      ) : (
-                        <span className="text-sm font-medium text-blue-600">{row.xoding}</span>
-                      )}
+                {comparisonData.map((row, idx) => (
+                  <tr
+                    key={idx}
+                    className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
+                  >
+                    <td className="py-3.5 px-4 text-sm text-zinc-300">{row.feature}</td>
+                    <td className="text-center py-3.5 px-4">
+                      <CellIcon value={row.xibecode} />
                     </td>
-                    <td className="text-center py-4 px-4 text-muted-foreground">
-                      {row.claude === true ? (
-                        <Check className="h-5 w-5 text-gray-400 mx-auto" />
-                      ) : row.claude === false ? (
-                        <X className="h-5 w-5 text-gray-400 mx-auto" />
-                      ) : (
-                        <span className="text-sm text-gray-500">{row.claude}</span>
-                      )}
+                    <td className="text-center py-3.5 px-4">
+                      <CellIcon value={row.claude} />
                     </td>
-                    <td className="text-center py-4 px-4 text-muted-foreground">
-                      {row.aider === true ? (
-                        <Check className="h-5 w-5 text-gray-400 mx-auto" />
-                      ) : row.aider === false ? (
-                        <X className="h-5 w-5 text-gray-400 mx-auto" />
-                      ) : (
-                        <span className="text-sm text-gray-500">{row.aider}</span>
-                      )}
+                    <td className="text-center py-3.5 px-4">
+                      <CellIcon value={row.aider} />
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+          </motion.div>
         </div>
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 md:py-32 bg-gradient-to-br from-blue-600 via-purple-600 to-pink-600 text-white">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-6">
-            Ready to Transform Your Coding Workflow?
-          </h2>
-          <p className="text-lg md:text-xl mb-8 max-w-2xl mx-auto opacity-90">
-            Join developers who are using AI to write better code, faster.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/docs/installation"
-              className="inline-flex items-center justify-center px-8 py-3 rounded-lg bg-white text-purple-600 font-medium hover:bg-gray-100 transition-colors"
+      <section className="relative py-24 md:py-36 overflow-hidden">
+        <div className="absolute top-0 inset-x-0 glow-line" />
+
+        {/* Background glow */}
+        <div className="absolute inset-0 -z-10">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-violet-600/10 blur-[120px]" />
+        </div>
+
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7 }}
+            className="text-center max-w-3xl mx-auto"
+          >
+            <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 tracking-tight">
+              Ready to let AI
+              <br />
+              <span className="text-gradient">write your code?</span>
+            </h2>
+            <p className="text-lg md:text-xl text-zinc-400 mb-10 max-w-xl mx-auto">
+              Install XibeCode in seconds. Free, open-source, no credit card required.
+            </p>
+
+            {/* Install command */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.3, duration: 0.5 }}
+              className="inline-flex items-center gap-3 px-6 py-3 rounded-xl bg-zinc-900 border border-white/10 font-mono text-sm mb-10"
             >
-              Get Started Now
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </Link>
-            <Link
-              href="/docs"
-              className="inline-flex items-center justify-center px-8 py-3 rounded-lg border-2 border-white text-white hover:bg-white/10 font-medium transition-colors"
-            >
-              View Documentation
-            </Link>
-          </div>
-          <p className="mt-8 text-sm opacity-75">
-            Free and open-source. No credit card required.
-          </p>
+              <span className="text-emerald-400">$</span>
+              <span className="text-white">npm install -g xibecode</span>
+            </motion.div>
+
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link
+                href="/docs/installation"
+                className="group inline-flex items-center justify-center px-8 py-3.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-medium shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 hover:from-violet-500 hover:to-fuchsia-500 transition-all"
+              >
+                Get Started Now
+                <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+              </Link>
+              <Link
+                href="/docs"
+                className="inline-flex items-center justify-center px-8 py-3.5 rounded-xl border border-white/10 text-zinc-300 hover:text-white hover:bg-white/5 hover:border-white/20 font-medium transition-all"
+              >
+                View Documentation
+              </Link>
+            </div>
+
+            <p className="mt-8 text-sm text-zinc-600">
+              Free and open-source under MIT License.
+            </p>
+          </motion.div>
         </div>
       </section>
     </div>
