@@ -1,10 +1,15 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { MCPServerConfig } from './config.js';
+import { MCPServerConfig, MCPServersConfig, MCPServerConfigLegacy } from './config.js';
 
 export interface MCPServersFile {
-  servers: MCPServerConfig[];
+  mcpServers: MCPServersConfig;
+}
+
+// Legacy file format for backward compatibility
+export interface MCPServersFileLegacy {
+  servers: MCPServerConfigLegacy[];
 }
 
 /**
@@ -39,37 +44,67 @@ export class MCPServersFileManager {
 
   /**
    * Load MCP servers from file
+   * Supports both new object-based format and legacy array-based format
+   * Automatically migrates legacy format to new format
    */
-  async loadMCPServers(): Promise<MCPServerConfig[]> {
+  async loadMCPServers(): Promise<MCPServersConfig> {
     try {
       if (!(await this.fileExists())) {
-        return [];
+        return {};
       }
 
       const content = await fs.readFile(this.filePath, 'utf-8');
-      const data: MCPServersFile = JSON.parse(content);
+      const data: any = JSON.parse(content);
 
-      // Validate structure
-      if (!data.servers || !Array.isArray(data.servers)) {
-        throw new Error('Invalid file format: "servers" must be an array');
+      // Check if it's the new object-based format
+      if (data.mcpServers && typeof data.mcpServers === 'object' && !Array.isArray(data.mcpServers)) {
+        // New format - validate and return
+        const validatedServers: MCPServersConfig = {};
+
+        for (const [serverName, serverConfig] of Object.entries(data.mcpServers)) {
+          const config = serverConfig as any;
+          if (!config.command) {
+            throw new Error(`Invalid server config for "${serverName}": missing required field "command"`);
+          }
+          validatedServers[serverName] = {
+            command: config.command,
+            args: config.args,
+            env: config.env,
+          };
+        }
+
+        return validatedServers;
       }
 
-      // Validate each server
-      const validatedServers: MCPServerConfig[] = [];
-      for (const server of data.servers) {
-        if (!server.name || !server.transport || !server.command) {
-          throw new Error(`Invalid server config: missing required fields (name, transport, command)`);
+      // Check if it's the legacy array-based format
+      if (data.servers && Array.isArray(data.servers)) {
+        // Legacy format - migrate to new format
+        const legacyData = data as MCPServersFileLegacy;
+        const migratedServers: MCPServersConfig = {};
+
+        for (const server of legacyData.servers) {
+          if (!server.name || !server.command) {
+            throw new Error(`Invalid server config in legacy format: missing required fields (name, command)`);
+          }
+          // Remove transport field and use name as key
+          migratedServers[server.name] = {
+            command: server.command,
+            args: server.args,
+            env: server.env,
+          };
         }
-        if (server.transport !== 'stdio') {
-          throw new Error(`Invalid transport type: only "stdio" is supported`);
-        }
-        validatedServers.push(server);
+
+        // Auto-migrate: save in new format
+        console.log('Migrating MCP servers configuration to new format...');
+        await this.saveMCPServers(migratedServers);
+
+        return migratedServers;
       }
 
-      return validatedServers;
+      throw new Error('Invalid file format: must contain "mcpServers" object or legacy "servers" array');
     } catch (error: any) {
       if (error.code === 'ENOENT') {
-        return [];
+        return {};
       }
       throw new Error(`Failed to load MCP servers file: ${error.message}`);
     }
@@ -77,16 +112,17 @@ export class MCPServersFileManager {
 
   /**
    * Save MCP servers to file
+   * Uses new object-based format
    */
-  async saveMCPServers(servers: MCPServerConfig[]): Promise<void> {
+  async saveMCPServers(servers: MCPServersConfig): Promise<void> {
     try {
       const configDir = path.dirname(this.filePath);
-      
+
       // Ensure directory exists
       await fs.mkdir(configDir, { recursive: true });
 
       const data: MCPServersFile = {
-        servers,
+        mcpServers: servers,
       };
 
       await fs.writeFile(this.filePath, JSON.stringify(data, null, 2) + '\n', 'utf-8');
@@ -99,26 +135,23 @@ export class MCPServersFileManager {
    * Create default config file with examples
    */
   async createDefaultFile(): Promise<void> {
-    const defaultServers: MCPServerConfig[] = [
-      {
-        name: 'filesystem',
-        transport: 'stdio',
+    const defaultServers: MCPServersConfig = {
+      'filesystem': {
         command: 'mcp-server-filesystem',
         args: ['--root', '/path/to/files'],
       },
-      {
-        name: 'github',
-        transport: 'stdio',
+      'github': {
         command: 'mcp-server-github',
         args: ['--token', 'YOUR_GITHUB_TOKEN'],
       },
-    ];
+    };
 
     await this.saveMCPServers(defaultServers);
   }
 
   /**
    * Validate the file format
+   * Supports both new object-based and legacy array-based formats
    */
   async validateFile(): Promise<{ valid: boolean; errors: string[] }> {
     const errors: string[] = [];
@@ -129,7 +162,7 @@ export class MCPServersFileManager {
       }
 
       const content = await fs.readFile(this.filePath, 'utf-8');
-      let data: MCPServersFile;
+      let data: any;
 
       try {
         data = JSON.parse(content);
@@ -138,36 +171,66 @@ export class MCPServersFileManager {
         return { valid: false, errors };
       }
 
-      if (!data.servers) {
-        errors.push('Missing "servers" field');
-      } else if (!Array.isArray(data.servers)) {
-        errors.push('"servers" must be an array');
-      } else {
-        // Validate each server
-        data.servers.forEach((server, index) => {
-          if (!server.name) {
-            errors.push(`Server ${index + 1}: missing "name"`);
+      // Check for new object-based format
+      if (data.mcpServers) {
+        if (typeof data.mcpServers !== 'object' || Array.isArray(data.mcpServers)) {
+          errors.push('"mcpServers" must be an object (not an array)');
+        } else {
+          // Validate each server
+          for (const [serverName, serverConfig] of Object.entries(data.mcpServers)) {
+            const config = serverConfig as any;
+            if (!config || typeof config !== 'object') {
+              errors.push(`Server "${serverName}": configuration must be an object`);
+              continue;
+            }
+            if (!config.command) {
+              errors.push(`Server "${serverName}": missing "command" field`);
+            }
+            if (config.args && !Array.isArray(config.args)) {
+              errors.push(`Server "${serverName}": "args" must be an array`);
+            }
+            if (config.env && typeof config.env !== 'object') {
+              errors.push(`Server "${serverName}": "env" must be an object`);
+            }
           }
-          if (!server.transport) {
-            errors.push(`Server ${index + 1}: missing "transport"`);
-          } else if (server.transport !== 'stdio') {
-            errors.push(`Server ${index + 1}: invalid transport "${server.transport}" (only "stdio" supported)`);
-          }
-          if (!server.command) {
-            errors.push(`Server ${index + 1}: missing "command"`);
-          }
-        });
-
-        // Check for duplicate names
-        const names = data.servers.map(s => s.name).filter(Boolean);
-        const duplicates = names.filter((name, index) => names.indexOf(name) !== index);
-        if (duplicates.length > 0) {
-          errors.push(`Duplicate server names: ${[...new Set(duplicates)].join(', ')}`);
         }
+      }
+      // Check for legacy array-based format
+      else if (data.servers) {
+        if (!Array.isArray(data.servers)) {
+          errors.push('Legacy format: "servers" must be an array');
+        } else {
+          // Validate legacy format
+          data.servers.forEach((server: any, index: number) => {
+            if (!server.name) {
+              errors.push(`Server ${index + 1}: missing "name"`);
+            }
+            if (!server.command) {
+              errors.push(`Server ${index + 1}: missing "command"`);
+            }
+            if (server.transport && server.transport !== 'stdio') {
+              errors.push(`Server ${index + 1}: invalid transport "${server.transport}" (only "stdio" supported)`);
+            }
+          });
+
+          // Check for duplicate names
+          const names = data.servers.map((s: any) => s.name).filter(Boolean);
+          const duplicates = names.filter((name: string, index: number) => names.indexOf(name) !== index);
+          if (duplicates.length > 0) {
+            errors.push(`Duplicate server names: ${[...new Set(duplicates)].join(', ')}`);
+          }
+
+          // Suggest migration
+          if (errors.length === 0) {
+            errors.push('Note: Using legacy array-based format. Will auto-migrate to new object-based format on load.');
+          }
+        }
+      } else {
+        errors.push('Missing "mcpServers" field (or legacy "servers" field)');
       }
 
       return {
-        valid: errors.length === 0,
+        valid: errors.length === 0 || (errors.length === 1 && errors[0].startsWith('Note:')),
         errors,
       };
     } catch (error: any) {
