@@ -1,52 +1,55 @@
 import Link from 'next/link';
-import { Github, Twitter, Linkedin } from 'lucide-react';
+import { Github } from 'lucide-react';
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="border-t bg-muted/50">
+    <footer className="border-t border-white/5 bg-zinc-950/50">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* About */}
           <div className="col-span-1 md:col-span-2">
-            <div className="flex items-center space-x-2 mb-4">
-              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">
                 <span className="text-white font-bold text-lg">X</span>
               </div>
-              <span className="text-lg font-bold">Xoding AI Tool</span>
+              <span className="text-lg font-bold text-gradient">XibeCode</span>
             </div>
-            <p className="text-sm text-muted-foreground max-w-md mb-4">
-              Production-ready autonomous coding agent powered by Claude AI. Open-source, customizable, with advanced context management.
+            <p className="text-sm text-zinc-500 max-w-md mb-4 leading-relaxed">
+              Production-ready autonomous coding agent powered by Claude AI.
+              Open-source, free, and fully customizable with smart context management and MCP support.
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-zinc-600">
               Created by{' '}
               <a
                 href="https://github.com/iotserver24"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-foreground underline"
+                className="text-zinc-400 hover:text-white transition-colors underline underline-offset-2"
               >
                 iotserver24
               </a>
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              <strong>Note:</strong> Not yet open-source but planned to be made open-source
             </p>
           </div>
 
           {/* Quick Links */}
           <div>
-            <h3 className="font-semibold mb-4">Quick Links</h3>
-            <ul className="space-y-2 text-sm text-muted-foreground">
+            <h3 className="font-semibold text-zinc-300 mb-4 text-sm uppercase tracking-wider">Navigate</h3>
+            <ul className="space-y-2.5 text-sm">
               <li>
-                <Link href="/" className="hover:text-foreground">
+                <Link href="/" className="text-zinc-500 hover:text-white transition-colors">
                   Home
                 </Link>
               </li>
               <li>
-                <Link href="/docs" className="hover:text-foreground">
+                <Link href="/docs" className="text-zinc-500 hover:text-white transition-colors">
                   Documentation
+                </Link>
+              </li>
+              <li>
+                <Link href="/updates" className="text-zinc-500 hover:text-white transition-colors">
+                  Updates
                 </Link>
               </li>
               <li>
@@ -54,7 +57,7 @@ export default function Footer() {
                   href="https://github.com/iotserver24/Xibecode"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="hover:text-foreground"
+                  className="text-zinc-500 hover:text-white transition-colors"
                 >
                   GitHub
                 </a>
@@ -64,26 +67,26 @@ export default function Footer() {
 
           {/* Resources */}
           <div>
-            <h3 className="font-semibold mb-4">Resources</h3>
-            <ul className="space-y-2 text-sm text-muted-foreground">
+            <h3 className="font-semibold text-zinc-300 mb-4 text-sm uppercase tracking-wider">Resources</h3>
+            <ul className="space-y-2.5 text-sm">
               <li>
-                <Link href="/docs/installation" className="hover:text-foreground">
+                <Link href="/docs/installation" className="text-zinc-500 hover:text-white transition-colors">
                   Installation
                 </Link>
               </li>
               <li>
-                <Link href="/docs/quickstart" className="hover:text-foreground">
+                <Link href="/docs/quickstart" className="text-zinc-500 hover:text-white transition-colors">
                   Quick Start
                 </Link>
               </li>
               <li>
-                <Link href="/docs/mcp" className="hover:text-foreground">
+                <Link href="/docs/mcp" className="text-zinc-500 hover:text-white transition-colors">
                   MCP Integration
                 </Link>
               </li>
               <li>
-                <Link href="/docs/examples" className="hover:text-foreground">
-                  Examples
+                <Link href="/docs/plugins" className="text-zinc-500 hover:text-white transition-colors">
+                  Plugins
                 </Link>
               </li>
             </ul>
@@ -91,30 +94,28 @@ export default function Footer() {
         </div>
 
         {/* Bottom Bar */}
-        <div className="mt-8 pt-8 border-t">
-          <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-            <p className="text-sm text-muted-foreground">
-              © {currentYear} Xoding AI Tool. Built with ❤️ by{' '}
+        <div className="mt-10 pt-8 border-t border-white/5">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <p className="text-xs text-zinc-600">
+              © {currentYear} XibeCode. Built with ❤️ by{' '}
               <a
                 href="https://github.com/iotserver24"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-foreground underline"
+                className="text-zinc-400 hover:text-white transition-colors"
               >
                 iotserver24
               </a>
             </p>
-            <div className="flex items-center space-x-4">
-              <a
-                href="https://github.com/iotserver24"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-foreground"
-                aria-label="GitHub"
-              >
-                <Github className="h-5 w-5" />
-              </a>
-            </div>
+            <a
+              href="https://github.com/iotserver24/Xibecode"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-zinc-600 hover:text-white transition-colors"
+              aria-label="GitHub"
+            >
+              <Github className="h-5 w-5" />
+            </a>
           </div>
         </div>
       </div>
