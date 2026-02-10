@@ -88,11 +88,25 @@ export ANTHROPIC_API_KEY=your_key_here
 xibecode run "Create a Python script that prints hello world"
 ```
 
-### 3. Try Interactive Chat
+### 3. Try Interactive Chat (classic)
 
 ```bash
 xibecode chat
 ```
+
+### 4. Try the new Ink TUI
+
+```bash
+xibecode tui
+```
+
+This launches a full-screen Ink-based chat UI with:
+- **Live streaming messages**
+- **Status bar** (model, mode, session, theme, tools)
+- **Slash commands** (e.g. `/help`, `/new`, `/sessions`, `/mode`, `/exit`)
+- **`!` shell commands** (run a shell command and feed results to the AI)
+- **`@` fuzzy file search** (quickly list matching files)
+- **Tab-based mode switching** between agent, plan, debug, and other modes.
 
 ## 💡 Usage
 
