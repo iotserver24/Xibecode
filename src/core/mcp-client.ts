@@ -8,14 +8,7 @@ import type {
   ReadResourceResult,
   GetPromptResult,
 } from '@modelcontextprotocol/sdk/types.js';
-
-export interface MCPServerConfig {
-  name: string;
-  transport: 'stdio'; // Only stdio is currently supported
-  command: string; // Command to execute
-  args?: string[]; // Command arguments
-  env?: Record<string, string>; // Environment variables
-}
+import { MCPServerConfig } from '../utils/config.js';
 
 export interface MCPTool extends Tool {
   serverName: string;
@@ -42,9 +35,9 @@ export class MCPClientManager {
   /**
    * Connect to an MCP server
    */
-  async connect(serverConfig: MCPServerConfig): Promise<void> {
-    if (this.clients.has(serverConfig.name)) {
-      throw new Error(`Already connected to MCP server: ${serverConfig.name}`);
+  async connect(serverName: string, serverConfig: MCPServerConfig): Promise<void> {
+    if (this.clients.has(serverName)) {
+      throw new Error(`Already connected to MCP server: ${serverName}`);
     }
 
     try {
@@ -55,12 +48,8 @@ export class MCPClientManager {
         capabilities: {},
       });
 
-      if (serverConfig.transport !== 'stdio') {
-        throw new Error(`Currently only 'stdio' transport is supported. Server: ${serverConfig.name}`);
-      }
-
       if (!serverConfig.command) {
-        throw new Error(`stdio transport requires 'command' for server ${serverConfig.name}`);
+        throw new Error(`stdio transport requires 'command' for server ${serverName}`);
       }
 
       const transport = new StdioClientTransport({
@@ -72,15 +61,15 @@ export class MCPClientManager {
       await client.connect(transport);
 
       // Store client and config
-      this.clients.set(serverConfig.name, client);
-      this.serverConfigs.set(serverConfig.name, serverConfig);
+      this.clients.set(serverName, client);
+      this.serverConfigs.set(serverName, serverConfig);
 
       // Discover and cache capabilities
-      await this.discoverCapabilities(serverConfig.name);
+      await this.discoverCapabilities(serverName);
 
     } catch (error) {
       throw new Error(
-        `Failed to connect to MCP server ${serverConfig.name}: ${
+        `Failed to connect to MCP server ${serverName}: ${
           error instanceof Error ? error.message : String(error)
         }`
       );

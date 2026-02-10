@@ -4,11 +4,23 @@ import * as os from 'os';
 import { MCPServersFileManager } from './mcp-servers-file.js';
 
 export interface MCPServerConfig {
-  name: string;
-  transport: 'stdio'; // Only stdio is currently supported
   command: string; // Command to execute
   args?: string[]; // Command arguments
   env?: Record<string, string>; // Environment variables
+}
+
+// Object-based MCP servers configuration
+export interface MCPServersConfig {
+  [serverName: string]: MCPServerConfig;
+}
+
+// Legacy array-based format (for backward compatibility)
+export interface MCPServerConfigLegacy {
+  name: string;
+  transport: 'stdio';
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
 }
 
 export interface XibeCodeConfig {
@@ -22,7 +34,7 @@ export interface XibeCodeConfig {
   gitCheckpointStrategy?: 'stash' | 'commit';
   testCommandOverride?: string;
   plugins?: string[];
-  mcpServers?: MCPServerConfig[];
+  mcpServers?: MCPServersConfig;
 }
 
 export class ConfigManager {
@@ -45,7 +57,7 @@ export class ConfigManager {
         enableDryRunByDefault: false,
         gitCheckpointStrategy: 'stash',
         plugins: [],
-        mcpServers: [],
+        mcpServers: {},
       },
     });
   }
@@ -196,29 +208,31 @@ export class ConfigManager {
   /**
    * Get all MCP server configurations
    * Loads from mcp-servers.json file first, falls back to config store
+   * Returns as object-based format
    */
-  async getMCPServers(): Promise<MCPServerConfig[]> {
+  async getMCPServers(): Promise<MCPServersConfig> {
     try {
       // Try to load from file first
       const fileServers = await this.mcpFileManager.loadMCPServers();
-      if (fileServers.length > 0 || await this.mcpFileManager.fileExists()) {
+      if (Object.keys(fileServers).length > 0 || await this.mcpFileManager.fileExists()) {
         return fileServers;
       }
     } catch (error) {
       // If file has errors, fall back to config store
       console.warn(`Warning: Failed to load MCP servers from file, using config store: ${error instanceof Error ? error.message : String(error)}`);
     }
-    
+
     // Fall back to config store
-    return this.get('mcpServers') || [];
+    return this.get('mcpServers') || {};
   }
 
   /**
    * Get MCP servers synchronously (for backward compatibility)
    * Uses config store only
+   * Returns as object-based format
    */
-  getMCPServersSync(): MCPServerConfig[] {
-    return this.get('mcpServers') || [];
+  getMCPServersSync(): MCPServersConfig {
+    return this.get('mcpServers') || {};
   }
 
   /**
@@ -231,15 +245,15 @@ export class ConfigManager {
   /**
    * Add an MCP server configuration
    */
-  addMCPServer(serverConfig: MCPServerConfig): void {
+  addMCPServer(serverName: string, serverConfig: MCPServerConfig): void {
     const servers = this.getMCPServersSync();
-    
+
     // Check if server with same name already exists
-    if (servers.some(s => s.name === serverConfig.name)) {
-      throw new Error(`MCP server with name "${serverConfig.name}" already exists`);
+    if (servers[serverName]) {
+      throw new Error(`MCP server with name "${serverName}" already exists`);
     }
 
-    servers.push(serverConfig);
+    servers[serverName] = serverConfig;
     this.set('mcpServers', servers);
   }
 
@@ -248,13 +262,13 @@ export class ConfigManager {
    */
   removeMCPServer(serverName: string): boolean {
     const servers = this.getMCPServersSync();
-    const filtered = servers.filter(s => s.name !== serverName);
-    
-    if (filtered.length === servers.length) {
+
+    if (!servers[serverName]) {
       return false; // Server not found
     }
 
-    this.set('mcpServers', filtered);
+    delete servers[serverName];
+    this.set('mcpServers', servers);
     return true;
   }
 
@@ -263,21 +277,20 @@ export class ConfigManager {
    */
   getMCPServer(serverName: string): MCPServerConfig | undefined {
     const servers = this.getMCPServersSync();
-    return servers.find(s => s.name === serverName);
+    return servers[serverName];
   }
 
   /**
    * Update an MCP server configuration
    */
-  updateMCPServer(serverName: string, updates: Partial<Omit<MCPServerConfig, 'name'>>): boolean {
+  updateMCPServer(serverName: string, updates: Partial<MCPServerConfig>): boolean {
     const servers = this.getMCPServersSync();
-    const index = servers.findIndex(s => s.name === serverName);
-    
-    if (index === -1) {
+
+    if (!servers[serverName]) {
       return false; // Server not found
     }
 
-    servers[index] = { ...servers[index], ...updates };
+    servers[serverName] = { ...servers[serverName], ...updates };
     this.set('mcpServers', servers);
     return true;
   }

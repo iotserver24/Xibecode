@@ -642,7 +642,7 @@ XibeCode stores config in `~/.xibecode/`
   "plugins": [],                          // Array of plugin paths
   
   // Latest version
-  "mcpServers": []                        // MCP server configurations
+  "mcpServers": {}                        // MCP server configurations (object-based)
 }
 ```
 
@@ -688,25 +688,23 @@ nano ~/.xibecode/mcp-servers.json
 
 ```json
 {
-  "servers": [
-    {
-      "name": "filesystem",
-      "transport": "stdio",
+  "mcpServers": {
+    "filesystem": {
       "command": "mcp-server-filesystem",
       "args": ["--root", "/path/to/files"]
     },
-    {
-      "name": "github",
-      "transport": "stdio",
+    "github": {
       "command": "mcp-server-github",
       "args": ["--token", "YOUR_TOKEN"],
       "env": {
         "GITHUB_TOKEN": "your_token_here"
       }
     }
-  ]
+  }
 }
 ```
+
+> **Note:** The configuration format has been updated to use an object-based structure. If you have an existing configuration using the legacy array format with `"servers": [...]`, it will be automatically migrated to the new format when you run any MCP command.
 
 **File Management Commands:**
 
@@ -764,16 +762,20 @@ MCP servers support two transport types:
 
 For local MCP servers that run as a subprocess. Currently only stdio transport is supported:
 
-```bash
-# Add via command line
-xibecode mcp add filesystem --command "mcp-server-filesystem" --args "--root /path/to/files"
+**Note:** The MCP configuration now uses a simpler object-based format. Instead of command-line flags, edit the configuration file directly:
 
-# Configuration format (stored automatically)
+```bash
+# Open the config file
+xibecode mcp edit
+
+# Add your server to the file using the new format:
 {
-  "name": "filesystem",
-  "transport": "stdio",
-  "command": "mcp-server-filesystem",
-  "args": ["--root", "/path/to/files"]
+  "mcpServers": {
+    "filesystem": {
+      "command": "mcp-server-filesystem",
+      "args": ["--root", "/path/to/files"]
+    }
+  }
 }
 ```
 
@@ -804,17 +806,15 @@ MCP tools are prefixed with the server name (e.g., `filesystem::read_file`, `rem
 npm install -g @modelcontextprotocol/server-github
 
 # Open the config file to add the server
-xibecode mcp add
+xibecode mcp edit
 # Edit the file and add:
 # {
-#   "servers": [
-#     {
-#       "name": "github",
-#       "transport": "stdio",
+#   "mcpServers": {
+#     "github": {
 #       "command": "mcp-server-github",
 #       "args": ["--token", "YOUR_GITHUB_TOKEN"]
 #     }
-#   ]
+#   }
 # }
 
 # Reload servers

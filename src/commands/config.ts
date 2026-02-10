@@ -43,19 +43,20 @@ export async function configCommand(options: ConfigOptions) {
 
   if (options.listMcpServers) {
     const servers = await config.getMCPServers();
-    if (servers.length === 0) {
+    const serverNames = Object.keys(servers);
+    if (serverNames.length === 0) {
       console.log(chalk.yellow('No MCP servers configured'));
       return;
     }
 
     console.log(chalk.bold.white('\n📡 Configured MCP Servers\n'));
-    servers.forEach(server => {
-      console.log(chalk.cyan(`  ${server.name}`));
-      console.log(chalk.gray(`    Transport: ${server.transport}`));
+    for (const serverName of serverNames) {
+      const server = servers[serverName];
+      console.log(chalk.cyan(`  ${serverName}`));
       console.log(chalk.gray(`    Command: ${server.command}`));
       if (server.args) console.log(chalk.gray(`    Args: ${server.args.join(' ')}`));
       console.log('');
-    });
+    }
     return;
   }
 
@@ -77,17 +78,15 @@ export async function configCommand(options: ConfigOptions) {
     ]);
     
     const serverConfig: MCPServerConfig = {
-      name,
-      transport: 'stdio',
       command,
     };
-    
+
     if (args.trim()) {
       serverConfig.args = args.trim().split(/\s+/);
     }
 
     try {
-      config.addMCPServer(serverConfig);
+      config.addMCPServer(name, serverConfig);
       ui.success(`MCP server "${name}" added successfully!`);
     } catch (error: any) {
       ui.error(`Failed to add MCP server: ${error.message}`);
@@ -293,17 +292,15 @@ export async function configCommand(options: ConfigOptions) {
         ]);
         
         const serverConfig: MCPServerConfig = {
-          name,
-          transport: 'stdio',
           command,
         };
-        
+
         if (args.trim()) {
           serverConfig.args = args.trim().split(/\s+/);
         }
 
         try {
-          config.addMCPServer(serverConfig);
+          config.addMCPServer(name, serverConfig);
           ui.success(`MCP server "${name}" added successfully!`);
         } catch (error: any) {
           ui.error(`Failed to add MCP server: ${error.message}`);
@@ -311,22 +308,24 @@ export async function configCommand(options: ConfigOptions) {
 
       } else if (mcpAction === 'list') {
         const servers = await config.getMCPServers();
-        if (servers.length === 0) {
+        const serverNames = Object.keys(servers);
+        if (serverNames.length === 0) {
           console.log(chalk.yellow('No MCP servers configured\n'));
         } else {
           console.log(chalk.bold.white('\n📡 Configured MCP Servers\n'));
-          servers.forEach(server => {
-            console.log(chalk.cyan(`  ${server.name}`));
-            console.log(chalk.gray(`    Transport: ${server.transport}`));
+          for (const serverName of serverNames) {
+            const server = servers[serverName];
+            console.log(chalk.cyan(`  ${serverName}`));
             console.log(chalk.gray(`    Command: ${server.command}`));
             if (server.args) console.log(chalk.gray(`    Args: ${server.args.join(' ')}`));
             console.log('');
-          });
+          }
         }
 
       } else if (mcpAction === 'remove') {
         const servers = await config.getMCPServers();
-        if (servers.length === 0) {
+        const serverNames = Object.keys(servers);
+        if (serverNames.length === 0) {
           console.log(chalk.yellow('No MCP servers configured\n'));
         } else {
           const { serverName } = await inquirer.prompt([
@@ -334,7 +333,7 @@ export async function configCommand(options: ConfigOptions) {
               type: 'list',
               name: 'serverName',
               message: 'Select server to remove:',
-              choices: servers.map(s => s.name),
+              choices: serverNames,
             },
           ]);
 
