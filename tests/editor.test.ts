@@ -1,11 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { FileEditor, SearchReplaceEdit, LineRangeEdit } from '../src/core/editor.js';
 import * as fs from 'fs/promises';
-import * as path from 'path';
 import * as diff from 'diff';
 
 vi.mock('fs/promises');
-vi.mock('path');
 vi.mock('diff');
 
 describe('FileEditor', () => {
@@ -30,14 +28,11 @@ function farewell(name) {
   });
 
   describe('smartEdit', () => {
-    const originalReadFile = fs.readFile as ReturnType<typeof vi.fn>;
-    const originalWriteFile = fs.writeFile as ReturnType<typeof vi.fn>;
-
     beforeEach(() => {
       vi.mocked(fs.readFile).mockResolvedValue(mockContent);
       vi.mocked(fs.writeFile).mockResolvedValue(undefined);
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
-      vi.mocked(path.resolve).mockReturnValue('/test/working/dir/test.js');
+      vi.mocked(diff.createPatch).mockReturnValue('--- original\n+++ modified\n+change');
     });
 
     it('should successfully edit file with unique search string', async () => {
@@ -68,7 +63,8 @@ function farewell(name) {
 
     it('should fail when search string appears multiple times without all flag', async () => {
       const edit: SearchReplaceEdit = {
-        search: 'console.log("Hello, " + name);',
+        // This string appears twice in mockContent
+        search: 'console.log(',
         replace: 'console.log("Hi, " + name);',
         // all: false by default
       };
@@ -114,7 +110,7 @@ function farewell(name) {
       vi.mocked(fs.readFile).mockResolvedValue(mockContent);
       vi.mocked(fs.writeFile).mockResolvedValue(undefined);
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
-      vi.mocked(path.resolve).mockReturnValue('/test/working/dir/test.js');
+      vi.mocked(diff.createPatch).mockReturnValue('--- original\n+++ modified\n+change');
     });
 
     it('should edit specific line range', async () => {
@@ -154,7 +150,6 @@ function farewell(name) {
       vi.mocked(fs.readFile).mockResolvedValue('line1\nline2\nline3');
       vi.mocked(fs.writeFile).mockResolvedValue(undefined);
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
-      vi.mocked(path.resolve).mockReturnValue('/test/working/dir/test.js');
     });
 
     it('should insert content at specified line', async () => {
@@ -191,7 +186,6 @@ function farewell(name) {
       ]);
       vi.mocked(fs.readFile).mockResolvedValue('backup content');
       vi.mocked(fs.writeFile).mockResolvedValue(undefined);
-      vi.mocked(path.join).mockImplementation((...args) => args.join('/'));
     });
 
     it('should revert to most recent backup by default', async () => {
@@ -243,7 +237,6 @@ function farewell(name) {
     beforeEach(() => {
       vi.mocked(fs.stat).mockResolvedValue({ size: 150, mtime: new Date() } as any);
       vi.mocked(fs.readFile).mockResolvedValue('line1\nline2\nline3');
-      vi.mocked(path.resolve).mockReturnValue('/test/working/dir/test.js');
     });
 
     it('should get file info for existing file', async () => {

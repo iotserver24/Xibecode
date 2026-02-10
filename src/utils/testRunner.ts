@@ -29,7 +29,8 @@ export class TestRunnerDetector {
 
   /**
    * Detect which package manager is available
-   * Priority: pnpm > bun > npm (as per user preference)
+   * Priority via lock files: pnpm > bun > npm.
+   * If no lock file is found, default to npm for predictability.
    */
   async detectPackageManager(): Promise<'pnpm' | 'bun' | 'npm'> {
     // Check for lock files
@@ -42,26 +43,8 @@ export class TestRunnerDetector {
       // Ignore errors
     }
 
-    // Check for installed package managers
-    const { exec } = require('child_process');
-    const { promisify } = require('util');
-    const execAsync = promisify(exec);
-
-    try {
-      await execAsync('pnpm --version', { timeout: 2000 });
-      return 'pnpm';
-    } catch {
-      // pnpm not available
-    }
-
-    try {
-      await execAsync('bun --version', { timeout: 2000 });
-      return 'bun';
-    } catch {
-      // bun not available
-    }
-
-    return 'npm'; // Default fallback
+    // Default fallback when no lock file is present
+    return 'npm';
   }
 
   /**
@@ -191,26 +174,42 @@ export class TestRunnerDetector {
       testsFailed: undefined,
     };
 
-    // Vitest patterns
-    if (runner === 'vitest' || output.includes('Test Files') || output.includes('PASS') || output.includes('FAIL')) {
-      const passMatch = output.match(/(\d+) passed/);
-      const failMatch = output.match(/(\d+) failed/);
-      const totalMatch = output.match(/(\d+) test[s]?/);
+    // Vitest patterns (prefer explicit runner flag to avoid clashing with Jest)
+    if (runner === 'vitest') {
+      // Example:
+      // Test Files  2 passed (2)
+      //      Tests  15 passed (15)
+      const testsLineMatch = output.match(/Tests\s+(\d+)\s+passed/);
+      const failMatch = output.match(/(\d+)\s+failed/);
 
-      if (passMatch) result.testsPassed = parseInt(passMatch[1], 10);
-      if (failMatch) result.testsFailed = parseInt(failMatch[1], 10);
-      if (totalMatch) result.testsRun = parseInt(totalMatch[1], 10);
+      if (testsLineMatch) {
+        result.testsPassed = parseInt(testsLineMatch[1], 10);
+        result.testsRun = result.testsPassed;
+      }
+      if (failMatch) {
+        // In typical Vitest output fail count appears separately; if present, update
+        result.testsFailed = parseInt(failMatch[1], 10);
+        if (result.testsRun !== undefined) {
+          result.testsRun = (result.testsPassed || 0) + (result.testsFailed || 0);
+        }
+      }
     }
 
     // Jest patterns
     if (runner === 'jest' || output.includes('Tests:')) {
       const passMatch = output.match(/(\d+) passed/);
       const failMatch = output.match(/(\d+) failed/);
-      const totalMatch = output.match(/Tests:\s+(\d+) total/);
+      const totalMatch = output.match(/Tests:\s+(\d+)\s+failed,\s+(\d+)\s+passed,\s+(\d+)\s+total/);
 
       if (passMatch) result.testsPassed = parseInt(passMatch[1], 10);
       if (failMatch) result.testsFailed = parseInt(failMatch[1], 10);
-      if (totalMatch) result.testsRun = parseInt(totalMatch[1], 10);
+      if (totalMatch) {
+        // Prefer the explicit total if present
+        result.testsRun = parseInt(totalMatch[3], 10);
+      } else if (result.testsPassed !== undefined || result.testsFailed !== undefined) {
+        // Fallback: sum passed + failed
+        result.testsRun = (result.testsPassed || 0) + (result.testsFailed || 0);
+      }
     }
 
     // Mocha patterns
@@ -236,7 +235,7 @@ export class TestRunnerDetector {
     }
 
     // Go test patterns
-    if (runner === 'go test' || output.includes('PASS') || output.includes('FAIL')) {
+    if (runner === 'go test') {
       const passMatch = output.match(/ok\s+.+\s+[\d.]+s/g);
       const failMatch = output.match(/FAIL\s+.+\s+[\d.]+s/g);
 
@@ -257,23 +256,17 @@ export class TestRunnerDetector {
     const failures: string[] = [];
     const lines = output.split('\n');
 
-    // Common failure patterns
-    const failureIndicators = [
-      'FAIL',
-      'FAILED',
-      'Error:',
-      'AssertionError',
-      '✗',
-      '❌',
-      '×',
-    ];
+    // Entry indicators for new failure blocks
+    const failureStartRegex = /^\s*(FAIL|FAILED)\b/;
+    // Additional lines that should be included as part of a failure once started
+    const failureDetailIndicators = ['Error:', 'AssertionError', '✗', '❌', '×'];
 
     let inFailureBlock = false;
     let currentFailure: string[] = [];
 
     for (const line of lines) {
-      // Check if we're entering a failure block
-      if (failureIndicators.some(indicator => line.includes(indicator))) {
+      // Check if we're entering a failure block (start on FAIL/FAILED lines)
+      if (failureStartRegex.test(line)) {
         if (currentFailure.length > 0) {
           failures.push(currentFailure.join('\n'));
         }
@@ -281,7 +274,11 @@ export class TestRunnerDetector {
         inFailureBlock = true;
       } else if (inFailureBlock) {
         // Continue collecting failure details
-        if (line.trim() === '' || line.match(/^[\s]*at /)) {
+        if (
+          line.trim() === '' ||
+          line.match(/^[\s]*at /) ||
+          failureDetailIndicators.some(indicator => line.includes(indicator))
+        ) {
           currentFailure.push(line);
         } else if (line.match(/^\s*(PASS|✓|√)/)) {
           // Exit failure block on next passing test
