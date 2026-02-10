@@ -3,7 +3,7 @@ import ora, { Ora } from 'ora';
 import { getTheme, type ThemeName, type ThemeTokens } from './themes.js';
 
 // ─── Version ────────────────────────────────────────────────────
-const VERSION = '0.0.7';
+const VERSION = '0.0.8';
 
 const W = 62; // box width
 

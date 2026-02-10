@@ -1,5 +1,6 @@
 import { ConfigManager, MCPServerConfig } from '../utils/config.js';
 import { EnhancedUI } from '../ui/enhanced-tui.js';
+import { mcpCommand } from './mcp.js';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 
@@ -254,7 +255,7 @@ export async function configCommand(options: ConfigOptions) {
           name: 'mcpAction',
           message: 'MCP Server Management:',
           choices: [
-            { name: '➕ Add MCP Server', value: 'add' },
+            { name: '➕ Add / Edit MCP Servers (open config file)', value: 'add' },
             { name: '📋 List MCP Servers', value: 'list' },
             { name: '🗑️  Remove MCP Server', value: 'remove' },
             { name: '↩️  Back', value: 'back' },
@@ -263,48 +264,9 @@ export async function configCommand(options: ConfigOptions) {
       ]);
 
       if (mcpAction === 'add') {
-        const { name } = await inquirer.prompt([
-          {
-            type: 'input',
-            name: 'name',
-            message: 'Server name:',
-            validate: (input) => {
-              if (!input) return 'Name cannot be empty';
-              const existing = config.getMCPServer(input);
-              if (existing) return 'Server with this name already exists';
-              return true;
-            },
-          },
-        ]);
-
-        const { command, args } = await inquirer.prompt([
-          {
-            type: 'input',
-            name: 'command',
-            message: 'Command to execute:',
-            validate: (input) => input ? true : 'Command cannot be empty',
-          },
-          {
-            type: 'input',
-            name: 'args',
-            message: 'Arguments (space-separated, or leave empty):',
-          },
-        ]);
-        
-        const serverConfig: MCPServerConfig = {
-          command,
-        };
-
-        if (args.trim()) {
-          serverConfig.args = args.trim().split(/\s+/);
-        }
-
-        try {
-          config.addMCPServer(name, serverConfig);
-          ui.success(`MCP server "${name}" added successfully!`);
-        } catch (error: any) {
-          ui.error(`Failed to add MCP server: ${error.message}`);
-        }
+        // Delegate to the dedicated MCP command, which opens
+        // ~/.xibecode/mcp-servers.json in the user's editor.
+        await mcpCommand('add');
 
       } else if (mcpAction === 'list') {
         const servers = await config.getMCPServers();
