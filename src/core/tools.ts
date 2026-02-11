@@ -34,8 +34,8 @@ export class CodingToolExecutor implements ToolExecutor {
 
   constructor(
     workingDir: string = process.cwd(),
-    options?: { 
-      dryRun?: boolean; 
+    options?: {
+      dryRun?: boolean;
       testCommandOverride?: string;
       pluginManager?: PluginManager;
       mcpClientManager?: MCPClientManager;
@@ -93,7 +93,7 @@ export class CodingToolExecutor implements ToolExecutor {
 
     // Safety assessment for risky operations
     const riskAssessment = this.safetyChecker.assessToolRisk(toolName, p);
-    
+
     // Check for blocked commands in run_command
     if (toolName === 'run_command' && p.command) {
       const blockCheck = this.safetyChecker.isCommandBlocked(p.command);
@@ -176,6 +176,22 @@ export class CodingToolExecutor implements ToolExecutor {
           return { error: true, success: false, message: 'Missing required parameter: line (number)' };
         }
         return this.insertAtLine(p.path, p.line, p.content ?? '');
+      }
+
+      case 'verified_edit': {
+        if (!p.path || typeof p.path !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: path (string)' };
+        }
+        if (typeof p.start_line !== 'number' || typeof p.end_line !== 'number') {
+          return { error: true, success: false, message: 'Missing required parameters: start_line, end_line (numbers)' };
+        }
+        if (typeof p.old_content !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: old_content (string) - the content currently at those lines' };
+        }
+        if (typeof p.new_content !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: new_content (string)' };
+        }
+        return this.verifiedEditFile(p.path, p.start_line, p.end_line, p.old_content, p.new_content);
       }
 
       case 'list_directory':
@@ -279,7 +295,7 @@ export class CodingToolExecutor implements ToolExecutor {
       }
 
       default:
-        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status` };
+        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status` };
     }
   }
 
@@ -412,6 +428,36 @@ export class CodingToolExecutor implements ToolExecutor {
             },
           },
           required: ['path', 'line', 'content'],
+        },
+      },
+      {
+        name: 'verified_edit',
+        description: 'MOST RELIABLE file editing tool. Edit a file by specifying the exact line range, the old content that should currently be at those lines (for verification), and the new content to replace it with. If old_content does not match what is actually in the file, the edit is REJECTED and the actual content is returned so you can retry. ALWAYS use read_file first to get the current content and line numbers before using this tool. This is PREFERRED over edit_file and edit_lines for accuracy.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            path: {
+              type: 'string',
+              description: 'Path to file to edit',
+            },
+            start_line: {
+              type: 'number',
+              description: 'Start line number (1-indexed) of the content to replace',
+            },
+            end_line: {
+              type: 'number',
+              description: 'End line number (1-indexed, inclusive) of the content to replace',
+            },
+            old_content: {
+              type: 'string',
+              description: 'The exact content currently at lines start_line through end_line. This MUST match the actual file content or the edit will be rejected. Copy this directly from read_file output.',
+            },
+            new_content: {
+              type: 'string',
+              description: 'The new content to replace the old content with',
+            },
+          },
+          required: ['path', 'start_line', 'end_line', 'old_content', 'new_content'],
         },
       },
       {
@@ -704,7 +750,7 @@ export class CodingToolExecutor implements ToolExecutor {
     const fullPath = this.resolvePath(filePath);
     try {
       const content = await fs.readFile(fullPath, 'utf-8');
-      
+
       if (startLine !== undefined && endLine !== undefined) {
         const lines = content.split('\n');
         const chunk = lines.slice(startLine - 1, endLine).join('\n');
@@ -749,7 +795,7 @@ export class CodingToolExecutor implements ToolExecutor {
 
   private async writeFile(filePath: string, content: string): Promise<any> {
     const fullPath = this.resolvePath(filePath);
-    
+
     if (this.dryRun) {
       const lines = content.split('\n').length;
       return {
@@ -803,6 +849,20 @@ export class CodingToolExecutor implements ToolExecutor {
     }
 
     const result = await this.fileEditor.editLineRange(filePath, { startLine, endLine, newContent });
+    return result;
+  }
+
+  private async verifiedEditFile(filePath: string, startLine: number, endLine: number, oldContent: string, newContent: string): Promise<any> {
+    if (this.dryRun) {
+      return {
+        success: true,
+        dryRun: true,
+        path: filePath,
+        message: `[DRY RUN] Would verified-edit lines ${startLine}-${endLine} in ${filePath}`,
+      };
+    }
+
+    const result = await this.fileEditor.verifiedEdit(filePath, { startLine, endLine, oldContent, newContent });
     return result;
   }
 
