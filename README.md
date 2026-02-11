@@ -4,12 +4,16 @@
 
 XibeCode is a professional CLI tool that brings autonomous AI coding capabilities to your terminal. Like Claude Code, but open-source, customizable, and with advanced context management.
 
-## 🆕 What's New in v0.1.5
+## 🆕 What's New in v0.1.6
 
-**v0.1.5:**
+**v0.1.6:**
 
-- 🎯 **Verified Edit Tool** - New `verified_edit` tool that requires old content verification before applying changes. Prevents AI hallucinated edits and enables self-correction on mismatch.
-- 🛡️ **Safer Editing by Default** - AI now uses `verified_edit` as the primary editing method, falling back to `edit_file`/`edit_lines` only if needed.
+- 🔍 **Codebase Search** - New `grep_code` tool using ripgrep (grep fallback) for lightning-fast code search across your project
+- 🌐 **Web Search** - New `web_search` tool powered by DuckDuckGo — free, no API key required
+- 📄 **URL Fetching** - New `fetch_url` tool to read any webpage as clean text (HTML auto-stripped)
+- 🧠 **Project Memory** - Persistent `.xibecode/memory.md` that saves project knowledge across sessions
+- 🎯 **Verified Edit Tool** - `verified_edit` with old content verification prevents hallucinated edits
+- 🛡️ **Safer Editing by Default** - AI uses `verified_edit` as primary editing method with smart fallbacks
 
 **Previous Updates:**
 
@@ -33,8 +37,13 @@ XibeCode is a professional CLI tool that brings autonomous AI coding capabilitie
 - ✅ **Loop Detection** - Prevents infinite loops and runaway executions
 - ✅ **Multiple Edit Methods** - Smart edit, line-range edit, insert, revert
 
-### 🆕 New Features (v2.0)
+### 🆕 New Features
 
+- ✅ **Web Search** - Search the web from within the AI (DuckDuckGo, free, no API key)
+- ✅ **Codebase Search** - Ripgrep-powered code search across your entire project
+- ✅ **URL Fetching** - Read any webpage as clean text for research
+- ✅ **Project Memory** - Persist project knowledge across sessions in `.xibecode/memory.md`
+- ✅ **Verified Editing** - Content-verified file edits that prevent AI mistakes
 - ✅ **Test Integration** - Auto-detect and run tests (Vitest, Jest, pytest, Go test)
 - ✅ **Git Awareness** - Check status, create checkpoints, revert changes safely
 - ✅ **Dry-Run Mode** - Preview changes without making them
@@ -46,11 +55,19 @@ XibeCode is a professional CLI tool that brings autonomous AI coding capabilitie
 - 📖 Read files (whole or partial for large files)
 - 📝 Write files (create or overwrite)
 - ✏️  Edit files (search/replace with automatic backups)
+- 🎯 Verified edits (content verification before applying)
 - ✂️  Edit specific line ranges
 - ↩️  Revert to previous versions
 - 🔍 Search files with glob patterns
+- 🔎 Grep codebase with ripgrep
 - 📁 List directories
 - 🧠 Get intelligent context (related files)
+
+### Web & Research
+
+- 🌐 Search the web (DuckDuckGo, free)
+- 📄 Fetch and read any URL as text
+- 🧠 Project memory persistence
 
 ### Command Execution
 
