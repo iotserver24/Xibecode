@@ -2,7 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { crawlDocs, generateSkillFromDocs } from './docs-scraper.js';
+import { crawlDocs, generateSkillFromDocs, type AISynthesisConfig } from './docs-scraper.js';
 import { MarketplaceClient, type MarketplaceSkillResult } from './marketplace-client.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -20,19 +20,20 @@ export class SkillManager {
     private builtInSkillsDir: string;
     private userSkillsDir: string;
     private marketplace: MarketplaceClient;
-    private apiKey: string;
-    private baseUrl?: string;
-    private model?: string;
+    private aiConfig: AISynthesisConfig;
 
-    constructor(workingDir: string = process.cwd(), apiKey?: string, baseUrl?: string, model?: string) {
+    constructor(workingDir: string = process.cwd(), apiKey?: string, baseUrl?: string, model?: string, provider?: 'anthropic' | 'openai') {
         // Built-in skills shipped with XibeCode
         this.builtInSkillsDir = path.join(__dirname, '..', '..', 'skills');
         // User-defined skills in project
         this.userSkillsDir = path.join(workingDir, '.xibecode', 'skills');
         this.marketplace = new MarketplaceClient();
-        this.apiKey = apiKey || process.env.ANTHROPIC_API_KEY || '';
-        this.baseUrl = baseUrl;
-        this.model = model;
+        this.aiConfig = {
+            apiKey: apiKey || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || '',
+            baseUrl,
+            model,
+            provider,
+        };
     }
 
     async loadSkills(): Promise<void> {
@@ -210,7 +211,7 @@ export class SkillManager {
             }
 
             // Generate skill content using AI synthesis
-            const skillContent = await generateSkillFromDocs(name, url, pages, this.apiKey, this.baseUrl, this.model, onProgress);
+            const skillContent = await generateSkillFromDocs(name, url, pages, this.aiConfig, onProgress);
 
             // Ensure user skills directory exists
             await fs.mkdir(this.userSkillsDir, { recursive: true });
