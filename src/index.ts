@@ -7,6 +7,10 @@ import { chatCommand } from './commands/chat.js';
 import { configCommand } from './commands/config.js';
 import { mcpCommand } from './commands/mcp.js';
 import dotenv from 'dotenv';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json');
 
 dotenv.config();
 
@@ -15,7 +19,7 @@ const program = new Command();
 program
   .name('xibecode')
   .description('XibeCode - AI-powered autonomous coding assistant')
-  .version('0.1.4');
+  .version(pkg.version);
 
 // Main run command
 program
@@ -102,20 +106,20 @@ mcpCmd
 
 // Show help if no command
 if (!process.argv.slice(2).length) {
-  const B  = chalk.hex('#3A3A4A');  // border
-  const C  = chalk.hex('#00D4FF');  // brand cyan
+  const B = chalk.hex('#3A3A4A');  // border
+  const C = chalk.hex('#00D4FF');  // brand cyan
   const Cb = chalk.hex('#00D4FF').bold;
-  const W  = chalk.white;
+  const W = chalk.white;
   const Wb = chalk.bold.white;
-  const D  = chalk.hex('#6B6B7B');  // dim
-  const M  = chalk.hex('#4A4A5A');  // muted
+  const D = chalk.hex('#6B6B7B');  // dim
+  const M = chalk.hex('#4A4A5A');  // muted
 
   console.log('');
   console.log('  ' + B('╭──────────────────────────────────────────────────────────────╮'));
   console.log('  ' + B('│') + '                                                              ' + B('│'));
   console.log('  ' + B('│') + '   ' + Cb('⚡ XibeCode') + '                                                ' + B('│'));
   console.log('  ' + B('│') + '   ' + D('AI-Powered Autonomous Coding Assistant') + '                      ' + B('│'));
-  console.log('  ' + B('│') + '   ' + M('v0.0.5 - File-Based MCP Config') + '                          ' + B('│'));
+  console.log('  ' + B('│') + '   ' + M(`v${pkg.version}`) + ' '.repeat(Math.max(1, 46 - pkg.version.length)) + B('│'));
   console.log('  ' + B('│') + '                                                              ' + B('│'));
   console.log('  ' + B('╰──────────────────────────────────────────────────────────────╯'));
   console.log('');

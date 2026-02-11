@@ -2,8 +2,9 @@ import chalk from 'chalk';
 import ora, { Ora } from 'ora';
 import { getTheme, type ThemeName, type ThemeTokens } from './themes.js';
 
-// ─── Version ────────────────────────────────────────────────────
-const VERSION = '0.1.4';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const { version: VERSION } = require('../../package.json');
 
 const W = 62; // box width
 

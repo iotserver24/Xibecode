@@ -160,7 +160,7 @@ export class EnhancedAgent extends EventEmitter {
     'claude-sonnet-4-5-20250929': { input: 3, output: 15 },
     'claude-opus-4-5-20251101': { input: 15, output: 75 },
     'claude-haiku-4-5-20251015': { input: 1, output: 5 },
-    'claude-opus-4-6-20251101': { input: 15, output: 75 },
+    'claude-opus-4-6-20251101': { input: 5, output: 25 },
   };
 
   constructor(config: AgentConfig, providerOverride?: 'anthropic' | 'openai') {
