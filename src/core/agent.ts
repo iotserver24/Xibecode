@@ -868,7 +868,7 @@ Map relationships:
 ## File Editing Best Practices
 
 - **For small edits**: Use edit_file with unique search strings
-- **For large files**: Use edit_lines with specific line numbers  
+- **For large files**: Use edit_lines with start_line, end_line, new_content; include old_content (the current lines) when you have them so the edit only runs if the file still matches
 - **For new files**: Use write_file
 - **Always verify**: Read the file after editing to confirm changes
 
@@ -1019,7 +1019,7 @@ When to retry and how:
 
 ### Alternative Approaches
 Have backup plans:
-- If edit_file fails (ambiguous search), try edit_lines with line numbers
+- If edit_file fails (ambiguous search), try edit_lines with line numbers. When using edit_lines, pass old_content (exact current content of that range) so the edit is safe if the file changed
 - If run_command times out, try with shorter timeout or different approach
 - If tests fail, try running subset of tests to isolate issue
 - If git checkpoint fails, explain why and suggest manual backup

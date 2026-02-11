@@ -165,7 +165,8 @@ export class CodingToolExecutor implements ToolExecutor {
         if (typeof p.new_content !== 'string') {
           return { error: true, success: false, message: 'Missing required parameter: new_content (string)' };
         }
-        return this.editLines(p.path, p.start_line, p.end_line, p.new_content);
+        const oldContent = typeof p.old_content === 'string' ? p.old_content : undefined;
+        return this.editLines(p.path, p.start_line, p.end_line, p.new_content, oldContent);
       }
 
       case 'insert_at_line': {
@@ -368,7 +369,7 @@ export class CodingToolExecutor implements ToolExecutor {
       },
       {
         name: 'edit_lines',
-        description: 'Edit specific line range in a file. Good for large files when you know the line numbers.',
+        description: 'Edit a line range: specify start_line, end_line, what is currently there (old_content), and what to replace it with (new_content). If old_content is provided, the edit only runs when those lines exactly match (safe against concurrent changes).',
         input_schema: {
           type: 'object',
           properties: {
@@ -384,9 +385,13 @@ export class CodingToolExecutor implements ToolExecutor {
               type: 'number',
               description: 'End line number (inclusive)',
             },
+            old_content: {
+              type: 'string',
+              description: 'Optional: exact current content of those lines. If provided, edit only runs when the file matches (recommended when you read the file first).',
+            },
             new_content: {
               type: 'string',
-              description: 'New content to replace those lines',
+              description: 'New content to replace lines start_line through end_line',
             },
           },
           required: ['path', 'start_line', 'end_line', 'new_content'],
@@ -791,7 +796,7 @@ export class CodingToolExecutor implements ToolExecutor {
     return result;
   }
 
-  private async editLines(filePath: string, startLine: number, endLine: number, newContent: string): Promise<any> {
+  private async editLines(filePath: string, startLine: number, endLine: number, newContent: string, oldContent?: string): Promise<any> {
     if (this.dryRun) {
       const lines = newContent.split('\n').length;
       return {
@@ -802,7 +807,12 @@ export class CodingToolExecutor implements ToolExecutor {
       };
     }
 
-    const result = await this.fileEditor.editLineRange(filePath, { startLine, endLine, newContent });
+    const result = await this.fileEditor.editLineRange(filePath, {
+      startLine,
+      endLine,
+      newContent,
+      expectedContent: oldContent,
+    });
     return result;
   }
 
