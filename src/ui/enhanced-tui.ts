@@ -188,15 +188,15 @@ export class EnhancedUI {
     console.log('');
     console.log('  ' + this.T.dim('  model') + '       ' + this.T.text(config.model));
     console.log('  ' + this.T.dim('  iterations') + '  ' + this.T.text(isFinite(config.maxIterations) ? String(config.maxIterations) : 'unlimited'));
-    
+
     if (config.dryRun) {
       console.log('  ' + this.T.dim('  mode') + '        ' + this.T.info('DRY RUN (no changes will be made)'));
     }
-    
+
     if (config.gitStatus && config.gitStatus.isGitRepo) {
       this.gitStatus(config.gitStatus);
     }
-    
+
     console.log('');
     console.log('  ' + this.line());
     console.log('');
@@ -326,7 +326,6 @@ export class EnhancedUI {
 
   // ─── Diff ─────────────────────────────────────────────
   showDiff(diff: string, file: string) {
-    if (!this.showDetails) return;
     console.log('    ' + this.T.bold(`changes: ${file}`));
     const lines = diff.split('\n').slice(0, 40);
     lines.forEach(line => {
@@ -384,7 +383,7 @@ export class EnhancedUI {
     };
 
     console.log('  ' + icons[level] + labels[level] + ': ' + this.T.text(message));
-    
+
     if (warnings.length > 0) {
       warnings.forEach(w => {
         console.log('       ' + this.T.dim('• ' + w));
@@ -405,13 +404,13 @@ export class EnhancedUI {
 
     console.log('    ' + this.T.bold(`Changes: ${files.length} file(s)`));
     console.log('       ' + this.T.success(`+${totalInsertions}`) + ' ' + this.T.error(`-${totalDeletions}`));
-    
+
     if (this.showDetails) {
       files.slice(0, 10).forEach(f => {
         const stats = this.T.success(`+${f.insertions}`) + ' ' + this.T.error(`-${f.deletions}`);
         console.log('       ' + stats + ' ' + this.T.text(f.path));
       });
-      
+
       if (files.length > 10) {
         console.log('       ' + this.T.dim(`... and ${files.length - 10} more files`));
       }
@@ -427,11 +426,11 @@ export class EnhancedUI {
     untracked?: string[];
   }) {
     const parts: string[] = [];
-    
+
     if (status.branch) {
       parts.push(this.T.info(`branch: ${status.branch}`));
     }
-    
+
     if (status.isClean) {
       parts.push(this.T.success('clean'));
     } else {
@@ -466,19 +465,19 @@ export class EnhancedUI {
   }) {
     const icon = results.success ? this.T.success('✔') : this.T.error('✘');
     const status = results.success ? this.T.success('PASS') : this.T.error('FAIL');
-    
+
     console.log('    ' + icon + ' ' + status);
-    
+
     if (results.runner) {
       console.log('       ' + this.T.dim(`runner: ${results.runner}`));
     }
-    
+
     if (results.testsRun !== undefined) {
       const passed = results.testsPassed || 0;
       const failed = results.testsFailed || 0;
       console.log('       ' + this.T.success(`${passed} passed`) + ' ' + (failed > 0 ? this.T.error(`${failed} failed`) : ''));
     }
-    
+
     if (results.duration) {
       const seconds = (results.duration / 1000).toFixed(2);
       console.log('       ' + this.T.dim(`duration: ${seconds}s`));
@@ -556,6 +555,11 @@ export class EnhancedUI {
       get_context: '🧠',
       revert_file: '↩️ ',
       insert_at_line: '➕',
+      verified_edit: '✅',
+      grep_code: '🔍',
+      web_search: '🌐',
+      fetch_url: '📄',
+      update_memory: '🧠',
     };
     return icons[toolName] || '🔧';
   }
@@ -579,6 +583,16 @@ export class EnhancedUI {
         return input.pattern || null;
       case 'list_directory':
         return input.path || '.';
+      case 'grep_code':
+        return input.pattern ? `"${input.pattern}"${input.path ? ` in ${input.path}` : ''}` : null;
+      case 'web_search':
+        return input.query ? `"${input.query}"` : null;
+      case 'fetch_url':
+        return input.url ? (input.url.length > 50 ? input.url.slice(0, 47) + '...' : input.url) : null;
+      case 'update_memory':
+        return 'saving to memory';
+      case 'verified_edit':
+        return input.path || null;
       default:
         return null;
     }
@@ -604,6 +618,16 @@ export class EnhancedUI {
         return `${result.count ?? 0} matches`;
       case 'list_directory':
         return `${result.count ?? 0} items`;
+      case 'grep_code':
+        return result.match_count !== undefined ? `${result.match_count} match${result.match_count === 1 ? '' : 'es'}` : 'done';
+      case 'web_search':
+        return result.results ? `${result.results.length} result${result.results.length === 1 ? '' : 's'}` : 'done';
+      case 'fetch_url':
+        return result.content ? `${(result.content.length / 1024).toFixed(1)}KB` : 'fetched';
+      case 'update_memory':
+        return 'saved';
+      case 'verified_edit':
+        return result.linesChanged ? `${result.linesChanged} lines changed` : 'edited';
       default:
         return 'ok';
     }
