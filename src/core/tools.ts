@@ -294,8 +294,36 @@ export class CodingToolExecutor implements ToolExecutor {
         return this.getMCPStatus();
       }
 
+      case 'grep_code': {
+        if (!p.pattern || typeof p.pattern !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: pattern (string)' };
+        }
+        return this.grepCode(p.pattern, p.path, p.ignore_case, p.file_pattern, p.max_results);
+      }
+
+      case 'web_search': {
+        if (!p.query || typeof p.query !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: query (string)' };
+        }
+        return this.webSearch(p.query, p.max_results);
+      }
+
+      case 'fetch_url': {
+        if (!p.url || typeof p.url !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: url (string)' };
+        }
+        return this.fetchUrl(p.url, p.max_length);
+      }
+
+      case 'update_memory': {
+        if (!p.content || typeof p.content !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: content (string)' };
+        }
+        return this.updateMemory(p.content, p.append);
+      }
+
       default:
-        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status` };
+        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, update_memory` };
     }
   }
 
@@ -720,6 +748,90 @@ export class CodingToolExecutor implements ToolExecutor {
         input_schema: {
           type: 'object',
           properties: {},
+        },
+      },
+      {
+        name: 'grep_code',
+        description: 'Search for a text pattern across your codebase using ripgrep (or grep fallback). Returns matching file paths, line numbers, and line content. Use this to find function usages, variable references, imports, error messages, etc. Much faster than reading files one by one.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            pattern: {
+              type: 'string',
+              description: 'Text or regex pattern to search for',
+            },
+            path: {
+              type: 'string',
+              description: 'Directory or file to search in (default: current working directory)',
+            },
+            ignore_case: {
+              type: 'boolean',
+              description: 'Case-insensitive search (default: false)',
+            },
+            file_pattern: {
+              type: 'string',
+              description: 'Glob pattern to filter files, e.g. "*.ts" or "*.py"',
+            },
+            max_results: {
+              type: 'number',
+              description: 'Maximum results to return (default: 50)',
+            },
+          },
+          required: ['pattern'],
+        },
+      },
+      {
+        name: 'web_search',
+        description: 'Search the web using DuckDuckGo. Returns titles, URLs, and snippets. Use this to look up documentation, find solutions to errors, research libraries, or get up-to-date information. No API key required.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'Search query',
+            },
+            max_results: {
+              type: 'number',
+              description: 'Max results to return (default: 8)',
+            },
+          },
+          required: ['query'],
+        },
+      },
+      {
+        name: 'fetch_url',
+        description: 'Fetch and read content from any URL. HTML is automatically stripped to plain text. Use this to read documentation pages, API references, blog posts, or any web content. Supports HTML, JSON, and plain text.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            url: {
+              type: 'string',
+              description: 'URL to fetch',
+            },
+            max_length: {
+              type: 'number',
+              description: 'Max characters to return (default: 20000). Increase for long docs.',
+            },
+          },
+          required: ['url'],
+        },
+      },
+      {
+        name: 'update_memory',
+        description: 'Save important project knowledge to .xibecode/memory.md so it persists across sessions. Use this to remember: coding conventions, architecture decisions, frequently used commands, project-specific notes, or anything useful for future sessions. The memory file is automatically loaded at the start of each session.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            content: {
+              type: 'string',
+              description: 'Content to save to memory (markdown format recommended)',
+            },
+            append: {
+              type: 'boolean',
+              description: 'If true (default), append to existing memory. If false, replace entire memory.',
+            },
+          },
+          required: ['content'],
         },
       },
     ];
@@ -1407,6 +1519,224 @@ export class CodingToolExecutor implements ToolExecutor {
         success: false,
         message: `Failed to get MCP status: ${error.message}`,
       };
+    }
+  }
+
+  // ── grep_code: ripgrep / grep fallback ──────────────────────
+  private async grepCode(
+    pattern: string,
+    searchPath: string = '.',
+    ignoreCase: boolean = false,
+    filePattern?: string,
+    maxResults: number = 50
+  ): Promise<any> {
+    const fullPath = this.resolvePath(searchPath);
+    const caseFlag = ignoreCase ? '-i' : '';
+
+    // Try ripgrep first, fallback to grep
+    const tryRg = async (): Promise<string> => {
+      const includeFlag = filePattern ? `--glob '${filePattern}'` : '';
+      const cmd = `rg --no-heading --line-number --max-count ${maxResults} ${caseFlag} ${includeFlag} -- ${JSON.stringify(pattern)} ${JSON.stringify(fullPath)} 2>/dev/null`;
+      const { stdout } = await execAsync(cmd, { maxBuffer: 1024 * 1024, timeout: 15000 });
+      return stdout;
+    };
+
+    const tryGrep = async (): Promise<string> => {
+      const includeFlag = filePattern ? `--include='${filePattern}'` : '';
+      const cmd = `grep -rnI ${caseFlag} ${includeFlag} -- ${JSON.stringify(pattern)} ${JSON.stringify(fullPath)} 2>/dev/null | head -${maxResults}`;
+      const { stdout } = await execAsync(cmd, { maxBuffer: 1024 * 1024, timeout: 15000 });
+      return stdout;
+    };
+
+    try {
+      let output: string;
+      try {
+        output = await tryRg();
+      } catch {
+        output = await tryGrep();
+      }
+
+      const lines = output.trim().split('\n').filter(Boolean);
+      const matches = lines.map(line => {
+        const match = line.match(/^(.+?):(\d+):(.*)$/);
+        if (match) {
+          return {
+            file: path.relative(this.workingDir, match[1]),
+            line: parseInt(match[2], 10),
+            content: match[3].trim(),
+          };
+        }
+        return { raw: line };
+      });
+
+      return {
+        success: true,
+        pattern,
+        total: matches.length,
+        matches,
+      };
+    } catch (error: any) {
+      // grep returns exit code 1 when no matches found
+      if (error.code === 1 || error.message?.includes('exit code 1')) {
+        return { success: true, pattern, total: 0, matches: [], message: 'No matches found' };
+      }
+      return { error: true, success: false, message: `Grep failed: ${error.message}` };
+    }
+  }
+
+  // ── web_search: DuckDuckGo HTML ───────────────────────────
+  private async webSearch(query: string, maxResults: number = 8): Promise<any> {
+    try {
+      const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `q=${encodeURIComponent(query)}`,
+      });
+
+      if (!response.ok) {
+        return { error: true, success: false, message: `Search failed: HTTP ${response.status}` };
+      }
+
+      const html = await response.text();
+
+      // Parse results from DuckDuckGo HTML
+      const results: Array<{ title: string; url: string; snippet: string }> = [];
+      const resultRegex = /<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>[\s\S]*?<a[^>]*class="result__snippet"[^>]*>(.*?)<\/a>/gi;
+
+      let match;
+      while ((match = resultRegex.exec(html)) !== null && results.length < maxResults) {
+        const rawUrl = match[1];
+        const title = match[2].replace(/<[^>]*>/g, '').trim();
+        const snippet = match[3].replace(/<[^>]*>/g, '').trim();
+
+        // DuckDuckGo wraps URLs in redirect; extract actual URL
+        let actualUrl = rawUrl;
+        const uddgMatch = rawUrl.match(/uddg=([^&]+)/);
+        if (uddgMatch) {
+          actualUrl = decodeURIComponent(uddgMatch[1]);
+        }
+
+        if (title && actualUrl) {
+          results.push({ title, url: actualUrl, snippet });
+        }
+      }
+
+      // Fallback: try simpler pattern if regex didn't match
+      if (results.length === 0) {
+        const simpleLinkRegex = /<a[^>]*class="result__url"[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi;
+        while ((match = simpleLinkRegex.exec(html)) !== null && results.length < maxResults) {
+          const url = match[1].trim();
+          const title = match[2].replace(/<[^>]*>/g, '').trim();
+          if (url && title) {
+            results.push({ title, url, snippet: '' });
+          }
+        }
+      }
+
+      return {
+        success: true,
+        query,
+        total: results.length,
+        results,
+      };
+    } catch (error: any) {
+      return { error: true, success: false, message: `Web search failed: ${error.message}` };
+    }
+  }
+
+  // ── fetch_url: read any URL as text ────────────────────────
+  private async fetchUrl(url: string, maxLength: number = 20000): Promise<any> {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,text/plain,application/json',
+        },
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!response.ok) {
+        return { error: true, success: false, message: `Fetch failed: HTTP ${response.status} ${response.statusText}` };
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      const raw = await response.text();
+
+      let text: string;
+      if (contentType.includes('application/json')) {
+        // Return JSON as-is
+        text = raw;
+      } else if (contentType.includes('text/plain')) {
+        text = raw;
+      } else {
+        // Strip HTML to text
+        text = raw
+          .replace(/<script[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[\s\S]*?<\/style>/gi, '')
+          .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+          .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+          .replace(/<header[\s\S]*?<\/header>/gi, '')
+          .replace(/<[^>]+>/g, '\n')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/\n{3,}/g, '\n\n')
+          .trim();
+      }
+
+      // Truncate to maxLength
+      const truncated = text.length > maxLength;
+      const content = truncated ? text.slice(0, maxLength) + '\n... [truncated]' : text;
+
+      return {
+        success: true,
+        url,
+        contentType: contentType.split(';')[0],
+        length: text.length,
+        truncated,
+        content,
+      };
+    } catch (error: any) {
+      return { error: true, success: false, message: `Fetch failed: ${error.message}` };
+    }
+  }
+
+  // ── update_memory: persist project knowledge ───────────────
+  private async updateMemory(content: string, append: boolean = true): Promise<any> {
+    const memoryDir = path.join(this.workingDir, '.xibecode');
+    const memoryPath = path.join(memoryDir, 'memory.md');
+
+    try {
+      await fs.mkdir(memoryDir, { recursive: true });
+
+      if (append) {
+        let existing = '';
+        try {
+          existing = await fs.readFile(memoryPath, 'utf-8');
+        } catch { /* file doesn't exist yet */ }
+        const updated = existing ? `${existing.trimEnd()}\n\n${content}` : content;
+        await fs.writeFile(memoryPath, updated, 'utf-8');
+      } else {
+        await fs.writeFile(memoryPath, content, 'utf-8');
+      }
+
+      const final = await fs.readFile(memoryPath, 'utf-8');
+      return {
+        success: true,
+        path: '.xibecode/memory.md',
+        lines: final.split('\n').length,
+        message: append ? 'Memory updated (appended)' : 'Memory replaced',
+      };
+    } catch (error: any) {
+      return { error: true, success: false, message: `Failed to update memory: ${error.message}` };
     }
   }
 }
