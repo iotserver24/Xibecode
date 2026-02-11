@@ -211,8 +211,8 @@ export class EnhancedAgent extends EventEmitter {
       let streamed = false;
 
       try {
-        // Tools are currently supported only for Anthropic-format models.
-        const effectiveTools = this.provider === 'anthropic' ? tools : [];
+        // Tools are supported for both Anthropic and OpenAI-format models.
+        const effectiveTools = tools;
         for (let attempt = 1; attempt <= maxApiRetries; attempt++) {
           try {
             const result = await this.callModel(effectiveTools);
@@ -473,16 +473,88 @@ export class EnhancedAgent extends EventEmitter {
   }
 
   /**
+   * Map Anthropic-format tools to OpenAI chat completions tools format.
+   */
+  private mapToolsToOpenAI(tools: Tool[]): Array<{ type: 'function'; function: { name: string; description: string; parameters: object } }> {
+    return tools.map((t) => ({
+      type: 'function' as const,
+      function: {
+        name: t.name,
+        description: t.description ?? '',
+        parameters: t.input_schema ?? { type: 'object', properties: {} },
+      },
+    }));
+  }
+
+  /**
+   * Build OpenAI-format messages from internal Anthropic-style history (including tool_calls and tool results).
+   */
+  private buildOpenAIMessages(): Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content?: string; tool_call_id?: string; tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }> }> {
+    const out: Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content?: string; tool_call_id?: string; tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }> }> = [];
+
+    out.push({ role: 'system', content: this.getSystemPrompt() });
+
+    for (const msg of this.messages) {
+      if (msg.role === 'user') {
+        if (typeof msg.content === 'string') {
+          out.push({ role: 'user', content: msg.content });
+        } else if (Array.isArray(msg.content)) {
+          const arr = msg.content as ContentBlock[];
+          const toolResults = arr.filter((b: any) => b.type === 'tool_result');
+          if (toolResults.length > 0) {
+            for (const tr of toolResults) {
+              out.push({
+                role: 'tool',
+                tool_call_id: (tr as any).tool_use_id,
+                content: typeof (tr as any).content === 'string' ? (tr as any).content : JSON.stringify((tr as any).content),
+              });
+            }
+          } else {
+            const textBlocks = arr.filter((b: any) => b.type === 'text') as TextBlock[];
+            const text = textBlocks.map((b) => b.text).join('\n');
+            if (text) out.push({ role: 'user', content: text });
+          }
+        }
+        continue;
+      }
+
+      if (msg.role === 'assistant') {
+        const blocks = (Array.isArray(msg.content) ? msg.content : []) as ContentBlock[];
+        const textBlocks = blocks.filter((b): b is TextBlock => b.type === 'text');
+        const toolUseBlocks = blocks.filter((b): b is ToolUseBlock => b.type === 'tool_use');
+        const contentText = textBlocks.map((b) => b.text).join('\n').trim();
+        const toolCalls =
+          toolUseBlocks.length > 0
+            ? toolUseBlocks.map((b) => ({
+                id: b.id,
+                type: 'function' as const,
+                function: { name: b.name, arguments: typeof b.input === 'string' ? b.input : JSON.stringify(b.input ?? {}) },
+              }))
+            : undefined;
+
+        const assistantMsg: { role: 'assistant'; content: string; tool_calls?: typeof toolCalls } = {
+          role: 'assistant',
+          content: contentText || '',
+        };
+        if (toolCalls && toolCalls.length > 0) assistantMsg.tool_calls = toolCalls;
+        out.push(assistantMsg);
+      }
+    }
+
+    return out;
+  }
+
+  /**
    * Call an OpenAI-compatible chat completions endpoint.
    * Uses streaming (SSE) when available, with a non-streaming fallback.
+   * Supports tools: sends them when provided and normalizes tool_calls in the response to Anthropic-style content blocks.
    */
-  private async callOpenAI(_tools: Tool[]): Promise<{ message: any; streamed: boolean }> {
+  private async callOpenAI(tools: Tool[]): Promise<{ message: any; streamed: boolean }> {
     if (!this.config.apiKey) {
       throw new Error('API key is required for OpenAI-compatible provider');
     }
 
     let base = (this.config.baseUrl || 'https://api.openai.com').replace(/\/+$/, '');
-    // If user provided a base URL that already includes /v1, avoid double /v1/v1
     let url: string;
     if (base.endsWith('/v1')) {
       url = `${base}/chat/completions`;
@@ -490,40 +562,16 @@ export class EnhancedAgent extends EventEmitter {
       url = `${base}/v1/chat/completions`;
     }
 
-    // Build OpenAI-style messages from our internal history.
-    const openAiMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
-
-    // Inject system prompt explicitly
-    openAiMessages.push({
-      role: 'system',
-      content: this.getSystemPrompt(),
-    });
-
-    for (const msg of this.messages) {
-      // Map Anthropic roles to OpenAI roles (ignore tool-specific roles)
-      if (msg.role !== 'user' && msg.role !== 'assistant') continue;
-
-      let contentText = '';
-      if (typeof msg.content === 'string') {
-        contentText = msg.content;
-      } else if (Array.isArray(msg.content)) {
-        const textBlocks = (msg.content as ContentBlock[]).filter((b) => b.type === 'text') as TextBlock[];
-        contentText = textBlocks.map((b) => b.text).join('\n');
-      }
-
-      if (!contentText) continue;
-
-      openAiMessages.push({
-        role: msg.role,
-        content: contentText,
-      });
-    }
+    const openAiMessages = this.buildOpenAIMessages();
 
     const baseBody: any = {
       model: this.config.model,
       messages: openAiMessages,
-      max_tokens: 8192,
+      max_tokens: 16000,
     };
+    if (tools.length > 0) {
+      baseBody.tools = this.mapToolsToOpenAI(tools);
+    }
 
     // ── Try streaming first (SSE) ─────────────────────────
     try {
@@ -549,6 +597,7 @@ export class EnhancedAgent extends EventEmitter {
       }
 
       let fullText = '';
+      const toolCallsAccum: Array<{ id: string; name: string; arguments: string; index: number }> = [];
       let hasEmittedStart = false;
       let buffer = '';
 
@@ -579,7 +628,6 @@ export class EnhancedAgent extends EventEmitter {
             if (typeof delta?.content === 'string') {
               chunkText = delta.content;
             } else if (Array.isArray(delta?.content)) {
-              // OpenAI beta format: array of content blocks
               chunkText = delta.content
                 .filter((c: any) => c.type === 'text' && typeof c.text === 'string')
                 .map((c: any) => c.text)
@@ -594,6 +642,21 @@ export class EnhancedAgent extends EventEmitter {
               }
               this.emit('stream_text', { text: chunkText });
             }
+
+            // Accumulate streaming tool_calls (OpenAI sends by index with optional id/name/arguments per chunk)
+            const dToolCalls = delta?.tool_calls;
+            if (Array.isArray(dToolCalls)) {
+              for (const tc of dToolCalls) {
+                const idx = tc.index ?? 0;
+                while (toolCallsAccum.length <= idx) {
+                  toolCallsAccum.push({ id: '', name: '', arguments: '', index: toolCallsAccum.length });
+                }
+                const acc = toolCallsAccum[idx];
+                if (tc.id != null) acc.id = tc.id;
+                if (tc.function?.name != null) acc.name = tc.function.name;
+                if (tc.function?.arguments != null) acc.arguments += tc.function.arguments;
+              }
+            }
           } catch {
             // Ignore malformed SSE lines
           }
@@ -604,15 +667,26 @@ export class EnhancedAgent extends EventEmitter {
         this.emit('stream_end', {});
       }
 
-      const message = {
-        content: [
-          {
-            type: 'text',
-            text: fullText,
-          } as TextBlock,
-        ],
-      };
+      const content: ContentBlock[] = [];
+      if (fullText) content.push({ type: 'text', text: fullText } as TextBlock);
+      for (const tc of toolCallsAccum) {
+        if (tc.id || tc.name || tc.arguments) {
+          let input: object;
+          try {
+            input = tc.arguments ? JSON.parse(tc.arguments) : {};
+          } catch {
+            input = { raw: tc.arguments };
+          }
+          content.push({
+            type: 'tool_use',
+            id: tc.id || `call_${content.length}`,
+            name: tc.name || 'unknown',
+            input,
+          } as ToolUseBlock);
+        }
+      }
 
+      const message = { content: content.length ? content : [{ type: 'text', text: '' } as TextBlock] };
       return { message, streamed: hasEmittedStart };
     } catch (_streamError) {
       // ── Fallback to non-streaming ───────────────────────
@@ -631,17 +705,31 @@ export class EnhancedAgent extends EventEmitter {
       }
 
       const data: any = await response.json();
-      const content = data?.choices?.[0]?.message?.content ?? '';
+      const msg = data?.choices?.[0]?.message ?? {};
+      const rawContent = msg.content ?? '';
+      const rawToolCalls = msg.tool_calls ?? [];
 
-      const message = {
-        content: [
-          {
-            type: 'text',
-            text: typeof content === 'string' ? content : JSON.stringify(content),
-          } as TextBlock,
-        ],
-      };
+      const content: ContentBlock[] = [];
+      const text = typeof rawContent === 'string' ? rawContent : (Array.isArray(rawContent) ? rawContent.map((c: any) => c.text ?? '').join('') : '');
+      if (text) content.push({ type: 'text', text } as TextBlock);
+      for (const tc of rawToolCalls) {
+        const fn = tc.function ?? {};
+        let input: object;
+        try {
+          input = typeof fn.arguments === 'string' && fn.arguments ? JSON.parse(fn.arguments) : {};
+        } catch {
+          input = { raw: fn.arguments };
+        }
+        content.push({
+          type: 'tool_use',
+          id: tc.id ?? `call_${content.length}`,
+          name: fn.name ?? 'unknown',
+          input,
+        } as ToolUseBlock);
+      }
+      if (content.length === 0) content.push({ type: 'text', text: '' } as TextBlock);
 
+      const message = { content };
       return { message, streamed: false };
     }
   }
