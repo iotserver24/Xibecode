@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { crawlDocs, generateSkillFromDocs } from './docs-scraper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -107,5 +108,45 @@ export class SkillManager {
             skill.description.toLowerCase().includes(lowerQuery) ||
             skill.tags?.some(tag => tag.toLowerCase().includes(lowerQuery))
         );
+    }
+
+    /**
+     * Learn a skill from documentation URL.
+     * Crawls the docs site, scrapes pages, and generates a skill file.
+     */
+    async learnFromDocs(
+        name: string,
+        url: string,
+        maxPages: number = 25,
+        onProgress?: (msg: string) => void,
+    ): Promise<{ success: boolean; pagesScraped: number; filePath: string; error?: string }> {
+        try {
+            // Crawl docs
+            const pages = await crawlDocs(url, maxPages, onProgress);
+
+            if (pages.length === 0) {
+                return { success: false, pagesScraped: 0, filePath: '', error: 'No pages could be scraped from that URL' };
+            }
+
+            // Generate skill content
+            const skillContent = generateSkillFromDocs(name, url, pages);
+
+            // Ensure user skills directory exists
+            await fs.mkdir(this.userSkillsDir, { recursive: true });
+
+            // Save skill file
+            const filePath = path.join(this.userSkillsDir, `${name}.md`);
+            await fs.writeFile(filePath, skillContent, 'utf-8');
+
+            // Parse and register the skill
+            const skill = this.parseSkillFile(skillContent, `${name}.md`);
+            if (skill) {
+                this.skills.set(skill.name, skill);
+            }
+
+            return { success: true, pagesScraped: pages.length, filePath };
+        } catch (error: any) {
+            return { success: false, pagesScraped: 0, filePath: '', error: error.message };
+        }
     }
 }
