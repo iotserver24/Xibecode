@@ -19,8 +19,6 @@ export interface LineRangeEdit {
   startLine: number;
   endLine: number;
   newContent: string;
-  /** If provided, the edit only runs when the current lines in the range exactly match this string. Use to avoid overwriting if the file changed. */
-  expectedContent?: string;
 }
 
 export class FileEditor {
@@ -90,15 +88,7 @@ export class FileEditor {
   }
 
   /**
-   * Normalize string for line-range comparison (trim trailing newline, consistent line endings).
-   */
-  private normalizeLineRangeText(s: string): string {
-    return s.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n+$/, '');
-  }
-
-  /**
-   * Edit specific line range - good for large files.
-   * Optionally pass expectedContent: if the current lines don't match, the edit is aborted (safe "replace only when this is there").
+   * Edit specific line range - good for large files
    */
   async editLineRange(filePath: string, edit: LineRangeEdit): Promise<EditResult> {
     const fullPath = path.resolve(this.workingDir, filePath);
@@ -112,19 +102,6 @@ export class FileEditor {
           success: false,
           message: `Invalid line range: ${edit.startLine}-${edit.endLine} (file has ${lines.length} lines)`,
         };
-      }
-
-      const currentSlice = lines.slice(edit.startLine - 1, edit.endLine).join('\n');
-      if (edit.expectedContent !== undefined) {
-        const expected = this.normalizeLineRangeText(edit.expectedContent);
-        const actual = this.normalizeLineRangeText(currentSlice);
-        if (expected !== actual) {
-          return {
-            success: false,
-            message: `Content at lines ${edit.startLine}-${edit.endLine} does not match expected. Refusing to replace. Re-read the file and try again with the current content.`,
-            linesChanged: 0,
-          };
-        }
       }
 
       // Create backup
