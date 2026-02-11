@@ -262,6 +262,7 @@ export async function chatCommand(options: ChatOptions) {
     console.log('  ' + chalk.hex('#00D4FF')('/skill <name>') + chalk.hex('#6B6B7B')('  activate a skill (e.g. /skill refactor-clean-code)'));
     console.log('  ' + chalk.hex('#00D4FF')('/skill list') + chalk.hex('#6B6B7B')('   show available skills'));
     console.log('  ' + chalk.hex('#00D4FF')('/skill off') + chalk.hex('#6B6B7B')('    deactivate current skill'));
+    console.log('  ' + chalk.hex('#00D4FF')('/learn <name> <url>') + chalk.hex('#6B6B7B')(' learn a new skill from docs URL'));
     console.log('  ' + chalk.hex('#00D4FF')('clear') + chalk.hex('#6B6B7B')('       clear screen and redraw header'));
     console.log('  ' + chalk.hex('#00D4FF')('tools on/off') + chalk.hex('#6B6B7B')(' toggle tools (editor & filesystem)'));
     console.log('  ' + chalk.hex('#00D4FF')('exit / quit') + chalk.hex('#6B6B7B')('   end the chat session'));
@@ -789,6 +790,50 @@ export async function chatCommand(options: ChatOptions) {
       agent.setSkill(skill.name, skill.instructions);
       ui.success(`Activated skill: ${skill.name}`);
       console.log('  ' + chalk.hex('#6B6B7B')(skill.description));
+      continue;
+    }
+
+    if (lowerMessage.startsWith('/learn')) {
+      const parts = trimmed.split(/\s+/);
+      if (parts.length < 3) {
+        ui.error('Usage: /learn <skill-name> <docs-url>');
+        console.log('  ' + chalk.dim('Example: /learn nextjs https://nextjs.org/docs'));
+        continue;
+      }
+      const skillName = parts[1];
+      const docsUrl = parts[2];
+
+      // Validate URL
+      try {
+        new URL(docsUrl);
+      } catch {
+        ui.error('Invalid URL. Please provide a valid documentation URL.');
+        continue;
+      }
+
+      console.log('');
+      console.log(chalk.hex('#00D4FF')('  📚 Learning from docs: ') + chalk.white(docsUrl));
+      console.log(chalk.dim('  This may take a moment...'));
+      console.log('');
+
+      const result = await skillManager.learnFromDocs(
+        skillName,
+        docsUrl,
+        25,
+        (msg) => {
+          console.log('  ' + chalk.hex('#6B6B7B')(`  ${msg}`));
+        }
+      );
+
+      if (result.success) {
+        console.log('');
+        ui.success(`Learned skill "${skillName}" from ${result.pagesScraped} pages`);
+        console.log('  ' + chalk.hex('#6B6B7B')(`Saved to: ${result.filePath}`));
+        console.log('  ' + chalk.dim(`Activate with: /skill ${skillName}`));
+        console.log('');
+      } else {
+        ui.error(`Failed to learn from docs: ${result.error}`);
+      }
       continue;
     }
 
