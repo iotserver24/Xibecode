@@ -12,6 +12,7 @@ import { PlanMode } from '../core/planMode.js';
 import { TodoManager } from '../utils/todoManager.js';
 import { getAllModes, type AgentMode } from '../core/modes.js';
 import { isThemeName, THEME_NAMES, type ThemeName } from '../ui/themes.js';
+import { SkillManager } from '../core/skills.js';
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -36,6 +37,8 @@ export async function chatCommand(options: ChatOptions) {
   const sessionManager = new SessionManager(config.getSessionDirectory());
   const contextManager = new ContextManager(process.cwd());
   const planMode = new PlanMode(process.cwd());
+  const skillManager = new SkillManager(process.cwd());
+  await skillManager.loadSkills();
 
   ui.clear();
   if (!config.isHeaderMinimal()) {
@@ -256,6 +259,9 @@ export async function chatCommand(options: ChatOptions) {
     console.log('  ' + chalk.hex('#00D4FF')('/undo') + chalk.hex('#6B6B7B')('        undo last AI turn (restore previous conversation state)'));
     console.log('  ' + chalk.hex('#00D4FF')('/redo') + chalk.hex('#6B6B7B')('        redo undone turn'));
     console.log('  ' + chalk.hex('#00D4FF')('/cost') + chalk.hex('#6B6B7B')('        show token usage and estimated cost'));
+    console.log('  ' + chalk.hex('#00D4FF')('/skill <name>') + chalk.hex('#6B6B7B')('  activate a skill (e.g. /skill refactor-clean-code)'));
+    console.log('  ' + chalk.hex('#00D4FF')('/skill list') + chalk.hex('#6B6B7B')('   show available skills'));
+    console.log('  ' + chalk.hex('#00D4FF')('/skill off') + chalk.hex('#6B6B7B')('    deactivate current skill'));
     console.log('  ' + chalk.hex('#00D4FF')('clear') + chalk.hex('#6B6B7B')('       clear screen and redraw header'));
     console.log('  ' + chalk.hex('#00D4FF')('tools on/off') + chalk.hex('#6B6B7B')(' toggle tools (editor & filesystem)'));
     console.log('  ' + chalk.hex('#00D4FF')('exit / quit') + chalk.hex('#6B6B7B')('   end the chat session'));
@@ -738,6 +744,54 @@ export async function chatCommand(options: ChatOptions) {
       continue;
     }
 
+    if (lowerMessage.startsWith('/skill')) {
+      const parts = trimmed.split(/\s+/);
+      const subcommand = parts[1]?.toLowerCase();
+
+      if (!subcommand || subcommand === 'list') {
+        const skills = skillManager.listSkills();
+        console.log('');
+        console.log(chalk.bold('  Available Skills'));
+        console.log('  ' + chalk.hex('#6B6B7B')('────────────────────────────────'));
+        if (skills.length === 0) {
+          console.log('  ' + chalk.hex('#6B6B7B')('No skills found'));
+        } else {
+          skills.forEach(skill => {
+            const active = agent.getActiveSkill() === skill.name ? chalk.hex('#00E676')(' (active)') : '';
+            console.log('  ' + chalk.hex('#00D4FF')(skill.name) + active);
+            console.log('    ' + chalk.hex('#6B6B7B')(skill.description));
+            if (skill.tags && skill.tags.length > 0) {
+              console.log('    ' + chalk.dim(`tags: ${skill.tags.join(', ')}`));
+            }
+            console.log('');
+          });
+        }
+        console.log('  ' + chalk.dim('Usage: /skill <name> to activate'));
+        console.log('');
+        continue;
+      }
+
+      if (subcommand === 'off') {
+        agent.setSkill(null);
+        ui.success('Skill deactivated');
+        continue;
+      }
+
+      // Activate skill
+      const skillName = parts.slice(1).join('-');
+      const skill = skillManager.getSkill(skillName);
+      if (!skill) {
+        ui.error(`Skill not found: ${skillName}`);
+        console.log('  ' + chalk.dim('Use /skill list to see available skills'));
+        continue;
+      }
+
+      agent.setSkill(skill.name, skill.instructions);
+      ui.success(`Activated skill: ${skill.name}`);
+      console.log('  ' + chalk.hex('#6B6B7B')(skill.description));
+      continue;
+    }
+
     if (lowerMessage === '/details') {
       const next = !ui.getShowDetails();
       ui.setShowDetails(next);
@@ -889,6 +943,8 @@ export async function chatCommand(options: ChatOptions) {
       const tokensLabel = stats.totalTokens > 0
         ? `${(stats.totalTokens / 1000).toFixed(1)}k${stats.costLabel ? ` · ${stats.costLabel}` : ''}`
         : undefined;
+
+      const activeSkill = agent.getActiveSkill();
       if (config.isStatusBarEnabled()) {
         ui.renderStatusBar({
           model,
@@ -898,6 +954,7 @@ export async function chatCommand(options: ChatOptions) {
           toolsEnabled: enableTools,
           themeName: ui.getThemeName(),
           mode: currentMode,
+          activeSkill,
         });
       }
       await sessionManager.saveMessagesAndStats({

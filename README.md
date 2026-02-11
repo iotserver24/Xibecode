@@ -50,6 +50,29 @@ XibeCode is a professional CLI tool that brings autonomous AI coding capabilitie
 - ✅ **Safety Controls** - Risk assessment and command blocking for dangerous operations
 - ✅ **Plugin System** - Extend XibeCode with custom tools and workflows
 
+### 🎓 Skills System
+
+XibeCode includes a **skills system** that activates specialized AI workflows for common tasks:
+
+**Built-in Skills:**
+
+- `refactor-clean-code` - Clean code principles & SOLID patterns
+- `debug-production` - Systematic debugging workflow
+- `write-tests` - Comprehensive testing with 80%+ coverage
+- `security-audit` - OWASP Top 10 security checks
+- `optimize-performance` - Performance profiling & optimization
+
+**Usage:**
+
+```bash
+# In chat mode
+/skill list                    # Show all skills
+/skill refactor-clean-code     # Activate a skill
+/skill off                     # Deactivate current skill
+```
+
+When a skill is active, the AI follows specialized instructions and best practices for that domain. Create custom skills in `.xibecode/skills/` (markdown files with YAML frontmatter).
+
 ### File Operations
 
 - 📖 Read files (whole or partial for large files)
