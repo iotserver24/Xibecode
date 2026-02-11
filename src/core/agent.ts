@@ -152,12 +152,12 @@ export class EnhancedAgent extends EventEmitter {
 
   constructor(config: AgentConfig, providerOverride?: 'anthropic' | 'openai') {
     super();
-    
+
     const clientConfig: any = { apiKey: config.apiKey };
     if (config.baseUrl) {
       clientConfig.baseURL = config.baseUrl;
     }
-    
+
     this.client = new Anthropic(clientConfig);
     this.config = {
       apiKey: config.apiKey,
@@ -321,7 +321,7 @@ export class EnhancedAgent extends EventEmitter {
 
           // Loop detection
           const loopCheck = this.loopDetector.check(toolUse.name, toolUse.input);
-          
+
           if (!loopCheck.allowed) {
             this.emit('warning', { message: loopCheck.reason });
             toolResults.push({
@@ -347,13 +347,13 @@ export class EnhancedAgent extends EventEmitter {
           // Execute
           try {
             const result = await toolExecutor.execute(toolUse.name, toolUse.input);
-            
+
             // Track file changes
-            if (['write_file', 'edit_file', 'edit_lines'].includes(toolUse.name)) {
+            if (['write_file', 'edit_file', 'edit_lines', 'verified_edit'].includes(toolUse.name)) {
               const input = toolUse.input as { path?: string };
               if (typeof input?.path === 'string') this.filesChanged.add(input.path);
             }
-            
+
             this.emit('tool_result', {
               name: toolUse.name,
               result,
@@ -526,10 +526,10 @@ export class EnhancedAgent extends EventEmitter {
         const toolCalls =
           toolUseBlocks.length > 0
             ? toolUseBlocks.map((b) => ({
-                id: b.id,
-                type: 'function' as const,
-                function: { name: b.name, arguments: typeof b.input === 'string' ? b.input : JSON.stringify(b.input ?? {}) },
-              }))
+              id: b.id,
+              type: 'function' as const,
+              function: { name: b.name, arguments: typeof b.input === 'string' ? b.input : JSON.stringify(b.input ?? {}) },
+            }))
             : undefined;
 
         const assistantMsg: { role: 'assistant'; content: string; tool_calls?: typeof toolCalls } = {
@@ -752,8 +752,8 @@ export class EnhancedAgent extends EventEmitter {
     const platformNote = platform === 'win32'
       ? 'You are running on Windows. Use PowerShell commands and Windows path conventions.'
       : platform === 'darwin'
-      ? 'You are running on macOS. Use Unix/bash commands.'
-      : 'You are running on Linux. Use bash commands.';
+        ? 'You are running on macOS. Use Unix/bash commands.'
+        : 'You are running on Linux. Use bash commands.';
 
     return `You are XibeCode, an expert autonomous coding assistant with advanced capabilities.
 
@@ -764,7 +764,7 @@ Working directory: ${process.cwd()}
 ## Core Principles
 
 1. **Read Before Edit**: ALWAYS read files with read_file before modifying them
-2. **Use Smart Editing**: Prefer edit_file (search/replace) over write_file for existing files
+2. **Use Verified Editing**: ALWAYS prefer verified_edit as your PRIMARY file editing tool. It requires old_content verification which prevents mistakes. Only fall back to edit_file or edit_lines if verified_edit fails.
 3. **Context Awareness**: Use get_context to understand project structure before making changes
 4. **Incremental Changes**: Make small, tested changes rather than large rewrites
 5. **Error Recovery**: If something fails, analyze the error and try a different approach
@@ -862,15 +862,23 @@ Map relationships:
 - For read_file: always include "path" as a string
 - For read_multiple_files: always include "paths" as an array of strings
 - For write_file: always include "path" and "content"
+- For verified_edit: always include "path", "start_line", "end_line", "old_content", and "new_content"
 - For edit_file: always include "path", "search", and "replace"
 - For run_command: always include "command" as a string
 
 ## File Editing Best Practices
 
-- **For small edits**: Use edit_file with unique search strings
-- **For large files**: Use edit_lines with specific line numbers  
+- **DEFAULT (use first)**: Use verified_edit — read the file first with read_file to get line numbers, then provide start_line, end_line, old_content (copied from what you read), and new_content. This is the SAFEST and MOST RELIABLE method because it verifies old content matches before editing. If the content doesn't match, it returns the actual content so you can retry.
+- **Fallback for small edits**: If verified_edit fails, use edit_file with unique search strings
+- **Fallback for large files**: If line numbers shift, use edit_lines with specific line numbers
 - **For new files**: Use write_file
 - **Always verify**: Read the file after editing to confirm changes
+
+### Verified Edit Workflow (PREFERRED)
+1. read_file to see current content and line numbers
+2. Identify the lines to change
+3. Use verified_edit with old_content copied EXACTLY from what you read
+4. If verification fails, re-read the file and retry with correct content
 
 ## Running Commands
 
@@ -1019,6 +1027,8 @@ When to retry and how:
 
 ### Alternative Approaches
 Have backup plans:
+- If verified_edit fails (content mismatch), re-read the file and retry with correct old_content
+- If verified_edit still fails, try edit_file with a unique search string
 - If edit_file fails (ambiguous search), try edit_lines with line numbers
 - If run_command times out, try with shorter timeout or different approach
 - If tests fail, try running subset of tests to isolate issue
