@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { MessageParam, Tool, ToolUseBlock, TextBlock, ContentBlock } from '@anthropic-ai/sdk/resources/messages';
 import fetch from 'node-fetch';
+import * as fsSync from 'fs';
 import { EventEmitter } from 'events';
 import { AgentMode, MODE_CONFIG, ModeState, createModeState, transitionMode, ModeOrchestrator, parseModeRequest, stripModeRequests, ModeTransitionPolicy } from './modes.js';
 
@@ -149,6 +150,7 @@ export class EnhancedAgent extends EventEmitter {
   private modeState: ModeState;
   private modeOrchestrator: ModeOrchestrator;
   private provider: 'anthropic' | 'openai';
+  private projectMemory: string = '';
 
   constructor(config: AgentConfig, providerOverride?: 'anthropic' | 'openai') {
     super();
@@ -176,6 +178,14 @@ export class EnhancedAgent extends EventEmitter {
     });
     // Prefer explicit provider override from config, otherwise auto-detect
     this.provider = providerOverride ?? this.detectProvider(this.config.model, this.config.baseUrl);
+
+    // Load project memory if it exists
+    try {
+      const memoryPath = require('path').join(process.cwd(), '.xibecode', 'memory.md');
+      if (fsSync.existsSync(memoryPath)) {
+        this.projectMemory = fsSync.readFileSync(memoryPath, 'utf-8').trim();
+      }
+    } catch { /* no memory file */ }
   }
 
   emit(event: AgentEvent['type'], data: any): boolean {
@@ -768,6 +778,15 @@ Working directory: ${process.cwd()}
 3. **Context Awareness**: Use get_context to understand project structure before making changes
 4. **Incremental Changes**: Make small, tested changes rather than large rewrites
 5. **Error Recovery**: If something fails, analyze the error and try a different approach
+6. **Search First**: Use grep_code to find code patterns, usages, and references before making changes
+7. **Web Research**: Use web_search and fetch_url when you need documentation, error solutions, or up-to-date info
+8. **Remember Important Things**: Use update_memory to save project knowledge for future sessions${this.projectMemory ? `
+
+## Project Memory
+
+The following knowledge was saved from previous sessions:
+
+${this.projectMemory}` : ''}
 6. **Think Systematically**: Decompose complex problems, form hypotheses, and validate assumptions
 7. **Consider Impact**: Analyze how changes affect related code and downstream dependencies
 
@@ -879,6 +898,27 @@ Map relationships:
 2. Identify the lines to change
 3. Use verified_edit with old_content copied EXACTLY from what you read
 4. If verification fails, re-read the file and retry with correct content
+
+## Codebase Search
+
+- Use \`grep_code\` to search for patterns across the codebase (uses ripgrep, falls back to grep)
+- Faster than reading files one by one — find usages, imports, function calls, error strings
+- Supports file pattern filtering: \`file_pattern: "*.ts"\` to search only TypeScript files
+- Use \`ignore_case: true\` for case-insensitive searches
+
+## Web Search & URL Fetching
+
+- Use \`web_search\` to search the web via DuckDuckGo (free, no API key needed)
+- Use \`fetch_url\` to read any URL — docs, APIs, blog posts (HTML is auto-stripped to text)
+- Useful for: looking up library docs, resolving error messages, finding solutions
+- Always use web_search when you encounter an unfamiliar error or need current documentation
+
+## Project Memory
+
+- Use \`update_memory\` to save important project info to .xibecode/memory.md
+- Memory persists across sessions — the AI loads it automatically on startup
+- Good things to remember: coding conventions, architecture decisions, common commands, gotchas
+- Append by default (\`append: true\`), or replace with \`append: false\`
 
 ## Running Commands
 
