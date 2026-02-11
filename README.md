@@ -4,9 +4,15 @@
 
 XibeCode is a professional CLI tool that brings autonomous AI coding capabilities to your terminal. Like Claude Code, but open-source, customizable, and with advanced context management.
 
-## 🆕 What's New in Latest Version
+## 🆕 What's New in v0.1.5
 
-**Major Updates:**
+**v0.1.5:**
+
+- 🎯 **Verified Edit Tool** - New `verified_edit` tool that requires old content verification before applying changes. Prevents AI hallucinated edits and enables self-correction on mismatch.
+- 🛡️ **Safer Editing by Default** - AI now uses `verified_edit` as the primary editing method, falling back to `edit_file`/`edit_lines` only if needed.
+
+**Previous Updates:**
+
 - 🧪 **Test Integration** - Auto-detect & run tests (Vitest, Jest, pytest, Go test)
 - 🔀 **Git Awareness** - Create checkpoints, check status, revert changes safely
 - 🛡️ **Safety Controls** - Dry-run mode, risk assessment, command blocking
@@ -18,6 +24,7 @@ XibeCode is a professional CLI tool that brings autonomous AI coding capabilitie
 ## 🎯 Key Features
 
 ### Core Capabilities
+
 - ✅ **Autonomous Agent Loop** - AI iteratively works on tasks until completion
 - ✅ **Smart Context Management** - Automatically loads related files (imports, tests, configs)
 - ✅ **Advanced File Editing** - Search/replace, line-range edits, automatic backups
@@ -27,6 +34,7 @@ XibeCode is a professional CLI tool that brings autonomous AI coding capabilitie
 - ✅ **Multiple Edit Methods** - Smart edit, line-range edit, insert, revert
 
 ### 🆕 New Features (v2.0)
+
 - ✅ **Test Integration** - Auto-detect and run tests (Vitest, Jest, pytest, Go test)
 - ✅ **Git Awareness** - Check status, create checkpoints, revert changes safely
 - ✅ **Dry-Run Mode** - Preview changes without making them
@@ -34,6 +42,7 @@ XibeCode is a professional CLI tool that brings autonomous AI coding capabilitie
 - ✅ **Plugin System** - Extend XibeCode with custom tools and workflows
 
 ### File Operations
+
 - 📖 Read files (whole or partial for large files)
 - 📝 Write files (create or overwrite)
 - ✏️  Edit files (search/replace with automatic backups)
@@ -44,6 +53,7 @@ XibeCode is a professional CLI tool that brings autonomous AI coding capabilitie
 - 🧠 Get intelligent context (related files)
 
 ### Command Execution
+
 - ⚡ Run shell commands
 - 🔧 Cross-platform command support
 - 📊 Capture stdout/stderr
@@ -105,6 +115,7 @@ xibecode run [prompt] [options]
 ```
 
 **Options:**
+
 - `-f, --file <path>` - Read prompt from a file
 - `-m, --model <model>` - AI model to use (default: claude-sonnet-4-5-20250929)
 - `-b, --base-url <url>` - Custom API base URL
@@ -151,11 +162,13 @@ xibecode chat [options]
 ```
 
 **Options:**
+
 - `-m, --model <model>` - AI model to use
 - `-b, --base-url <url>` - Custom API base URL
 - `-k, --api-key <key>` - API key
 
 **Commands in chat:**
+
 - `tools on/off` - Toggle tool execution
 - `clear` - Clear screen
 - `exit` or `quit` - Exit chat
@@ -202,6 +215,7 @@ xibecode run "Add error handling to userController.js"
 ```
 
 The AI will:
+
 - Read `userController.js`
 - Find and read imported files
 - Check for related test files
@@ -210,9 +224,26 @@ The AI will:
 
 ### 2. **Advanced File Editing**
 
-Three ways to edit files:
+Four ways to edit files, with verified_edit as the recommended default:
 
-#### Search/Replace (Most Reliable)
+#### Verified Edit (DEFAULT - Most Reliable) 🎯
+
+```javascript
+// AI reads the file first, then provides old content for verification
+{
+  tool: "verified_edit",
+  path: "app.js",
+  start_line: 5,
+  end_line: 5,
+  old_content: "const port = 3000;",
+  new_content: "const port = process.env.PORT || 3000;"
+}
+// If old_content doesn't match → edit is REJECTED and actual content is returned
+// AI can then re-read and retry with correct content
+```
+
+#### Search/Replace (Fallback)
+
 ```javascript
 {
   tool: "edit_file",
@@ -223,6 +254,7 @@ Three ways to edit files:
 ```
 
 #### Line Range (For Large Files)
+
 ```javascript
 {
   tool: "edit_lines",
@@ -234,6 +266,7 @@ Three ways to edit files:
 ```
 
 #### Insert (Add New Code)
+
 ```javascript
 {
   tool: "insert_at_line",
@@ -254,6 +287,7 @@ xibecode run "Revert app.js to previous version"
 ### 4. **Cross-Platform**
 
 Works identically on:
+
 - ✅ Windows (PowerShell)
 - ✅ macOS (bash/zsh)
 - ✅ Linux (bash)
@@ -265,7 +299,7 @@ The AI automatically uses the right commands for your OS.
 ```
 ╔════════════════════════════════════════════════════════════╗
 ║                 XibeCode AI Agent                          ║
-║              Autonomous Coding Assistant v0.1.4            ║
+║              Autonomous Coding Assistant v0.1.5            ║
 ╚════════════════════════════════════════════════════════════╝
 
 📋 Task:
@@ -317,6 +351,7 @@ xibecode run "Fix the bug around line 500 in large-file.js"
 ```
 
 The AI will:
+
 1. Read lines 450-550 (context around the area)
 2. Make targeted edit using line numbers
 3. Verify the change
@@ -328,6 +363,7 @@ xibecode run "Understand this project structure and suggest improvements"
 ```
 
 The AI will use `get_context` to:
+
 - Map import relationships
 - Find test files
 - Read configs
@@ -336,6 +372,7 @@ The AI will use `get_context` to:
 ### Error Recovery
 
 If something fails, the AI will:
+
 1. Read the error message
 2. Analyze what went wrong
 3. Try a different approach
@@ -354,15 +391,18 @@ xibecode run "Add validation to User model and ensure all tests pass"
 ```
 
 **Supported test runners:**
+
 - Node.js: Vitest, Jest, Mocha, Ava
 - Python: pytest, unittest
 - Go: `go test`
 
 **Package manager detection:**
+
 - Prioritizes: pnpm → bun → npm
 - Detects from lock files (`pnpm-lock.yaml`, `bun.lockb`, `package-lock.json`)
 
 **Example workflow:**
+
 ```bash
 xibecode run "Refactor the authentication module:
 1. Read the current code
@@ -383,6 +423,7 @@ xibecode run "Show me the current git status"
 ```
 
 The AI will use `get_git_status` to see:
+
 - Current branch
 - Staged/unstaged/untracked files
 - Clean/dirty state
@@ -395,6 +436,7 @@ xibecode run "Fix linting errors in changed files" --changed-only
 ```
 
 The AI will:
+
 - Get list of modified files with `get_git_changed_files`
 - Focus edits only on those files
 - More efficient for large codebases
@@ -406,11 +448,13 @@ xibecode run "Refactor the database layer (create checkpoint first)"
 ```
 
 The AI can:
+
 - Create checkpoints with `create_git_checkpoint`
 - Use git stash or commit strategy (configurable)
 - Revert to checkpoints if something goes wrong
 
 **Example:**
+
 ```javascript
 // The AI executes:
 create_git_checkpoint({
@@ -448,12 +492,14 @@ xibecode run "Refactor the auth module" --dry-run
 ```
 
 In dry-run mode:
+
 - All file operations show what *would* happen
 - No actual changes are made
 - Git operations are simulated
 - Perfect for testing complex tasks
 
 **Example output:**
+
 ```
 [DRY RUN] Would replace lines 15-20 with 8 new lines
 [DRY RUN] Would write 150 lines to src/auth/index.ts
@@ -465,18 +511,21 @@ In dry-run mode:
 XibeCode automatically assesses risk for operations:
 
 **High-risk operations** (require extra care):
+
 - Deleting files/directories
 - Force push to git
 - Destructive shell commands
 - Reverting to checkpoints
 
 **Blocked operations:**
+
 - Fork bombs
 - Deleting root/home directories
 - Direct disk writes
 - Extremely dangerous commands
 
 **Example:**
+
 ```bash
 $ xibecode run "Delete all test files"
 
@@ -557,6 +606,7 @@ The AI will automatically have access to your custom tools!
 ### Plugin Examples
 
 **Database migrations:**
+
 ```javascript
 registerTools() {
   return [{
@@ -569,6 +619,7 @@ registerTools() {
 ```
 
 **Internal APIs:**
+
 ```javascript
 registerTools() {
   return [{
@@ -663,6 +714,7 @@ XibeCode supports the [Model Context Protocol (MCP)](https://modelcontextprotoco
 ### What is MCP?
 
 MCP is an open protocol that standardizes how applications provide context to LLMs. With MCP, you can:
+
 - **Extend Tools**: Add tools from external servers (databases, APIs, etc.)
 - **Access Resources**: Read data from external sources
 - **Use Prompt Templates**: Leverage pre-built prompts from servers
@@ -743,12 +795,14 @@ xibecode mcp reload
 #### Alternative Methods
 
 **Via config command (interactive):**
+
 ```bash
 xibecode config --add-mcp-server my-server
 # Follow interactive prompts
 ```
 
 **Via config menu:**
+
 ```bash
 xibecode config
 # Select "📡 Manage MCP Servers" → "➕ Add MCP Server"
@@ -830,24 +884,28 @@ xibecode chat
 XibeCode includes advanced reasoning capabilities that enable it to:
 
 ### Systematic Problem Solving
+
 - **Problem Decomposition**: Breaks complex tasks into manageable steps
 - **Hypothesis-Driven Development**: Forms and tests hypotheses systematically
 - **Root Cause Analysis**: Traces issues to their source, not just symptoms
 - **Pattern Recognition**: Identifies design patterns and anti-patterns
 
 ### Advanced Context Awareness
+
 - **Project Structure Understanding**: Maps dependencies and data flows
 - **Change Impact Analysis**: Considers downstream effects before modifications
 - **Historical Context**: Uses git history to understand code evolution
 - **Cross-File Dependencies**: Tracks relationships between files
 
 ### Coding Best Practices
+
 - **SOLID Principles**: Applies proper software design principles
 - **Error Handling**: Structured error classification and recovery strategies
 - **Performance Optimization**: Data structure selection and algorithm analysis
 - **Security Best Practices**: Input validation, secure defaults, proper authentication
 
 ### Multi-Step Planning
+
 - **Task Breakdown**: Decomposes large features into atomic steps
 - **Dependency Mapping**: Identifies prerequisites and execution order
 - **Milestone Definition**: Sets intermediate validation points
@@ -895,6 +953,7 @@ MIT
 ## 🙏 Credits
 
 Built with:
+
 - [@anthropic-ai/sdk](https://www.npmjs.com/package/@anthropic-ai/sdk)
 - [@modelcontextprotocol/sdk](https://github.com/modelcontextprotocol/sdk)
 - [Commander.js](https://github.com/tj/commander.js/)
@@ -907,4 +966,5 @@ Inspired by [Claude Code](https://www.anthropic.com/news/claude-code) and [Aider
 ---
 
 **Made with ❤️ for developers who love AI-assisted coding**
+
 # XibeCode
