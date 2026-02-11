@@ -823,7 +823,7 @@ export async function chatCommand(options: ChatOptions) {
       const result = await skillManager.learnFromDocs(
         skillName,
         docsUrl,
-        25,
+        60,
         (msg) => {
           console.log('  ' + chalk.hex('#6B6B7B')(`  ${msg}`));
         }

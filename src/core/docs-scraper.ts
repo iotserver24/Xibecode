@@ -248,7 +248,7 @@ async function synthesizeWithOpenAI(
             messages: [
                 { role: 'user', content: prompt },
             ],
-            max_tokens: 32768,
+            max_tokens: 8192,
             temperature: 0.3,
         }),
     });
@@ -279,7 +279,7 @@ async function synthesizeWithAnthropic(
 
     const response = await client.messages.create({
         model: config.model || 'claude-sonnet-4-20250514',
-        max_tokens: 32768,
+        max_tokens: 8192,
         temperature: 0.3,
         messages: [{ role: 'user', content: prompt }],
     });
@@ -306,6 +306,46 @@ function detectProvider(model?: string): 'anthropic' | 'openai' {
 }
 
 /**
+ * Summarize a chunk of documentation pages to extract key technical details.
+ * Usage: "Map" step in Map-Reduce.
+ */
+async function summarizeChunk(
+    chunkTitle: string,
+    pages: ScrapedPage[],
+    config: AISynthesisConfig,
+    onProgress?: (msg: string) => void,
+): Promise<string> {
+    const combinedContent = pages.map(p => `### ${p.title}\nURL: ${p.url}\n\n${p.content}`).join('\n\n');
+    const prompt = `You are a technical documentation summarizer.
+I have combined text from ${pages.length} documentation pages about "${chunkTitle}".
+
+Your task is to extract the **key technical patterns, code snippets, and concepts** from this text.
+Do NOT summarize generically. Extract specific:
+- Code examples (keep them intact)
+- Configuration options
+- API signatures
+- Best practices
+- Gotchas
+
+Output a dense technical summary in Markdown format.
+
+Content:
+${combinedContent.slice(0, 50000)}`;
+
+    const provider = config.provider || detectProvider(config.model);
+    try {
+        if (provider === 'anthropic') {
+            return await synthesizeWithAnthropic(prompt, config);
+        } else {
+            return await synthesizeWithOpenAI(prompt, config);
+        }
+    } catch (e: any) {
+        onProgress?.(`Chunk summarization failed: ${e.message}, using raw content`);
+        return combinedContent.slice(0, 10000); // Fallback
+    }
+}
+
+/**
  * Generate a skill markdown file from scraped documentation pages using AI synthesis.
  * Supports both Anthropic (Claude) and OpenAI-compatible APIs (Grok, GPT, etc.)
  */
@@ -318,7 +358,33 @@ export async function generateSkillFromDocs(
 ): Promise<string> {
     onProgress?.('Synthesizing skill with AI...');
 
-    const prompt = buildSynthesisPrompt(name, rootUrl, pages);
+    let processedPages: ScrapedPage[] = pages;
+
+    // Map-Reduce for large doc sets
+    if (pages.length > 10) {
+        onProgress?.(`Large doc set detected (${pages.length} pages). Running multi-stage synthesis...`);
+        const chunkSize = 10;
+        const chunks = [];
+        for (let i = 0; i < pages.length; i += chunkSize) {
+            chunks.push(pages.slice(i, i + chunkSize));
+        }
+
+        const summaries: ScrapedPage[] = [];
+
+        for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            onProgress?.(`Summarizing part ${i + 1}/${chunks.length}...`);
+            const summary = await summarizeChunk(`${name} Part ${i + 1}`, chunk, config, onProgress);
+            summaries.push({
+                url: rootUrl,
+                title: `Summary Part ${i + 1}`,
+                content: summary
+            });
+        }
+        processedPages = summaries;
+    }
+
+    const prompt = buildSynthesisPrompt(name, rootUrl, processedPages);
 
     // Determine which API to use
     const provider = config.provider || detectProvider(config.model);
