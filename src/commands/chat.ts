@@ -37,8 +37,7 @@ export async function chatCommand(options: ChatOptions) {
   const sessionManager = new SessionManager(config.getSessionDirectory());
   const contextManager = new ContextManager(process.cwd());
   const planMode = new PlanMode(process.cwd());
-  const skillManager = new SkillManager(process.cwd());
-  await skillManager.loadSkills();
+  let skillManager: SkillManager;
 
   ui.clear();
   if (!config.isHeaderMinimal()) {
@@ -56,6 +55,9 @@ export async function chatCommand(options: ChatOptions) {
 
   const model = options.model || config.getModel();
   const baseUrl = options.baseUrl || config.getBaseUrl();
+
+  skillManager = new SkillManager(process.cwd(), apiKey, baseUrl, model);
+  await skillManager.loadSkills();
   let currentProvider: 'anthropic' | 'openai' | undefined =
     (options.provider as 'anthropic' | 'openai' | undefined) || config.get('provider');
 
