@@ -21,6 +21,13 @@ export interface LineRangeEdit {
   newContent: string;
 }
 
+export interface VerifiedEdit {
+  startLine: number;
+  endLine: number;
+  oldContent: string;   // Must match what's actually in the file at these lines
+  newContent: string;
+}
+
 export class FileEditor {
   private workingDir: string;
   private backupDir: string;
@@ -36,13 +43,13 @@ export class FileEditor {
    */
   async smartEdit(filePath: string, edit: SearchReplaceEdit): Promise<EditResult> {
     const fullPath = path.resolve(this.workingDir, filePath);
-    
+
     try {
       const content = await fs.readFile(fullPath, 'utf-8');
-      
+
       // Count occurrences
       const occurrences = (content.match(new RegExp(this.escapeRegex(edit.search), 'g')) || []).length;
-      
+
       if (occurrences === 0) {
         return {
           success: false,
@@ -58,7 +65,7 @@ export class FileEditor {
       }
 
       // Perform replacement
-      const newContent = edit.all 
+      const newContent = edit.all
         ? content.replaceAll(edit.search, edit.replace)
         : content.replace(edit.search, edit.replace);
 
@@ -92,7 +99,7 @@ export class FileEditor {
    */
   async editLineRange(filePath: string, edit: LineRangeEdit): Promise<EditResult> {
     const fullPath = path.resolve(this.workingDir, filePath);
-    
+
     try {
       const content = await fs.readFile(fullPath, 'utf-8');
       const lines = content.split('\n');
@@ -137,11 +144,86 @@ export class FileEditor {
   }
 
   /**
+   * Verified edit - requires old content to match before replacing.
+   * This is the most reliable editing method as it prevents hallucinated edits.
+   * If the old content doesn't match, returns the actual content so the AI can self-correct.
+   */
+  async verifiedEdit(filePath: string, edit: VerifiedEdit): Promise<EditResult & { actual_content?: string }> {
+    const fullPath = path.resolve(this.workingDir, filePath);
+
+    try {
+      const content = await fs.readFile(fullPath, 'utf-8');
+      const lines = content.split('\n');
+
+      // Validate line range
+      if (edit.startLine < 1 || edit.endLine > lines.length) {
+        return {
+          success: false,
+          message: `Invalid line range: ${edit.startLine}-${edit.endLine} (file has ${lines.length} lines)`,
+        };
+      }
+
+      if (edit.startLine > edit.endLine) {
+        return {
+          success: false,
+          message: `Invalid line range: start_line (${edit.startLine}) must be <= end_line (${edit.endLine})`,
+        };
+      }
+
+      // Extract actual content at the specified lines
+      const actualLines = lines.slice(edit.startLine - 1, edit.endLine);
+      const actualContent = actualLines.join('\n');
+
+      // Normalize for comparison: trim trailing whitespace per line, then compare
+      const normalize = (s: string) => s.split('\n').map(l => l.trimEnd()).join('\n').trim();
+      const normalizedActual = normalize(actualContent);
+      const normalizedExpected = normalize(edit.oldContent);
+
+      if (normalizedActual !== normalizedExpected) {
+        return {
+          success: false,
+          message: `Content mismatch at lines ${edit.startLine}-${edit.endLine}. The old_content you provided does not match the actual file content. Re-read the file and try again.`,
+          actual_content: actualContent,
+        };
+      }
+
+      // Content verified — proceed with edit
+      await this.createBackup(filePath, content);
+
+      const newLines = [
+        ...lines.slice(0, edit.startLine - 1),
+        ...edit.newContent.split('\n'),
+        ...lines.slice(edit.endLine),
+      ];
+
+      const newContent = newLines.join('\n');
+      await fs.writeFile(fullPath, newContent, 'utf-8');
+
+      // Generate diff
+      const patches = diff.createPatch(filePath, content, newContent);
+      const linesChanged = this.countChangedLines(patches);
+
+      return {
+        success: true,
+        message: `Successfully verified and edited lines ${edit.startLine}-${edit.endLine} in ${filePath}`,
+        diff: patches,
+        linesChanged,
+      };
+
+    } catch (error: any) {
+      return {
+        success: false,
+        message: `Failed to edit ${filePath}: ${error.message}`,
+      };
+    }
+  }
+
+  /**
    * Insert content at specific line
    */
   async insertAtLine(filePath: string, line: number, content: string): Promise<EditResult> {
     const fullPath = path.resolve(this.workingDir, filePath);
-    
+
     try {
       const originalContent = await fs.readFile(fullPath, 'utf-8');
       const lines = originalContent.split('\n');
@@ -181,10 +263,10 @@ export class FileEditor {
    */
   async applyPatch(filePath: string, patch: string): Promise<EditResult> {
     const fullPath = path.resolve(this.workingDir, filePath);
-    
+
     try {
       const content = await fs.readFile(fullPath, 'utf-8');
-      
+
       // Create backup
       await this.createBackup(filePath, content);
 
@@ -198,7 +280,7 @@ export class FileEditor {
       }
 
       const result = diff.applyPatch(content, patches[0]);
-      
+
       if (result === false) {
         return {
           success: false,
@@ -227,7 +309,7 @@ export class FileEditor {
    */
   async revertToBackup(filePath: string, backupIndex: number = 0): Promise<EditResult> {
     const backups = await this.listBackups(filePath);
-    
+
     if (backups.length === 0) {
       return {
         success: false,
@@ -266,7 +348,7 @@ export class FileEditor {
    */
   private async createBackup(filePath: string, content: string): Promise<void> {
     await fs.mkdir(this.backupDir, { recursive: true });
-    
+
     const timestamp = Date.now();
     const backupName = `${filePath.replace(/[\/\\]/g, '_')}.${timestamp}.backup`;
     const backupPath = path.join(this.backupDir, backupName);
@@ -281,7 +363,7 @@ export class FileEditor {
     try {
       const backupPrefix = filePath.replace(/[\/\\]/g, '_');
       const files = await fs.readdir(this.backupDir);
-      
+
       const backups = files
         .filter(f => f.startsWith(backupPrefix) && f.endsWith('.backup'))
         .sort((a, b) => {
@@ -322,12 +404,12 @@ export class FileEditor {
     preview?: string;
   }> {
     const fullPath = path.resolve(this.workingDir, filePath);
-    
+
     try {
       const stats = await fs.stat(fullPath);
       const content = await fs.readFile(fullPath, 'utf-8');
       const lines = content.split('\n');
-      
+
       // Get first 10 lines as preview
       const preview = lines.slice(0, 10).join('\n');
 
