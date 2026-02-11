@@ -154,6 +154,7 @@ export class EnhancedAgent extends EventEmitter {
   private totalInputTokens: number = 0;
   private totalOutputTokens: number = 0;
   private sessionCost: number = 0;
+  private activeSkill: { name: string; instructions: string } | null = null;
 
   // Pricing per 1M tokens (input/output) — Claude models
   private static readonly PRICING: Record<string, { input: number; output: number }> = {
@@ -823,6 +824,13 @@ Working directory: ${process.cwd()}
 The following knowledge was saved from previous sessions:
 
 ${this.projectMemory}` : ''}
+
+${this.activeSkill ? `## Active Skill: ${this.activeSkill.name}
+
+${this.activeSkill.instructions}
+
+---
+` : ''}
 6. **Think Systematically**: Decompose complex problems, form hypotheses, and validate assumptions
 7. **Consider Impact**: Analyze how changes affect related code and downstream dependencies
 
@@ -1225,5 +1233,23 @@ When you complete the task, provide a comprehensive summary including:
       reason,
       auto: false,
     });
+  }
+
+  /**
+   * Activate a skill to inject specialized instructions into the system prompt.
+   */
+  setSkill(skillName: string | null, instructions?: string) {
+    if (skillName && instructions) {
+      this.activeSkill = { name: skillName, instructions };
+    } else {
+      this.activeSkill = null;
+    }
+  }
+
+  /**
+   * Get the currently active skill name, if any.
+   */
+  getActiveSkill(): string | null {
+    return this.activeSkill?.name || null;
   }
 }
