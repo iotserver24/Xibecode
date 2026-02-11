@@ -20,13 +20,19 @@ export class SkillManager {
     private builtInSkillsDir: string;
     private userSkillsDir: string;
     private marketplace: MarketplaceClient;
+    private apiKey: string;
+    private baseUrl?: string;
+    private model?: string;
 
-    constructor(workingDir: string = process.cwd()) {
+    constructor(workingDir: string = process.cwd(), apiKey?: string, baseUrl?: string, model?: string) {
         // Built-in skills shipped with XibeCode
         this.builtInSkillsDir = path.join(__dirname, '..', '..', 'skills');
         // User-defined skills in project
         this.userSkillsDir = path.join(workingDir, '.xibecode', 'skills');
         this.marketplace = new MarketplaceClient();
+        this.apiKey = apiKey || process.env.ANTHROPIC_API_KEY || '';
+        this.baseUrl = baseUrl;
+        this.model = model;
     }
 
     async loadSkills(): Promise<void> {
@@ -203,8 +209,8 @@ export class SkillManager {
                 return { success: false, pagesScraped: 0, filePath: '', error: 'No pages could be scraped from that URL' };
             }
 
-            // Generate skill content
-            const skillContent = generateSkillFromDocs(name, url, pages);
+            // Generate skill content using AI synthesis
+            const skillContent = await generateSkillFromDocs(name, url, pages, this.apiKey, this.baseUrl, this.model, onProgress);
 
             // Ensure user skills directory exists
             await fs.mkdir(this.userSkillsDir, { recursive: true });
