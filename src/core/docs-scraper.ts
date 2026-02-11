@@ -164,36 +164,60 @@ function buildSynthesisPrompt(name: string, rootUrl: string, pages: ScrapedPage[
 
     const docsContent = pageSummaries.join('\n\n---\n\n');
 
-    return `You are an expert at creating AI coding assistant skills. I scraped ${pages.length} pages from the documentation at ${rootUrl}.
+    return `You are an expert Senior Software Engineer and Technical Writer. I have scraped ${pages.length} pages from the documentation at ${rootUrl}.
 
-Your task: Read and understand the documentation below, then create a comprehensive, well-structured SKILL FILE in Markdown format.
+Your task is to create a **"Gold Standard" Skill File** for an AI coding assistant. This file will be used by the AI to understand how to write perfect code using "${name}".
 
-The skill file should be a practical guide that an AI coding assistant can use to help developers work with "${name}". It should include:
+### Goal
+The output must be a comprehensive, high-density technical guide. It should not just list APIs, but explain **how to think** about the technology, **common patterns**, **pitfalls**, and **best practices**.
 
-1. **YAML frontmatter** with:
-   - description: A clear one-line description
-   - tags: Relevant comma-separated tags
-   - source: ${rootUrl}
+### Structure Requirements
 
-2. **Overview section**: Brief explanation of what ${name} is and what it's used for
+1. **YAML Frontmatter**:
+   - \`description\`: A concise, high-level summary.
+   - \`tags\`: Relevant technical tags (comma-separated).
+   - \`source\`: ${rootUrl}
 
-3. **Key concepts**: The most important concepts, APIs, and patterns from the docs
+2. **Role & Persona**:
+   - Start with "You are an expert [Technology] developer..."
+   - Define the mindset and goals (e.g. "Write clean, modern, type-safe code").
 
-4. **Common patterns & code examples**: Real, practical code snippets showing common usage (properly formatted in code blocks)
+3. **Overview**:
+   - What problem does this solve?
+   - When should you use it?
+   - What are the core philosophies?
 
-5. **Best practices**: Important tips, gotchas, and recommendations
+3. **Critical Concepts (Mental Models)**:
+   - Deeply explain the *why* and *how*.
+   - Use analogies if helpful.
+   - Explain the lifecycle, data flow, or architecture.
 
-6. **Quick reference**: A concise cheat-sheet of the most-used APIs/commands
+4. **Installation & Setup** (Brief):
+   - Standard installation commands.
+   - Essential configuration.
 
-IMPORTANT RULES:
-- Write clean, well-formatted Markdown
-- Include REAL code examples from the documentation (properly formatted in fenced code blocks)
-- Be comprehensive but concise — focus on what a developer would actually need
-- Do NOT include navigation text, menu items, or HTML artifacts
-- Do NOT include raw HTML or broken formatting
-- Make the skill genuinely useful for an AI assistant helping developers
+5. **Common Patterns & "The Right Way"**:
+   - **CRITICAL**: Show code examples of how to do things *correctly* in a modern context.
+   - Contrast "Old Way" vs "New Way" if applicable (e.g., Options API vs Composition API).
+   - Show how to integrate with the broader ecosystem.
 
-Here is the scraped documentation:
+6. **Gotchas & Anti-Patterns**:
+   - What mistakes do developers commonly make?
+   - What has performance implications?
+   - Security concerns?
+
+7. **API Reference (High-Frequency)**:
+   - Don't list everything. List the 20% of APIs used 80% of the time.
+   - Include type signatures if relevant.
+
+### Style Guidelines
+- **Tone**: Authoritative, technical, concise, and helpful.
+- **Format**: Clean Markdown. Use bolding for emphasis.
+- **Code**: All code patterns MUST be valid and idiomatic. Use comments to explain complex lines.
+- **No Fluff**: Remove intro/outro chatter. meaningful content only.
+- **No raw HTML**: Strict Markdown only.
+
+### Source Documentation Content:
 
 ${docsContent}`;
 }
