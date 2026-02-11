@@ -15,8 +15,6 @@ XibeCode is a professional CLI tool that brings autonomous AI coding capabilitie
 
 **v0.1.7:**
 
-**v0.1.7:**
-
 - 🎓 **Skills System** - Activate specialized AI workflows with `/skill` command
 - 🧹 **5 Built-in Skills** - refactor-clean-code, debug-production, write-tests, security-audit, optimize-performance
 - 📚 **Custom Skills** - Create your own skills in `.xibecode/skills/` (markdown with YAML frontmatter)
