@@ -55,11 +55,11 @@ export async function chatCommand(options: ChatOptions) {
 
   const model = options.model || config.getModel();
   const baseUrl = options.baseUrl || config.getBaseUrl();
-
-  skillManager = new SkillManager(process.cwd(), apiKey, baseUrl, model);
-  await skillManager.loadSkills();
   let currentProvider: 'anthropic' | 'openai' | undefined =
     (options.provider as 'anthropic' | 'openai' | undefined) || config.get('provider');
+
+  skillManager = new SkillManager(process.cwd(), apiKey, baseUrl, model, currentProvider);
+  await skillManager.loadSkills();
 
   // Initialize MCP client manager.
   // Connections are established on-demand (for example when the user runs /mcp),

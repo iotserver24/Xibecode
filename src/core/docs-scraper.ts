@@ -137,22 +137,18 @@ export async function crawlDocs(
     return pages;
 }
 
-/**
- * Generate a skill markdown file from scraped documentation pages using AI synthesis.
- * The AI reads the scraped content and produces a clean, structured, actionable skill file.
- */
-export async function generateSkillFromDocs(
-    name: string,
-    rootUrl: string,
-    pages: ScrapedPage[],
-    apiKey: string,
-    baseUrl?: string,
-    model?: string,
-    onProgress?: (msg: string) => void,
-): Promise<string> {
-    onProgress?.('Synthesizing skill with AI...');
+/** AI synthesis config passed from SkillManager */
+export interface AISynthesisConfig {
+    apiKey: string;
+    baseUrl?: string;
+    model?: string;
+    provider?: 'anthropic' | 'openai';
+}
 
-    // Prepare a condensed summary of all scraped pages for the AI
+/**
+ * Build the synthesis prompt from scraped pages.
+ */
+function buildSynthesisPrompt(name: string, rootUrl: string, pages: ScrapedPage[]): string {
     // Cap total content to ~60K chars to fit in context window
     let totalChars = 0;
     const maxTotalChars = 60_000;
@@ -168,7 +164,7 @@ export async function generateSkillFromDocs(
 
     const docsContent = pageSummaries.join('\n\n---\n\n');
 
-    const prompt = `You are an expert at creating AI coding assistant skills. I scraped ${pages.length} pages from the documentation at ${rootUrl}.
+    return `You are an expert at creating AI coding assistant skills. I scraped ${pages.length} pages from the documentation at ${rootUrl}.
 
 Your task: Read and understand the documentation below, then create a comprehensive, well-structured SKILL FILE in Markdown format.
 
@@ -200,28 +196,130 @@ IMPORTANT RULES:
 Here is the scraped documentation:
 
 ${docsContent}`;
+}
 
-    const clientConfig: any = { apiKey };
-    if (baseUrl) clientConfig.baseURL = baseUrl;
-    const client = new Anthropic(clientConfig);
+/**
+ * Call an OpenAI-compatible API (works with Grok, OpenAI, etc.)
+ */
+async function synthesizeWithOpenAI(
+    prompt: string,
+    config: AISynthesisConfig,
+): Promise<string> {
+    let base = (config.baseUrl || 'https://api.openai.com').replace(/\/+$/, '');
+    let url: string;
+    if (base.endsWith('/v1')) {
+        url = `${base}/chat/completions`;
+    } else {
+        url = `${base}/v1/chat/completions`;
+    }
 
-    try {
-        const response = await client.messages.create({
-            model: model || 'claude-sonnet-4-20250514',
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.apiKey}`,
+        },
+        body: JSON.stringify({
+            model: config.model || 'gpt-4',
+            messages: [
+                { role: 'user', content: prompt },
+            ],
             max_tokens: 32768,
             temperature: 0.3,
-            messages: [{ role: 'user', content: prompt }],
-        });
+        }),
+    });
 
-        const textBlock = response.content.find(b => b.type === 'text');
-        if (!textBlock || textBlock.type !== 'text') {
-            throw new Error('No text response from AI');
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`${response.status} ${text.slice(0, 200)}`);
+    }
+
+    const data: any = await response.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content) {
+        throw new Error('No content in OpenAI response');
+    }
+    return content;
+}
+
+/**
+ * Call the Anthropic API (Claude models)
+ */
+async function synthesizeWithAnthropic(
+    prompt: string,
+    config: AISynthesisConfig,
+): Promise<string> {
+    const clientConfig: any = { apiKey: config.apiKey };
+    if (config.baseUrl) clientConfig.baseURL = config.baseUrl;
+    const client = new Anthropic(clientConfig);
+
+    const response = await client.messages.create({
+        model: config.model || 'claude-sonnet-4-20250514',
+        max_tokens: 32768,
+        temperature: 0.3,
+        messages: [{ role: 'user', content: prompt }],
+    });
+
+    const textBlock = response.content.find(b => b.type === 'text');
+    if (!textBlock || textBlock.type !== 'text') {
+        throw new Error('No text response from AI');
+    }
+    return textBlock.text;
+}
+
+/**
+ * Detect provider from model name (same heuristic as agent.ts)
+ */
+function detectProvider(model?: string): 'anthropic' | 'openai' {
+    if (!model) return 'anthropic';
+    const m = model.toLowerCase();
+    // Claude models → Anthropic
+    if (m.includes('claude')) return 'anthropic';
+    // GPT, O1, O3, Grok, and other non-Claude models → OpenAI-compatible
+    if (m.startsWith('gpt-') || m.startsWith('gpt4') || m.startsWith('o1-') || m.startsWith('o3-') || m.includes('grok')) return 'openai';
+    // Default to OpenAI format for unknown models (most custom endpoints use it)
+    return 'openai';
+}
+
+/**
+ * Generate a skill markdown file from scraped documentation pages using AI synthesis.
+ * Supports both Anthropic (Claude) and OpenAI-compatible APIs (Grok, GPT, etc.)
+ */
+export async function generateSkillFromDocs(
+    name: string,
+    rootUrl: string,
+    pages: ScrapedPage[],
+    config: AISynthesisConfig,
+    onProgress?: (msg: string) => void,
+): Promise<string> {
+    onProgress?.('Synthesizing skill with AI...');
+
+    const prompt = buildSynthesisPrompt(name, rootUrl, pages);
+
+    // Determine which API to use
+    const provider = config.provider || detectProvider(config.model);
+
+    try {
+        let skillContent: string;
+
+        if (provider === 'anthropic') {
+            onProgress?.(`Using Anthropic API (${config.model || 'claude-sonnet-4-20250514'})...`);
+            skillContent = await synthesizeWithAnthropic(prompt, config);
+        } else {
+            onProgress?.(`Using OpenAI-compatible API (${config.model || 'gpt-4'})...`);
+            skillContent = await synthesizeWithOpenAI(prompt, config);
         }
 
-        let skillContent = textBlock.text.trim();
+        skillContent = skillContent.trim();
 
-        // Strip any <think> tags
+        // Strip any <think> tags (some models use these)
         skillContent = skillContent.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+
+        // If AI returned content inside markdown code block, extract it
+        const codeBlockMatch = skillContent.match(/^```(?:markdown|md)?\n([\s\S]*?)```$/);
+        if (codeBlockMatch) {
+            skillContent = codeBlockMatch[1].trim();
+        }
 
         // Ensure it has frontmatter
         if (!skillContent.startsWith('---')) {
