@@ -4,7 +4,15 @@
 
 XibeCode is a professional CLI tool that brings autonomous AI coding capabilities to your terminal. Like Claude Code, but open-source, customizable, and with advanced context management.
 
-## 🆕 What's New in v0.1.6
+## 🆕 What's New in v0.1.7
+
+**v0.1.7:**
+
+- 🎓 **Skills System** - Activate specialized AI workflows with `/skill` command
+- 🧹 **5 Built-in Skills** - refactor-clean-code, debug-production, write-tests, security-audit, optimize-performance
+- 📚 **Custom Skills** - Create your own skills in `.xibecode/skills/` (markdown with YAML frontmatter)
+- 🎯 **Smart Skill Injection** - Active skills inject specialized instructions into AI's system prompt
+- 📊 **Status Bar Display** - See active skill in status bar
 
 **v0.1.6:**
 
