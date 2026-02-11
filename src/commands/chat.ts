@@ -263,6 +263,7 @@ export async function chatCommand(options: ChatOptions) {
     console.log('  ' + chalk.hex('#00D4FF')('/skill list') + chalk.hex('#6B6B7B')('   show available skills'));
     console.log('  ' + chalk.hex('#00D4FF')('/skill off') + chalk.hex('#6B6B7B')('    deactivate current skill'));
     console.log('  ' + chalk.hex('#00D4FF')('/learn <name> <url>') + chalk.hex('#6B6B7B')(' learn a new skill from docs URL'));
+    console.log('  ' + chalk.hex('#00D4FF')('/marketplace [query]') + chalk.hex('#6B6B7B')(' search & install skills from marketplace'));
     console.log('  ' + chalk.hex('#00D4FF')('clear') + chalk.hex('#6B6B7B')('       clear screen and redraw header'));
     console.log('  ' + chalk.hex('#00D4FF')('tools on/off') + chalk.hex('#6B6B7B')(' toggle tools (editor & filesystem)'));
     console.log('  ' + chalk.hex('#00D4FF')('exit / quit') + chalk.hex('#6B6B7B')('   end the chat session'));
@@ -768,6 +769,7 @@ export async function chatCommand(options: ChatOptions) {
           });
         }
         console.log('  ' + chalk.dim('Usage: /skill <name> to activate'));
+        console.log('  ' + chalk.dim('Tip: /marketplace to browse community skills'));
         console.log('');
         continue;
       }
@@ -829,10 +831,87 @@ export async function chatCommand(options: ChatOptions) {
         console.log('');
         ui.success(`Learned skill "${skillName}" from ${result.pagesScraped} pages`);
         console.log('  ' + chalk.hex('#6B6B7B')(`Saved to: ${result.filePath}`));
+        if (result.marketplaceId) {
+          console.log('  ' + chalk.hex('#00E676')(`✓ Published to Skills Marketplace`));
+        }
         console.log('  ' + chalk.dim(`Activate with: /skill ${skillName}`));
         console.log('');
       } else {
         ui.error(`Failed to learn from docs: ${result.error}`);
+      }
+      continue;
+    }
+
+    if (lowerMessage.startsWith('/marketplace')) {
+      const query = trimmed.replace(/^\/marketplace\s*/i, '').trim();
+
+      console.log('');
+      console.log(chalk.hex('#00D4FF')('  🏪 Skills Marketplace') + chalk.hex('#6B6B7B')(' · skills.xibeai.in'));
+      console.log('  ' + chalk.hex('#6B6B7B')('────────────────────────────────'));
+
+      try {
+        const results = await skillManager.searchMarketplace(query, 10);
+
+        if (results.length === 0) {
+          console.log('  ' + chalk.hex('#6B6B7B')('No skills found' + (query ? ` for "${query}"` : '')));
+          console.log('  ' + chalk.dim('Try: /marketplace debug  or  /marketplace security'));
+          console.log('');
+          continue;
+        }
+
+        results.forEach((skill, i) => {
+          const score = skill.qualityScore ? chalk.hex('#00E676')(` ★${(skill.qualityScore * 10).toFixed(1)}`) : '';
+          const dl = chalk.hex('#6B6B7B')(`↓${skill.downloads}`);
+          console.log('  ' + chalk.white(`${i + 1}.`) + ' ' + chalk.hex('#00D4FF').bold(skill.name) + score + ' ' + dl);
+          console.log('     ' + chalk.hex('#6B6B7B')(skill.description || 'No description'));
+          if (skill.categories?.length) {
+            console.log('     ' + chalk.dim(skill.categories.join(', ')));
+          }
+        });
+
+        console.log('');
+
+        // Prompt to install
+        const { installChoice } = await inquirer.prompt([
+          {
+            type: 'list',
+            name: 'installChoice',
+            message: 'Install a skill?',
+            choices: [
+              ...results.map((s, i) => ({
+                name: `${i + 1}. ${s.name}`,
+                value: s.id,
+              })),
+              { name: 'Cancel', value: '__cancel__' },
+            ],
+          },
+        ]);
+
+        if (installChoice === '__cancel__') {
+          continue;
+        }
+
+        const selectedSkill = results.find(s => s.id === installChoice);
+        if (!selectedSkill) continue;
+
+        const installResult = await skillManager.installFromMarketplace(
+          installChoice,
+          selectedSkill.name,
+          (msg) => console.log('  ' + chalk.hex('#6B6B7B')(`  ${msg}`)),
+        );
+
+        if (installResult.success) {
+          console.log('');
+          ui.success(`Installed "${selectedSkill.name}"`);
+          console.log('  ' + chalk.hex('#6B6B7B')(`Saved to: ${installResult.filePath}`));
+          const activateName = selectedSkill.name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-');
+          console.log('  ' + chalk.dim(`Activate with: /skill ${activateName}`));
+          console.log('');
+        } else {
+          ui.error(`Failed to install: ${installResult.error}`);
+        }
+      } catch (error: any) {
+        ui.error(`Marketplace error: ${error.message}`);
       }
       continue;
     }

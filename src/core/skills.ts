@@ -3,6 +3,7 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { crawlDocs, generateSkillFromDocs } from './docs-scraper.js';
+import { MarketplaceClient, type MarketplaceSkillResult } from './marketplace-client.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -18,12 +19,14 @@ export class SkillManager {
     private skills: Map<string, Skill> = new Map();
     private builtInSkillsDir: string;
     private userSkillsDir: string;
+    private marketplace: MarketplaceClient;
 
     constructor(workingDir: string = process.cwd()) {
         // Built-in skills shipped with XibeCode
         this.builtInSkillsDir = path.join(__dirname, '..', '..', 'skills');
         // User-defined skills in project
         this.userSkillsDir = path.join(workingDir, '.xibecode', 'skills');
+        this.marketplace = new MarketplaceClient();
     }
 
     async loadSkills(): Promise<void> {
@@ -111,15 +114,87 @@ export class SkillManager {
     }
 
     /**
+     * Search the Skills Marketplace for community skills
+     */
+    async searchMarketplace(query: string = '', limit: number = 10): Promise<MarketplaceSkillResult[]> {
+        try {
+            const response = await this.marketplace.searchSkills(query, limit);
+            return response.results;
+        } catch (error: any) {
+            throw new Error(`Marketplace search failed: ${error.message}`);
+        }
+    }
+
+    /**
+     * Install a skill from the marketplace by ID
+     * Downloads the content and saves it to the user skills directory
+     */
+    async installFromMarketplace(
+        id: string,
+        skillName: string,
+        onProgress?: (msg: string) => void,
+    ): Promise<{ success: boolean; filePath: string; error?: string }> {
+        try {
+            onProgress?.('Downloading skill from marketplace...');
+            const { content, name } = await this.marketplace.getSkillContent(id);
+
+            // Ensure user skills directory exists
+            await fs.mkdir(this.userSkillsDir, { recursive: true });
+
+            // Sanitize filename
+            const fileName = skillName.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-');
+            const filePath = path.join(this.userSkillsDir, `${fileName}.md`);
+
+            // If the content doesn't have frontmatter, wrap it
+            let finalContent = content;
+            if (!content.startsWith('---')) {
+                finalContent = `---\nname: ${name || skillName}\ndescription: Installed from Skills Marketplace\ntags: marketplace\n---\n\n${content}`;
+            }
+
+            await fs.writeFile(filePath, finalContent, 'utf-8');
+            onProgress?.('Skill saved locally');
+
+            // Register the skill locally
+            const skill = this.parseSkillFile(finalContent, `${fileName}.md`);
+            if (skill) {
+                this.skills.set(skill.name, skill);
+            }
+
+            return { success: true, filePath };
+        } catch (error: any) {
+            return { success: false, filePath: '', error: error.message };
+        }
+    }
+
+    /**
+     * Upload a skill to the marketplace
+     */
+    async uploadToMarketplace(
+        content: string,
+        skillName?: string,
+        onProgress?: (msg: string) => void,
+    ): Promise<{ success: boolean; skillId?: string; error?: string }> {
+        try {
+            onProgress?.('Uploading skill to marketplace...');
+            const result = await this.marketplace.uploadSkill(content, skillName);
+            onProgress?.(`Skill published to marketplace as "${result.skill.name}"`);
+            return { success: true, skillId: result.skillId };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
      * Learn a skill from documentation URL.
      * Crawls the docs site, scrapes pages, and generates a skill file.
+     * Auto-uploads to the Skills Marketplace on success.
      */
     async learnFromDocs(
         name: string,
         url: string,
         maxPages: number = 25,
         onProgress?: (msg: string) => void,
-    ): Promise<{ success: boolean; pagesScraped: number; filePath: string; error?: string }> {
+    ): Promise<{ success: boolean; pagesScraped: number; filePath: string; error?: string; marketplaceId?: string }> {
         try {
             // Crawl docs
             const pages = await crawlDocs(url, maxPages, onProgress);
@@ -144,7 +219,18 @@ export class SkillManager {
                 this.skills.set(skill.name, skill);
             }
 
-            return { success: true, pagesScraped: pages.length, filePath };
+            // Auto-upload to marketplace
+            let marketplaceId: string | undefined;
+            try {
+                onProgress?.('Publishing skill to marketplace...');
+                const uploadResult = await this.marketplace.uploadSkill(skillContent, name);
+                marketplaceId = uploadResult.skillId;
+                onProgress?.(`Skill published to marketplace as "${uploadResult.skill.name}"`);
+            } catch (uploadError: any) {
+                onProgress?.(`Marketplace upload skipped: ${uploadError.message}`);
+            }
+
+            return { success: true, pagesScraped: pages.length, filePath, marketplaceId };
         } catch (error: any) {
             return { success: false, pagesScraped: 0, filePath: '', error: error.message };
         }
