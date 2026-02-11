@@ -151,6 +151,17 @@ export class EnhancedAgent extends EventEmitter {
   private modeOrchestrator: ModeOrchestrator;
   private provider: 'anthropic' | 'openai';
   private projectMemory: string = '';
+  private totalInputTokens: number = 0;
+  private totalOutputTokens: number = 0;
+  private sessionCost: number = 0;
+
+  // Pricing per 1M tokens (input/output) — Claude models
+  private static readonly PRICING: Record<string, { input: number; output: number }> = {
+    'claude-sonnet-4-5-20250929': { input: 3, output: 15 },
+    'claude-opus-4-5-20251101': { input: 15, output: 75 },
+    'claude-haiku-4-5-20251015': { input: 1, output: 5 },
+    'claude-opus-4-6-20251101': { input: 15, output: 75 },
+  };
 
   constructor(config: AgentConfig, providerOverride?: 'anthropic' | 'openai') {
     super();
@@ -251,6 +262,31 @@ export class EnhancedAgent extends EventEmitter {
           role: 'assistant',
           content: response.content,
         });
+
+        // Track token usage for cost estimation
+        if (response.usage) {
+          const inputTokens = response.usage.input_tokens || 0;
+          const outputTokens = response.usage.output_tokens || 0;
+          this.totalInputTokens += inputTokens;
+          this.totalOutputTokens += outputTokens;
+
+          // Calculate cost
+          const pricing = EnhancedAgent.PRICING[this.config.model];
+          if (pricing) {
+            this.sessionCost += (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
+          }
+        }
+
+        // Auto-compact: if conversation exceeds 80 messages, compact older ones
+        if (this.messages.length > 80) {
+          const preserved = this.messages.slice(-12);
+          const compactNotice: MessageParam = {
+            role: 'assistant' as const,
+            content: 'Earlier conversation was auto-compacted to save context window space. Recent messages are preserved.',
+          };
+          this.messages = [compactNotice, ...preserved];
+          this.emit('warning', { message: 'Auto-compacted conversation to save context (kept last 12 messages)' });
+        }
 
         // Process response
         const content: ContentBlock[] = response.content;
@@ -1150,6 +1186,11 @@ When you complete the task, provide a comprehensive summary including:
       toolCalls: this.toolCallCount,
       filesChanged: this.filesChanged.size,
       changedFiles: Array.from(this.filesChanged),
+      inputTokens: this.totalInputTokens,
+      outputTokens: this.totalOutputTokens,
+      totalTokens: this.totalInputTokens + this.totalOutputTokens,
+      cost: this.sessionCost,
+      costLabel: this.sessionCost > 0 ? `$${this.sessionCost.toFixed(4)}` : undefined,
     };
   }
 

@@ -36,7 +36,7 @@ export async function chatCommand(options: ChatOptions) {
   const sessionManager = new SessionManager(config.getSessionDirectory());
   const contextManager = new ContextManager(process.cwd());
   const planMode = new PlanMode(process.cwd());
-  
+
   ui.clear();
   if (!config.isHeaderMinimal()) {
     ui.header('1.0.0');
@@ -66,6 +66,11 @@ export async function chatCommand(options: ChatOptions) {
 
   let enableTools = true;
   const toolExecutor = new CodingToolExecutor(process.cwd(), { mcpClientManager });
+
+  // ── Undo/Redo history stack ──
+  const undoStack: Array<{ messages: any[]; label: string }> = [];
+  const redoStack: Array<{ messages: any[]; label: string }> = [];
+  const MAX_UNDO = 20;
 
   // ── Create ONE agent for the entire chat session ──
   // This keeps conversation history (messages) across all turns,
@@ -134,6 +139,13 @@ export async function chatCommand(options: ChatOptions) {
               ui.fileChanged('modified', r.path || '', r.linesChanged ? `${r.linesChanged} lines` : undefined);
             } else if (r?.success && event.data.name === 'edit_lines') {
               ui.fileChanged('modified', r.path || '', r.linesChanged ? `${r.linesChanged} lines` : undefined);
+            } else if (r?.success && event.data.name === 'verified_edit') {
+              ui.fileChanged('modified', r.path || '', r.linesChanged ? `${r.linesChanged} lines` : undefined);
+            }
+
+            // Diff preview: show colorized diff when available
+            if (r?.diff && (event.data.name === 'edit_file' || event.data.name === 'edit_lines' || event.data.name === 'verified_edit')) {
+              ui.showDiff(r.diff, r.path || r.message || '');
             }
           }
           break;
@@ -208,10 +220,10 @@ export async function chatCommand(options: ChatOptions) {
         const rel = path.relative(process.cwd(), path.join(dir, entry.name)) || '.';
         console.log(
           '  ' +
-            (isDir ? chalk.hex('#40C4FF')('📁') : chalk.hex('#CE93D8')('📄')) +
-            ' ' +
-            chalk.white(name) +
-            chalk.hex('#6B6B7B')(`  ·  ${rel}`)
+          (isDir ? chalk.hex('#40C4FF')('📁') : chalk.hex('#CE93D8')('📄')) +
+          ' ' +
+          chalk.white(name) +
+          chalk.hex('#6B6B7B')(`  ·  ${rel}`)
         );
       }
       if (filtered.length > 50) {
@@ -241,6 +253,9 @@ export async function chatCommand(options: ChatOptions) {
     console.log('  ' + chalk.hex('#00D4FF')('/thinking') + chalk.hex('#6B6B7B')('    toggle thinking spinner'));
     console.log('  ' + chalk.hex('#00D4FF')('/themes') + chalk.hex('#6B6B7B')('      choose a color theme'));
     console.log('  ' + chalk.hex('#00D4FF')('@path') + chalk.hex('#6B6B7B')('        list files/folders under path (or cwd if just "@")'));
+    console.log('  ' + chalk.hex('#00D4FF')('/undo') + chalk.hex('#6B6B7B')('        undo last AI turn (restore previous conversation state)'));
+    console.log('  ' + chalk.hex('#00D4FF')('/redo') + chalk.hex('#6B6B7B')('        redo undone turn'));
+    console.log('  ' + chalk.hex('#00D4FF')('/cost') + chalk.hex('#6B6B7B')('        show token usage and estimated cost'));
     console.log('  ' + chalk.hex('#00D4FF')('clear') + chalk.hex('#6B6B7B')('       clear screen and redraw header'));
     console.log('  ' + chalk.hex('#00D4FF')('tools on/off') + chalk.hex('#6B6B7B')(' toggle tools (editor & filesystem)'));
     console.log('  ' + chalk.hex('#00D4FF')('exit / quit') + chalk.hex('#6B6B7B')('   end the chat session'));
@@ -559,7 +574,7 @@ export async function chatCommand(options: ChatOptions) {
 
     const trimmed = message.trim();
     const lowerMessage = trimmed.toLowerCase();
-    
+
     if (lowerMessage === '/help') {
       showSlashHelp();
       continue;
@@ -675,6 +690,51 @@ export async function chatCommand(options: ChatOptions) {
 
     if (lowerMessage === '/compact') {
       await handleCompactCommand();
+      continue;
+    }
+
+    if (lowerMessage === '/undo') {
+      if (undoStack.length === 0) {
+        ui.info('Nothing to undo.');
+      } else {
+        const current = { messages: [...agent.getMessages()], label: 'redo point' };
+        redoStack.push(current);
+        const prev = undoStack.pop()!;
+        agent.setMessages(prev.messages);
+        await sessionManager.saveMessagesAndStats({ id: currentSession.id, messages: prev.messages, stats: agent.getStats() });
+        ui.success(`Undo: reverted to previous state (${prev.label})`);
+      }
+      continue;
+    }
+
+    if (lowerMessage === '/redo') {
+      if (redoStack.length === 0) {
+        ui.info('Nothing to redo.');
+      } else {
+        const current = { messages: [...agent.getMessages()], label: 'undo point' };
+        undoStack.push(current);
+        const next = redoStack.pop()!;
+        agent.setMessages(next.messages);
+        await sessionManager.saveMessagesAndStats({ id: currentSession.id, messages: next.messages, stats: agent.getStats() });
+        ui.success(`Redo: restored next state`);
+      }
+      continue;
+    }
+
+    if (lowerMessage === '/cost') {
+      const stats = agent.getStats();
+      console.log('');
+      console.log(chalk.bold('  Token Usage & Cost'));
+      console.log('  ' + chalk.hex('#6B6B7B')('────────────────────────────'));
+      console.log('  ' + chalk.hex('#00D4FF')('Input tokens:  ') + chalk.white(stats.inputTokens.toLocaleString()));
+      console.log('  ' + chalk.hex('#00D4FF')('Output tokens: ') + chalk.white(stats.outputTokens.toLocaleString()));
+      console.log('  ' + chalk.hex('#00D4FF')('Total tokens:  ') + chalk.white(stats.totalTokens.toLocaleString()));
+      if (stats.costLabel) {
+        console.log('  ' + chalk.hex('#00D4FF')('Est. cost:     ') + chalk.hex('#00E676')(stats.costLabel));
+      } else {
+        console.log('  ' + chalk.hex('#6B6B7B')('  (cost tracking unavailable for this model)'));
+      }
+      console.log('');
       continue;
     }
 
@@ -813,15 +873,27 @@ export async function chatCommand(options: ChatOptions) {
 
     try {
       const tools = enableTools ? toolExecutor.getTools() : [];
+
+      // Save undo point before AI turn
+      undoStack.push({ messages: [...agent.getMessages()], label: message.slice(0, 40) });
+      if (undoStack.length > MAX_UNDO) undoStack.shift();
+      redoStack.length = 0; // clear redo on new action
+
       // agent.run() resets its iteration/tool counters but KEEPS
       // the conversation history (this.messages), so the AI has
       // full context of everything discussed in this session.
       await agent.run(message, tools, toolExecutor);
       const stats = agent.getStats();
+
+      // Build tokens label for status bar
+      const tokensLabel = stats.totalTokens > 0
+        ? `${(stats.totalTokens / 1000).toFixed(1)}k${stats.costLabel ? ` · ${stats.costLabel}` : ''}`
+        : undefined;
       if (config.isStatusBarEnabled()) {
         ui.renderStatusBar({
           model,
           sessionTitle: currentSession.title,
+          tokensLabel,
           cwd: process.cwd(),
           toolsEnabled: enableTools,
           themeName: ui.getThemeName(),
