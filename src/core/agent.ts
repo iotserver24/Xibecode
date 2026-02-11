@@ -205,10 +205,36 @@ export class EnhancedAgent extends EventEmitter {
 
       this.emit('thinking', { message: 'AI is thinking...' });
 
+      const maxApiRetries = 5;
+      const retryDelayMs = 2000;
+      let response: any;
+      let streamed = false;
+
       try {
         // Tools are currently supported only for Anthropic-format models.
         const effectiveTools = this.provider === 'anthropic' ? tools : [];
-        const { message: response, streamed } = await this.callModel(effectiveTools);
+        for (let attempt = 1; attempt <= maxApiRetries; attempt++) {
+          try {
+            const result = await this.callModel(effectiveTools);
+            response = result.message;
+            streamed = result.streamed;
+            break;
+          } catch (apiError: any) {
+            this.emit('error', { message: 'API Error', error: apiError.message });
+            if (attempt < maxApiRetries) {
+              this.emit('warning', {
+                message: `Retrying in ${retryDelayMs / 1000}s (attempt ${attempt}/${maxApiRetries})...`,
+              });
+              await new Promise((r) => setTimeout(r, retryDelayMs));
+            } else {
+              throw apiError;
+            }
+          }
+        }
+
+        if (!response) {
+          throw new Error('API call failed after retries');
+        }
 
         // Add assistant response
         this.messages.push({

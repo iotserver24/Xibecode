@@ -60,7 +60,7 @@ npm install -g xibecode
 ### From Source
 
 ```bash
-git clone https://github.com/yourusername/xibecode
+git clone https://github.com/iotserver24/xibecode
 cd xibecode
 npm install
 npm run build
