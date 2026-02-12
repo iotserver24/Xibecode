@@ -10,7 +10,7 @@ import { exportSessionToMarkdown } from '../core/export.js';
 import { ContextManager } from '../core/context.js';
 import { PlanMode } from '../core/planMode.js';
 import { TodoManager } from '../utils/todoManager.js';
-import { getAllModes, type AgentMode } from '../core/modes.js';
+import { getAllModes, type AgentMode, MODE_CONFIG } from '../core/modes.js';
 import { isThemeName, THEME_NAMES, type ThemeName } from '../ui/themes.js';
 import { SkillManager } from '../core/skills.js';
 import chalk from 'chalk';
@@ -278,6 +278,7 @@ export async function chatCommand(options: ChatOptions) {
     console.log('  ' + chalk.hex('#00D4FF')('/learn <name> <url>') + chalk.hex('#6B6B7B')(' learn a new skill from docs URL'));
     console.log('  ' + chalk.hex('#00D4FF')('/marketplace [query]') + chalk.hex('#6B6B7B')(' search & install skills from marketplace'));
     console.log('  ' + chalk.hex('#00D4FF')('/skills-sh [query]') + chalk.hex('#6B6B7B')('   search skills from skills.sh'));
+    console.log('  ' + chalk.hex('#00D4FF')('/team') + chalk.hex('#6B6B7B')('        activate Team Mode (Arya & Co.)'));
     console.log('  ' + chalk.hex('#00D4FF')('clear') + chalk.hex('#6B6B7B')('       clear screen and redraw header'));
     console.log('  ' + chalk.hex('#00D4FF')('tools on/off') + chalk.hex('#6B6B7B')(' toggle tools (editor & filesystem)'));
     console.log('  ' + chalk.hex('#00D4FF')('exit / quit') + chalk.hex('#6B6B7B')('   end the chat session'));
@@ -494,6 +495,38 @@ export async function chatCommand(options: ChatOptions) {
       console.log('');
     } catch (error: any) {
       ui.error('Failed to search files for @ path', error);
+    }
+  }
+
+  async function handleTeamCommand() {
+    ui.info('Activating Team Mode...');
+    if (typeof (agent as any).setModeFromUser === 'function') {
+      (agent as any).setModeFromUser('team_leader', 'User activated Team Mode via /team');
+    }
+    currentMode = 'team_leader';
+
+    console.log('');
+    console.log(chalk.bold.hex('#FFD600')('  👑 Team Mode Activated'));
+    console.log(chalk.hex('#6B6B7B')('  ────────────────────────────────'));
+    console.log('  Arya (Team Leader) is now coordinating the team:');
+    console.log('  · ' + chalk.hex('#00B0FF')('Siri (SEO)') + '      · ' + chalk.hex('#FF6D00')('Agni (Product)'));
+    console.log('  · ' + chalk.hex('#7C4DFF')('Anna (Arch)') + '     · ' + chalk.hex('#00E676')('Alex (Eng)'));
+    console.log('  · ' + chalk.hex('#00BCD4')('David (Data)') + '    · ' + chalk.hex('#E91E63')('Sanvi (Rsrch)'));
+    console.log('');
+    console.log('  You can ask Arya to lead, or call agents directly:');
+    console.log('  ' + chalk.dim('> @Agni create user stories for login'));
+    console.log('  ' + chalk.dim('> @Siri check seo for landing page'));
+    console.log('');
+
+    if (config.isStatusBarEnabled()) {
+      ui.renderStatusBar({
+        model,
+        sessionTitle: currentSession.title,
+        cwd: process.cwd(),
+        toolsEnabled: enableTools,
+        themeName: ui.getThemeName(),
+        mode: currentMode,
+      });
     }
   }
 
@@ -760,6 +793,11 @@ export async function chatCommand(options: ChatOptions) {
 
     if (lowerMessage === '/compact') {
       await handleCompactCommand();
+      continue;
+    }
+
+    if (lowerMessage === '/team') {
+      await handleTeamCommand();
       continue;
     }
 
@@ -1110,6 +1148,43 @@ export async function chatCommand(options: ChatOptions) {
 
     // Reset per-message display flag
     hasResponse = false;
+
+    // Check for explicit agent call (e.g. "@Agni ...")
+    // We do this BEFORE the main agent run
+    const agentMatch = trimmed.match(/^@(\w+)\s+(.+)/);
+    if (agentMatch) {
+      const name = agentMatch[1];
+      const task = agentMatch[2];
+
+      // Find mode by persona name
+      const targetModeEntry = Object.entries(MODE_CONFIG).find(([_, cfg]) =>
+        cfg.personaName.toLowerCase() === name.toLowerCase()
+      );
+
+      if (targetModeEntry) {
+        const [modeId, modeConfig] = targetModeEntry;
+        if (modeId !== currentMode) {
+          ui.info(`Switching to ${modeConfig.personaName} (${modeConfig.name})...`);
+          if (typeof (agent as any).setModeFromUser === 'function') {
+            (agent as any).setModeFromUser(modeId as AgentMode, `User called @${name}`);
+          }
+          currentMode = modeId as AgentMode;
+
+          if (config.isStatusBarEnabled()) {
+            ui.renderStatusBar({
+              model,
+              sessionTitle: currentSession.title,
+              cwd: process.cwd(),
+              toolsEnabled: enableTools,
+              themeName: ui.getThemeName(),
+              mode: currentMode,
+            });
+          }
+        }
+        // Update message to remove the trigger, or keep it depending on preference.
+        // Let's keep the full message so the agent sees who was addressed.
+      }
+    }
 
     try {
       const tools = enableTools ? toolExecutor.getTools() : [];
