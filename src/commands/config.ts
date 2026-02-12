@@ -63,7 +63,7 @@ export async function configCommand(options: ConfigOptions) {
 
   if (options.addMcpServer) {
     const name = options.addMcpServer;
-    
+
     const { command, args } = await inquirer.prompt([
       {
         type: 'input',
@@ -77,7 +77,7 @@ export async function configCommand(options: ConfigOptions) {
         message: 'Arguments (space-separated, or leave empty):',
       },
     ]);
-    
+
     const serverConfig: MCPServerConfig = {
       command,
     };
@@ -99,7 +99,7 @@ export async function configCommand(options: ConfigOptions) {
   if (options.removeMcpServer) {
     const name = options.removeMcpServer;
     const removed = config.removeMCPServer(name);
-    
+
     if (removed) {
       ui.success(`MCP server "${name}" removed successfully!`);
     } else {
@@ -129,17 +129,17 @@ export async function configCommand(options: ConfigOptions) {
   if (options.show) {
     ui.header('1.0.0');
     console.log(chalk.bold.white('⚙️  Current Configuration\n'));
-    
+
     const displayConfig = config.getDisplayConfig();
     Object.entries(displayConfig).forEach(([key, value]) => {
       const keyFormatted = chalk.gray(key.padEnd(20));
       console.log(`${keyFormatted}: ${chalk.white(value)}`);
     });
-    
+
     console.log('');
     ui.divider();
     console.log('');
-    
+
     // Validate config
     const validation = config.validate();
     if (!validation.valid) {
@@ -151,7 +151,7 @@ export async function configCommand(options: ConfigOptions) {
     } else {
       console.log(chalk.green('✓ Configuration is valid\n'));
     }
-    
+
     return;
   }
 
@@ -277,12 +277,12 @@ export async function configCommand(options: ConfigOptions) {
               { name: 'o3-mini (reasoning)', value: fixedOpenAIModels[3] },
               ...(customModels.length
                 ? [
-                    new inquirer.Separator('── Saved custom models ──'),
-                    ...customModels.map(cm => ({
-                      name: `${cm.id} (${cm.provider})`,
-                      value: cm.id,
-                    })),
-                  ]
+                  new inquirer.Separator('── Saved custom models ──'),
+                  ...customModels.map(cm => ({
+                    name: `${cm.id} (${cm.provider})`,
+                    value: cm.id,
+                  })),
+                ]
                 : []),
               new inquirer.Separator('──────────────────────────────'),
               { name: 'Add new custom model', value: 'custom_new' },
@@ -367,7 +367,7 @@ export async function configCommand(options: ConfigOptions) {
         if (mcpAction === 'add') {
           // Delegate to the dedicated MCP command, which opens
           // ~/.xibecode/mcp-servers.json in the user's editor.
-          await mcpCommand('add');
+          await mcpCommand('add', []);
         } else if (mcpAction === 'list') {
           const servers = await config.getMCPServers();
           const serverNames = Object.keys(servers);

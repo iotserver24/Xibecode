@@ -1,224 +1,271 @@
-import { ConfigManager, MCPServerConfig } from '../utils/config.js';
+import { ConfigManager } from '../utils/config.js';
 import { EnhancedUI } from '../ui/enhanced-tui.js';
+import { SmitheryClient } from '../utils/smithery.js';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 
-/**
- * Helper function to open a file in the default editor
- */
-async function openFileInEditor(filePath: string, ui: EnhancedUI): Promise<void> {
-  console.log(chalk.bold.white('\n📝 MCP Servers Configuration File\n'));
-  console.log(chalk.cyan(`  File: ${filePath}\n`));
-  
-  // Check if we're in an interactive terminal
-  const isInteractive = process.stdin.isTTY && process.stdout.isTTY;
-  
-  if (!isInteractive) {
-    // Non-interactive terminal - just show the path
-    console.log(chalk.white('  Edit this file manually:\n'));
-    console.log(chalk.cyan(`    ${filePath}\n`));
-    console.log(chalk.gray('  After editing, run: xibecode mcp reload\n'));
+const execAsync = promisify(exec);
+
+export async function mcpCommand(action: string, args: string[]) {
+  const config = new ConfigManager();
+  const ui = new EnhancedUI(false, config.getTheme() as any);
+
+  if (!action) {
+    ui.info('Usage: xibecode mcp <install|search|list|login> [args]');
     return;
   }
-  
-  // Try to open in editor
-  const editor = process.env.EDITOR || process.env.VISUAL;
-  
-  if (editor) {
-    console.log(chalk.gray(`  Opening in ${editor}...\n`));
-    
-    try {
-      const { spawn } = await import('child_process');
-      const editorProcess = spawn(editor, [filePath], {
-        stdio: 'inherit',
-        detached: false,
-      });
-      
-      editorProcess.on('error', (error: Error) => {
-        console.log(chalk.yellow(`\n⚠ Could not open ${editor}: ${error.message}\n`));
-        console.log(chalk.white('  Edit the file manually:\n'));
-        console.log(chalk.cyan(`    ${filePath}\n`));
-      });
-      
-      editorProcess.on('exit', (code) => {
-        if (code === 0 || code === null) {
-          console.log(chalk.green('\n✓ File saved. Run "xibecode mcp reload" to reload servers.\n'));
-        }
-      });
-    } catch (error: any) {
-      console.log(chalk.yellow(`\n⚠ Could not open editor: ${error.message}\n`));
-      console.log(chalk.white('  Edit the file manually:\n'));
-      console.log(chalk.cyan(`    ${filePath}\n`));
-    }
-  } else {
-    // No editor set, show instructions
-    console.log(chalk.white('  To edit this file:\n'));
-    console.log(chalk.cyan(`    1. Open: ${filePath}\n`));
-    console.log(chalk.gray('    2. Or set EDITOR environment variable:\n'));
-    console.log(chalk.cyan(`       export EDITOR=code  # VS Code`));
-    console.log(chalk.cyan(`       export EDITOR=nano   # Nano`));
-    console.log(chalk.cyan(`       export EDITOR=vim    # Vim\n`));
-    console.log(chalk.gray('    3. After editing, run: xibecode mcp reload\n'));
+
+  switch (action) {
+    case 'list':
+      await handleList(ui, config);
+      break;
+    case 'search':
+      const query = args.join(' ');
+      if (!query) {
+        ui.error('Please provide a search query');
+        return;
+      }
+      await handleSearch(ui, query);
+      break;
+    case 'install':
+    case 'add':
+      if (args.length === 0) {
+        // Interactive add mode if no args
+        await handleAddInteractive(ui, config);
+      } else {
+        await handleInstall(ui, config, args[0]);
+      }
+      break;
+
+    case 'remove':
+      if (args.length === 0) {
+        ui.error('Please provide a server name to remove');
+        return;
+      }
+      await handleRemove(ui, config, args[0]);
+      break;
+
+    case 'login':
+      await handleLogin(ui);
+      break;
+
+    case 'file':
+      console.log(config.getMCPServersFileManager().getFilePath());
+      break;
+
+    case 'edit':
+      // Open in default editor
+      const editor = process.env.EDITOR || 'vim';
+      const file = config.getMCPServersFileManager().getFilePath();
+      ui.info(`Opening ${file} in ${editor}...`);
+      try {
+        const proc = exec(`${editor} "${file}"`);
+        proc.unref(); // Detach
+      } catch (e) {
+        ui.error(`Failed to open editor: ${e}`);
+      }
+      break;
+
+    case 'init':
+      await config.getMCPServersFileManager().createDefaultFile();
+      ui.success('Created default mcp-servers.json');
+      break;
+
+    case 'reload':
+      // Just reload config to verify
+      await config.getMCPServers();
+      ui.success('Reloaded configuration');
+      break;
+
+    default:
+      ui.error(`Unknown action: ${action}`);
+      ui.info('Usage: xibecode mcp <install|search|list|login> [args]');
   }
 }
 
-interface MCPAddOptions {
-  command: string;
-  args?: string;
-  env?: string;
-}
+async function handleList(ui: EnhancedUI, config: ConfigManager) {
+  const servers = await config.getMCPServers();
+  const fileParams = config.getMCPServersFileManager();
 
-interface MCPCommandOptions {
-  add?: MCPAddOptions;
-}
+  if (Object.keys(servers).length === 0) {
+    ui.info('No MCP servers installed.');
+    return;
+  }
 
-export async function mcpCommand(
-  action: 'add' | 'list' | 'remove' | 'file' | 'edit' | 'init' | 'reload',
-  nameOrOptions?: string
-): Promise<void> {
-  const ui = new EnhancedUI(false);
-  const config = new ConfigManager();
+  console.log('');
+  console.log(chalk.bold('  Installed MCP Servers'));
+  console.log('  ' + chalk.hex('#6B6B7B')('──────────────────────'));
 
-  if (action === 'add') {
-    // Same as edit - just open the file for editing
-    const fileManager = config.getMCPServersFileManager();
-    const filePath = fileManager.getFilePath();
-    
-    // Create file if it doesn't exist
-    if (!(await fileManager.fileExists())) {
-      await fileManager.createDefaultFile();
-      ui.success('Created default MCP servers file');
+  for (const [name, cfg] of Object.entries(servers)) {
+    console.log('  ' + chalk.hex('#00D4FF')(name));
+    console.log('    ' + chalk.hex('#6B6B7B')(`Command: ${cfg.command} ${(cfg.args || []).join(' ')}`));
+    if (cfg.env && Object.keys(cfg.env).length > 0) {
+      console.log('    ' + chalk.dim(`Env: ${Object.keys(cfg.env).join(', ')}`));
     }
+    console.log('');
+  }
 
-    // Open in editor
-    await openFileInEditor(filePath, ui);
+  console.log('  ' + chalk.dim(`Config file: ${fileParams.getFilePath()}`));
+  console.log('');
+}
 
-  } else if (action === 'list') {
-    const servers = await config.getMCPServers();
+async function handleSearch(ui: EnhancedUI, query: string) {
+  const client = new SmitheryClient();
+  ui.thinking(`Searching for "${query}" on Smithery...`);
 
-    if (Object.keys(servers).length === 0) {
-      console.log(chalk.yellow('No MCP servers configured\n'));
-      console.log(chalk.white('  Add a server by editing the config file: xibecode mcp edit\n'));
+  const results = await client.search(query);
+  ui.stopSpinner();
+
+  if (results.length === 0) {
+    ui.info(`No results found for "${query}"`);
+    return;
+  }
+
+  console.log('');
+  console.log(chalk.bold(`  Search Results for "${query}"`));
+  console.log('  ' + chalk.hex('#6B6B7B')('────────────────────────────────────────'));
+
+  results.slice(0, 10).forEach(server => {
+    console.log('  ' + chalk.hex('#00D4FF')(server.qualifiedName));
+    if (server.displayName) console.log('    ' + chalk.white(server.displayName));
+    if (server.description) console.log('    ' + chalk.dim(server.description.split('\n')[0].slice(0, 100) + '...'));
+    console.log('    ' + chalk.hex('#6B6B7B')(`Downloads: ${server.useCount || 0}`));
+    console.log('');
+  });
+
+  ui.info(`To install: xibecode mcp install <qualifiedName>`);
+}
+
+async function handleInstall(ui: EnhancedUI, config: ConfigManager, serverName: string) {
+  const client = new SmitheryClient();
+  let qualifiedName = serverName;
+
+  // Check if it looks like a qualified name (user/repo)
+  if (!serverName.includes('/')) {
+    ui.thinking(`Resolving "${serverName}"...`);
+    const results = await client.search(serverName);
+    ui.stopSpinner();
+
+    if (results.length === 0) {
+      ui.error(`Could not find server "${serverName}"`);
       return;
     }
 
-    console.log(chalk.bold.white('\n📡 Configured MCP Servers\n'));
-    let index = 1;
-    for (const [serverName, serverConfig] of Object.entries(servers)) {
-      console.log(chalk.cyan(`  ${index}. ${serverName}`));
-      console.log(chalk.gray(`     Command: ${serverConfig.command}`));
-      if (serverConfig.args && serverConfig.args.length > 0) {
-        console.log(chalk.gray(`     Args: ${serverConfig.args.join(' ')}`));
-      }
-      if (serverConfig.env && Object.keys(serverConfig.env).length > 0) {
-        const envKeys = Object.keys(serverConfig.env);
-        console.log(chalk.gray(`     Env: ${envKeys.join(', ')}`));
-      }
-      console.log('');
-      index++;
-    }
-
-  } else if (action === 'remove') {
-    const serverName = nameOrOptions as string;
-
-    if (!serverName) {
-      ui.error('Server name is required');
-      console.log(chalk.white('\n  Usage: xibecode mcp remove <name>\n'));
-      process.exit(1);
-    }
-
-    const removed = config.removeMCPServer(serverName);
-    
-    if (removed) {
-      ui.success(`MCP server "${serverName}" removed successfully!`);
+    // If exact match found
+    const exact = results.find(r => r.qualifiedName === serverName || r.displayName === serverName);
+    if (exact) {
+      qualifiedName = exact.qualifiedName;
     } else {
-      ui.error(`MCP server "${serverName}" not found`);
-      console.log(chalk.gray(`  Use "xibecode mcp list" to see configured servers\n`));
-      process.exit(1);
+      // Ask user to pick
+      const { picked } = await inquirer.prompt([{
+        type: 'list',
+        name: 'picked',
+        message: `Multiple matches found for "${serverName}". Select one:`,
+        choices: results.map(r => ({
+          name: `${r.qualifiedName} (${r.displayName || ''})`,
+          value: r.qualifiedName
+        }))
+      }]);
+      qualifiedName = picked;
     }
-  } else if (action === 'file') {
-    const fileManager = config.getMCPServersFileManager();
-    const filePath = fileManager.getFilePath();
-    const exists = await fileManager.fileExists();
-    
-    console.log(chalk.bold.white('\n📄 MCP Servers Configuration File\n'));
-    console.log(chalk.cyan(`  Path: ${filePath}`));
-    console.log(chalk.gray(`  Status: ${exists ? chalk.green('exists') : chalk.yellow('does not exist')}\n`));
-    
-    if (exists) {
-      const validation = await fileManager.validateFile();
-      if (validation.valid) {
-        const servers = await fileManager.loadMCPServers();
-        console.log(chalk.green(`  ✓ Valid configuration (${servers.length} server(s))\n`));
-      } else {
-        console.log(chalk.yellow('  ⚠ Configuration has errors:\n'));
-        validation.errors.forEach(error => {
-          console.log(chalk.yellow(`    • ${error}`));
-        });
-        console.log('');
-      }
-    } else {
-      console.log(chalk.white('  Create it with: xibecode mcp init\n'));
+  }
+
+  ui.thinking(`Configuring ${qualifiedName}...`);
+
+  const runConfig = client.getRunConfig(qualifiedName);
+  const fileManager = config.getMCPServersFileManager();
+  const existing = await fileManager.loadMCPServers();
+
+  // Determine a local name (last part of qualified name)
+  const localName = qualifiedName.split('/').pop() || qualifiedName;
+
+  if (existing[localName]) {
+    const { overwrite } = await inquirer.prompt([{
+      type: 'confirm',
+      name: 'overwrite',
+      message: `Server "${localName}" already exists. Overwrite?`,
+      default: false
+    }]);
+    if (!overwrite) {
+      ui.info('Installation cancelled.');
+      return;
     }
+  }
 
-  } else if (action === 'edit') {
-    const fileManager = config.getMCPServersFileManager();
-    const filePath = fileManager.getFilePath();
-    
-    // Create file if it doesn't exist
-    if (!(await fileManager.fileExists())) {
-      await fileManager.createDefaultFile();
-      ui.success('Created default MCP servers file');
-    }
+  // Add to config
+  existing[localName] = runConfig;
+  await fileManager.saveMCPServers(existing);
 
-    // Open in editor
-    await openFileInEditor(filePath, ui);
+  ui.stopSpinner();
+  ui.success(`Installed ${qualifiedName} as "${localName}"`);
+  console.log(chalk.dim(`  Command: ${runConfig.command} ${runConfig.args.join(' ')}`));
 
-  } else if (action === 'init') {
-    const fileManager = config.getMCPServersFileManager();
-    
-    if (await fileManager.fileExists()) {
-      const { overwrite } = await inquirer.prompt([
-        {
-          type: 'confirm',
-          name: 'overwrite',
-          message: 'File already exists. Overwrite with default template?',
-          default: false,
-        },
-      ]);
+  ui.info('NOTE: If this server requires authentication, run: xibecode mcp login');
+}
 
-      if (!overwrite) {
-        console.log(chalk.gray('Cancelled.\n'));
-        return;
-      }
-    }
+async function handleRemove(ui: EnhancedUI, config: ConfigManager, serverName: string) {
+  const fileManager = config.getMCPServersFileManager();
+  const existing = await fileManager.loadMCPServers();
 
-    await fileManager.createDefaultFile();
-    ui.success('Created default MCP servers configuration file!');
-    console.log(chalk.gray(`  File: ${fileManager.getFilePath()}\n`));
-    console.log(chalk.white('  Edit it with: xibecode mcp edit\n'));
+  if (!existing[serverName]) {
+    ui.error(`Server "${serverName}" not found.`);
+    return;
+  }
 
-  } else if (action === 'reload') {
-    const fileManager = config.getMCPServersFileManager();
-    
-    if (!(await fileManager.fileExists())) {
-      ui.error('MCP servers file does not exist');
-      console.log(chalk.white('  Create it with: xibecode mcp init\n'));
-      process.exit(1);
-    }
+  delete existing[serverName];
+  await fileManager.saveMCPServers(existing);
+  ui.success(`Removed server "${serverName}"`);
+}
 
-    const validation = await fileManager.validateFile();
-    if (!validation.valid) {
-      ui.error('File has validation errors:');
-      validation.errors.forEach(error => {
-        console.log(chalk.red(`  • ${error}`));
-      });
-      console.log('');
-      process.exit(1);
-    }
+async function handleAddInteractive(ui: EnhancedUI, config: ConfigManager) {
+  const { mode } = await inquirer.prompt([{
+    type: 'list',
+    name: 'mode',
+    message: 'How do you want to add a server?',
+    choices: [
+      { name: 'Search Smithery Registry', value: 'search' },
+      { name: 'Enter Qualified Name (user/repo)', value: 'manual' }
+    ]
+  }]);
 
-    const servers = await fileManager.loadMCPServers();
-    ui.success(`Reloaded ${servers.length} MCP server(s) from file`);
-    console.log(chalk.gray('  Restart xibecode chat/run to use updated servers\n'));
+  if (mode === 'search') {
+    const { query } = await inquirer.prompt([{
+      type: 'input',
+      name: 'query',
+      message: 'Search query:'
+    }]);
+    await handleSearch(ui, query);
+    // Prompt to install from search results? 
+    // For simplicity, just list for now and let user copy command.
+  } else {
+    const { name } = await inquirer.prompt([{
+      type: 'input',
+      name: 'name',
+      message: 'Enter qualified name (e.g. call518/mcp-mysql-ops):'
+    }]);
+    if (name) await handleInstall(ui, config, name);
+  }
+}
+
+async function handleLogin(ui: EnhancedUI) {
+  console.log(chalk.cyan('Launching Smithery login...'));
+  try {
+    // Run interactively
+    const proc = exec('npx -y @smithery/cli login');
+
+    proc.stdout?.on('data', (data) => process.stdout.write(data));
+    proc.stderr?.on('data', (data) => process.stderr.write(data));
+
+    // We can't really pipe stdin easily in this async wrapper if not in raw mode,
+    // but smithery login usually just opens a browser.
+
+    await new Promise((resolve) => {
+      proc.on('exit', resolve);
+    });
+    ui.success('Login command finished.');
+  } catch (e: any) {
+    ui.error(`Login failed: ${e.message}`);
   }
 }
