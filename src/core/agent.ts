@@ -260,6 +260,7 @@ export class EnhancedAgent extends EventEmitter {
             const result = await this.callModel(effectiveTools);
             response = result.message;
             streamed = result.streamed;
+            const persona = result.persona;
             break;
           } catch (apiError: any) {
             this.emit('error', { message: 'API Error', error: apiError.message });
@@ -388,7 +389,7 @@ export class EnhancedAgent extends EventEmitter {
             // Remove mode request and task complete tags for display
             const displayText = stripTaskComplete(stripModeRequests(cleanText));
             if (displayText) {
-              this.emit('response', { text: displayText });
+              this.emit('response', { text: displayText, persona: response.persona });
             }
           }
         }
@@ -496,10 +497,16 @@ export class EnhancedAgent extends EventEmitter {
   /**
    * Call the model with streaming (fallback to non-streaming).
    */
-  private async callModel(tools: Tool[]): Promise<{ message: any; streamed: boolean }> {
+  private async callModel(tools: Tool[]): Promise<{ message: any; streamed: boolean; persona?: { name: string; color: string } }> {
     // Route to provider-specific implementation
     if (this.provider === 'openai') {
-      return this.callOpenAI(tools);
+      const result = await this.callOpenAI(tools);
+      const currentModeConfig = MODE_CONFIG[this.modeState.current];
+      const persona = {
+        name: currentModeConfig.personaName,
+        color: currentModeConfig.displayColor,
+      };
+      return { ...result, persona };
     }
 
     const params: any = {
@@ -522,13 +529,19 @@ export class EnhancedAgent extends EventEmitter {
       this.thinkFilter.reset();
       let hasEmittedStart = false;
 
+      const currentModeConfig = MODE_CONFIG[this.modeState.current];
+      const persona = {
+        name: currentModeConfig.personaName,
+        color: currentModeConfig.displayColor,
+      };
+
       const stream = this.client.messages.stream(params);
 
       stream.on('text', (chunk: string) => {
         const filtered = this.thinkFilter.push(chunk);
         if (filtered) {
           if (!hasEmittedStart) {
-            this.emit('stream_start', {});
+            this.emit('stream_start', { persona });
             hasEmittedStart = true;
           }
           this.emit('stream_text', { text: filtered });
@@ -556,7 +569,12 @@ export class EnhancedAgent extends EventEmitter {
       // ── Fallback to non-streaming ──
       try {
         const message = await this.client.messages.create(params);
-        return { message, streamed: false };
+        const currentModeConfig = MODE_CONFIG[this.modeState.current];
+        const persona = {
+          name: currentModeConfig.personaName,
+          color: currentModeConfig.displayColor,
+        };
+        return { message, streamed: false, persona };
       } catch (error: any) {
         throw error;
       }
@@ -640,7 +658,7 @@ export class EnhancedAgent extends EventEmitter {
    * Uses streaming (SSE) when available, with a non-streaming fallback.
    * Supports tools: sends them when provided and normalizes tool_calls in the response to Anthropic-style content blocks.
    */
-  private async callOpenAI(tools: Tool[]): Promise<{ message: any; streamed: boolean }> {
+  private async callOpenAI(tools: Tool[]): Promise<{ message: any; streamed: boolean; persona?: { name: string; color: string } }> {
     if (!this.config.apiKey) {
       throw new Error('API key is required for OpenAI-compatible provider');
     }
@@ -728,7 +746,12 @@ export class EnhancedAgent extends EventEmitter {
             if (chunkText) {
               fullText += chunkText;
               if (!hasEmittedStart) {
-                this.emit('stream_start', {});
+                const currentModeConfig = MODE_CONFIG[this.modeState.current];
+                const persona = {
+                  name: currentModeConfig.personaName,
+                  color: currentModeConfig.displayColor,
+                };
+                this.emit('stream_start', { persona });
                 hasEmittedStart = true;
               }
               this.emit('stream_text', { text: chunkText });

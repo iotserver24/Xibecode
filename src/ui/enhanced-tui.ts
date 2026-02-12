@@ -235,11 +235,18 @@ export class EnhancedUI {
   }
 
   // ─── Streaming ────────────────────────────────────────
-  startAssistantResponse() {
+  startAssistantResponse(persona?: { name: string; color: string }) {
     this.stopSpinner();
     this.isStreaming = true;
     this.streamLineLen = 0;
-    console.log('  ' + this.T.assistant('◆ XibeCode'));
+
+    if (persona) {
+      const tagColor = persona.color || '#00D4FF';
+      process.stdout.write('  ' + chalk.bgHex(tagColor).black(` ${persona.name} `) + ' ');
+      console.log(chalk.hex(tagColor)('◆'));
+    } else {
+      console.log('  ' + this.T.assistant('◆ XibeCode'));
+    }
   }
 
   streamText(text: string) {
@@ -266,9 +273,17 @@ export class EnhancedUI {
   }
 
   // ─── Non-streaming response ───────────────────────────
-  response(text: string) {
+  response(text: string, persona?: { name: string; color: string }) {
     this.stopSpinner();
-    console.log('  ' + this.T.assistant('◆ XibeCode'));
+
+    if (persona) {
+      const tagColor = persona.color || '#00D4FF';
+      process.stdout.write('  ' + chalk.bgHex(tagColor).black(` ${persona.name} `) + ' ');
+      console.log(chalk.hex(tagColor)('◆'));
+    } else {
+      console.log('  ' + this.T.assistant('◆ XibeCode'));
+    }
+
     const lines = text.split('\n');
     lines.forEach(line => {
       console.log('    ' + this.T.text(line));
