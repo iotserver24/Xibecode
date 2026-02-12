@@ -3,7 +3,7 @@ import type { MessageParam, Tool, ToolUseBlock, TextBlock, ContentBlock } from '
 import fetch from 'node-fetch';
 import * as fsSync from 'fs';
 import { EventEmitter } from 'events';
-import { AgentMode, MODE_CONFIG, ModeState, createModeState, transitionMode, ModeOrchestrator, parseModeRequest, stripModeRequests, ModeTransitionPolicy } from './modes.js';
+import { AgentMode, MODE_CONFIG, ModeState, createModeState, transitionMode, ModeOrchestrator, parseModeRequest, stripModeRequests, parseTaskComplete, stripTaskComplete, ModeTransitionPolicy } from './modes.js';
 import { NeuralMemory } from './memory.js';
 
 export interface AgentConfig {
@@ -355,14 +355,38 @@ export class EnhancedAgent extends EventEmitter {
               });
             }
           }
+
+          // Check for task completion
+          const taskComplete = parseTaskComplete(block.text);
+          if (taskComplete) {
+            // Switch back to team_leader mode
+            this.modeState = transitionMode(this.modeState, 'team_leader', 'Task completed: ' + taskComplete.summary);
+            this.emit('mode_changed', {
+              from: this.modeState.previous,
+              to: 'team_leader',
+              reason: 'Task completion reported',
+              auto: true
+            });
+
+            // Update tool executor mode if applicable
+            if (toolExecutor.setMode) {
+              toolExecutor.setMode('team_leader');
+            }
+
+            // Add a system note to help Arya know what happened
+            this.messages.push({
+              role: 'user',
+              content: `[SYSTEM] Agent reported task completion:\nSummary: ${taskComplete.summary}\n\nYou are now Arya (Team Leader) again. Review the summary and decide the next step.`
+            });
+          }
         }
 
         // Show text responses (only if not already streamed)
         if (!streamed) {
           for (const block of textBlocks) {
             const cleanText = ThinkTagFilter.strip(block.text);
-            // Remove mode request tags for display
-            const displayText = stripModeRequests(cleanText);
+            // Remove mode request and task complete tags for display
+            const displayText = stripTaskComplete(stripModeRequests(cleanText));
             if (displayText) {
               this.emit('response', { text: displayText });
             }
