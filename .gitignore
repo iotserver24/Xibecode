@@ -52,3 +52,4 @@ coverage/
 # bun.lock
 # pnpm-lock.yaml
 Skill-marketplace
+next/

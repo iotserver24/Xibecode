@@ -67,10 +67,12 @@ export class CodingToolExecutor implements ToolExecutor {
     this.testCommandOverride = options?.testCommandOverride;
   }
 
+  private currentMode: AgentMode = 'agent';
+
   setMode(mode: AgentMode) {
+    this.currentMode = mode;
     const config = MODE_CONFIG[mode];
     this.dryRun = config.defaultDryRun;
-    // We could also enforce allowed tools here if we wanted strictly enforced limits
   }
 
   /**
@@ -86,6 +88,20 @@ export class CodingToolExecutor implements ToolExecutor {
   }
 
   async execute(toolName: string, input: any): Promise<any> {
+    // Check tool permissions first
+    // import { isToolAllowed } from './modes.js'; // Ensure this is imported at top
+    const { isToolAllowed } = await import('./modes.js');
+    const permission = isToolAllowed(this.currentMode, toolName);
+
+    if (!permission.allowed) {
+      return {
+        error: true,
+        success: false,
+        message: `PERMISSION DENIED: ${permission.reason}. Please delegate this task to the appropriate agent using [[REQUEST_MODE: <mode> | reason=...]].`,
+        blocked: true
+      };
+    }
+
     const p = this.parseInput(input);
 
     // Check if it's an MCP tool (format: serverName::toolName)
