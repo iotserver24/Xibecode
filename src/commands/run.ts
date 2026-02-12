@@ -8,6 +8,7 @@ import { ConfigManager } from '../utils/config.js';
 import { PlanMode } from '../core/planMode.js';
 import { TodoManager } from '../utils/todoManager.js';
 import { NeuralMemory } from '../core/memory.js';
+import { SkillManager } from '../core/skills.js';
 import chalk from 'chalk';
 
 interface RunOptions {
@@ -27,7 +28,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   const ui = new EnhancedUI(options.verbose);
   const config = new ConfigManager();
 
-  ui.header('1.0.0');
+  ui.header('0.2.7');
 
   // Get API key
   const apiKey = options.apiKey || config.getApiKey();
@@ -149,12 +150,16 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   const memory = new NeuralMemory();
   await memory.init().catch(() => { });
 
+  const skillManager = new SkillManager(process.cwd(), apiKey, baseUrl, model, provider);
+  await skillManager.loadSkills();
+
   const toolExecutor = new CodingToolExecutor(process.cwd(), {
     dryRun,
     testCommandOverride,
     pluginManager,
     mcpClientManager,
     memory,
+    skillManager,
   });
   const agent = new EnhancedAgent(
     {

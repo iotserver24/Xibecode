@@ -1,6 +1,7 @@
 import { TodoManager, TodoItem, TodoDocument } from '../utils/todoManager.js';
 import { EnhancedAgent, AgentConfig, AgentEvent } from './agent.js';
 import { CodingToolExecutor } from './tools.js';
+import { SkillManager } from './skills.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import chalk from 'chalk';
@@ -67,7 +68,8 @@ export class PlanMode {
     // We give it a restricted set of tools: Read access + Write access ONLY to plan/todo files
     // For now, we'll give it the standard executor but instruct it carefully.
     const toolExecutor = new CodingToolExecutor(this.rootDir, {
-      dryRun: false // We want it to actually write the plan files
+      dryRun: false, // We want it to actually write the plan files
+      skillManager: new SkillManager(this.rootDir, this.config.apiKey, this.config.baseUrl, this.config.model, this.provider)
     });
 
     // Filter tools to ensure safety during planning (read-only + specific writes)

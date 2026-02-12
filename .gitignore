@@ -26,7 +26,8 @@ build/
 # OS
 .DS_Store
 Thumbs.db
-
+.xibecode/
+.xibecode
 # Logs
 *.log
 npm-debug.log*
@@ -39,6 +40,7 @@ coverage/
 .nyc_output/
 
 # XibeCode
+.xibecode/
 .xibecode_backups/
 
 # Temp
