@@ -117,7 +117,7 @@ export async function chatCommand(options: ChatOptions) {
 
         // ── Streaming ──
         case 'stream_start':
-          ui.startAssistantResponse();
+          ui.startAssistantResponse(event.data.persona);
           hasResponse = true;
           break;
 
@@ -132,7 +132,7 @@ export async function chatCommand(options: ChatOptions) {
         // ── Non-streaming fallback ──
         case 'response':
           if (!hasResponse) {
-            ui.response(event.data.text);
+            ui.response(event.data.text, event.data.persona);
             hasResponse = true;
           }
           break;
