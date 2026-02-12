@@ -4,6 +4,7 @@ import fetch from 'node-fetch';
 import * as fsSync from 'fs';
 import { EventEmitter } from 'events';
 import { AgentMode, MODE_CONFIG, ModeState, createModeState, transitionMode, ModeOrchestrator, parseModeRequest, stripModeRequests, ModeTransitionPolicy } from './modes.js';
+import { NeuralMemory } from './memory.js';
 
 export interface AgentConfig {
   apiKey: string;
@@ -155,6 +156,7 @@ export class EnhancedAgent extends EventEmitter {
   private totalOutputTokens: number = 0;
   private sessionCost: number = 0;
   private activeSkill: { name: string; instructions: string } | null = null;
+  private memory: NeuralMemory;
 
   // Pricing per 1M tokens (input/output) — Claude models
   private static readonly PRICING: Record<string, { input: number; output: number }> = {
@@ -192,6 +194,9 @@ export class EnhancedAgent extends EventEmitter {
     this.provider = providerOverride ?? this.detectProvider(this.config.model, this.config.baseUrl);
 
     // Load project memory if it exists
+    this.memory = new NeuralMemory();
+    this.memory.init().catch(console.error);
+
     try {
       const memoryPath = require('path').join(process.cwd(), '.xibecode', 'memory.md');
       if (fsSync.existsSync(memoryPath)) {
@@ -214,6 +219,21 @@ export class EnhancedAgent extends EventEmitter {
       role: 'user',
       content: initialPrompt,
     });
+
+    // ─── Neural Memory Recall ───
+    try {
+      const memories = await this.memory.retrieve(initialPrompt);
+      if (memories.length > 0) {
+        const memoryContext = memories.map(m => `- [${new Date(m.timestamp).toISOString().split('T')[0]}] ${m.trigger} -> ${m.action} (${m.outcome})`).join('\n');
+        this.messages.push({
+          role: 'user',
+          content: `\n\n[Neural Memory Recall]\nI found some relevant past experiences that might help:\n${memoryContext}\n\nUser Prompt: ${initialPrompt}`
+        });
+        this.emit('thinking', { message: `Recalled ${memories.length} relevant memories` });
+      }
+    } catch (err) {
+      // Ignore memory errors to not block execution
+    }
 
     this.emit('thinking', { message: 'Starting agent...' });
 
@@ -1185,7 +1205,9 @@ When you complete the task, provide a comprehensive summary including:
 - What was accomplished (specific files and changes)
 - Any trade-offs or design decisions made
 - Potential improvements or follow-up tasks
-- Test results and validation performed`;
+- Test results and validation performed
+
+${MODE_CONFIG[this.modeState.current].promptSuffix}`;
   }
 
   getStats() {

@@ -7,11 +7,13 @@ import { EnhancedUI } from '../ui/enhanced-tui.js';
 import { ConfigManager } from '../utils/config.js';
 import { PlanMode } from '../core/planMode.js';
 import { TodoManager } from '../utils/todoManager.js';
+import { NeuralMemory } from '../core/memory.js';
 import chalk from 'chalk';
 
 interface RunOptions {
   file?: string;
   model?: string;
+  mode?: string;
   baseUrl?: string;
   apiKey?: string;
   provider?: string;
@@ -24,7 +26,7 @@ interface RunOptions {
 export async function runCommand(prompt: string | undefined, options: RunOptions) {
   const ui = new EnhancedUI(options.verbose);
   const config = new ConfigManager();
-  
+
   ui.header('1.0.0');
 
   // Get API key
@@ -71,7 +73,17 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
 
   // Plan mode: decide if this is a large/complex task and, if so,
   // create/extend todo.md before starting the agent.
-  const planMode = new PlanMode(process.cwd());
+  const planMode = new PlanMode(
+    process.cwd(),
+    {
+      apiKey,
+      baseUrl,
+      model,
+      maxIterations: 10, // Not used by PlanMode directly anymore, but kept for type compatibility if needed
+      verbose: options.verbose
+    },
+    provider as 'anthropic' | 'openai'
+  );
   const isLarge = planMode.isLargeTask(finalPrompt);
   let effectivePrompt = finalPrompt;
   let activeTodoId: string | undefined;
@@ -134,11 +146,15 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   ui.startSession(effectivePrompt, { model, maxIterations, dryRun });
 
   // Initialize components
+  const memory = new NeuralMemory();
+  await memory.init().catch(() => { });
+
   const toolExecutor = new CodingToolExecutor(process.cwd(), {
     dryRun,
     testCommandOverride,
     pluginManager,
     mcpClientManager,
+    memory,
   });
   const agent = new EnhancedAgent(
     {
@@ -147,9 +163,12 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
       model,
       maxIterations,
       verbose: options.verbose,
+      mode: (options.mode as any) || 'agent',
     },
     provider
   );
+  // Inject memory into agent (we'll need to update Agent to accept it or just let it use its own? Better to share same instance)
+  (agent as any).memory = memory;
 
   const startTime = Date.now();
   let currentIteration = 0;
@@ -191,12 +210,12 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
 
       case 'tool_result':
         ui.toolResult(event.data.name, event.data.result, event.data.success);
-        
+
         // Show diff for file edits (verbose only, handled inside showDiff)
         if (event.data.result?.diff) {
           ui.showDiff(event.data.result.diff, event.data.result.path || 'file');
         }
-        
+
         // Show file changes
         if (event.data.result?.success && event.data.name === 'write_file') {
           ui.fileChanged('created', event.data.result.path, `${event.data.result.lines} lines`);
@@ -222,7 +241,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   // Run the agent
   try {
     await agent.run(effectivePrompt, toolExecutor.getTools(), toolExecutor);
-    
+
     const stats = agent.getStats();
     const duration = Date.now() - startTime;
 
@@ -231,7 +250,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
       const todoManager = new TodoManager(process.cwd());
       await todoManager.updateStatus(activeTodoId, 'done');
     }
-    
+
     ui.completionSummary({
       iterations: stats.iterations,
       duration,
@@ -246,21 +265,21 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
       });
       console.log('');
     }
-    
+
   } catch (error: any) {
     const duration = Date.now() - startTime;
-    
+
     ui.failureSummary(error.message, {
       iterations: currentIteration,
       duration,
     });
-    
+
     if (options.verbose) {
       console.log(chalk.red('\n  Stack trace:'));
       console.log(chalk.gray('  ' + error.stack));
       console.log('');
     }
-    
+
     process.exit(1);
   } finally {
     // Cleanup: disconnect from all MCP servers

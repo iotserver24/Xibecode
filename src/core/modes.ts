@@ -3,7 +3,7 @@
  * Defines different operating modes with specific capabilities and restrictions
  */
 
-export type AgentMode = 'plan' | 'agent' | 'debugger' | 'security' | 'review';
+export type AgentMode = 'plan' | 'agent' | 'tester' | 'debugger' | 'security' | 'review';
 
 export type ToolCategory =
   | 'read_only'
@@ -140,12 +140,54 @@ You can switch to other personas when needed:
 - Be incremental and verify each step`,
   },
 
+  tester: {
+    name: 'Tester',
+    description: 'Comprehensive testing and quality assurance',
+    personaName: 'Tess',
+    personaRole: 'the Tester',
+    allowedCategories: ['read_only', 'write_fs', 'git_read', 'git_mutation', 'tests', 'context'],
+    canModify: true,
+    defaultDryRun: false,
+    displayColor: '#FF4081', // pink
+    icon: '🧪',
+    riskTolerance: 'low',
+    requiresConfirmation: false,
+    promptSuffix: `
+## TESTER MODE - Quality Assurance
+### You are Tess the Tester 🧪
+
+You are operating in TESTER MODE. Your mission is to ensure code quality and correctness:
+
+- Design and implement comprehensive test suites
+- Run existing tests and analyze failures
+- Create regression tests for reported bugs
+- Verify new features against requirements
+- Ensure high test coverage
+
+### Your Approach
+1. **Analyze**: Understand the requirements and existing code
+2. **Plan**: Design test cases (unit, integration, e2e)
+3. **Implement**: Write robust, maintainable test code
+4. **Execute**: Run tests and analyze results
+5. **Report**: Document findings and coverage
+
+### Best Practices
+- Prefer TDD (Test Driven Development) flows where possible
+- Write clear, descriptive test names
+- Test edge cases and error conditions
+- Ensure tests are deterministic and isolated
+
+### Mode Switching
+- **Dex the Debugger** for fixing test failures: [[REQUEST_MODE: debugger | reason=Fix failing tests]]
+- **Blaze the Builder** for implementing missing features: [[REQUEST_MODE: agent | reason=Implement feature for testing]]`,
+  },
+
   debugger: {
     name: 'Debugger',
     description: 'Systematic debugging and root cause analysis',
     personaName: 'Dex',
     personaRole: 'the Debugger',
-    allowedCategories: ['read_only', 'write_fs', 'git_read', 'shell_command', 'tests', 'context'],
+    allowedCategories: ['read_only', 'write_fs', 'git_read', 'git_mutation', 'shell_command', 'tests', 'context'],
     canModify: true,
     defaultDryRun: false,
     displayColor: '#FFD740', // amber/yellow
@@ -598,9 +640,9 @@ export function stripModeRequests(text: string): string {
 }
 
 export function isValidMode(mode: string): mode is AgentMode {
-  return ['plan', 'agent', 'debugger', 'security', 'review'].includes(mode);
+  return ['plan', 'agent', 'tester', 'debugger', 'security', 'review'].includes(mode);
 }
 
 export function getAllModes(): AgentMode[] {
-  return ['plan', 'agent', 'debugger', 'security', 'review'];
+  return ['plan', 'agent', 'tester', 'debugger', 'security', 'review'];
 }

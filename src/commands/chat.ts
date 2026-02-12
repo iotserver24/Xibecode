@@ -36,7 +36,6 @@ export async function chatCommand(options: ChatOptions) {
 
   const sessionManager = new SessionManager(config.getSessionDirectory());
   const contextManager = new ContextManager(process.cwd());
-  const planMode = new PlanMode(process.cwd());
   let skillManager: SkillManager;
 
   ui.clear();
@@ -65,6 +64,18 @@ export async function chatCommand(options: ChatOptions) {
   // Connections are established on-demand (for example when the user runs /mcp),
   // instead of eagerly on startup.
   const mcpClientManager = new MCPClientManager();
+
+  const planMode = new PlanMode(
+    process.cwd(),
+    {
+      apiKey: apiKey as string,
+      baseUrl,
+      model,
+      maxIterations: 10,
+      verbose: false,
+    },
+    (currentProvider || 'anthropic') as 'anthropic' | 'openai'
+  );
 
   // Gemini‑style intro screen
   ui.chatBanner(process.cwd(), model, baseUrl);

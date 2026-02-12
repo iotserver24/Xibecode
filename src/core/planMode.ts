@@ -1,4 +1,9 @@
 import { TodoManager, TodoItem, TodoDocument } from '../utils/todoManager.js';
+import { EnhancedAgent, AgentConfig, AgentEvent } from './agent.js';
+import { CodingToolExecutor } from './tools.js';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import chalk from 'chalk';
 
 export interface PlanResult {
   doc: TodoDocument;
@@ -14,7 +19,11 @@ export interface PlanResult {
  * it does not call the LLM yet, but prepares a solid path for that later.
  */
 export class PlanMode {
-  constructor(private readonly rootDir: string) {}
+  constructor(
+    private readonly rootDir: string,
+    private readonly config: AgentConfig,
+    private readonly provider: 'anthropic' | 'openai'
+  ) { }
 
   /**
    * Decide whether a task should go through plan mode.
@@ -48,33 +57,102 @@ export class PlanMode {
    * Build or extend a TODO plan for the given description.
    * Returns the updated document plus the tasks it just added/updated.
    */
+  /**
+   * Build or extend a TODO plan using the AI Architect.
+   */
   async buildPlan(description: string): Promise<PlanResult> {
-    const todoManager = new TodoManager(this.rootDir);
+    console.log(chalk.cyan('\n🧠 AI Architect is analyzing the request...'));
 
-    // Split description into candidate task titles.
-    const candidates = this.extractCandidateTasks(description);
-    if (candidates.length === 0) {
-      // Fallback: treat whole description as one task
-      candidates.push(description.trim());
+    // Initialize the Architect Agent
+    // We give it a restricted set of tools: Read access + Write access ONLY to plan/todo files
+    // For now, we'll give it the standard executor but instruct it carefully.
+    const toolExecutor = new CodingToolExecutor(this.rootDir, {
+      dryRun: false // We want it to actually write the plan files
+    });
+
+    // Filter tools to ensure safety during planning (read-only + specific writes)
+    // Actually, giving full read access is good. We just want to encourage it to write plans.
+    const tools = toolExecutor.getTools();
+
+    const architect = new EnhancedAgent(
+      { ...this.config, maxIterations: 10 }, // Limit iterations for planning
+      this.provider
+    );
+
+    // Forward events for visibility
+    architect.on('event', (event: AgentEvent) => {
+      if (event.type === 'thinking') console.log(chalk.gray(`  ${event.data.message}`));
+    });
+
+    const prompt = `
+You are the AI Architect. Your goal is to analyze the user's request and create a concrete execution plan.
+
+USER REQUEST: "${description}"
+
+1.  **Explore**: Read files to understand the current state of the project.
+2.  **Plan**: Create a detailed \`implementation_plan.md\` file.
+    -   Describe the architectural changes.
+    -   List files to create/modify.
+    -   Identify potential risks.
+3.  **Tasking**: Create or Update the \`todo.md\` file.
+    -   Break the plan into small, testable tasks.
+    -   Use a markdown list format with IDs if possible, or just a standard task list.
+    -   The \`todo.md\` MUST be actionable.
+
+Perform these steps now.
+    `.trim();
+
+    try {
+      await architect.run(prompt, tools, toolExecutor);
+    } catch (error) {
+      console.error(chalk.red('Architect failed to generate plan:'), error);
     }
 
-    const newItems: Array<Omit<TodoItem, 'status'>> = candidates.map(title => ({
+    // Now read the generated todo.md to return the result
+    const todoManager = new TodoManager(this.rootDir);
+    let doc: TodoDocument;
+
+    try {
+      // Force reload from disk in case Agent wrote it
+      doc = await todoManager.load();
+    } catch (e) {
+      // Fallback if no todo.md was created
+      doc = { pending: [], inProgress: [], done: [] };
+    }
+
+    // If doc is empty, fallback to heuristic (means Agent failed to write todo.md)
+    if (doc.pending.length === 0 && doc.inProgress.length === 0 && doc.done.length === 0) {
+      console.log(chalk.yellow('  (Architect did not create tasks, falling back to heuristic)'));
+      return this.fallbackBuildPlan(description);
+    }
+
+    return {
+      doc,
+      tasks: doc.pending, // This might not be exactly "new" tasks, but "pending" ones
+      isLarge: true,
+    };
+  }
+
+  /**
+   * Fallback to the old heuristic method if AI fails
+   */
+  async fallbackBuildPlan(description: string): Promise<PlanResult> {
+    const todoManager = new TodoManager(this.rootDir);
+    const candidates = this.extractCandidateTasks(description);
+    if (candidates.length === 0) candidates.push(description.trim());
+
+    const newItems = candidates.map((title: string) => ({
       id: this.generateDeterministicId(title),
       title: title.trim(),
     }));
 
     const doc = await todoManager.mergeNewTasks(newItems);
 
-    // Return the concrete items (merged into the doc) corresponding to these ids
+    // Re-map to find added tasks
     const byId = new Map<string, TodoItem>();
-    for (const item of [...doc.pending, ...doc.inProgress, ...doc.done]) {
-      byId.set(item.id, item);
-    }
-    const tasks: TodoItem[] = [];
-    for (const t of newItems) {
-      const found = byId.get(t.id);
-      if (found) tasks.push(found);
-    }
+    [...doc.pending, ...doc.inProgress, ...doc.done].forEach(i => byId.set(i.id, i));
+
+    const tasks = newItems.map((t: any) => byId.get(t.id)).filter(Boolean) as TodoItem[];
 
     return {
       doc,

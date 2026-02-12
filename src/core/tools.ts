@@ -4,12 +4,15 @@ import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
 import { ContextManager } from './context.js';
+import { AgentMode, MODE_CONFIG } from './modes.js';
 import { FileEditor } from './editor.js';
 import { GitUtils } from '../utils/git.js';
 import { TestRunnerDetector } from '../utils/testRunner.js';
 import { SafetyChecker } from '../utils/safety.js';
 import { PluginManager } from './plugins.js';
 import { MCPClientManager } from './mcp-client.js';
+import { NeuralMemory } from './memory.js';
+import { BrowserManager } from '../tools/browser.js';
 import * as os from 'os';
 
 const execAsync = promisify(exec);
@@ -28,6 +31,8 @@ export class CodingToolExecutor implements ToolExecutor {
   private safetyChecker: SafetyChecker;
   private pluginManager: PluginManager;
   private mcpClientManager?: MCPClientManager;
+  private memory?: NeuralMemory;
+  private browserManager: BrowserManager;
   private platform: string;
   private dryRun: boolean;
   private testCommandOverride?: string;
@@ -39,6 +44,7 @@ export class CodingToolExecutor implements ToolExecutor {
       testCommandOverride?: string;
       pluginManager?: PluginManager;
       mcpClientManager?: MCPClientManager;
+      memory?: NeuralMemory;
     }
   ) {
     this.workingDir = workingDir;
@@ -49,9 +55,17 @@ export class CodingToolExecutor implements ToolExecutor {
     this.safetyChecker = new SafetyChecker();
     this.pluginManager = options?.pluginManager || new PluginManager();
     this.mcpClientManager = options?.mcpClientManager;
+    this.memory = options?.memory;
+    this.browserManager = new BrowserManager();
     this.platform = os.platform();
     this.dryRun = options?.dryRun || false;
     this.testCommandOverride = options?.testCommandOverride;
+  }
+
+  setMode(mode: AgentMode) {
+    const config = MODE_CONFIG[mode];
+    this.dryRun = config.defaultDryRun;
+    // We could also enforce allowed tools here if we wanted strictly enforced limits
   }
 
   /**
@@ -322,8 +336,31 @@ export class CodingToolExecutor implements ToolExecutor {
         return this.updateMemory(p.content, p.append);
       }
 
+      case 'remember_lesson': {
+        if (!this.memory) {
+          return { error: true, success: false, message: 'Memory system is not initialized.' };
+        }
+        if (!p.trigger || typeof p.trigger !== 'string') return { error: true, success: false, message: 'Missing trigger' };
+        if (!p.action || typeof p.action !== 'string') return { error: true, success: false, message: 'Missing action' };
+        if (!p.outcome || typeof p.outcome !== 'string') return { error: true, success: false, message: 'Missing outcome' };
+
+        await this.memory.addMemory(p.trigger, p.action, p.outcome, p.tags || []);
+        return { success: true, message: 'Lesson learned and saved to neural memory.' };
+      }
+
+      case 'take_screenshot': {
+        if (!p.url || typeof p.url !== 'string') return { error: true, success: false, message: 'Missing url' };
+        if (!p.path || typeof p.path !== 'string') return { error: true, success: false, message: 'Missing path' };
+        return this.browserManager.takeScreenshot(p.url, p.path, p.fullPage !== false);
+      }
+
+      case 'get_console_logs': {
+        if (!p.url || typeof p.url !== 'string') return { error: true, success: false, message: 'Missing url' };
+        return this.browserManager.getConsoleLogs(p.url);
+      }
+
       default:
-        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, update_memory` };
+        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, take_screenshot, get_console_logs` };
     }
   }
 
@@ -797,6 +834,44 @@ export class CodingToolExecutor implements ToolExecutor {
           },
           required: ['query'],
         },
+      },
+      {
+        name: 'remember_lesson',
+        description: 'Save a key lesson, fix, or optimization to persistent memory. Use this when you solve a tricky problem, fix a build error, or find a better way to do something. This helps you avoid repeating mistakes in the future.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            trigger: { type: 'string', description: 'The situation, error, or context that triggered this learning (e.g. "Build failed with error X")' },
+            action: { type: 'string', description: 'What you did to fix or improve it' },
+            outcome: { type: 'string', description: 'The positive result' },
+            tags: { type: 'array', items: { type: 'string' }, description: 'Optional tags for categorization' }
+          },
+          required: ['trigger', 'action', 'outcome']
+        }
+      },
+      {
+        name: 'take_screenshot',
+        description: 'Take a screenshot of a web page. Useful for verifying UI appearance or capturing the state of a web app.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            url: { type: 'string', description: 'URL to visit (e.g., http://localhost:3000)' },
+            path: { type: 'string', description: 'Output path for the screenshot (e.g., screenshot.png)' },
+            fullPage: { type: 'boolean', description: 'Capture full page? Default: true' }
+          },
+          required: ['url', 'path']
+        }
+      },
+      {
+        name: 'get_console_logs',
+        description: 'Get browser console logs (and errors) from a URL. Useful for debugging frontend issues.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            url: { type: 'string', description: 'URL to visit' }
+          },
+          required: ['url']
+        }
       },
       {
         name: 'fetch_url',

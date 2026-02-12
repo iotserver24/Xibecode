@@ -28,6 +28,7 @@ program
   .argument('[prompt]', 'Task for the AI to accomplish')
   .option('-f, --file <path>', 'Read prompt from file')
   .option('-m, --model <model>', 'AI model to use')
+  .option('--mode <mode>', 'Initial agent mode (agent, plan, debugger, etc.)')
   .option('-b, --base-url <url>', 'Custom API base URL')
   .option('-k, --api-key <key>', 'API key (overrides config)')
   .option('--provider <provider>', 'Model API format: anthropic or openai')
@@ -71,38 +72,55 @@ const mcpCmd = program
 mcpCmd
   .command('add')
   .description('Open MCP servers configuration file to add servers')
-  .action(() => mcpCommand('add'));
+  .action(() => mcpCommand('add', []));
 
 mcpCmd
   .command('list')
   .description('List all configured MCP servers')
-  .action(() => mcpCommand('list'));
+  .action(() => mcpCommand('list', []));
 
 mcpCmd
   .command('remove')
   .description('Remove an MCP server')
   .argument('<name>', 'Server name')
-  .action((name) => mcpCommand('remove', name));
+  .action((name) => mcpCommand('remove', [name]));
 
 mcpCmd
   .command('file')
   .description('Show path to MCP servers configuration file')
-  .action(() => mcpCommand('file'));
+  .action(() => mcpCommand('file', []));
 
 mcpCmd
   .command('edit')
   .description('Open MCP servers configuration file in editor')
-  .action(() => mcpCommand('edit'));
+  .action(() => mcpCommand('edit', []));
 
 mcpCmd
   .command('init')
   .description('Create default MCP servers configuration file')
-  .action(() => mcpCommand('init'));
+  .action(() => mcpCommand('init', []));
 
 mcpCmd
   .command('reload')
   .description('Reload MCP servers from configuration file')
-  .action(() => mcpCommand('reload'));
+  .action(() => mcpCommand('reload', []));
+
+mcpCmd
+  .command('search')
+  .description('Search for MCP servers on Smithery')
+  .argument('<query...>', 'Search query')
+  .action((query) => mcpCommand('search', query));
+
+mcpCmd
+  .command('install')
+  .description('Install an MCP server')
+  .argument('<name>', 'Server name (e.g. @smithery/mcp-postgres)')
+  .action((name) => mcpCommand('install', [name]));
+
+mcpCmd
+  .command('login')
+  .description('Authenticate with Smithery')
+  .action(() => mcpCommand('login', []));
 
 // Show help if no command
 if (!process.argv.slice(2).length) {
