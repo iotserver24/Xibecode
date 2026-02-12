@@ -592,7 +592,12 @@ const TOOL_CATEGORIES: Record<string, ToolCategory> = {
 
   // Network tools
   'web_search': 'network',
-  'web_fetch': 'network',
+  'fetch_url': 'network', // Changed from web_fetch to match tools.ts
+  'get_console_logs': 'network',
+  'search_skills_sh': 'network',
+
+  // Memory tools
+  'update_memory': 'write_fs', // Allows writing to project memory
 };
 
 export function isToolAllowed(mode: AgentMode, toolName: string): { allowed: boolean; reason?: string } {
@@ -878,6 +883,23 @@ export function parseModeRequest(text: string): { mode: AgentMode; reason: strin
  */
 export function stripModeRequests(text: string): string {
   return text.replace(/\[\[REQUEST_MODE:[^\]]+\]\]/gi, '').trim();
+}
+
+/**
+ * Parse task completion from text (looks for [[TASK_COMPLETE | summary=...]] tags)
+ */
+export function parseTaskComplete(text: string): { summary: string } | null {
+  const pattern = /\[\[TASK_COMPLETE\s*\|\s*summary=([^\]]+)\]\]/i;
+  const match = text.match(pattern);
+  if (!match) return null;
+  return { summary: match[1].trim() };
+}
+
+/**
+ * Strip task complete tags from text (for display)
+ */
+export function stripTaskComplete(text: string): string {
+  return text.replace(/\[\[TASK_COMPLETE[^\]]+\]\]/gi, '').trim();
 }
 
 export function isValidMode(mode: string): mode is AgentMode {

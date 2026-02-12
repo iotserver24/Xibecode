@@ -4,7 +4,7 @@ import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
 import { ContextManager } from './context.js';
-import { AgentMode, MODE_CONFIG } from './modes.js';
+import { AgentMode, MODE_CONFIG, isToolAllowed } from './modes.js';
 import { FileEditor } from './editor.js';
 import { GitUtils } from '../utils/git.js';
 import { TestRunnerDetector } from '../utils/testRunner.js';
@@ -89,8 +89,6 @@ export class CodingToolExecutor implements ToolExecutor {
 
   async execute(toolName: string, input: any): Promise<any> {
     // Check tool permissions first
-    // import { isToolAllowed } from './modes.js'; // Ensure this is imported at top
-    const { isToolAllowed } = await import('./modes.js');
     const permission = isToolAllowed(this.currentMode, toolName);
 
     if (!permission.allowed) {
