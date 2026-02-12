@@ -14,6 +14,7 @@ import { MCPClientManager } from './mcp-client.js';
 import { NeuralMemory } from './memory.js';
 import { BrowserManager } from '../tools/browser.js';
 import * as os from 'os';
+import { SkillManager } from './skills.js';
 
 const execAsync = promisify(exec);
 
@@ -33,6 +34,7 @@ export class CodingToolExecutor implements ToolExecutor {
   private mcpClientManager?: MCPClientManager;
   private memory?: NeuralMemory;
   private browserManager: BrowserManager;
+  private skillManager: SkillManager;
   private platform: string;
   private dryRun: boolean;
   private testCommandOverride?: string;
@@ -45,6 +47,7 @@ export class CodingToolExecutor implements ToolExecutor {
       pluginManager?: PluginManager;
       mcpClientManager?: MCPClientManager;
       memory?: NeuralMemory;
+      skillManager?: SkillManager; // Optional for compatibility, but recommended
     }
   ) {
     this.workingDir = workingDir;
@@ -57,6 +60,8 @@ export class CodingToolExecutor implements ToolExecutor {
     this.mcpClientManager = options?.mcpClientManager;
     this.memory = options?.memory;
     this.browserManager = new BrowserManager();
+    // Initialize skill manager if provided, otherwise create a default one
+    this.skillManager = options?.skillManager || new SkillManager(workingDir);
     this.platform = os.platform();
     this.dryRun = options?.dryRun || false;
     this.testCommandOverride = options?.testCommandOverride;
@@ -359,8 +364,22 @@ export class CodingToolExecutor implements ToolExecutor {
         return this.browserManager.getConsoleLogs(p.url);
       }
 
+      case 'search_skills_sh': {
+        if (!p.query || typeof p.query !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: query (string)' };
+        }
+        return this.searchSkillsSh(p.query);
+      }
+
+      case 'install_skill_from_skills_sh': {
+        if (!p.skill_id || typeof p.skill_id !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: skill_id (string)' };
+        }
+        return this.installSkillFromSkillsSh(p.skill_id);
+      }
+
       default:
-        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, take_screenshot, get_console_logs` };
+        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, take_screenshot, get_console_logs, search_skills_sh, install_skill_from_skills_sh` };
     }
   }
 
@@ -907,6 +926,34 @@ export class CodingToolExecutor implements ToolExecutor {
             },
           },
           required: ['content'],
+        },
+      },
+      {
+        name: 'search_skills_sh',
+        description: 'Search for AI coding skills from the skills.sh marketplace. Returns a list of available skills with their IDs and descriptions.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'Search query (e.g., "react", "python", "testing")',
+            },
+          },
+          required: ['query'],
+        },
+      },
+      {
+        name: 'install_skill_from_skills_sh',
+        description: 'Install an AI coding skill from skills.sh using its ID found via search_skills_sh. The skill will be downloaded and available for use.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            skill_id: {
+              type: 'string',
+              description: 'The unique ID of the skill to install (e.g., "vercel-labs/agent-skills@vercel-react-best-practices")',
+            },
+          },
+          required: ['skill_id'],
         },
       },
     ];
@@ -1589,11 +1636,37 @@ export class CodingToolExecutor implements ToolExecutor {
         totalPrompts: allPrompts.length,
       };
     } catch (error: any) {
+    }
+  }
+
+  private async searchSkillsSh(query: string): Promise<any> {
+    try {
+      const results = await this.skillManager.searchSkillsSh(query);
       return {
-        error: true,
-        success: false,
-        message: `Failed to get MCP status: ${error.message}`,
+        success: true,
+        query,
+        count: results.length,
+        results: results.map(r => ({ id: r.id, url: r.url })),
       };
+    } catch (error: any) {
+      return { error: true, success: false, message: `Failed to search skills.sh: ${error.message}` };
+    }
+  }
+
+  private async installSkillFromSkillsSh(skillId: string): Promise<any> {
+    try {
+      const result = await this.skillManager.installFromSkillsSh(skillId);
+      if (result.success) {
+        return {
+          success: true,
+          message: result.message || `Successfully installed skill: ${skillId}`,
+          skill_id: skillId
+        };
+      } else {
+        return { error: true, success: false, message: `Failed to install skill: ${result.message}` };
+      }
+    } catch (error: any) {
+      return { error: true, success: false, message: `Exception during installation: ${error.message}` };
     }
   }
 

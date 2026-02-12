@@ -81,7 +81,7 @@ export async function chatCommand(options: ChatOptions) {
   ui.chatBanner(process.cwd(), model, baseUrl);
 
   let enableTools = true;
-  const toolExecutor = new CodingToolExecutor(process.cwd(), { mcpClientManager });
+  const toolExecutor = new CodingToolExecutor(process.cwd(), { mcpClientManager, skillManager });
 
   // ── Undo/Redo history stack ──
   const undoStack: Array<{ messages: any[]; label: string }> = [];
@@ -277,6 +277,7 @@ export async function chatCommand(options: ChatOptions) {
     console.log('  ' + chalk.hex('#00D4FF')('/skill off') + chalk.hex('#6B6B7B')('    deactivate current skill'));
     console.log('  ' + chalk.hex('#00D4FF')('/learn <name> <url>') + chalk.hex('#6B6B7B')(' learn a new skill from docs URL'));
     console.log('  ' + chalk.hex('#00D4FF')('/marketplace [query]') + chalk.hex('#6B6B7B')(' search & install skills from marketplace'));
+    console.log('  ' + chalk.hex('#00D4FF')('/skills-sh [query]') + chalk.hex('#6B6B7B')('   search skills from skills.sh'));
     console.log('  ' + chalk.hex('#00D4FF')('clear') + chalk.hex('#6B6B7B')('       clear screen and redraw header'));
     console.log('  ' + chalk.hex('#00D4FF')('tools on/off') + chalk.hex('#6B6B7B')(' toggle tools (editor & filesystem)'));
     console.log('  ' + chalk.hex('#00D4FF')('exit / quit') + chalk.hex('#6B6B7B')('   end the chat session'));
@@ -598,6 +599,54 @@ export async function chatCommand(options: ChatOptions) {
 
     if (lowerMessage === '/help') {
       showSlashHelp();
+      continue;
+    }
+
+    if (lowerMessage.startsWith('/skills-sh')) {
+      const parts = trimmed.split(/\s+/);
+      const subcommand = parts[1]?.toLowerCase();
+
+      if (!subcommand) {
+        ui.info('Usage: /skills-sh <query>   OR   /skills-sh install <id>');
+        continue;
+      }
+
+      if (subcommand === 'install') {
+        const skillId = parts.slice(2).join(' ');
+        if (!skillId) {
+          ui.error('Please provide a skill ID: /skills-sh install <id>');
+          continue;
+        }
+        ui.info(`Installing skill "${skillId}" from skills.sh...`);
+        const result = await skillManager.installFromSkillsSh(skillId);
+        if (result.success) {
+          ui.success(result.message || 'Skill installed successfully');
+        } else {
+          ui.error(`Failed to install skill: ${result.message}`);
+        }
+      } else {
+        // Search
+        const query = trimmed.replace(/^\/skills-sh\s*/i, '').trim();
+        ui.info(`Searching skills.sh for "${query}"...`);
+        const results = await skillManager.searchSkillsSh(query);
+
+        if (results.length === 0) {
+          ui.info('No skills found on skills.sh');
+        } else {
+          console.log('');
+          console.log(chalk.bold('  skills.sh Results'));
+          console.log('  ' + chalk.hex('#6B6B7B')('────────────────────────────────'));
+
+          results.forEach(r => {
+            console.log('  ' + chalk.hex('#00D4FF')(r.id));
+            if (r.url) console.log('    ' + chalk.hex('#6B6B7B')(r.url));
+            console.log('');
+          });
+
+          console.log('  ' + chalk.dim('To install: /skills-sh install <id>'));
+          console.log('');
+        }
+      }
       continue;
     }
 

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { crawlDocs, generateSkillFromDocs, type AISynthesisConfig } from './docs-scraper.js';
 import { MarketplaceClient, type MarketplaceSkillResult } from './marketplace-client.js';
+import { SkillsShClient, type SkillsShResult } from './skills-sh-client.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -20,6 +21,7 @@ export class SkillManager {
     private builtInSkillsDir: string;
     private userSkillsDir: string;
     private marketplace: MarketplaceClient;
+    private skillsSh: SkillsShClient;
     private aiConfig: AISynthesisConfig;
 
     constructor(workingDir: string = process.cwd(), apiKey?: string, baseUrl?: string, model?: string, provider?: 'anthropic' | 'openai') {
@@ -28,6 +30,7 @@ export class SkillManager {
         // User-defined skills in project
         this.userSkillsDir = path.join(workingDir, '.xibecode', 'skills');
         this.marketplace = new MarketplaceClient();
+        this.skillsSh = new SkillsShClient();
         this.aiConfig = {
             apiKey: apiKey || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || '',
             baseUrl,
@@ -240,6 +243,33 @@ export class SkillManager {
             return { success: true, pagesScraped: pages.length, filePath, marketplaceId };
         } catch (error: any) {
             return { success: false, pagesScraped: 0, filePath: '', error: error.message };
+        }
+    }
+
+    /**
+     * Search skills.sh for skills
+     */
+    async searchSkillsSh(query: string): Promise<SkillsShResult[]> {
+        return this.skillsSh.search(query);
+    }
+
+    /**
+     * Install a skill from skills.sh
+     */
+    async installFromSkillsSh(skillId: string): Promise<{ success: boolean; message?: string }> {
+        // We'll install strictly to the user skills directory if possible
+        // But npx skills add might install to a different location or just output the file
+        // For now, we'll run it in the user skills directory
+        try {
+            await fs.mkdir(this.userSkillsDir, { recursive: true });
+            const result = await this.skillsSh.install(skillId, this.userSkillsDir);
+
+            // Reload skills to pick up the new one
+            await this.loadSkillsFromDirectory(this.userSkillsDir, 'user');
+
+            return { success: !!result, message: result || 'Installation failed' };
+        } catch (error: any) {
+            return { success: false, message: error.message };
         }
     }
 }
