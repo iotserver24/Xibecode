@@ -1003,22 +1003,8 @@ Contributions welcome! Please see CONTRIBUTING.md
 
 ## 📝 License
 
-MIT
+APACHE 2.0
 
-## 🙏 Credits
-
-Built with:
-
-- [@anthropic-ai/sdk](https://www.npmjs.com/package/@anthropic-ai/sdk)
-- [@modelcontextprotocol/sdk](https://github.com/modelcontextprotocol/sdk)
-- [Commander.js](https://github.com/tj/commander.js/)
-- [Inquirer.js](https://github.com/SBoudrias/Inquirer.js/)
-- [Chalk](https://github.com/chalk/chalk)
-- [fast-glob](https://github.com/mrmlnc/fast-glob)
-
-Inspired by [Claude Code](https://www.anthropic.com/news/claude-code) and [Aider](https://github.com/paul-gauthier/aider)
-
----
 
 **Made with ❤️ for developers who love AI-assisted coding**
 
