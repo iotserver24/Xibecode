@@ -7,7 +7,7 @@ export default function InstallationPage() {
       <h2>Requirements</h2>
       <ul>
         <li><strong>Node.js 18.0.0</strong> or higher</li>
-        <li>An <strong>Anthropic API key</strong> (for Claude AI)</li>
+        <li>An <strong>AI provider API key</strong> (Anthropic, OpenAI, or compatible)</li>
       </ul>
 
       <h2>Install from npm (Recommended)</h2>
@@ -27,7 +27,7 @@ npm run build
 npm link`}</code></pre>
 
       <h2>Set up API Key</h2>
-      <p>XibeCode needs an Anthropic API key to communicate with Claude. You can set it up in three ways:</p>
+      <p>XibeCode needs an AI provider API key (Anthropic, OpenAI, or compatible). You can set it up in three ways:</p>
 
       <h3>Option 1: Interactive Setup</h3>
       <pre><code>xibecode config</code></pre>

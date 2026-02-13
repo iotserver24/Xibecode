@@ -80,7 +80,7 @@ export default function Hero() {
               className="text-lg md:text-xl text-zinc-400 max-w-xl leading-relaxed"
             >
               Autonomous AI coding assistant that builds features, fixes bugs,
-              refactors code, and runs tests — all from your terminal. Powered by Claude AI.
+              refactors code, and runs tests — all from your terminal.
             </motion.p>
 
             <motion.div

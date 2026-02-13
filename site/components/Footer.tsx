@@ -17,7 +17,7 @@ export default function Footer() {
               <span className="text-lg font-bold text-gradient">XibeCode</span>
             </div>
             <p className="text-sm text-zinc-500 max-w-md mb-4 leading-relaxed">
-              Production-ready autonomous coding agent powered by Claude AI.
+              Production-ready autonomous coding agent for your terminal.
               Open-source, free, and fully customizable with smart context management and MCP support.
             </p>
             <p className="text-xs text-zinc-600">

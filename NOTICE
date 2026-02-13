@@ -1,0 +1,93 @@
+XibeCode
+Copyright 2026 Anish Kumar (R3AP3R editz)
+
+GitHub: https://github.com/iotserver24/xibecode
+Author: Anish Kumar
+Alias: R3AP3R editz
+Profile: https://github.com/iotserver24
+
+This product is licensed under the Apache License, Version 2.0.
+You may obtain a copy of the License at:
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+================================================================================
+
+This software includes the following open-source dependencies:
+
+@anthropic-ai/sdk (Apache-2.0)
+  Anthropic Claude API client
+  https://github.com/anthropics/anthropic-sdk-typescript
+
+@modelcontextprotocol/sdk (MIT)
+  Model Context Protocol SDK
+  https://github.com/modelcontextprotocol/sdk
+
+commander (MIT)
+  CLI framework
+  https://github.com/tj/commander.js
+
+chalk (MIT)
+  Terminal string styling
+  https://github.com/chalk/chalk
+
+conf (MIT)
+  Configuration management
+  https://github.com/sindresorhus/conf
+
+diff (BSD-3-Clause)
+  JavaScript diff implementation
+  https://github.com/kpdecker/jsdiff
+
+dotenv (BSD-2-Clause)
+  Environment variable loader
+  https://github.com/motdotla/dotenv
+
+fast-glob (MIT)
+  Fast file system globbing
+  https://github.com/mrmlnc/fast-glob
+
+ink (MIT)
+  React for CLI apps
+  https://github.com/vadimdemedes/ink
+
+inquirer (MIT)
+  Interactive command line prompts
+  https://github.com/SBoudrias/Inquirer.js
+
+node-fetch (MIT)
+  Fetch API for Node.js
+  https://github.com/node-fetch/node-fetch
+
+ora (MIT)
+  Terminal spinner
+  https://github.com/sindresorhus/ora
+
+strip-ansi (MIT)
+  Strip ANSI escape codes
+  https://github.com/chalk/strip-ansi
+
+zod (MIT)
+  TypeScript-first schema validation
+  https://github.com/colinhacks/zod
+
+================================================================================
+
+REQUIREMENTS FOR DERIVATIVE WORKS
+
+Any derivative works, forks, or redistributions of XibeCode must:
+
+1. Retain this NOTICE file
+2. Credit "Anish Kumar (R3AP3R editz)" as the original author
+3. Include a copy of the Apache 2.0 LICENSE file
+4. State clearly if modifications were made to the original work
+5. Not use the name "XibeCode" or the names of contributors to endorse
+   or promote derivative products without prior written permission
+
+For full license terms, see the LICENSE file in this distribution.
