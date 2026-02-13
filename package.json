@@ -22,20 +22,18 @@
     "assistant",
     "autonomous",
     "agent",
-    "claude",
-    "anthropic",
     "automation"
   ],
-  "author": "",
-  "license": "MIT",
+  "author": "Anish Kumar (R3AP3R editz) <https://github.com/iotserver24>",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/xibecode"
+    "url": "https://github.com/iotserver24/xibecode"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/xibecode/issues"
+    "url": "https://github.com/iotserver24/xibecode/issues"
   },
-  "homepage": "https://github.com/yourusername/xibecode#readme",
+  "homepage": "https://github.com/iotserver24/xibecode#readme",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
     "@modelcontextprotocol/sdk": "^1.26.0",
