@@ -156,7 +156,7 @@ export default function HomePage() {
             </div>
 
             <p className="mt-8 text-sm text-zinc-600">
-              Free and open-source under MIT License.
+              Free and open-source under Apache 2.0 License.
             </p>
           </motion.div>
         </div>
