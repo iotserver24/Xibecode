@@ -1,8 +1,8 @@
 # XibeCode - AI Coding Assistant
 
-> **Production-ready autonomous coding agent powered by Claude AI**
+> **Production-ready autonomous coding agent**
 
-XibeCode is a professional CLI tool that brings autonomous AI coding capabilities to your terminal. Like Claude Code, but open-source, customizable, and with advanced context management.
+XibeCode is a professional CLI tool that brings autonomous AI coding capabilities to your terminal. Open-source, customizable, and with advanced context management.
 
 ## 🆕 What's New in v0.1.8
 
@@ -1003,7 +1003,9 @@ Contributions welcome! Please see CONTRIBUTING.md
 
 ## 📝 License
 
-MIT
+Apache License 2.0 — see [LICENSE](LICENSE) for details.
+
+Copyright 2026 Anish Kumar (R3AP3R editz)
 
 ## 🙏 Credits
 
@@ -1015,8 +1017,6 @@ Built with:
 - [Inquirer.js](https://github.com/SBoudrias/Inquirer.js/)
 - [Chalk](https://github.com/chalk/chalk)
 - [fast-glob](https://github.com/mrmlnc/fast-glob)
-
-Inspired by [Claude Code](https://www.anthropic.com/news/claude-code) and [Aider](https://github.com/paul-gauthier/aider)
 
 ---
 

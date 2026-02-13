@@ -5,12 +5,12 @@ import Footer from '@/components/Footer';
 
 export const metadata: Metadata = {
   title: 'XibeCode — Autonomous AI Coding Assistant',
-  description: 'Production-ready autonomous coding agent powered by Claude AI. Open-source, free, and fully customizable with smart context management, MCP support, and plugin system.',
-  keywords: ['XibeCode', 'AI coding assistant', 'autonomous agent', 'Claude AI', 'CLI tool', 'open source', 'MCP'],
-  authors: [{ name: 'iotserver24', url: 'https://github.com/iotserver24' }],
+  description: 'Production-ready autonomous coding agent. Open-source, free, and fully customizable with smart context management, MCP support, and plugin system.',
+  keywords: ['XibeCode', 'AI coding assistant', 'autonomous agent', 'CLI tool', 'open source', 'MCP'],
+  authors: [{ name: 'Anish Kumar', url: 'https://github.com/iotserver24' }],
   openGraph: {
     title: 'XibeCode — Autonomous AI Coding Assistant',
-    description: 'Production-ready autonomous coding agent powered by Claude AI. Free and open-source.',
+    description: 'Production-ready autonomous coding agent. Free and open-source.',
     type: 'website',
   },
 };
