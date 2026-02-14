@@ -247,15 +247,61 @@ export async function chatCommand(options: ChatOptions) {
     isProcessing: false,
   });
 
-  // Queue for WebUI messages
+  // Queue for WebUI messages and resolver for interrupting TUI input
   let pendingWebUIMessage: string | null = null;
+  let webUIMessageResolver: ((msg: string) => void) | null = null;
 
   // Listen for messages from WebUI
   SessionBridge.on('user_message', async (content: string, source: string) => {
     if (source === 'webui') {
       pendingWebUIMessage = content;
+      // If TUI is waiting for input, resolve immediately with WebUI message
+      if (webUIMessageResolver) {
+        webUIMessageResolver(content);
+        webUIMessageResolver = null;
+        pendingWebUIMessage = null;
+      }
     }
   });
+
+  /**
+   * Get input from either TUI or WebUI (whichever comes first)
+   */
+  async function getInput(): Promise<{ message: string; source: 'tui' | 'webui' }> {
+    // Check if there's already a pending WebUI message
+    if (pendingWebUIMessage) {
+      const msg = pendingWebUIMessage;
+      pendingWebUIMessage = null;
+      return { message: msg, source: 'webui' };
+    }
+
+    return new Promise((resolve) => {
+      // Set up resolver for WebUI messages
+      webUIMessageResolver = (msg: string) => {
+        rl.close();
+        resolve({ message: msg, source: 'webui' });
+      };
+
+      // Create readline interface for TUI input
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+
+      // Show prompt
+      process.stdout.write(chalk.hex('#00E676').bold('❯ You ') + '');
+
+      rl.on('line', (line) => {
+        webUIMessageResolver = null;
+        rl.close();
+        resolve({ message: line, source: 'tui' });
+      });
+
+      rl.on('close', () => {
+        webUIMessageResolver = null;
+      });
+    });
+  }
 
   async function showPathSuggestions(raw: string) {
     const input = raw.trim().slice(1).trim(); // drop leading '@'
@@ -615,22 +661,14 @@ export async function chatCommand(options: ChatOptions) {
 
   // ── Chat loop ──
   while (true) {
-    // Check for pending message from WebUI
-    let message: string;
-    if (pendingWebUIMessage) {
-      message = pendingWebUIMessage;
-      pendingWebUIMessage = null;
+    // Get input from either TUI or WebUI
+    const input = await getInput();
+    let message = input.message;
+    const messageSource = input.source; // Track where the message came from
+
+    // Show indicator for WebUI messages
+    if (messageSource === 'webui') {
       console.log(chalk.hex('#00D4FF').bold('❯ WebUI ') + chalk.white(message));
-    } else {
-      const result = await inquirer.prompt([
-        {
-          type: 'input',
-          name: 'message',
-          message: chalk.hex('#00E676').bold('❯ You '),
-          prefix: '',
-        },
-      ]);
-      message = result.message;
     }
 
     // Special interactive flow when user types just "@"
@@ -1255,8 +1293,10 @@ export async function chatCommand(options: ChatOptions) {
       if (undoStack.length > MAX_UNDO) undoStack.shift();
       redoStack.length = 0; // clear redo on new action
 
-      // Broadcast user message to WebUI
-      SessionBridge.onTUIUserMessage(message);
+      // Broadcast user message to WebUI (only if from TUI, WebUI already has it)
+      if (messageSource === 'tui') {
+        SessionBridge.onTUIUserMessage(message);
+      }
 
       // agent.run() resets its iteration/tool counters but KEEPS
       // the conversation history (this.messages), so the AI has

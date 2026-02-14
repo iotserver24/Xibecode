@@ -11,11 +11,13 @@ XibeCode is a CLI agent that can read and edit code, run commands, and iterate o
 
 ## What's New in v0.4.0
 
-- **WebUI** - Browser-based interface with dashboard, visual diff, and chat
-- **AI Test Generation** - Automatically generate comprehensive test suites
-- **Multi-Model Support** - Switch between Claude, GPT-4, and more
-- **Visual Diff Viewer** - View git changes in the browser
-- **Configuration Panel** - Easy model and API key management
+- **TUI-WebUI Sync** - Real-time bidirectional sync between terminal and browser
+- **Slash Commands** - Type `/` in WebUI to switch between 13 agent modes
+- **File References** - Type `@` to browse and reference project files
+- **Custom Model Support** - Use any OpenAI-compatible API endpoint
+- **Tool Execution Display** - See tool calls and results in real-time
+- **Markdown Rendering** - Rich text formatting in chat responses
+- **Minimalistic Design** - Clean, terminal-style interface
 
 ## Installation
 
@@ -133,41 +135,68 @@ MCP server management:
 
 ## WebUI
 
-The WebUI provides a browser-based interface that's perfect for:
-- Users who prefer GUIs over CLIs
-- Visual diff reviewing
-- Quick model switching
-- AI test generation with preview
+The WebUI provides a browser-based interface that syncs in real-time with the terminal.
 
 ```bash
-# Start the WebUI
-xibecode ui --open
+# Start with both TUI and WebUI
+xibecode chat
 
-# Or with pnpm
-pnpm ui
+# WebUI opens automatically at http://localhost:3847
 ```
 
-### Dashboard
-The dashboard shows:
-- Project name and version
-- Git branch and status
-- Test runner detection
-- Dependency count
+### TUI-WebUI Sync
 
-### Visual Diff
-View your git changes with syntax highlighting:
-- Green for additions
-- Red for deletions
-- Refresh button to reload
+When you run `xibecode chat`, both interfaces are connected:
+- Messages sent from **TUI** appear in **WebUI** (marked with "TUI")
+- Messages sent from **WebUI** are processed by **TUI**
+- Streaming responses show in both simultaneously
+- Tool executions display in real-time
 
-### Multi-Model Support
-Switch between models in the UI:
-- **Claude Sonnet 4.5** (default)
-- **Claude Opus 4.5** (premium)
-- **Claude Haiku 4.5** (fast)
-- **GPT-4o** (OpenAI)
-- **GPT-4o Mini** (OpenAI fast)
-- **O1 Preview/Mini** (reasoning)
+### Slash Commands (`/`)
+
+Type `/` in the input to open the mode selector:
+
+| Mode | Icon | Description |
+|------|------|-------------|
+| Agent | 🤖 | Autonomous coding (default) |
+| Plan | 📋 | Analyze without modifying |
+| Tester | 🧪 | Testing and QA |
+| Debugger | 🐛 | Bug investigation |
+| Security | 🔒 | Security analysis |
+| Review | 👀 | Code review |
+| Team Leader | 👑 | Coordinate team |
+| Architect | 🏛️ | System design |
+| Engineer | 🛠️ | Implementation |
+| SEO | 🌐 | SEO optimization |
+| Product | 🔥 | Product strategy |
+| Data | 📊 | Data analysis |
+| Researcher | 📚 | Deep research |
+
+### File References (`@`)
+
+Type `@` to browse and reference files:
+- Shows project files and folders
+- Filter by typing after `@`
+- Select to include file path in message
+- Helps AI understand which files to work with
+
+### Settings Panel
+
+Click the ⚙️ Settings button to configure:
+- **Provider** - Anthropic, OpenAI, or Custom
+- **Model** - Select from available models
+- **Custom Model ID** - For custom/local models
+- **API Key** - Your provider API key
+- **Base URL** - Custom API endpoint (for local LLMs)
+- **Session Info** - Working directory, git branch
+
+### Features
+
+- **Markdown Rendering** - Code blocks, bold, italic, lists, links
+- **Tool Execution** - Shows each tool call with status (running/done/failed)
+- **Thinking Indicator** - Spinner while AI is processing
+- **Responsive Design** - Works on mobile and desktop
+- **Real-time Streaming** - See responses as they're generated
 
 ## AI Test Generation
 

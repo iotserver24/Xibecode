@@ -74,6 +74,9 @@ class SessionBridgeClass extends EventEmitter {
    * Broadcast message to all WebSocket clients
    */
   broadcastToWebUI(message: BridgeMessage): void {
+    if (this.webSocketClients.size === 0) {
+      return; // No clients connected
+    }
     const payload = JSON.stringify(message);
     for (const ws of this.webSocketClients) {
       try {
