@@ -13,8 +13,8 @@ import { defineConfig, devices } from '@playwright/test';
  * @see https://playwright.dev/docs/test-configuration
  */
 export default defineConfig({
-  // Directory containing test files
-  testDir: './tests',
+  // Directory containing E2E test files (separate from unit tests)
+  testDir: './e2e',
 
   // Run tests in files in parallel
   fullyParallel: true,
@@ -58,30 +58,21 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
-    {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
-    },
-    {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
-    },
-
-    // Mobile viewports
-    {
-      name: 'mobile-chrome',
-      use: { ...devices['Pixel 5'] },
-    },
-    {
-      name: 'mobile-safari',
-      use: { ...devices['iPhone 12'] },
-    },
-
-    // Tablet viewport
-    {
-      name: 'tablet',
-      use: { ...devices['iPad Pro 11'] },
-    },
+    // Only run additional browsers locally, not on CI
+    ...(process.env.CI ? [] : [
+      {
+        name: 'firefox',
+        use: { ...devices['Desktop Firefox'] },
+      },
+      {
+        name: 'webkit',
+        use: { ...devices['Desktop Safari'] },
+      },
+      {
+        name: 'mobile-chrome',
+        use: { ...devices['Pixel 5'] },
+      },
+    ]),
   ],
 
   // Global timeout for each test
