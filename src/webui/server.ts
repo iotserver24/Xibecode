@@ -377,6 +377,50 @@ export class WebUIServer {
         return;
       }
 
+      // File list for @ command (simple GET)
+      if (pathname === '/api/files') {
+        try {
+          const files: string[] = [];
+          const walkDir = async (dir: string, prefix: string = '') => {
+            const entries = await fs.readdir(dir, { withFileTypes: true });
+            for (const entry of entries) {
+              // Skip hidden files, node_modules, dist, etc.
+              if (entry.name.startsWith('.') ||
+                  entry.name === 'node_modules' ||
+                  entry.name === 'dist' ||
+                  entry.name === 'build' ||
+                  entry.name === 'coverage' ||
+                  entry.name === '__pycache__') {
+                continue;
+              }
+              const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+              if (entry.isDirectory()) {
+                files.push(relativePath + '/');
+                // Limit depth to avoid huge lists
+                if (relativePath.split('/').length < 4) {
+                  await walkDir(path.join(dir, entry.name), relativePath);
+                }
+              } else {
+                files.push(relativePath);
+              }
+            }
+          };
+          await walkDir(this.workingDir);
+          // Sort: directories first, then files
+          files.sort((a, b) => {
+            const aIsDir = a.endsWith('/');
+            const bIsDir = b.endsWith('/');
+            if (aIsDir && !bIsDir) return -1;
+            if (!aIsDir && bIsDir) return 1;
+            return a.localeCompare(b);
+          });
+          sendJSON({ success: true, files: files.slice(0, 500) }); // Limit to 500 files
+        } catch (error: any) {
+          sendJSON({ success: false, error: error.message }, 500);
+        }
+        return;
+      }
+
       // 404 for unknown API routes
       sendJSON({ error: 'Not found' }, 404);
     } catch (error: any) {
@@ -632,10 +676,10 @@ export class WebUIServer {
     }
 
     return {
-      workingDir: this.workingDir,
       name: packageJson?.name || path.basename(this.workingDir),
       version: packageJson?.version,
       description: packageJson?.description,
+      workingDir: this.workingDir,
       isGitRepo: !!gitInfo,
       gitBranch: gitInfo?.branch,
       gitStatus: gitInfo?.clean ? 'clean' : 'dirty',
@@ -649,6 +693,7 @@ export class WebUIServer {
 
   /**
    * Fallback HTML when no frontend build exists
+   * Minimalistic terminal-style WebUI
    */
   private getFallbackHTML(): string {
     return `<!DOCTYPE html>
@@ -656,363 +701,861 @@ export class WebUIServer {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>XibeCode WebUI</title>
+  <title>XibeCode</title>
   <style>
+    :root {
+      --bg-primary: #0d1117;
+      --bg-secondary: #161b22;
+      --bg-tertiary: #21262d;
+      --border-color: #30363d;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --text-muted: #6e7681;
+      --accent-blue: #58a6ff;
+      --accent-green: #3fb950;
+      --accent-yellow: #d29922;
+      --accent-red: #f85149;
+      --accent-purple: #a371f7;
+      --accent-cyan: #39c5cf;
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-      color: #e0e0e0;
+      font-family: 'SF Mono', 'Fira Code', 'Monaco', 'Consolas', monospace;
+      background: var(--bg-primary);
+      color: var(--text-primary);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
+      font-size: 14px;
+      line-height: 1.5;
     }
-    header {
-      background: rgba(0,0,0,0.3);
-      padding: 1rem 2rem;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-    }
-    header h1 { font-size: 1.5rem; color: #00d4ff; }
-    main {
-      flex: 1;
+
+    /* Header */
+    .header {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 20px;
       display: flex;
-      max-width: 1400px;
-      margin: 0 auto;
-      width: 100%;
-      padding: 1rem;
-      gap: 1rem;
-    }
-    .sidebar {
-      width: 280px;
-      background: rgba(0,0,0,0.2);
-      border-radius: 8px;
-      padding: 1rem;
-    }
-    .content {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-    .panel {
-      background: rgba(0,0,0,0.2);
-      border-radius: 8px;
-      padding: 1rem;
-    }
-    .panel h2 {
-      font-size: 1rem;
-      color: #00d4ff;
-      margin-bottom: 1rem;
-      padding-bottom: 0.5rem;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-    }
-    .chat-container {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
-    .messages {
-      flex: 1;
-      overflow-y: auto;
-      padding: 1rem;
-      background: rgba(0,0,0,0.3);
-      border-radius: 8px;
-      margin-bottom: 1rem;
-      min-height: 300px;
-    }
-    .message {
-      margin-bottom: 1rem;
-      padding: 0.75rem;
-      border-radius: 8px;
-    }
-    .message.user { background: rgba(0,212,255,0.2); margin-left: 20%; }
-    .message.assistant { background: rgba(255,255,255,0.05); margin-right: 20%; }
-    .message.system { background: rgba(255,193,7,0.2); text-align: center; font-size: 0.9rem; }
-    .input-area {
-      display: flex;
-      gap: 0.5rem;
-    }
-    input, select, button {
-      padding: 0.75rem 1rem;
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 8px;
-      background: rgba(0,0,0,0.3);
-      color: #fff;
-      font-size: 1rem;
-    }
-    input { flex: 1; }
-    input:focus, select:focus { outline: none; border-color: #00d4ff; }
-    button {
-      background: linear-gradient(135deg, #00d4ff, #0099ff);
-      border: none;
-      cursor: pointer;
-      font-weight: 600;
-    }
-    button:hover { opacity: 0.9; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .config-item {
-      margin-bottom: 1rem;
-    }
-    .config-item label {
-      display: block;
-      font-size: 0.85rem;
-      color: #aaa;
-      margin-bottom: 0.25rem;
-    }
-    .config-item input, .config-item select {
-      width: 100%;
-    }
-    .stat {
-      display: flex;
+      align-items: center;
       justify-content: space-between;
-      padding: 0.5rem 0;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
+      flex-wrap: wrap;
+      gap: 12px;
     }
-    .stat-label { color: #888; }
-    .stat-value { color: #00d4ff; font-weight: 600; }
-    .status-indicator {
-      display: inline-block;
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .logo-icon {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 16px;
+    }
+    .logo-text {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .logo-text span { color: var(--accent-cyan); }
+    .header-info {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .info-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .info-item .label { color: var(--text-muted); }
+    .info-item .value { color: var(--accent-cyan); }
+    .status-dot {
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      margin-right: 0.5rem;
+      background: var(--accent-red);
     }
-    .status-connected { background: #4caf50; }
-    .status-disconnected { background: #f44336; }
-    .code-block {
-      background: #1e1e1e;
-      padding: 1rem;
-      border-radius: 4px;
-      overflow-x: auto;
-      font-family: 'Monaco', 'Menlo', monospace;
-      font-size: 0.85rem;
-      white-space: pre-wrap;
-    }
-    .diff-add { color: #4caf50; }
-    .diff-remove { color: #f44336; }
-    .tabs {
+    .status-dot.connected { background: var(--accent-green); }
+
+    /* Main layout */
+    .main {
+      flex: 1;
       display: flex;
-      gap: 0.5rem;
-      margin-bottom: 1rem;
+      flex-direction: column;
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 16px;
     }
-    .tab {
-      padding: 0.5rem 1rem;
-      background: rgba(0,0,0,0.3);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 4px;
-      cursor: pointer;
+
+    /* Messages area */
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-height: 400px;
     }
-    .tab.active {
-      background: rgba(0,212,255,0.2);
-      border-color: #00d4ff;
-    }
-    #loading {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: rgba(0,0,0,0.9);
-      padding: 2rem;
+
+    /* Message styles */
+    .message {
+      padding: 12px 16px;
       border-radius: 8px;
+      max-width: 85%;
+      word-wrap: break-word;
+    }
+    .message.user {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      align-self: flex-end;
+      margin-left: auto;
+    }
+    .message.user::before {
+      content: '> ';
+      color: var(--accent-green);
+    }
+    .message.assistant {
+      background: var(--bg-secondary);
+      border-left: 3px solid var(--accent-cyan);
+      align-self: flex-start;
+    }
+    .message.system {
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 12px;
+      text-align: center;
+      align-self: center;
+      max-width: 100%;
+    }
+    .message.tool {
+      background: var(--bg-tertiary);
+      border-left: 3px solid var(--accent-yellow);
+      font-size: 13px;
+      padding: 10px 14px;
+    }
+    .message.tool .tool-name {
+      color: var(--accent-yellow);
+      font-weight: 600;
+    }
+    .message.tool .tool-status {
+      color: var(--text-muted);
+      margin-left: 8px;
+    }
+    .message.tool .tool-status.success { color: var(--accent-green); }
+    .message.tool .tool-status.error { color: var(--accent-red); }
+
+    /* Thinking indicator */
+    .thinking {
       display: none;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      color: var(--text-secondary);
+      font-size: 13px;
     }
+    .thinking.visible { display: flex; }
     .spinner {
-      width: 40px;
-      height: 40px;
-      border: 3px solid rgba(0,212,255,0.3);
-      border-top-color: #00d4ff;
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border-color);
+      border-top-color: var(--accent-cyan);
       border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin: 0 auto 1rem;
+      animation: spin 0.8s linear infinite;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Input area */
+    .input-area {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 16px;
+      position: relative;
+    }
+    .input-wrapper {
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+    }
+    .input-field {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 14px;
+      resize: none;
+      min-height: 24px;
+      max-height: 200px;
+      outline: none;
+    }
+    .input-field::placeholder { color: var(--text-muted); }
+    .send-btn {
+      background: var(--accent-cyan);
+      color: var(--bg-primary);
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .send-btn:hover { opacity: 0.9; }
+    .send-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .input-hints {
+      display: flex;
+      gap: 16px;
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .hint-key {
+      background: var(--bg-tertiary);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 11px;
+    }
+
+    /* Command popup */
+    .cmd-popup {
+      display: none;
+      position: absolute;
+      bottom: 100%;
+      left: 0;
+      right: 0;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin-bottom: 8px;
+      max-height: 300px;
+      overflow-y: auto;
+      z-index: 100;
+    }
+    .cmd-popup.visible { display: block; }
+    .cmd-popup-header {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .cmd-item {
+      padding: 10px 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .cmd-item:last-child { border-bottom: none; }
+    .cmd-item:hover { background: var(--bg-tertiary); }
+    .cmd-item.selected { background: var(--bg-tertiary); }
+    .cmd-item-icon {
+      width: 24px;
+      text-align: center;
+    }
+    .cmd-item-info { flex: 1; }
+    .cmd-item-name {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .cmd-item-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .cmd-item-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+    }
+
+    /* Settings panel */
+    .settings-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    .settings-overlay.visible {
+      display: flex;
+    }
+    .settings-panel {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      width: 90%;
+      max-width: 500px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .settings-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .settings-header h2 {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .settings-close {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 18px;
+      padding: 4px;
+    }
+    .settings-close:hover { color: var(--text-primary); }
+    .settings-content {
+      padding: 20px;
+    }
+    .settings-section {
+      margin-bottom: 24px;
+    }
+    .settings-section:last-child { margin-bottom: 0; }
+    .settings-section h3 {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      letter-spacing: 0.5px;
+    }
+    .settings-field {
+      margin-bottom: 16px;
+    }
+    .settings-field:last-child { margin-bottom: 0; }
+    .settings-field label {
+      display: block;
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+    .settings-field input,
+    .settings-field select {
+      width: 100%;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 10px 12px;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 13px;
+    }
+    .settings-field input:focus,
+    .settings-field select:focus {
+      outline: none;
+      border-color: var(--accent-cyan);
+    }
+    .settings-field input::placeholder { color: var(--text-muted); }
+    .settings-field small {
+      display: block;
+      margin-top: 4px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .settings-btn {
+      width: 100%;
+      background: var(--accent-cyan);
+      color: var(--bg-primary);
+      border: none;
+      padding: 12px;
+      border-radius: 6px;
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 16px;
+    }
+    .settings-btn:hover { opacity: 0.9; }
+
+    /* Markdown rendering */
+    .message.assistant code {
+      background: var(--bg-tertiary);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .message.assistant pre {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 12px;
+      margin: 8px 0;
+      overflow-x: auto;
+    }
+    .message.assistant pre code {
+      background: none;
+      padding: 0;
+    }
+    .message.assistant strong { color: var(--accent-cyan); }
+    .message.assistant em { color: var(--text-secondary); }
+    .message.assistant a {
+      color: var(--accent-blue);
+      text-decoration: none;
+    }
+    .message.assistant a:hover { text-decoration: underline; }
+    .message.assistant ul, .message.assistant ol {
+      margin: 8px 0;
+      padding-left: 20px;
+    }
+    .message.assistant li { margin: 4px 0; }
+    .message.assistant blockquote {
+      border-left: 3px solid var(--border-color);
+      padding-left: 12px;
+      color: var(--text-secondary);
+      margin: 8px 0;
+    }
+    .message.assistant h1, .message.assistant h2, .message.assistant h3 {
+      margin: 16px 0 8px;
+      color: var(--text-primary);
+    }
+    .message.assistant h1 { font-size: 18px; }
+    .message.assistant h2 { font-size: 16px; }
+    .message.assistant h3 { font-size: 14px; }
+
+    /* Settings button in header */
+    .settings-trigger {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .settings-trigger:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .header { padding: 10px 14px; }
+      .header-info { display: none; }
+      .main { padding: 12px; }
+      .message { max-width: 95%; }
+      .settings-panel { width: 95%; }
+    }
   </style>
 </head>
 <body>
-  <header>
-    <h1>XibeCode WebUI</h1>
+  <header class="header">
+    <div class="logo">
+      <div class="logo-icon">X</div>
+      <div class="logo-text">Xibe<span>Code</span></div>
+    </div>
+    <div class="header-info">
+      <div class="info-item">
+        <span class="label">Path:</span>
+        <span class="value" id="current-path">~</span>
+      </div>
+      <div class="info-item">
+        <span class="label">Model:</span>
+        <span class="value" id="current-model">-</span>
+      </div>
+      <div class="info-item">
+        <span class="label">Mode:</span>
+        <span class="value" id="current-mode">Agent</span>
+      </div>
+      <div class="info-item">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">Connecting...</span>
+      </div>
+    </div>
+    <button class="settings-trigger" onclick="openSettings()">
+      <span>&#9881;</span> Settings
+    </button>
   </header>
 
-  <main>
-    <aside class="sidebar">
-      <div class="panel">
-        <h2>Project</h2>
-        <div id="project-info">Loading...</div>
-      </div>
+  <main class="main">
+    <div class="messages" id="messages">
+      <div class="message system">Welcome to XibeCode. Type <span class="hint-key">/</span> for modes or <span class="hint-key">@</span> to reference files.</div>
+    </div>
 
-      <div class="panel" style="margin-top: 1rem;">
-        <h2>Configuration</h2>
-        <div class="config-item">
-          <label>Model</label>
-          <select id="model-select">
-            <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
-            <option value="claude-opus-4-5-20251101">Claude Opus 4.5</option>
-            <option value="claude-haiku-4-5-20251015">Claude Haiku 4.5</option>
-            <option value="gpt-4o">GPT-4o</option>
-            <option value="gpt-4o-mini">GPT-4o Mini</option>
-          </select>
-        </div>
-        <div class="config-item">
-          <label>API Key</label>
-          <input type="password" id="api-key" placeholder="Enter API key">
-        </div>
-        <button onclick="saveConfig()" style="width: 100%;">Save Config</button>
-      </div>
+    <div class="thinking" id="thinking">
+      <div class="spinner"></div>
+      <span id="thinking-text">AI is thinking...</span>
+    </div>
 
-      <div class="panel" style="margin-top: 1rem;">
-        <h2>Status</h2>
-        <div class="stat">
-          <span class="stat-label">WebSocket</span>
-          <span class="stat-value"><span id="ws-status" class="status-indicator status-disconnected"></span><span id="ws-text">Disconnected</span></span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Session</span>
-          <span class="stat-value" id="session-id">None</span>
-        </div>
+    <div class="input-area">
+      <div class="cmd-popup" id="cmd-popup">
+        <div class="cmd-popup-header">Select Mode</div>
+        <div id="cmd-list"></div>
       </div>
-    </aside>
-
-    <div class="content">
-      <div class="tabs">
-        <div class="tab active" onclick="showTab('chat')">Chat</div>
-        <div class="tab" onclick="showTab('diff')">Visual Diff</div>
-        <div class="tab" onclick="showTab('tests')">Test Generator</div>
+      <div class="cmd-popup" id="file-popup">
+        <div class="cmd-popup-header">Select File</div>
+        <div id="file-list"></div>
       </div>
-
-      <div id="tab-chat" class="panel chat-container">
-        <div class="messages" id="messages">
-          <div class="message system">Welcome to XibeCode WebUI. Start chatting with the AI agent below.</div>
-        </div>
-        <div class="input-area">
-          <input type="text" id="user-input" placeholder="Type your message..." onkeydown="if(event.key==='Enter')sendMessage()">
-          <button onclick="sendMessage()" id="send-btn">Send</button>
-        </div>
+      <div class="input-wrapper">
+        <textarea class="input-field" id="user-input" placeholder="Type a message... (/ for modes, @ for files)" rows="1"></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendMessage()">Send</button>
       </div>
-
-      <div id="tab-diff" class="panel" style="display: none;">
-        <h2>Visual Diff</h2>
-        <button onclick="loadDiff()">Refresh Diff</button>
-        <div id="diff-content" class="code-block" style="margin-top: 1rem;">
-          Click "Refresh Diff" to load git changes.
-        </div>
-      </div>
-
-      <div id="tab-tests" class="panel" style="display: none;">
-        <h2>AI Test Generator</h2>
-        <div class="config-item">
-          <label>File Path</label>
-          <input type="text" id="test-file-path" placeholder="src/utils/helpers.ts">
-        </div>
-        <div class="config-item">
-          <label>Framework</label>
-          <select id="test-framework">
-            <option value="">Auto-detect</option>
-            <option value="vitest">Vitest</option>
-            <option value="jest">Jest</option>
-            <option value="mocha">Mocha</option>
-            <option value="pytest">pytest</option>
-            <option value="go">Go test</option>
-          </select>
-        </div>
-        <button onclick="generateTests()">Generate Tests</button>
-        <button onclick="analyzeCode()" style="margin-left: 0.5rem;">Analyze Code</button>
-        <div id="test-output" class="code-block" style="margin-top: 1rem; max-height: 400px; overflow-y: auto;">
-          Enter a file path and click "Generate Tests" to create test cases.
-        </div>
+      <div class="input-hints">
+        <span><span class="hint-key">/</span> modes</span>
+        <span><span class="hint-key">@</span> files</span>
+        <span><span class="hint-key">Enter</span> send</span>
+        <span><span class="hint-key">Shift+Enter</span> new line</span>
       </div>
     </div>
   </main>
 
-  <div id="loading">
-    <div class="spinner"></div>
-    <div>Processing...</div>
+  <!-- Settings Panel -->
+  <div class="settings-overlay" id="settings-overlay" onclick="closeSettings(event)">
+    <div class="settings-panel" onclick="event.stopPropagation()">
+      <div class="settings-header">
+        <h2>Settings</h2>
+        <button class="settings-close" onclick="closeSettings()">&times;</button>
+      </div>
+      <div class="settings-content">
+        <div class="settings-section">
+          <h3>AI Provider</h3>
+          <div class="settings-field">
+            <label>Provider</label>
+            <select id="settings-provider" onchange="onProviderChange()">
+              <option value="anthropic">Anthropic (Claude)</option>
+              <option value="openai">OpenAI</option>
+              <option value="custom">Custom / OpenAI-compatible</option>
+            </select>
+          </div>
+          <div class="settings-field">
+            <label>Model</label>
+            <select id="settings-model">
+              <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+              <option value="claude-opus-4-5-20251101">Claude Opus 4.5</option>
+              <option value="claude-haiku-4-5-20251015">Claude Haiku 4.5</option>
+            </select>
+          </div>
+          <div class="settings-field" id="custom-model-field" style="display:none;">
+            <label>Custom Model ID</label>
+            <input type="text" id="settings-custom-model" placeholder="e.g., gpt-4-turbo, llama-3-70b">
+            <small>Enter the model identifier for your provider</small>
+          </div>
+          <div class="settings-field">
+            <label>API Key</label>
+            <input type="password" id="settings-api-key" placeholder="sk-...">
+          </div>
+          <div class="settings-field" id="base-url-field" style="display:none;">
+            <label>Base URL</label>
+            <input type="text" id="settings-base-url" placeholder="https://api.openai.com/v1">
+            <small>For custom OpenAI-compatible endpoints</small>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>Session Info</h3>
+          <div class="settings-field">
+            <label>Working Directory</label>
+            <input type="text" id="settings-workdir" readonly>
+          </div>
+          <div class="settings-field">
+            <label>Git Branch</label>
+            <input type="text" id="settings-branch" readonly>
+          </div>
+          <div class="settings-field">
+            <label>Session ID</label>
+            <input type="text" id="settings-session" readonly>
+          </div>
+        </div>
+
+        <button class="settings-btn" onclick="saveSettings()">Save Settings</button>
+      </div>
+    </div>
   </div>
 
   <script>
+    // Modes configuration
+    const MODES = [
+      { id: 'agent', name: 'Agent', icon: '&#x1F916;', desc: 'Autonomous coding', color: '#00E676' },
+      { id: 'plan', name: 'Plan', icon: '&#x1F4CB;', desc: 'Analyze and plan without modifying', color: '#40C4FF' },
+      { id: 'tester', name: 'Tester', icon: '&#x1F9EA;', desc: 'Testing and QA', color: '#FF4081' },
+      { id: 'debugger', name: 'Debugger', icon: '&#x1F41B;', desc: 'Bug investigation', color: '#FFD740' },
+      { id: 'security', name: 'Security', icon: '&#x1F512;', desc: 'Security analysis', color: '#FF5252' },
+      { id: 'review', name: 'Review', icon: '&#x1F440;', desc: 'Code review', color: '#BB86FC' },
+      { id: 'team_leader', name: 'Team Leader', icon: '&#x1F451;', desc: 'Coordinate team', color: '#FFD600' },
+      { id: 'architect', name: 'Architect', icon: '&#x1F3DB;', desc: 'System design', color: '#7C4DFF' },
+      { id: 'engineer', name: 'Engineer', icon: '&#x1F6E0;', desc: 'Implementation', color: '#00E676' },
+      { id: 'seo', name: 'SEO', icon: '&#x1F310;', desc: 'SEO optimization', color: '#00B0FF' },
+      { id: 'product', name: 'Product', icon: '&#x1F525;', desc: 'Product strategy', color: '#FF6D00' },
+      { id: 'data', name: 'Data', icon: '&#x1F4CA;', desc: 'Data analysis', color: '#00BCD4' },
+      { id: 'researcher', name: 'Researcher', icon: '&#x1F4DA;', desc: 'Deep research', color: '#E91E63' },
+    ];
+
     let ws = null;
-    let sessionId = null;
-    let currentTab = 'chat';
+    let files = [];
+    let selectedCmdIndex = 0;
+    let selectedFileIndex = 0;
+    let currentPopup = null; // 'modes' | 'files' | null
+    let streamingMessageEl = null;
+    let streamingText = ''; // Track raw text for streaming
 
     // Initialize
     document.addEventListener('DOMContentLoaded', async () => {
-      await loadConfig();
       await loadProjectInfo();
-      await createSession();
+      await loadConfig();
+      connectWebSocket();
+      setupInput();
+      renderModeList();
     });
 
-    function showTab(tab) {
-      currentTab = tab;
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('[id^="tab-"]').forEach(t => t.style.display = 'none');
-      document.querySelector(\`.tab:nth-child(\${tab === 'chat' ? 1 : tab === 'diff' ? 2 : 3})\`).classList.add('active');
-      document.getElementById('tab-' + tab).style.display = tab === 'chat' ? 'flex' : 'block';
-    }
+    // Setup input handling
+    function setupInput() {
+      const input = document.getElementById('user-input');
 
-    async function loadConfig() {
-      try {
-        const res = await fetch('/api/config');
-        const config = await res.json();
-        document.getElementById('model-select').value = config.currentModel || 'claude-sonnet-4-5-20250929';
-        if (config.apiKeySet) {
-          document.getElementById('api-key').placeholder = '••••••••';
+      input.addEventListener('input', (e) => {
+        autoResize(input);
+        handleInputChange(e.target.value);
+      });
+
+      input.addEventListener('keydown', (e) => {
+        if (currentPopup) {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            navigatePopup(1);
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            navigatePopup(-1);
+          } else if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            selectPopupItem();
+          } else if (e.key === 'Escape') {
+            closePopups();
+          }
+        } else if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendMessage();
         }
-      } catch (e) {
-        console.error('Failed to load config:', e);
+      });
+    }
+
+    function autoResize(textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+    }
+
+    function handleInputChange(value) {
+      const lastChar = value.slice(-1);
+      const beforeLast = value.slice(0, -1);
+
+      // Check for / command at start or after space
+      if (lastChar === '/' && (beforeLast === '' || beforeLast.endsWith(' '))) {
+        openModePopup();
+        return;
+      }
+
+      // Check for @ command
+      if (lastChar === '@' && (beforeLast === '' || beforeLast.endsWith(' '))) {
+        openFilePopup();
+        return;
+      }
+
+      // Filter popups based on input after trigger
+      if (currentPopup === 'modes') {
+        const match = value.match(/\\/([\\w]*)$/);
+        if (match) {
+          filterModeList(match[1]);
+        } else {
+          closePopups();
+        }
+      } else if (currentPopup === 'files') {
+        const match = value.match(/@([\\w\\.\\-\\/]*)$/);
+        if (match) {
+          filterFileList(match[1]);
+        } else {
+          closePopups();
+        }
       }
     }
 
-    async function saveConfig() {
-      const model = document.getElementById('model-select').value;
-      const apiKey = document.getElementById('api-key').value;
+    function openModePopup() {
+      currentPopup = 'modes';
+      selectedCmdIndex = 0;
+      document.getElementById('cmd-popup').classList.add('visible');
+      document.getElementById('file-popup').classList.remove('visible');
+      renderModeList();
+    }
 
+    function openFilePopup() {
+      currentPopup = 'files';
+      selectedFileIndex = 0;
+      document.getElementById('file-popup').classList.add('visible');
+      document.getElementById('cmd-popup').classList.remove('visible');
+      loadFiles();
+    }
+
+    function closePopups() {
+      currentPopup = null;
+      document.getElementById('cmd-popup').classList.remove('visible');
+      document.getElementById('file-popup').classList.remove('visible');
+    }
+
+    function renderModeList(filter = '') {
+      const list = document.getElementById('cmd-list');
+      const filtered = MODES.filter(m =>
+        m.name.toLowerCase().includes(filter.toLowerCase()) ||
+        m.id.toLowerCase().includes(filter.toLowerCase())
+      );
+
+      list.innerHTML = filtered.map((mode, i) => \`
+        <div class="cmd-item \${i === selectedCmdIndex ? 'selected' : ''}"
+             onclick="selectMode('\${mode.id}')"
+             onmouseenter="selectedCmdIndex = \${i}; renderModeList('\${filter}')">
+          <div class="cmd-item-icon">\${mode.icon}</div>
+          <div class="cmd-item-info">
+            <div class="cmd-item-name">\${mode.name}</div>
+            <div class="cmd-item-desc">\${mode.desc}</div>
+          </div>
+          <div class="cmd-item-color" style="background: \${mode.color}"></div>
+        </div>
+      \`).join('');
+    }
+
+    function filterModeList(filter) {
+      selectedCmdIndex = 0;
+      renderModeList(filter);
+    }
+
+    async function loadFiles() {
       try {
-        await fetch('/api/config', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model, apiKey: apiKey || undefined }),
+        const res = await fetch('/api/files');
+        const data = await res.json();
+        files = data.files || [];
+        renderFileList();
+      } catch (e) {
+        files = [];
+        renderFileList();
+      }
+    }
+
+    function renderFileList(filter = '') {
+      const list = document.getElementById('file-list');
+      const filtered = files.filter(f =>
+        f.toLowerCase().includes(filter.toLowerCase())
+      ).slice(0, 20);
+
+      if (filtered.length === 0) {
+        list.innerHTML = '<div class="cmd-item"><div class="cmd-item-info"><div class="cmd-item-desc">No files found</div></div></div>';
+        return;
+      }
+
+      list.innerHTML = filtered.map((file, i) => \`
+        <div class="cmd-item \${i === selectedFileIndex ? 'selected' : ''}"
+             onclick="selectFile('\${file}')"
+             onmouseenter="selectedFileIndex = \${i}; renderFileList('\${filter}')">
+          <div class="cmd-item-icon">\${file.includes('.') ? '&#x1F4C4;' : '&#x1F4C1;'}</div>
+          <div class="cmd-item-info">
+            <div class="cmd-item-name">\${file.split('/').pop()}</div>
+            <div class="cmd-item-desc">\${file}</div>
+          </div>
+        </div>
+      \`).join('');
+    }
+
+    function filterFileList(filter) {
+      selectedFileIndex = 0;
+      renderFileList(filter);
+    }
+
+    function navigatePopup(direction) {
+      if (currentPopup === 'modes') {
+        const filteredModes = MODES.filter(m => {
+          const input = document.getElementById('user-input').value;
+          const match = input.match(/\\/([\\w]*)$/);
+          return !match || m.name.toLowerCase().includes(match[1].toLowerCase());
         });
-        addMessage('system', 'Configuration saved!');
-      } catch (e) {
-        addMessage('system', 'Failed to save configuration');
+        selectedCmdIndex = Math.max(0, Math.min(filteredModes.length - 1, selectedCmdIndex + direction));
+        renderModeList(document.getElementById('user-input').value.match(/\\/([\\w]*)$/)?.[1] || '');
+      } else if (currentPopup === 'files') {
+        const filteredFiles = files.filter(f => {
+          const input = document.getElementById('user-input').value;
+          const match = input.match(/@([\\w\\.\\-\\/]*)$/);
+          return !match || f.toLowerCase().includes(match[1].toLowerCase());
+        }).slice(0, 20);
+        selectedFileIndex = Math.max(0, Math.min(filteredFiles.length - 1, selectedFileIndex + direction));
+        renderFileList(document.getElementById('user-input').value.match(/@([\\w\\.\\-\\/]*)$/)?.[1] || '');
       }
     }
 
-    async function loadProjectInfo() {
-      try {
-        const res = await fetch('/api/project');
-        const info = await res.json();
-        document.getElementById('project-info').innerHTML = \`
-          <div class="stat"><span class="stat-label">Name</span><span class="stat-value">\${info.name}</span></div>
-          <div class="stat"><span class="stat-label">Git Branch</span><span class="stat-value">\${info.gitBranch || 'N/A'}</span></div>
-          <div class="stat"><span class="stat-label">Status</span><span class="stat-value">\${info.gitStatus || 'N/A'}</span></div>
-          <div class="stat"><span class="stat-label">Test Runner</span><span class="stat-value">\${info.testRunner || 'None'}</span></div>
-          <div class="stat"><span class="stat-label">Dependencies</span><span class="stat-value">\${info.dependencies}</span></div>
-        \`;
-      } catch (e) {
-        document.getElementById('project-info').textContent = 'Failed to load';
+    function selectPopupItem() {
+      if (currentPopup === 'modes') {
+        const filteredModes = MODES.filter(m => {
+          const input = document.getElementById('user-input').value;
+          const match = input.match(/\\/([\\w]*)$/);
+          return !match || m.name.toLowerCase().includes(match[1].toLowerCase());
+        });
+        if (filteredModes[selectedCmdIndex]) {
+          selectMode(filteredModes[selectedCmdIndex].id);
+        }
+      } else if (currentPopup === 'files') {
+        const filteredFiles = files.filter(f => {
+          const input = document.getElementById('user-input').value;
+          const match = input.match(/@([\\w\\.\\-\\/]*)$/);
+          return !match || f.toLowerCase().includes(match[1].toLowerCase());
+        }).slice(0, 20);
+        if (filteredFiles[selectedFileIndex]) {
+          selectFile(filteredFiles[selectedFileIndex]);
+        }
       }
     }
 
-    async function createSession() {
-      // In bridge mode, we don't create a separate session - we sync with TUI
-      sessionId = 'bridge';
-      document.getElementById('session-id').textContent = 'TUI Sync';
-      connectWebSocket();
+    function selectMode(modeId) {
+      const input = document.getElementById('user-input');
+      // Replace /xxx with mode switch command
+      input.value = input.value.replace(/\\/[\\w]*$/, '/mode ' + modeId);
+      closePopups();
+      input.focus();
+      document.getElementById('current-mode').textContent = MODES.find(m => m.id === modeId)?.name || modeId;
     }
 
+    function selectFile(file) {
+      const input = document.getElementById('user-input');
+      // Replace @xxx with the file path
+      input.value = input.value.replace(/@[\\w\\.\\-\\/]*$/, '@' + file + ' ');
+      closePopups();
+      input.focus();
+    }
+
+    // WebSocket connection
     function connectWebSocket() {
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      // Connect in bridge mode to sync with TUI
       ws = new WebSocket(\`\${protocol}//\${location.host}?mode=bridge\`);
 
       ws.onopen = () => {
-        document.getElementById('ws-status').className = 'status-indicator status-connected';
-        document.getElementById('ws-text').textContent = 'Synced with TUI';
+        document.getElementById('status-dot').classList.add('connected');
+        document.getElementById('status-text').textContent = 'Connected';
       };
 
       ws.onclose = () => {
-        document.getElementById('ws-status').className = 'status-indicator status-disconnected';
-        document.getElementById('ws-text').textContent = 'Disconnected';
+        document.getElementById('status-dot').classList.remove('connected');
+        document.getElementById('status-text').textContent = 'Disconnected';
         setTimeout(connectWebSocket, 3000);
       };
 
@@ -1024,88 +1567,125 @@ export class WebUIServer {
 
     function handleWSMessage(data) {
       switch (data.type) {
-        // Bridge events from TUI
         case 'user_message':
+          // Only show TUI messages - WebUI messages are already shown locally
           if (data.source === 'tui') {
-            addMessage('user', data.data.content + ' (from TUI)');
+            addMessage('user', data.data.content + ' (TUI)');
           }
           document.getElementById('send-btn').disabled = true;
+          showThinking(true);
           break;
         case 'assistant_message':
           addMessage('assistant', data.data.content);
           document.getElementById('send-btn').disabled = false;
-          break;
-        case 'session_sync':
-          // Sync session state
-          if (data.data.sessionId) {
-            document.getElementById('session-id').textContent = 'TUI: ' + data.data.sessionId.slice(0, 8) + '...';
-          }
+          showThinking(false);
           break;
         case 'thinking':
-          updateThinking(data.data?.text || data.message);
+          showThinking(true, data.data?.text || 'Processing...');
           break;
         case 'stream_start':
           startStreamMessage();
+          showThinking(false);
           break;
         case 'stream_text':
-          appendStreamText(data.data?.text || data.text);
+          appendStreamText(data.data?.text || data.text || '');
           break;
         case 'stream_end':
           endStreamMessage();
           document.getElementById('send-btn').disabled = false;
           break;
-        case 'response':
-          addMessage('assistant', data.text);
-          break;
         case 'tool_call':
-          addMessage('system', \`🔧 \${data.data?.name || data.name}\`);
+          addToolMessage(data.data?.name || data.name, 'running');
           break;
         case 'tool_result':
-          const success = data.data?.success ? '✓' : '✗';
-          addMessage('system', \`\${success} \${data.data?.name || data.name} completed\`);
+          updateLastToolMessage(data.data?.name || data.name, data.data?.success ? 'success' : 'error');
           break;
         case 'complete':
           document.getElementById('send-btn').disabled = false;
+          showThinking(false);
           break;
         case 'error':
-          addMessage('system', \`Error: \${data.data?.error || data.error}\`);
+          addMessage('system', 'Error: ' + (data.data?.error || data.error));
           document.getElementById('send-btn').disabled = false;
+          showThinking(false);
+          break;
+        case 'session_sync':
+          if (data.data?.sessionId) {
+            document.getElementById('settings-session').value = data.data.sessionId;
+          }
           break;
       }
     }
 
-    let streamingMessageEl = null;
+    function showThinking(show, text = 'AI is thinking...') {
+      const el = document.getElementById('thinking');
+      if (show) {
+        el.classList.add('visible');
+        document.getElementById('thinking-text').textContent = text;
+      } else {
+        el.classList.remove('visible');
+      }
+    }
 
     function startStreamMessage() {
       const messages = document.getElementById('messages');
       streamingMessageEl = document.createElement('div');
       streamingMessageEl.className = 'message assistant';
+      streamingText = ''; // Reset streaming text
       messages.appendChild(streamingMessageEl);
       messages.scrollTop = messages.scrollHeight;
     }
 
     function appendStreamText(text) {
-      if (streamingMessageEl) {
-        streamingMessageEl.textContent += text;
+      if (streamingMessageEl && text) {
+        streamingText += text;
+        // For performance, only render markdown every few updates or just show plain text while streaming
+        streamingMessageEl.textContent = streamingText;
         document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
       }
     }
 
     function endStreamMessage() {
+      if (streamingMessageEl) {
+        // Final markdown render when streaming is complete
+        streamingMessageEl.innerHTML = renderMarkdown(streamingText);
+      }
       streamingMessageEl = null;
-    }
-
-    function updateThinking(message) {
-      // Could add a thinking indicator
+      streamingText = '';
     }
 
     function addMessage(role, content) {
       const messages = document.getElementById('messages');
       const msg = document.createElement('div');
       msg.className = 'message ' + role;
-      msg.textContent = content;
+      if (role === 'assistant') {
+        msg.innerHTML = renderMarkdown(content);
+      } else {
+        msg.textContent = content;
+      }
       messages.appendChild(msg);
       messages.scrollTop = messages.scrollHeight;
+    }
+
+    function addToolMessage(name, status) {
+      const messages = document.getElementById('messages');
+      const msg = document.createElement('div');
+      msg.className = 'message tool';
+      msg.innerHTML = \`<span class="tool-name">\${escapeHtml(name)}</span><span class="tool-status \${status}">\${status === 'running' ? '&#x23F3; running' : status}</span>\`;
+      msg.dataset.toolName = name;
+      messages.appendChild(msg);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function updateLastToolMessage(name, status) {
+      const messages = document.getElementById('messages');
+      const toolMsgs = messages.querySelectorAll('.message.tool');
+      for (let i = toolMsgs.length - 1; i >= 0; i--) {
+        if (toolMsgs[i].dataset.toolName === name) {
+          toolMsgs[i].innerHTML = \`<span class="tool-name">\${escapeHtml(name)}</span><span class="tool-status \${status}">\${status === 'success' ? '&#x2713; done' : '&#x2717; failed'}</span>\`;
+          break;
+        }
+      }
     }
 
     function sendMessage() {
@@ -1115,113 +1695,142 @@ export class WebUIServer {
 
       addMessage('user', message);
       input.value = '';
+      autoResize(input);
       document.getElementById('send-btn').disabled = true;
+      showThinking(true);
 
       if (ws && ws.readyState === WebSocket.OPEN) {
-        // Send via bridge to TUI
         ws.send(JSON.stringify({ type: 'message', content: message }));
       }
     }
 
-    async function loadDiff() {
-      const diffContent = document.getElementById('diff-content');
-      diffContent.textContent = 'Loading...';
+    // Simple markdown renderer
+    function renderMarkdown(text) {
+      if (!text) return '';
+      let html = escapeHtml(text);
 
-      try {
-        const res = await fetch('/api/git/diff');
-        const data = await res.json();
+      // Code blocks
+      html = html.replace(/\`\`\`([\\s\\S]*?)\`\`\`/g, '<pre><code>$1</code></pre>');
+      // Inline code
+      html = html.replace(/\`([^\`]+)\`/g, '<code>$1</code>');
+      // Bold
+      html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
+      // Italic
+      html = html.replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
+      // Headers
+      html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+      html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+      html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+      // Lists
+      html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+      html = html.replace(/(<li>.*<\\/li>\\n?)+/g, '<ul>$&</ul>');
+      // Links
+      html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2" target="_blank">$1</a>');
+      // Line breaks
+      html = html.replace(/\\n/g, '<br>');
 
-        if (!data.success) {
-          diffContent.textContent = 'Error: ' + data.error;
-          return;
-        }
-
-        if (!data.diff) {
-          diffContent.textContent = 'No changes detected.';
-          return;
-        }
-
-        // Colorize diff
-        const lines = data.diff.split('\\n');
-        diffContent.innerHTML = lines.map(line => {
-          if (line.startsWith('+') && !line.startsWith('+++')) {
-            return '<span class="diff-add">' + escapeHtml(line) + '</span>';
-          } else if (line.startsWith('-') && !line.startsWith('---')) {
-            return '<span class="diff-remove">' + escapeHtml(line) + '</span>';
-          }
-          return escapeHtml(line);
-        }).join('\\n');
-      } catch (e) {
-        diffContent.textContent = 'Failed to load diff: ' + e.message;
-      }
-    }
-
-    async function generateTests() {
-      const filePath = document.getElementById('test-file-path').value;
-      const framework = document.getElementById('test-framework').value;
-      const output = document.getElementById('test-output');
-
-      if (!filePath) {
-        output.textContent = 'Please enter a file path.';
-        return;
-      }
-
-      output.textContent = 'Generating tests...';
-      document.getElementById('loading').style.display = 'block';
-
-      try {
-        const res = await fetch('/api/tests/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filePath, framework: framework || undefined }),
-        });
-        const data = await res.json();
-
-        if (data.error) {
-          output.textContent = 'Error: ' + data.message;
-        } else {
-          output.innerHTML = \`<strong>Generated \${data.testCasesGenerated} test cases</strong>\\n\\n\` + escapeHtml(data.content);
-        }
-      } catch (e) {
-        output.textContent = 'Failed: ' + e.message;
-      } finally {
-        document.getElementById('loading').style.display = 'none';
-      }
-    }
-
-    async function analyzeCode() {
-      const filePath = document.getElementById('test-file-path').value;
-      const output = document.getElementById('test-output');
-
-      if (!filePath) {
-        output.textContent = 'Please enter a file path.';
-        return;
-      }
-
-      output.textContent = 'Analyzing code...';
-
-      try {
-        const res = await fetch('/api/tests/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filePath }),
-        });
-        const data = await res.json();
-
-        if (data.error) {
-          output.textContent = 'Error: ' + data.message;
-        } else {
-          output.textContent = JSON.stringify(data, null, 2);
-        }
-      } catch (e) {
-        output.textContent = 'Failed: ' + e.message;
-      }
+      return html;
     }
 
     function escapeHtml(text) {
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
+    }
+
+    // Settings
+    function openSettings() {
+      document.getElementById('settings-overlay').classList.add('visible');
+    }
+
+    function closeSettings(event) {
+      if (!event || event.target === event.currentTarget) {
+        document.getElementById('settings-overlay').classList.remove('visible');
+      }
+    }
+
+    function onProviderChange() {
+      const provider = document.getElementById('settings-provider').value;
+      const modelSelect = document.getElementById('settings-model');
+      const customField = document.getElementById('custom-model-field');
+      const baseUrlField = document.getElementById('base-url-field');
+
+      if (provider === 'anthropic') {
+        modelSelect.innerHTML = \`
+          <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+          <option value="claude-opus-4-5-20251101">Claude Opus 4.5</option>
+          <option value="claude-haiku-4-5-20251015">Claude Haiku 4.5</option>
+        \`;
+        customField.style.display = 'none';
+        baseUrlField.style.display = 'none';
+      } else if (provider === 'openai') {
+        modelSelect.innerHTML = \`
+          <option value="gpt-4o">GPT-4o</option>
+          <option value="gpt-4o-mini">GPT-4o Mini</option>
+          <option value="gpt-4-turbo">GPT-4 Turbo</option>
+          <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+        \`;
+        customField.style.display = 'none';
+        baseUrlField.style.display = 'none';
+      } else {
+        modelSelect.innerHTML = '<option value="custom">Custom Model</option>';
+        customField.style.display = 'block';
+        baseUrlField.style.display = 'block';
+      }
+    }
+
+    async function loadProjectInfo() {
+      try {
+        const res = await fetch('/api/project');
+        const info = await res.json();
+        document.getElementById('current-path').textContent = info.workingDir || info.name || '~';
+        document.getElementById('settings-workdir').value = info.workingDir || process.cwd();
+        document.getElementById('settings-branch').value = info.gitBranch || 'N/A';
+      } catch (e) {
+        console.error('Failed to load project info:', e);
+      }
+    }
+
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/config');
+        const config = await res.json();
+        document.getElementById('current-model').textContent = config.currentModel?.split('-').slice(0, 2).join('-') || 'Claude';
+        document.getElementById('settings-model').value = config.currentModel || 'claude-sonnet-4-5-20250929';
+        if (config.apiKeySet) {
+          document.getElementById('settings-api-key').placeholder = '••••••••';
+        }
+      } catch (e) {
+        console.error('Failed to load config:', e);
+      }
+    }
+
+    async function saveSettings() {
+      const provider = document.getElementById('settings-provider').value;
+      const model = provider === 'custom'
+        ? document.getElementById('settings-custom-model').value
+        : document.getElementById('settings-model').value;
+      const apiKey = document.getElementById('settings-api-key').value;
+      const baseUrl = document.getElementById('settings-base-url').value;
+
+      try {
+        await fetch('/api/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model,
+            apiKey: apiKey || undefined,
+            baseUrl: baseUrl || undefined,
+            provider
+          }),
+        });
+        addMessage('system', 'Settings saved successfully');
+        closeSettings();
+        // Update header
+        document.getElementById('current-model').textContent = model.split('-').slice(0, 2).join('-');
+      } catch (e) {
+        addMessage('system', 'Failed to save settings');
+      }
     }
   </script>
 </body>
