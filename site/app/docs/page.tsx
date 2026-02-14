@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowRight, Book, Code, Rocket, Settings, Puzzle, FileText } from 'lucide-react';
+import { ArrowRight, Book, Code, Rocket, Settings, Puzzle, FileText, Users, Wrench, Shield } from 'lucide-react';
 
 export default function DocsPage() {
   const sections = [
@@ -14,6 +14,18 @@ export default function DocsPage() {
       title: 'Quick Start',
       description: 'Run your first autonomous coding task with XibeCode.',
       href: '/docs/quickstart',
+    },
+    {
+      icon: Users,
+      title: 'Agent Modes',
+      description: 'Discover 13 specialized AI personas for different tasks.',
+      href: '/docs/modes',
+    },
+    {
+      icon: Wrench,
+      title: 'Tools Reference',
+      description: 'Explore 95+ built-in tools for autonomous coding.',
+      href: '/docs/tools',
     },
     {
       icon: Settings,
@@ -46,8 +58,28 @@ export default function DocsPage() {
       <div>
         <h1 className="text-4xl font-bold mb-4">Documentation</h1>
         <p className="text-xl text-zinc-400">
-          Everything you need to know about using XibeCode.
+          Everything you need to know about using XibeCode — the autonomous AI coding assistant.
         </p>
+      </div>
+
+      {/* Feature highlights */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="p-4 rounded-xl border border-white/5 bg-white/[0.02] text-center">
+          <div className="text-2xl font-bold text-violet-400">13</div>
+          <div className="text-sm text-zinc-500">Agent Modes</div>
+        </div>
+        <div className="p-4 rounded-xl border border-white/5 bg-white/[0.02] text-center">
+          <div className="text-2xl font-bold text-violet-400">95+</div>
+          <div className="text-sm text-zinc-500">Built-in Tools</div>
+        </div>
+        <div className="p-4 rounded-xl border border-white/5 bg-white/[0.02] text-center">
+          <div className="text-2xl font-bold text-violet-400">MCP</div>
+          <div className="text-sm text-zinc-500">Protocol Support</div>
+        </div>
+        <div className="p-4 rounded-xl border border-white/5 bg-white/[0.02] text-center">
+          <div className="text-2xl font-bold text-violet-400">Open</div>
+          <div className="text-sm text-zinc-500">Source (Apache 2.0)</div>
+        </div>
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
@@ -90,6 +122,16 @@ export default function DocsPage() {
             </Link>
           </li>
           <li>
+            <Link href="/docs/modes" className="text-violet-400 hover:underline">
+              Agent Modes (13 Personas) →
+            </Link>
+          </li>
+          <li>
+            <Link href="/docs/tools" className="text-violet-400 hover:underline">
+              Tools Reference (95+ Tools) →
+            </Link>
+          </li>
+          <li>
             <Link href="/docs/examples" className="text-violet-400 hover:underline">
               Example Use Cases →
             </Link>
@@ -100,6 +142,28 @@ export default function DocsPage() {
             </Link>
           </li>
         </ul>
+      </div>
+
+      <div className="p-6 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
+        <h2 className="text-xl font-bold text-white mb-2">New to XibeCode?</h2>
+        <p className="text-zinc-400 mb-4">
+          Start with the Quick Start guide to run your first autonomous coding task, then explore
+          the Agent Modes to discover the 13 specialized AI personas.
+        </p>
+        <div className="flex gap-3">
+          <Link
+            href="/docs/quickstart"
+            className="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-colors text-sm font-medium"
+          >
+            Quick Start →
+          </Link>
+          <Link
+            href="/docs/modes"
+            className="inline-flex items-center px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-zinc-300 hover:bg-white/10 transition-colors text-sm font-medium"
+          >
+            Agent Modes →
+          </Link>
+        </div>
       </div>
     </div>
   );

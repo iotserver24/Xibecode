@@ -10,15 +10,19 @@ const comparisonData = [
   { feature: 'Open Source', xibecode: true, claude: false, aider: true },
   { feature: 'Free to Use', xibecode: true, claude: false, aider: true },
   { feature: 'Custom API Endpoint', xibecode: true, claude: false, aider: true },
+  { feature: '13 Agent Modes (Personas)', xibecode: true, claude: false, aider: false },
+  { feature: '95+ Built-in Tools', xibecode: true, claude: true, aider: 'partial' },
   { feature: 'Smart Context Discovery', xibecode: true, claude: true, aider: 'partial' },
   { feature: 'Advanced File Editing (4 methods)', xibecode: true, claude: false, aider: false },
   { feature: 'Cross-Platform', xibecode: true, claude: true, aider: true },
   { feature: 'Loop Detection', xibecode: true, claude: true, aider: false },
   { feature: 'Automatic Backups & Revert', xibecode: true, claude: 'partial', aider: false },
+  { feature: 'Neural Memory System', xibecode: true, claude: false, aider: false },
   { feature: 'Test Integration', xibecode: true, claude: false, aider: false },
   { feature: 'Git Awareness', xibecode: true, claude: false, aider: 'partial' },
   { feature: 'MCP Protocol Support', xibecode: true, claude: false, aider: false },
   { feature: 'Plugin System', xibecode: true, claude: false, aider: false },
+  { feature: 'Skills System', xibecode: true, claude: false, aider: false },
   { feature: 'Dry-Run Mode', xibecode: true, claude: false, aider: false },
   { feature: 'Risk Assessment', xibecode: true, claude: false, aider: false },
 ];
@@ -34,6 +38,106 @@ export default function HomePage() {
     <div>
       <Hero />
       <Features />
+
+      {/* Stats Section */}
+      <section className="relative py-16 md:py-24">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7 }}
+            className="grid grid-cols-2 md:grid-cols-4 gap-6"
+          >
+            <div className="text-center p-6 rounded-2xl border border-white/5 bg-white/[0.02]">
+              <div className="text-4xl font-bold text-gradient mb-2">13</div>
+              <div className="text-zinc-400">Agent Modes</div>
+            </div>
+            <div className="text-center p-6 rounded-2xl border border-white/5 bg-white/[0.02]">
+              <div className="text-4xl font-bold text-gradient mb-2">95+</div>
+              <div className="text-zinc-400">Built-in Tools</div>
+            </div>
+            <div className="text-center p-6 rounded-2xl border border-white/5 bg-white/[0.02]">
+              <div className="text-4xl font-bold text-gradient mb-2">8</div>
+              <div className="text-zinc-400">Tool Categories</div>
+            </div>
+            <div className="text-center p-6 rounded-2xl border border-white/5 bg-white/[0.02]">
+              <div className="text-4xl font-bold text-gradient mb-2">100%</div>
+              <div className="text-zinc-400">Open Source</div>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Agent Modes Section */}
+      <section className="relative py-16 md:py-24">
+        <div className="absolute top-0 inset-x-0 glow-line" />
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7 }}
+            className="text-center mb-12"
+          >
+            <p className="text-sm font-medium text-violet-400 tracking-wider uppercase mb-4">
+              13 Specialized Personas
+            </p>
+            <h2 className="text-3xl md:text-4xl font-bold mb-6 tracking-tight">
+              Agent Modes for
+              <span className="text-zinc-500"> Every Task</span>
+            </h2>
+            <p className="text-lg text-zinc-400 max-w-2xl mx-auto">
+              Switch between specialized AI personas optimized for different development tasks.
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7, delay: 0.2 }}
+            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+          >
+            {[
+              { mode: 'agent', name: 'Blaze', role: 'Builder', icon: '🤖', desc: 'Full-stack development' },
+              { mode: 'plan', name: 'Aria', role: 'Architect', icon: '📋', desc: 'Planning & analysis' },
+              { mode: 'debugger', name: 'Dex', role: 'Detective', icon: '🐛', desc: 'Bug hunting' },
+              { mode: 'tester', name: 'Tess', role: 'QA Engineer', icon: '🧪', desc: 'Testing & quality' },
+              { mode: 'security', name: 'Sentinel', role: 'Guardian', icon: '🔒', desc: 'Security audits' },
+              { mode: 'review', name: 'Nova', role: 'Critic', icon: '👀', desc: 'Code reviews' },
+              { mode: 'engineer', name: 'Alex', role: 'Implementer', icon: '🛠️', desc: 'Feature building' },
+              { mode: 'team_leader', name: 'Arya', role: 'Leader', icon: '👑', desc: 'Task orchestration' },
+            ].map((persona, idx) => (
+              <div
+                key={idx}
+                className="p-4 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-colors"
+              >
+                <div className="text-2xl mb-2">{persona.icon}</div>
+                <div className="text-sm font-semibold text-white">{persona.name}</div>
+                <div className="text-xs text-violet-400">{persona.role}</div>
+                <div className="text-xs text-zinc-500 mt-1">{persona.desc}</div>
+              </div>
+            ))}
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.4, duration: 0.5 }}
+            className="text-center mt-8"
+          >
+            <Link
+              href="/docs/modes"
+              className="inline-flex items-center text-violet-400 hover:text-violet-300 font-medium"
+            >
+              View all 13 modes
+              <ArrowRight className="ml-1 h-4 w-4" />
+            </Link>
+          </motion.div>
+        </div>
+      </section>
 
       {/* Comparison Section */}
       <section className="relative py-24 md:py-36">
