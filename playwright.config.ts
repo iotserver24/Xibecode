@@ -16,6 +16,12 @@ export default defineConfig({
   // Directory containing E2E test files (separate from unit tests)
   testDir: './e2e',
 
+  // Only match .spec.ts files
+  testMatch: '**/*.spec.ts',
+
+  // Ignore unit test directory completely
+  testIgnore: ['**/tests/**', '**/node_modules/**'],
+
   // Run tests in files in parallel
   fullyParallel: true,
 
