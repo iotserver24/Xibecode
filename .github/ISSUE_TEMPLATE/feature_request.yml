@@ -1,0 +1,68 @@
+name: Feature Request
+description: Suggest a new feature for XibeCode
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! We appreciate your input.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: Is your feature request related to a problem? Please describe.
+      placeholder: I'm always frustrated when...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe the solution you'd like
+      placeholder: It would be great if XibeCode could...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe any alternative solutions or features you've considered
+      placeholder: I've tried using... but it doesn't work because...
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      description: What area does this feature relate to?
+      options:
+        - CLI / TUI
+        - WebUI
+        - AI / Agent
+        - Test Generation
+        - MCP Integration
+        - Plugins / Skills
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to you?
+      options:
+        - Nice to have
+        - Important
+        - Critical for my workflow
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I would be willing to help implement this feature

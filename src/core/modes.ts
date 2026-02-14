@@ -20,7 +20,7 @@
  * - `researcher` - Sanvi the Scholar: Deep research and investigation
  *
  * **Development:**
- * - `agent` - Blaze the Builder: Full-capability coding agent
+ * - `agent` - Full-capability autonomous coding agent
  * - `engineer` - Alex the Implementer: Feature implementation
  * - `architect` - Anna the Designer: System architecture design
  *
@@ -48,7 +48,7 @@
  */
 export type AgentMode =
   | 'plan'           // Aria - Planning
-  | 'agent'          // Blaze - Full coding
+  | 'agent'          // Full autonomous coding
   | 'tester'         // Tess - Testing
   | 'debugger'       // Dex - Debugging
   | 'security'       // Sentinel - Security
@@ -317,7 +317,7 @@ After analysis, present a clear, actionable plan and request the appropriate mod
 
 ### Mode Switching
 When your analysis is complete and you need to execute the plan:
-- Request a switch to **Blaze the Builder (Agent Mode)** by including:
+- Request a switch to **Agent Mode** by including:
   [[REQUEST_MODE: agent | reason=Ready to implement the plan]]
 - For security-focused plans, you may recommend **Sentinel (Security Mode)** instead
 - The system will handle the transition automatically if approved`,
@@ -326,8 +326,8 @@ When your analysis is complete and you need to execute the plan:
   agent: {
     name: 'Agent',
     description: 'Autonomous coding with full capabilities',
-    personaName: 'Blaze',
-    personaRole: 'the Builder',
+    personaName: '',
+    personaRole: '',
     allowedCategories: ['read_only', 'write_fs', 'git_read', 'git_mutation', 'shell_command', 'tests', 'context'],
     canModify: true,
     defaultDryRun: false,
@@ -337,7 +337,6 @@ When your analysis is complete and you need to execute the plan:
     requiresConfirmation: false,
     promptSuffix: `
 ## AGENT MODE - Full Autonomous Coding
-### You are Blaze the Builder 🤖
 
 You are operating in AGENT MODE with full capabilities to:
 
@@ -407,7 +406,7 @@ You are operating in TESTER MODE. Your mission is to ensure code quality and cor
 
 ### Mode Switching
 - **Dex the Debugger** for fixing test failures: [[REQUEST_MODE: debugger | reason=Fix failing tests]]
-- **Blaze the Builder** for implementing missing features: [[REQUEST_MODE: agent | reason=Implement feature for testing]]`,
+- **Agent Mode** for implementing missing features: [[REQUEST_MODE: agent | reason=Implement feature for testing]]`,
   },
 
   debugger: {
@@ -449,7 +448,7 @@ You are operating in DEBUGGER MODE. Your mission is to:
 - Use git checkpoints before attempting fixes
 
 ### Mode Switching
-- Switch to **Blaze the Builder (Agent)** for broader refactors: [[REQUEST_MODE: agent | reason=...]]
+- Switch to **Agent Mode** for broader refactors: [[REQUEST_MODE: agent | reason=...]]
 - Return to **Aria the Architect (Plan)** for complex architectural fixes: [[REQUEST_MODE: plan | reason=...]]`,
   },
 
@@ -488,7 +487,7 @@ You are operating in SECURITY MODE. Your mission is comprehensive security analy
 ### After Analysis & Mode Switching
 After completing your security analysis, request the appropriate mode:
 - **Dex the Debugger** for targeted vulnerability fixes: [[REQUEST_MODE: debugger | reason=Fix security vulnerabilities]]
-- **Blaze the Builder** for broader security improvements: [[REQUEST_MODE: agent | reason=Implement security enhancements]]
+- **Agent Mode** for broader security improvements: [[REQUEST_MODE: agent | reason=Implement security enhancements]]
 
 ### Restrictions
 - Read-only analysis mode - cannot modify code
@@ -531,7 +530,7 @@ You are operating in REVIEW MODE. Your role is to review code quality:
 
 ### Mode Switching
 After review, you can request implementation of improvements:
-- **Blaze the Builder (Agent)** for implementing suggestions: [[REQUEST_MODE: agent | reason=Implement review suggestions]]
+- **Agent Mode** for implementing suggestions: [[REQUEST_MODE: agent | reason=Implement review suggestions]]
 - **Aria the Architect (Plan)** for complex refactoring plans: [[REQUEST_MODE: plan | reason=Plan major refactoring]]
 
 ### Restrictions
