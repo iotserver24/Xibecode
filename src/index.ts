@@ -6,6 +6,7 @@ import { runCommand } from './commands/run.js';
 import { chatCommand } from './commands/chat.js';
 import { configCommand } from './commands/config.js';
 import { mcpCommand } from './commands/mcp.js';
+import { startWebUI } from './webui/server.js';
 import dotenv from 'dotenv';
 import { createRequire } from 'module';
 
@@ -41,14 +42,53 @@ program
 // Interactive chat
 program
   .command('chat')
-  .description('Start an interactive chat session')
+  .description('Start an interactive chat session with WebUI')
   .option('-m, --model <model>', 'AI model to use')
   .option('-b, --base-url <url>', 'Custom API base URL')
   .option('-k, --api-key <key>', 'API key (overrides config)')
   .option('--provider <provider>', 'Model API format: anthropic or openai')
   .option('--theme <theme>', 'UI theme to use')
   .option('--session <id>', 'Resume a specific chat session by id')
+  .option('--no-webui', 'Disable WebUI server (TUI only)')
   .action(chatCommand);
+
+// WebUI - Browser-based interface
+program
+  .command('ui')
+  .description('Start the WebUI - browser-based interface with dashboard, visual diff, and more')
+  .option('-p, --port <port>', 'Port to run on (default: 3847)', '3847')
+  .option('-h, --host <host>', 'Host to bind to (default: localhost)', 'localhost')
+  .option('--open', 'Open browser automatically', false)
+  .action(async (options) => {
+    const port = parseInt(options.port, 10);
+    const host = options.host;
+
+    console.log(chalk.hex('#00D4FF').bold('\n  ⚡ XibeCode WebUI\n'));
+    console.log(chalk.dim(`  Starting server on ${host}:${port}...\n`));
+
+    try {
+      const server = await startWebUI({ port, host, workingDir: process.cwd() });
+
+      const url = `http://${host}:${port}`;
+      console.log(chalk.green('  ✓ Server running at: ') + chalk.hex('#00D4FF')(url));
+      console.log(chalk.dim('\n  Press Ctrl+C to stop\n'));
+
+      if (options.open) {
+        const open = (await import('open')).default;
+        await open(url);
+      }
+
+      // Handle graceful shutdown
+      process.on('SIGINT', async () => {
+        console.log(chalk.dim('\n  Shutting down...'));
+        await server.stop();
+        process.exit(0);
+      });
+    } catch (error: any) {
+      console.error(chalk.red('  ✗ Failed to start: ') + error.message);
+      process.exit(1);
+    }
+  });
 
 // Configuration
 program
@@ -122,42 +162,10 @@ mcpCmd
   .description('Authenticate with Smithery')
   .action(() => mcpCommand('login', []));
 
-// Show help if no command
+// Launch chat with WebUI if no command provided
 if (!process.argv.slice(2).length) {
-  const B = chalk.hex('#3A3A4A');  // border
-  const C = chalk.hex('#00D4FF');  // brand cyan
-  const Cb = chalk.hex('#00D4FF').bold;
-  const W = chalk.white;
-  const Wb = chalk.bold.white;
-  const D = chalk.hex('#6B6B7B');  // dim
-  const M = chalk.hex('#4A4A5A');  // muted
-
-  console.log('');
-  console.log('  ' + B('╭──────────────────────────────────────────────────────────────╮'));
-  console.log('  ' + B('│') + '                                                              ' + B('│'));
-  console.log('  ' + B('│') + '   ' + Cb('⚡ XibeCode') + '                                                ' + B('│'));
-  console.log('  ' + B('│') + '   ' + D('AI-Powered Autonomous Coding Assistant') + '                      ' + B('│'));
-  console.log('  ' + B('│') + '   ' + M(`v${pkg.version}`) + ' '.repeat(Math.max(1, 46 - pkg.version.length)) + B('│'));
-  console.log('  ' + B('│') + '                                                              ' + B('│'));
-  console.log('  ' + B('╰──────────────────────────────────────────────────────────────╯'));
-  console.log('');
-  console.log('  ' + Wb('Quick Start'));
-  console.log('');
-  console.log('  ' + C('  xibecode chat') + D('                  start interactive chat'));
-  console.log('  ' + C('  xibecode run') + D(' "Build an API"    run autonomous task'));
-  console.log('  ' + C('  xibecode config --show') + D('        view configuration'));
-  console.log('');
-  console.log('  ' + Wb('Examples'));
-  console.log('');
-  console.log('  ' + D('  xibecode run "Build a REST API with Express"'));
-  console.log('  ' + D('  xibecode run "Fix the bug in app.js" --verbose'));
-  console.log('  ' + D('  xibecode run --file task.txt'));
-  console.log('');
-  console.log('  ' + D('  xibecode --help       full command reference'));
-  console.log('  ' + D('  xibecode <cmd> --help  command-specific help'));
-  console.log('');
-
-  process.exit(0);
+  // Default action: start interactive chat with WebUI
+  chatCommand({});
+} else {
+  program.parse();
 }
-
-program.parse();

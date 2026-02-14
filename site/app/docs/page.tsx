@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowRight, Book, Code, Rocket, Settings, Puzzle, FileText, Users, Wrench, Shield } from 'lucide-react';
+import { ArrowRight, Book, Code, Rocket, Settings, Puzzle, FileText, Users, Wrench, Shield, Monitor, TestTube } from 'lucide-react';
 
 export default function DocsPage() {
   const sections = [
@@ -14,6 +14,20 @@ export default function DocsPage() {
       title: 'Quick Start',
       description: 'Run your first autonomous coding task with XibeCode.',
       href: '/docs/quickstart',
+    },
+    {
+      icon: Monitor,
+      title: 'WebUI',
+      description: 'Browser-based interface with dashboard, visual diff, and chat.',
+      href: '/docs/webui',
+      isNew: true,
+    },
+    {
+      icon: TestTube,
+      title: 'AI Test Generation',
+      description: 'Automatically generate comprehensive test suites for your code.',
+      href: '/docs/test-generation',
+      isNew: true,
     },
     {
       icon: Users,
@@ -87,8 +101,13 @@ export default function DocsPage() {
           <Link
             key={section.href}
             href={section.href}
-            className="group p-6 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] hover:border-violet-500/20 transition-all"
+            className="group p-6 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] hover:border-violet-500/20 transition-all relative"
           >
+            {'isNew' in section && section.isNew && (
+              <span className="absolute top-4 right-4 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                New
+              </span>
+            )}
             <div className="flex items-start gap-4">
               <div className="p-2.5 rounded-lg bg-violet-500/10 text-violet-400">
                 <section.icon className="h-5 w-5" />
@@ -119,6 +138,16 @@ export default function DocsPage() {
           <li>
             <Link href="/docs/installation" className="text-violet-400 hover:underline">
               Installation Guide →
+            </Link>
+          </li>
+          <li>
+            <Link href="/docs/webui" className="text-emerald-400 hover:underline">
+              WebUI (New) →
+            </Link>
+          </li>
+          <li>
+            <Link href="/docs/test-generation" className="text-emerald-400 hover:underline">
+              AI Test Generation (New) →
             </Link>
           </li>
           <li>
