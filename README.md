@@ -154,23 +154,38 @@ When you run `xibecode chat`, both interfaces are connected:
 
 ### Slash Commands (`/`)
 
-Type `/` in the input to open the mode selector:
+Type `/` in the input to open the command palette:
+
+**Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `/clear` | Clear chat messages |
+| `/help` | Show available commands |
+| `/diff` | Show git diff |
+| `/status` | Show git status |
+| `/test` | Run project tests |
+| `/format` | Format code in project |
+| `/reset` | Reset chat session |
+| `/files` | List project files |
+
+**Modes:**
 
 | Mode | Icon | Description |
 |------|------|-------------|
-| Agent | 🤖 | Autonomous coding (default) |
-| Plan | 📋 | Analyze without modifying |
-| Tester | 🧪 | Testing and QA |
-| Debugger | 🐛 | Bug investigation |
-| Security | 🔒 | Security analysis |
-| Review | 👀 | Code review |
-| Team Leader | 👑 | Coordinate team |
-| Architect | 🏛️ | System design |
-| Engineer | 🛠️ | Implementation |
-| SEO | 🌐 | SEO optimization |
-| Product | 🔥 | Product strategy |
-| Data | 📊 | Data analysis |
-| Researcher | 📚 | Deep research |
+| `/mode agent` | 🤖 | Autonomous coding (default) |
+| `/mode plan` | 📋 | Analyze without modifying |
+| `/mode tester` | 🧪 | Testing and QA |
+| `/mode debugger` | 🐛 | Bug investigation |
+| `/mode security` | 🔒 | Security analysis |
+| `/mode review` | 👀 | Code review |
+| `/mode team_leader` | 👑 | Coordinate team |
+| `/mode architect` | 🏛️ | System design |
+| `/mode engineer` | 🛠️ | Implementation |
+| `/mode seo` | 🌐 | SEO optimization |
+| `/mode product` | 🔥 | Product strategy |
+| `/mode data` | 📊 | Data analysis |
+| `/mode researcher` | 📚 | Deep research |
 
 ### File References (`@`)
 
