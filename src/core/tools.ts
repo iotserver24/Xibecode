@@ -18,11 +18,75 @@ import { SkillManager } from './skills.js';
 
 const execAsync = promisify(exec);
 
+/**
+ * Interface for tool executors
+ *
+ * @category Tool Execution
+ * @since 0.1.0
+ */
 export interface ToolExecutor {
+  /**
+   * Execute a tool with given input
+   *
+   * @param toolName - Name of the tool to execute
+   * @param input - Tool input parameters
+   * @returns Tool execution result
+   */
   execute(toolName: string, input: any): Promise<any>;
+
+  /**
+   * Get all available tools
+   *
+   * @returns Array of tool definitions
+   */
   getTools(): Tool[];
 }
 
+/**
+ * Main tool executor for XibeCode agent
+ *
+ * Provides 95+ tools across 8 categories for autonomous coding operations:
+ * - File Operations: read, write, edit, delete files
+ * - Git Operations: status, diff, commit, reset
+ * - Shell Commands: run commands, interactive shell
+ * - Web Operations: search, fetch URLs, HTTP requests
+ * - Context Operations: code search, file finding, context discovery
+ * - Test Operations: run tests, get results
+ * - Memory Operations: update neural memory
+ * - Browser Operations: web automation with Puppeteer
+ *
+ * Features:
+ * - Mode-based tool permissions
+ * - Safety checking for dangerous operations
+ * - Plugin support for custom tools
+ * - MCP integration for external tools
+ * - Dry-run mode for safe previews
+ * - Backup system for file operations
+ *
+ * @example
+ * ```typescript
+ * const executor = new CodingToolExecutor('/project', {
+ *   dryRun: false,
+ *   pluginManager,
+ *   memory
+ * });
+ *
+ * executor.setMode('agent');
+ *
+ * // Read a file
+ * const result = await executor.execute('read_file', { path: 'src/app.ts' });
+ *
+ * // Edit a file
+ * await executor.execute('edit_file', {
+ *   path: 'src/app.ts',
+ *   search: 'old code',
+ *   replace: 'new code'
+ * });
+ * ```
+ *
+ * @category Tool Execution
+ * @since 0.1.0
+ */
 export class CodingToolExecutor implements ToolExecutor {
   private workingDir: string;
   private contextManager: ContextManager;
@@ -39,6 +103,37 @@ export class CodingToolExecutor implements ToolExecutor {
   private dryRun: boolean;
   private testCommandOverride?: string;
 
+  /**
+   * Creates a new CodingToolExecutor instance
+   *
+   * Initializes all tool subsystems including file operations, git utilities,
+   * test runner, safety checker, plugin manager, and optional MCP integration.
+   *
+   * @example
+   * ```typescript
+   * // Basic usage
+   * const executor = new CodingToolExecutor('/project');
+   *
+   * // With options
+   * const executor = new CodingToolExecutor('/project', {
+   *   dryRun: true,
+   *   pluginManager: new PluginManager(),
+   *   memory: new NeuralMemory('./.xibecode/memory.json')
+   * });
+   * ```
+   *
+   * @param workingDir - Working directory for file operations (default: process.cwd())
+   * @param options - Configuration options
+   * @param options.dryRun - Enable dry-run mode (preview changes without executing)
+   * @param options.testCommandOverride - Override test command detection
+   * @param options.pluginManager - Plugin manager instance for custom tools
+   * @param options.mcpClientManager - MCP client manager for external tool integration
+   * @param options.memory - Neural memory instance for persistent learning
+   * @param options.skillManager - Skill manager for loading custom workflows
+   *
+   * @category Constructor
+   * @since 0.1.0
+   */
   constructor(
     workingDir: string = process.cwd(),
     options?: {
@@ -69,6 +164,26 @@ export class CodingToolExecutor implements ToolExecutor {
 
   private currentMode: AgentMode = 'agent';
 
+  /**
+   * Set the current agent mode
+   *
+   * Changes the tool executor's operating mode, which affects:
+   * - Tool permissions (what tools are available)
+   * - Dry-run default (some modes preview changes by default)
+   * - Risk tolerance for operations
+   *
+   * @example
+   * ```typescript
+   * executor.setMode('plan');      // Read-only mode
+   * executor.setMode('agent');     // Full capabilities
+   * executor.setMode('security');  // Security-focused mode
+   * ```
+   *
+   * @param mode - Agent mode to switch to
+   *
+   * @category Mode Management
+   * @since 0.1.0
+   */
   setMode(mode: AgentMode) {
     this.currentMode = mode;
     const config = MODE_CONFIG[mode];
@@ -77,6 +192,11 @@ export class CodingToolExecutor implements ToolExecutor {
 
   /**
    * Safely parse tool input - handles string JSON, null, undefined
+   *
+   * @param input - Raw tool input (string, object, null, or undefined)
+   * @returns Parsed input as object
+   *
+   * @internal
    */
   private parseInput(input: any): Record<string, any> {
     if (!input) return {};
@@ -87,6 +207,49 @@ export class CodingToolExecutor implements ToolExecutor {
     return {};
   }
 
+  /**
+   * Execute a tool with given input
+   *
+   * Main tool execution pipeline that:
+   * 1. Checks tool permissions for current mode
+   * 2. Routes MCP tools to external servers
+   * 3. Routes plugin tools to plugin manager
+   * 4. Performs safety assessment for risky operations
+   * 5. Executes the tool implementation
+   * 6. Returns structured result
+   *
+   * @example
+   * ```typescript
+   * // Read a file
+   * const result = await executor.execute('read_file', {
+   *   path: 'src/app.ts'
+   * });
+   *
+   * if (result.success) {
+   *   console.log(result.content);
+   * }
+   *
+   * // Edit a file
+   * await executor.execute('edit_file', {
+   *   path: 'src/app.ts',
+   *   search: 'const old = 1;',
+   *   replace: 'const new = 2;'
+   * });
+   *
+   * // Run a command
+   * await executor.execute('run_command', {
+   *   command: 'npm test'
+   * });
+   * ```
+   *
+   * @param toolName - Name of the tool to execute (e.g., 'read_file', 'edit_file')
+   * @param input - Tool input parameters (varies by tool)
+   * @returns Tool execution result with success/error status
+   *
+   * @see {@link getTools} for list of available tools
+   * @category Tool Execution
+   * @since 0.1.0
+   */
   async execute(toolName: string, input: any): Promise<any> {
     // Check tool permissions first
     const permission = isToolAllowed(this.currentMode, toolName);
@@ -397,6 +560,40 @@ export class CodingToolExecutor implements ToolExecutor {
     }
   }
 
+  /**
+   * Get all available tools for the agent
+   *
+   * Returns an array of tool definitions including core tools, plugin tools,
+   * and MCP tools. Each tool includes:
+   * - name: Tool identifier
+   * - description: What the tool does (for Claude AI)
+   * - input_schema: JSON Schema for input validation
+   *
+   * Tools are grouped by category:
+   * - File Operations: read_file, write_file, edit_file, etc.
+   * - Git Operations: get_git_status, git_commit, etc.
+   * - Shell Commands: run_command, interactive_shell
+   * - Web Operations: web_search, fetch_url, http_request
+   * - Context Operations: grep_code, search_files, get_context
+   * - Test Operations: run_tests, get_test_status
+   * - Memory Operations: update_memory
+   * - Browser Operations: open_browser, browser_click, etc.
+   *
+   * @example
+   * ```typescript
+   * const tools = executor.getTools();
+   * console.log(`${tools.length} tools available`);
+   *
+   * // Find a specific tool
+   * const readFile = tools.find(t => t.name === 'read_file');
+   * console.log(readFile.description);
+   * ```
+   *
+   * @returns Array of tool definitions with schemas
+   *
+   * @category Tool Management
+   * @since 0.1.0
+   */
   getTools(): Tool[] {
     const coreTools: Tool[] = [
       {
@@ -990,10 +1187,51 @@ export class CodingToolExecutor implements ToolExecutor {
     return [...coreTools, ...mcpTools, ...pluginTools];
   }
 
+  /**
+   * Resolve relative file path to absolute path
+   *
+   * @param filePath - Relative or absolute file path
+   * @returns Absolute path resolved against working directory
+   *
+   * @internal
+   */
   private resolvePath(filePath: string): string {
     return path.resolve(this.workingDir, filePath);
   }
 
+  /**
+   * Read file contents
+   *
+   * Reads a file from the filesystem. Supports partial reading by line range
+   * to avoid token limits for large files. Always returns UTF-8 encoded text.
+   *
+   * @example
+   * ```typescript
+   * // Read entire file
+   * const result = await executor.execute('read_file', {
+   *   path: 'src/app.ts'
+   * });
+   *
+   * // Read specific line range
+   * const partial = await executor.execute('read_file', {
+   *   path: 'src/large-file.ts',
+   *   start_line: 100,
+   *   end_line: 200
+   * });
+   * ```
+   *
+   * @param filePath - Path to file (relative to working directory)
+   * @param startLine - Optional start line for partial read (1-indexed)
+   * @param endLine - Optional end line for partial read (inclusive)
+   * @returns Object with path, content, and line info
+   *
+   * @throws {FileNotFoundError} If file doesn't exist
+   * @throws {PermissionError} If file is not readable
+   *
+   * @category File Operations
+   * @mode All modes
+   * @since 0.1.0
+   */
   private async readFile(filePath: string, startLine?: number, endLine?: number): Promise<any> {
     const fullPath = this.resolvePath(filePath);
     try {
@@ -1041,6 +1279,33 @@ export class CodingToolExecutor implements ToolExecutor {
     };
   }
 
+  /**
+   * Write content to file
+   *
+   * Creates or overwrites a file with the given content. Automatically creates
+   * parent directories if they don't exist. Creates a backup before overwriting
+   * existing files.
+   *
+   * In dry-run mode, shows what would be written without making changes.
+   *
+   * @example
+   * ```typescript
+   * await executor.execute('write_file', {
+   *   path: 'src/new-file.ts',
+   *   content: 'export const hello = "world";'
+   * });
+   * ```
+   *
+   * @param filePath - Path to file (relative to working directory)
+   * @param content - File content to write
+   * @returns Object with success status, path, and file info
+   *
+   * @throws {PermissionError} If directory is not writable
+   *
+   * @category File Operations
+   * @mode Write modes (agent, engineer, architect)
+   * @since 0.1.0
+   */
   private async writeFile(filePath: string, content: string): Promise<any> {
     const fullPath = this.resolvePath(filePath);
 
@@ -1071,6 +1336,47 @@ export class CodingToolExecutor implements ToolExecutor {
     }
   }
 
+  /**
+   * Edit file using search and replace
+   *
+   * Performs intelligent search-and-replace editing using the FileEditor's
+   * smart edit strategy. Searches for exact string matches and replaces them.
+   * Automatically handles multi-line strings and special characters.
+   *
+   * Creates a backup before editing. In dry-run mode, shows what would be
+   * changed without modifying the file.
+   *
+   * @example
+   * ```typescript
+   * // Replace first occurrence
+   * await executor.execute('edit_file', {
+   *   path: 'src/app.ts',
+   *   search: 'const oldValue = 1;',
+   *   replace: 'const newValue = 2;'
+   * });
+   *
+   * // Replace all occurrences
+   * await executor.execute('edit_file', {
+   *   path: 'src/app.ts',
+   *   search: 'oldName',
+   *   replace: 'newName',
+   *   all: true
+   * });
+   * ```
+   *
+   * @param filePath - Path to file (relative to working directory)
+   * @param search - Exact string to search for (can be multi-line)
+   * @param replace - Replacement string
+   * @param all - Replace all occurrences (default: false, replaces first only)
+   * @returns Object with success status, changes made, and diff
+   *
+   * @throws {FileNotFoundError} If file doesn't exist
+   * @throws {SearchNotFoundError} If search string not found
+   *
+   * @category File Operations
+   * @mode Write modes (agent, engineer, architect)
+   * @since 0.1.0
+   */
   private async editFile(filePath: string, search: string, replace: string, all?: boolean): Promise<any> {
     if (this.dryRun) {
       return {
@@ -1172,6 +1478,56 @@ export class CodingToolExecutor implements ToolExecutor {
     }
   }
 
+  /**
+   * Execute a shell command
+   *
+   * Runs a command in a shell (bash on Unix, PowerShell on Windows).
+   * Captures stdout and stderr. Supports stdin input for interactive commands.
+   * Automatically times out after 120 seconds (configurable).
+   *
+   * Safety checks are performed before execution to block dangerous commands
+   * like `rm -rf /`, malicious scripts, and other high-risk operations.
+   *
+   * @example
+   * ```typescript
+   * // Run a simple command
+   * const result = await executor.execute('run_command', {
+   *   command: 'npm test'
+   * });
+   *
+   * // Run with specific working directory
+   * await executor.execute('run_command', {
+   *   command: 'ls -la',
+   *   cwd: './src'
+   * });
+   *
+   * // Run with stdin input
+   * await executor.execute('run_command', {
+   *   command: 'cat > output.txt',
+   *   input: 'Hello World'
+   * });
+   *
+   * // Run with custom timeout
+   * await executor.execute('run_command', {
+   *   command: 'npm install',
+   *   timeout: 300  // 5 minutes
+   * });
+   * ```
+   *
+   * @param command - Shell command to execute
+   * @param cwd - Working directory (default: executor's working directory)
+   * @param input - Optional stdin input for interactive commands
+   * @param timeout - Timeout in seconds (default: 120)
+   * @returns Object with stdout, stderr, exit code, and execution time
+   *
+   * @throws {SafetyError} If command is blocked by safety checker
+   * @throws {TimeoutError} If command exceeds timeout
+   *
+   * @category Shell Commands
+   * @mode Command modes (agent, engineer, debugger, tester)
+   * @risk-level High
+   * @since 0.1.0
+   */
   private async runCommand(command: string, cwd?: string, input?: string, timeout?: number): Promise<any> {
     const workDir = cwd ? this.resolvePath(cwd) : this.workingDir;
     const timeoutMs = (timeout || 120) * 1000;

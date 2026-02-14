@@ -1,0 +1,59 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["./src/index.ts"],
+  "entryPointStrategy": "expand",
+  "out": "./docs/api-generated",
+  "plugin": ["typedoc-plugin-markdown"],
+  "theme": "markdown",
+  "excludePrivate": true,
+  "excludeProtected": false,
+  "excludeExternals": true,
+  "excludeInternal": false,
+  "readme": "./README.md",
+  "categorizeByGroup": true,
+  "categoryOrder": [
+    "Agent",
+    "Tools",
+    "Modes",
+    "Memory",
+    "Editor",
+    "Context",
+    "Skills",
+    "Plugins",
+    "MCP",
+    "Safety",
+    "*"
+  ],
+  "groupOrder": [
+    "Classes",
+    "Functions",
+    "Interfaces",
+    "Type Aliases",
+    "*"
+  ],
+  "sort": ["source-order"],
+  "kindSortOrder": [
+    "Class",
+    "Interface",
+    "Type alias",
+    "Function",
+    "Variable",
+    "Property",
+    "Method"
+  ],
+  "includeVersion": true,
+  "gitRevision": "main",
+  "gitRemote": "origin",
+  "name": "XibeCode API Documentation",
+  "navigation": {
+    "includeCategories": true,
+    "includeGroups": true
+  },
+  "skipErrorChecking": false,
+  "treatWarningsAsErrors": false,
+  "validation": {
+    "notExported": true,
+    "invalidLink": true,
+    "notDocumented": false
+  }
+}
