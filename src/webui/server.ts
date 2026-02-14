@@ -22,6 +22,7 @@ import { CodingToolExecutor } from '../core/tools.js';
 import { GitUtils } from '../utils/git.js';
 import { TestRunnerDetector } from '../utils/testRunner.js';
 import { TestGenerator, writeTestFile } from '../tools/test-generator.js';
+import { SessionBridge } from '../core/session-bridge.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -429,7 +430,38 @@ export class WebUIServer {
   private handleWebSocket(ws: WebSocket, req: IncomingMessage): void {
     const url = new URL(req.url || '/', `http://${req.headers.host}`);
     const sessionId = url.searchParams.get('session');
+    const mode = url.searchParams.get('mode'); // 'bridge' for TUI sync, null for standalone
 
+    // Register with SessionBridge for TUI-WebUI sync
+    if (mode === 'bridge') {
+      SessionBridge.registerWebSocket(ws);
+
+      ws.on('message', async (data) => {
+        try {
+          const message = JSON.parse(data.toString());
+
+          if (message.type === 'ping') {
+            ws.send(JSON.stringify({ type: 'pong' }));
+            return;
+          }
+
+          // Forward user messages to TUI via SessionBridge
+          if (message.type === 'message' && message.content) {
+            SessionBridge.onWebUIUserMessage(message.content);
+          }
+        } catch (error) {
+          console.error('WebSocket message error:', error);
+        }
+      });
+
+      ws.on('close', () => {
+        SessionBridge.unregisterWebSocket(ws);
+      });
+
+      return;
+    }
+
+    // Legacy standalone mode for backward compatibility
     if (sessionId) {
       this.wsClients.set(sessionId, ws);
     }
@@ -962,24 +994,20 @@ export class WebUIServer {
     }
 
     async function createSession() {
-      try {
-        const res = await fetch('/api/session/create', { method: 'POST' });
-        const data = await res.json();
-        sessionId = data.sessionId;
-        document.getElementById('session-id').textContent = sessionId.slice(0, 12) + '...';
-        connectWebSocket();
-      } catch (e) {
-        console.error('Failed to create session:', e);
-      }
+      // In bridge mode, we don't create a separate session - we sync with TUI
+      sessionId = 'bridge';
+      document.getElementById('session-id').textContent = 'TUI Sync';
+      connectWebSocket();
     }
 
     function connectWebSocket() {
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      ws = new WebSocket(\`\${protocol}//\${location.host}?session=\${sessionId}\`);
+      // Connect in bridge mode to sync with TUI
+      ws = new WebSocket(\`\${protocol}//\${location.host}?mode=bridge\`);
 
       ws.onopen = () => {
         document.getElementById('ws-status').className = 'status-indicator status-connected';
-        document.getElementById('ws-text').textContent = 'Connected';
+        document.getElementById('ws-text').textContent = 'Synced with TUI';
       };
 
       ws.onclose = () => {
@@ -996,29 +1024,51 @@ export class WebUIServer {
 
     function handleWSMessage(data) {
       switch (data.type) {
+        // Bridge events from TUI
+        case 'user_message':
+          if (data.source === 'tui') {
+            addMessage('user', data.data.content + ' (from TUI)');
+          }
+          document.getElementById('send-btn').disabled = true;
+          break;
+        case 'assistant_message':
+          addMessage('assistant', data.data.content);
+          document.getElementById('send-btn').disabled = false;
+          break;
+        case 'session_sync':
+          // Sync session state
+          if (data.data.sessionId) {
+            document.getElementById('session-id').textContent = 'TUI: ' + data.data.sessionId.slice(0, 8) + '...';
+          }
+          break;
         case 'thinking':
-          updateThinking(data.message);
+          updateThinking(data.data?.text || data.message);
           break;
         case 'stream_start':
           startStreamMessage();
           break;
         case 'stream_text':
-          appendStreamText(data.text);
+          appendStreamText(data.data?.text || data.text);
           break;
         case 'stream_end':
           endStreamMessage();
+          document.getElementById('send-btn').disabled = false;
           break;
         case 'response':
           addMessage('assistant', data.text);
           break;
         case 'tool_call':
-          addMessage('system', \`Tool: \${data.name}\`);
+          addMessage('system', \`🔧 \${data.data?.name || data.name}\`);
+          break;
+        case 'tool_result':
+          const success = data.data?.success ? '✓' : '✗';
+          addMessage('system', \`\${success} \${data.data?.name || data.name} completed\`);
           break;
         case 'complete':
           document.getElementById('send-btn').disabled = false;
           break;
         case 'error':
-          addMessage('system', \`Error: \${data.error}\`);
+          addMessage('system', \`Error: \${data.data?.error || data.error}\`);
           document.getElementById('send-btn').disabled = false;
           break;
       }
@@ -1061,14 +1111,15 @@ export class WebUIServer {
     function sendMessage() {
       const input = document.getElementById('user-input');
       const message = input.value.trim();
-      if (!message || !sessionId) return;
+      if (!message) return;
 
       addMessage('user', message);
       input.value = '';
       document.getElementById('send-btn').disabled = true;
 
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'message', sessionId, content: message }));
+        // Send via bridge to TUI
+        ws.send(JSON.stringify({ type: 'message', content: message }));
       }
     }
 

@@ -14,6 +14,7 @@ import { getAllModes, type AgentMode, MODE_CONFIG } from '../core/modes.js';
 import { isThemeName, THEME_NAMES, type ThemeName } from '../ui/themes.js';
 import { SkillManager } from '../core/skills.js';
 import { startWebUI, type WebUIServer } from '../webui/server.js';
+import { SessionBridge } from '../core/session-bridge.js';
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -131,27 +132,32 @@ export async function chatCommand(options: ChatOptions) {
         case 'thinking':
           if (!hasResponse) {
             ui.thinking(event.data.message || 'Analyzing your request...');
+            SessionBridge.onThinking(event.data.message || 'Analyzing your request...');
           }
           break;
 
         // ── Streaming ──
         case 'stream_start':
           ui.startAssistantResponse(event.data.persona);
+          SessionBridge.onStreamStart(event.data.persona);
           hasResponse = true;
           break;
 
         case 'stream_text':
           ui.streamText(event.data.text);
+          SessionBridge.onStreamText(event.data.text);
           break;
 
         case 'stream_end':
           ui.endAssistantResponse();
+          SessionBridge.onStreamEnd();
           break;
 
         // ── Non-streaming fallback ──
         case 'response':
           if (!hasResponse) {
             ui.response(event.data.text, event.data.persona);
+            SessionBridge.onAssistantMessage(event.data.text, event.data.persona);
             hasResponse = true;
           }
           break;
@@ -160,12 +166,14 @@ export async function chatCommand(options: ChatOptions) {
         case 'tool_call':
           if (enableTools) {
             ui.toolCall(event.data.name, event.data.input);
+            SessionBridge.onToolCall(event.data.name, event.data.input);
           }
           break;
 
         case 'tool_result':
           if (enableTools) {
             ui.toolResult(event.data.name, event.data.result, event.data.success);
+            SessionBridge.onToolResult(event.data.name, event.data.result, event.data.success);
 
             const r = event.data.result;
             if (r?.success && event.data.name === 'write_file') {
@@ -196,6 +204,7 @@ export async function chatCommand(options: ChatOptions) {
         // ── Errors / Warnings ──
         case 'error':
           ui.error(event.data.message || event.data.error);
+          SessionBridge.onError(event.data.message || event.data.error);
           break;
 
         case 'warning':
@@ -205,6 +214,7 @@ export async function chatCommand(options: ChatOptions) {
         case 'mode_changed':
           currentMode = event.data.to as AgentMode;
           ui.info(`Mode: ${currentMode}`);
+          SessionBridge.updateState({ mode: currentMode });
           break;
       }
     });
@@ -227,6 +237,25 @@ export async function chatCommand(options: ChatOptions) {
   } else {
     currentSession = await sessionManager.createSession({ model, cwd: process.cwd() });
   }
+
+  // Update SessionBridge with initial state
+  SessionBridge.updateState({
+    sessionId: currentSession.id,
+    model,
+    mode: currentMode,
+    messages: agent.getMessages(),
+    isProcessing: false,
+  });
+
+  // Queue for WebUI messages
+  let pendingWebUIMessage: string | null = null;
+
+  // Listen for messages from WebUI
+  SessionBridge.on('user_message', async (content: string, source: string) => {
+    if (source === 'webui') {
+      pendingWebUIMessage = content;
+    }
+  });
 
   async function showPathSuggestions(raw: string) {
     const input = raw.trim().slice(1).trim(); // drop leading '@'
@@ -586,14 +615,23 @@ export async function chatCommand(options: ChatOptions) {
 
   // ── Chat loop ──
   while (true) {
-    let { message } = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'message',
-        message: chalk.hex('#00E676').bold('❯ You '),
-        prefix: '',
-      },
-    ]);
+    // Check for pending message from WebUI
+    let message: string;
+    if (pendingWebUIMessage) {
+      message = pendingWebUIMessage;
+      pendingWebUIMessage = null;
+      console.log(chalk.hex('#00D4FF').bold('❯ WebUI ') + chalk.white(message));
+    } else {
+      const result = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'message',
+          message: chalk.hex('#00E676').bold('❯ You '),
+          prefix: '',
+        },
+      ]);
+      message = result.message;
+    }
 
     // Special interactive flow when user types just "@"
     if (message.trim() === '@') {
@@ -1217,11 +1255,17 @@ export async function chatCommand(options: ChatOptions) {
       if (undoStack.length > MAX_UNDO) undoStack.shift();
       redoStack.length = 0; // clear redo on new action
 
+      // Broadcast user message to WebUI
+      SessionBridge.onTUIUserMessage(message);
+
       // agent.run() resets its iteration/tool counters but KEEPS
       // the conversation history (this.messages), so the AI has
       // full context of everything discussed in this session.
       await agent.run(message, tools, toolExecutor);
       const stats = agent.getStats();
+
+      // Update SessionBridge with latest messages
+      SessionBridge.updateState({ messages: agent.getMessages() });
 
       // Build tokens label for status bar
       const tokensLabel = stats.totalTokens > 0
