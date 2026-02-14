@@ -15,6 +15,7 @@ import { NeuralMemory } from './memory.js';
 import { BrowserManager } from '../tools/browser.js';
 import * as os from 'os';
 import { SkillManager } from './skills.js';
+import { TestGenerator, generateTestsForFile, writeTestFile } from '../tools/test-generator.js';
 
 const execAsync = promisify(exec);
 
@@ -590,6 +591,27 @@ export class CodingToolExecutor implements ToolExecutor {
           return { error: true, success: false, message: 'Missing required parameter: skill_id (string)' };
         }
         return this.installSkillFromSkillsSh(p.skill_id);
+      }
+
+      // AI Test Generation Tools
+      case 'generate_tests': {
+        if (!p.file_path || typeof p.file_path !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: file_path (string)' };
+        }
+        return this.generateTests(p.file_path, {
+          framework: p.framework,
+          outputDir: p.output_dir,
+          includeEdgeCases: p.include_edge_cases,
+          includeMocks: p.include_mocks,
+          maxTestsPerFunction: p.max_tests_per_function,
+        }, p.write_file);
+      }
+
+      case 'analyze_code_for_tests': {
+        if (!p.file_path || typeof p.file_path !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: file_path (string)' };
+        }
+        return this.analyzeCodeForTests(p.file_path);
       }
 
       default:
@@ -1288,6 +1310,60 @@ export class CodingToolExecutor implements ToolExecutor {
           required: ['skill_id'],
         },
       },
+      // AI Test Generation Tools
+      {
+        name: 'generate_tests',
+        description: 'AI-powered test generation. Analyzes a source file and automatically generates comprehensive test cases including unit tests, edge cases, error handling tests, and type checks. Supports Vitest, Jest, Mocha, pytest, and Go test frameworks.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            file_path: {
+              type: 'string',
+              description: 'Path to the source file to generate tests for (e.g., "src/utils/helpers.ts")',
+            },
+            framework: {
+              type: 'string',
+              enum: ['vitest', 'jest', 'mocha', 'pytest', 'go'],
+              description: 'Test framework to use. Auto-detected if not specified.',
+            },
+            output_dir: {
+              type: 'string',
+              description: 'Directory for test output. Default: __tests__ for JS/TS, tests/ for Python, same dir for Go.',
+            },
+            include_edge_cases: {
+              type: 'boolean',
+              description: 'Include edge case tests (empty strings, null values, boundary conditions). Default: true',
+            },
+            include_mocks: {
+              type: 'boolean',
+              description: 'Include mock setup code for dependencies. Default: true',
+            },
+            max_tests_per_function: {
+              type: 'number',
+              description: 'Maximum test cases per function. Default: 5',
+            },
+            write_file: {
+              type: 'boolean',
+              description: 'Write generated tests to file. Default: false (returns content only)',
+            },
+          },
+          required: ['file_path'],
+        },
+      },
+      {
+        name: 'analyze_code_for_tests',
+        description: 'Analyze a source file to understand its structure before generating tests. Returns information about functions, classes, exports, imports, complexity, and dependencies. Useful for understanding what needs to be tested.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            file_path: {
+              type: 'string',
+              description: 'Path to the source file to analyze (e.g., "src/utils/helpers.ts")',
+            },
+          },
+          required: ['file_path'],
+        },
+      },
     ];
 
     // Merge MCP tools
@@ -1913,6 +1989,122 @@ export class CodingToolExecutor implements ToolExecutor {
       success: true,
       lastRun: this.lastTestResult,
     };
+  }
+
+  // ── AI Test Generation Methods ──
+
+  private testGenerator: TestGenerator | null = null;
+
+  private getTestGenerator(): TestGenerator {
+    if (!this.testGenerator) {
+      this.testGenerator = new TestGenerator(this.workingDir);
+    }
+    return this.testGenerator;
+  }
+
+  private async generateTests(
+    filePath: string,
+    config: {
+      framework?: 'vitest' | 'jest' | 'mocha' | 'pytest' | 'go';
+      outputDir?: string;
+      includeEdgeCases?: boolean;
+      includeMocks?: boolean;
+      maxTestsPerFunction?: number;
+    },
+    writeToFile: boolean = false
+  ): Promise<any> {
+    try {
+      const generator = this.getTestGenerator();
+      const absolutePath = this.resolvePath(filePath);
+
+      // Analyze the file
+      const analysis = await generator.analyzeFile(absolutePath);
+
+      // Generate tests
+      const generatedTest = await generator.generateTests(analysis, {
+        framework: config.framework,
+        outputDir: config.outputDir,
+        includeEdgeCases: config.includeEdgeCases ?? true,
+        includeMocks: config.includeMocks ?? true,
+        maxTestsPerFunction: config.maxTestsPerFunction ?? 5,
+      });
+
+      // Optionally write to file
+      if (writeToFile && !this.dryRun) {
+        await writeTestFile(generatedTest);
+      }
+
+      return {
+        success: true,
+        sourceFile: filePath,
+        testFilePath: generatedTest.testFilePath,
+        framework: generatedTest.framework,
+        testCasesGenerated: generatedTest.testCases.length,
+        coverage: generatedTest.coverage,
+        writtenToFile: writeToFile && !this.dryRun,
+        dryRun: this.dryRun,
+        content: generatedTest.content,
+        testCases: generatedTest.testCases.map(tc => ({
+          name: tc.name,
+          type: tc.type,
+          description: tc.description,
+        })),
+      };
+    } catch (error: any) {
+      return {
+        error: true,
+        success: false,
+        message: `Failed to generate tests: ${error.message}`,
+      };
+    }
+  }
+
+  private async analyzeCodeForTests(filePath: string): Promise<any> {
+    try {
+      const generator = this.getTestGenerator();
+      const absolutePath = this.resolvePath(filePath);
+
+      const analysis = await generator.analyzeFile(absolutePath);
+
+      return {
+        success: true,
+        filePath,
+        language: analysis.language,
+        functions: analysis.functions.map(f => ({
+          name: f.name,
+          params: f.params,
+          returnType: f.returnType,
+          isAsync: f.isAsync,
+          isExported: f.isExported,
+          complexity: f.complexity,
+          dependencies: f.dependencies,
+          sideEffects: f.sideEffects,
+        })),
+        classes: analysis.classes.map(c => ({
+          name: c.name,
+          isExported: c.isExported,
+          methodCount: c.methods.length,
+          propertyCount: c.properties.length,
+          methods: c.methods.map(m => m.name),
+        })),
+        exports: analysis.exports,
+        imports: analysis.imports,
+        summary: {
+          totalFunctions: analysis.functions.length,
+          exportedFunctions: analysis.functions.filter(f => f.isExported).length,
+          totalClasses: analysis.classes.length,
+          exportedClasses: analysis.classes.filter(c => c.isExported).length,
+          asyncFunctions: analysis.functions.filter(f => f.isAsync).length,
+          highComplexityFunctions: analysis.functions.filter(f => f.complexity === 'high').length,
+        },
+      };
+    } catch (error: any) {
+      return {
+        error: true,
+        success: false,
+        message: `Failed to analyze code: ${error.message}`,
+      };
+    }
   }
 
   // ── Git Methods ──

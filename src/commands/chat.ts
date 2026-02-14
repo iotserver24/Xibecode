@@ -13,6 +13,7 @@ import { TodoManager } from '../utils/todoManager.js';
 import { getAllModes, type AgentMode, MODE_CONFIG } from '../core/modes.js';
 import { isThemeName, THEME_NAMES, type ThemeName } from '../ui/themes.js';
 import { SkillManager } from '../core/skills.js';
+import { startWebUI, type WebUIServer } from '../webui/server.js';
 import chalk from 'chalk';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -24,6 +25,7 @@ interface ChatOptions {
   provider?: string;
   theme?: string;
   session?: string;
+  noWebui?: boolean;
 }
 
 export async function chatCommand(options: ChatOptions) {
@@ -37,10 +39,27 @@ export async function chatCommand(options: ChatOptions) {
   const sessionManager = new SessionManager(config.getSessionDirectory());
   const contextManager = new ContextManager(process.cwd());
   let skillManager: SkillManager;
+  let webUIServer: WebUIServer | null = null;
 
   ui.clear();
   if (!config.isHeaderMinimal()) {
     ui.header('1.0.0');
+  }
+
+  // Start WebUI server in background (unless disabled)
+  const webUIPort = 3847;
+  if (!options.noWebui) {
+    try {
+      webUIServer = await startWebUI({ port: webUIPort, host: 'localhost', workingDir: process.cwd() });
+      console.log(chalk.hex('#6B6B7B')(`  WebUI: `) + chalk.hex('#00D4FF')(`http://localhost:${webUIPort}`) + chalk.hex('#6B6B7B')(` (open in browser for visual interface)`));
+      console.log('');
+    } catch (error: any) {
+      // Silently continue if WebUI fails to start (port might be in use)
+      if (error.code !== 'EADDRINUSE') {
+        console.log(chalk.hex('#6B6B7B')(`  WebUI: `) + chalk.yellow(`failed to start (${error.message})`));
+        console.log('');
+      }
+    }
   }
 
   // Get API key
@@ -1122,6 +1141,10 @@ export async function chatCommand(options: ChatOptions) {
         messages: agent.getMessages(),
         stats,
       });
+      // Stop WebUI server
+      if (webUIServer) {
+        await webUIServer.stop();
+      }
       break;
     }
 
@@ -1232,4 +1255,9 @@ export async function chatCommand(options: ChatOptions) {
 
   // Cleanup: disconnect from any MCP servers connected during this session
   await mcpClientManager.disconnectAll();
+
+  // Stop WebUI server if running
+  if (webUIServer) {
+    await webUIServer.stop();
+  }
 }
