@@ -97,6 +97,30 @@ MCP server management:
 - Skill system (built-in + custom markdown skills)
 - Session-aware chat and themed terminal UI
 
+## Browser Testing (Playwright)
+
+XibeCode includes comprehensive browser automation and testing capabilities powered by Playwright:
+
+- **Screenshots** - Capture webpage screenshots
+- **Console Logs** - Collect browser console output for debugging
+- **Visual Regression** - Compare screenshots against baselines to detect UI changes
+- **Accessibility Audits** - Check WCAG compliance (alt text, labels, heading hierarchy)
+- **Performance Metrics** - Measure Core Web Vitals (FCP, LCP, CLS, TTI)
+- **Responsive Testing** - Test across multiple viewports (mobile, tablet, desktop)
+- **Network Monitoring** - Capture all network requests during page load
+- **E2E Tests** - Execute Playwright test files
+
+```bash
+# Example: Test a page's performance
+xibecode run "Measure the performance of http://localhost:3000"
+
+# Example: Check accessibility
+xibecode run "Run an accessibility audit on the homepage"
+
+# Example: Visual regression test
+xibecode run "Take a screenshot and compare against baseline"
+```
+
 ## Project Docs
 
 - `CHANGELOG.md` — release history
