@@ -84,8 +84,58 @@ export default function WebUIPage() {
       <div>
         <h2 className="text-2xl font-bold mb-6">Slash Commands (<code className="text-violet-400">/</code>)</h2>
         <p className="text-zinc-400 mb-4">
-          Type <code className="text-violet-400">/</code> in the input to open the mode selector. Use arrow keys to navigate and Enter to select.
+          Type <code className="text-violet-400">/</code> in the input to open the command palette. Use arrow keys to navigate and Enter to select.
         </p>
+
+        {/* Commands */}
+        <h3 className="text-lg font-semibold text-emerald-400 mb-3">Commands</h3>
+        <div className="overflow-x-auto mb-6">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-white/10">
+                <th className="text-left py-3 px-4 font-semibold">Command</th>
+                <th className="text-left py-3 px-4 font-semibold">Description</th>
+              </tr>
+            </thead>
+            <tbody className="text-zinc-400">
+              <tr className="border-b border-white/5">
+                <td className="py-3 px-4 font-mono text-violet-400">/clear</td>
+                <td className="py-3 px-4">Clear chat messages</td>
+              </tr>
+              <tr className="border-b border-white/5">
+                <td className="py-3 px-4 font-mono text-violet-400">/help</td>
+                <td className="py-3 px-4">Show available commands and tips</td>
+              </tr>
+              <tr className="border-b border-white/5">
+                <td className="py-3 px-4 font-mono text-violet-400">/diff</td>
+                <td className="py-3 px-4">Show git diff</td>
+              </tr>
+              <tr className="border-b border-white/5">
+                <td className="py-3 px-4 font-mono text-violet-400">/status</td>
+                <td className="py-3 px-4">Show git status</td>
+              </tr>
+              <tr className="border-b border-white/5">
+                <td className="py-3 px-4 font-mono text-violet-400">/test</td>
+                <td className="py-3 px-4">Run project tests</td>
+              </tr>
+              <tr className="border-b border-white/5">
+                <td className="py-3 px-4 font-mono text-violet-400">/format</td>
+                <td className="py-3 px-4">Format code in project</td>
+              </tr>
+              <tr className="border-b border-white/5">
+                <td className="py-3 px-4 font-mono text-violet-400">/reset</td>
+                <td className="py-3 px-4">Reset chat session</td>
+              </tr>
+              <tr className="border-b border-white/5">
+                <td className="py-3 px-4 font-mono text-violet-400">/files</td>
+                <td className="py-3 px-4">List project files</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Modes */}
+        <h3 className="text-lg font-semibold text-emerald-400 mb-3">Agent Modes</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -97,67 +147,67 @@ export default function WebUIPage() {
             </thead>
             <tbody className="text-zinc-400">
               <tr className="border-b border-white/5">
-                <td className="py-3 px-4 font-mono text-violet-400">agent</td>
+                <td className="py-3 px-4 font-mono text-violet-400">/mode agent</td>
                 <td className="py-3 px-4">🤖</td>
                 <td className="py-3 px-4">Autonomous coding (default)</td>
               </tr>
               <tr className="border-b border-white/5">
-                <td className="py-3 px-4 font-mono text-violet-400">plan</td>
+                <td className="py-3 px-4 font-mono text-violet-400">/mode plan</td>
                 <td className="py-3 px-4">📋</td>
                 <td className="py-3 px-4">Analyze without modifying code</td>
               </tr>
               <tr className="border-b border-white/5">
-                <td className="py-3 px-4 font-mono text-violet-400">tester</td>
+                <td className="py-3 px-4 font-mono text-violet-400">/mode tester</td>
                 <td className="py-3 px-4">🧪</td>
                 <td className="py-3 px-4">Testing and QA</td>
               </tr>
               <tr className="border-b border-white/5">
-                <td className="py-3 px-4 font-mono text-violet-400">debugger</td>
+                <td className="py-3 px-4 font-mono text-violet-400">/mode debugger</td>
                 <td className="py-3 px-4">🐛</td>
                 <td className="py-3 px-4">Bug investigation</td>
               </tr>
               <tr className="border-b border-white/5">
-                <td className="py-3 px-4 font-mono text-violet-400">security</td>
+                <td className="py-3 px-4 font-mono text-violet-400">/mode security</td>
                 <td className="py-3 px-4">🔒</td>
                 <td className="py-3 px-4">Security analysis</td>
               </tr>
               <tr className="border-b border-white/5">
-                <td className="py-3 px-4 font-mono text-violet-400">review</td>
+                <td className="py-3 px-4 font-mono text-violet-400">/mode review</td>
                 <td className="py-3 px-4">👀</td>
                 <td className="py-3 px-4">Code review</td>
               </tr>
               <tr className="border-b border-white/5">
-                <td className="py-3 px-4 font-mono text-violet-400">team_leader</td>
+                <td className="py-3 px-4 font-mono text-violet-400">/mode team_leader</td>
                 <td className="py-3 px-4">👑</td>
                 <td className="py-3 px-4">Coordinate team of agents</td>
               </tr>
               <tr className="border-b border-white/5">
-                <td className="py-3 px-4 font-mono text-violet-400">architect</td>
+                <td className="py-3 px-4 font-mono text-violet-400">/mode architect</td>
                 <td className="py-3 px-4">🏛️</td>
                 <td className="py-3 px-4">System design</td>
               </tr>
               <tr className="border-b border-white/5">
-                <td className="py-3 px-4 font-mono text-violet-400">engineer</td>
+                <td className="py-3 px-4 font-mono text-violet-400">/mode engineer</td>
                 <td className="py-3 px-4">🛠️</td>
                 <td className="py-3 px-4">Implementation</td>
               </tr>
               <tr className="border-b border-white/5">
-                <td className="py-3 px-4 font-mono text-violet-400">seo</td>
+                <td className="py-3 px-4 font-mono text-violet-400">/mode seo</td>
                 <td className="py-3 px-4">🌐</td>
                 <td className="py-3 px-4">SEO optimization</td>
               </tr>
               <tr className="border-b border-white/5">
-                <td className="py-3 px-4 font-mono text-violet-400">product</td>
+                <td className="py-3 px-4 font-mono text-violet-400">/mode product</td>
                 <td className="py-3 px-4">🔥</td>
                 <td className="py-3 px-4">Product strategy</td>
               </tr>
               <tr className="border-b border-white/5">
-                <td className="py-3 px-4 font-mono text-violet-400">data</td>
+                <td className="py-3 px-4 font-mono text-violet-400">/mode data</td>
                 <td className="py-3 px-4">📊</td>
                 <td className="py-3 px-4">Data analysis</td>
               </tr>
               <tr className="border-b border-white/5">
-                <td className="py-3 px-4 font-mono text-violet-400">researcher</td>
+                <td className="py-3 px-4 font-mono text-violet-400">/mode researcher</td>
                 <td className="py-3 px-4">📚</td>
                 <td className="py-3 px-4">Deep research</td>
               </tr>

@@ -986,6 +986,15 @@ export class WebUIServer {
       height: 12px;
       border-radius: 3px;
     }
+    .cmd-section-header {
+      padding: 8px 14px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      background: var(--bg-tertiary);
+      font-weight: 600;
+    }
 
     /* Settings panel */
     .settings-overlay {
@@ -1292,6 +1301,18 @@ export class WebUIServer {
   </div>
 
   <script>
+    // Commands configuration
+    const COMMANDS = [
+      { id: 'clear', name: '/clear', icon: '&#x1F9F9;', desc: 'Clear chat messages', color: '#8B949E', type: 'action' },
+      { id: 'help', name: '/help', icon: '&#x2753;', desc: 'Show available commands', color: '#58A6FF', type: 'action' },
+      { id: 'diff', name: '/diff', icon: '&#x1F4DD;', desc: 'Show git diff', color: '#3FB950', type: 'action' },
+      { id: 'status', name: '/status', icon: '&#x1F4CA;', desc: 'Show git status', color: '#A371F7', type: 'action' },
+      { id: 'test', name: '/test', icon: '&#x1F9EA;', desc: 'Run project tests', color: '#FF4081', type: 'action' },
+      { id: 'format', name: '/format', icon: '&#x2728;', desc: 'Format code in project', color: '#FFD740', type: 'action' },
+      { id: 'reset', name: '/reset', icon: '&#x1F504;', desc: 'Reset chat session', color: '#F85149', type: 'action' },
+      { id: 'files', name: '/files', icon: '&#x1F4C1;', desc: 'List project files', color: '#39C5CF', type: 'action' },
+    ];
+
     // Modes configuration
     const MODES = [
       { id: 'agent', name: 'Agent', icon: '&#x1F916;', desc: 'Autonomous coding', color: '#00E676' },
@@ -1309,6 +1330,12 @@ export class WebUIServer {
       { id: 'researcher', name: 'Researcher', icon: '&#x1F4DA;', desc: 'Deep research', color: '#E91E63' },
     ];
 
+    // Combined list for slash popup
+    const ALL_SLASH_ITEMS = [
+      ...COMMANDS.map(c => ({ ...c, category: 'command' })),
+      ...MODES.map(m => ({ ...m, name: '/mode ' + m.id, category: 'mode' })),
+    ];
+
     let ws = null;
     let files = [];
     let selectedCmdIndex = 0;
@@ -1323,7 +1350,6 @@ export class WebUIServer {
       await loadConfig();
       connectWebSocket();
       setupInput();
-      renderModeList();
     });
 
     // Setup input handling
@@ -1381,7 +1407,7 @@ export class WebUIServer {
       if (currentPopup === 'modes') {
         const match = value.match(/\\/([\\w]*)$/);
         if (match) {
-          filterModeList(match[1]);
+          filterSlashList(match[1]);
         } else {
           closePopups();
         }
@@ -1400,7 +1426,7 @@ export class WebUIServer {
       selectedCmdIndex = 0;
       document.getElementById('cmd-popup').classList.add('visible');
       document.getElementById('file-popup').classList.remove('visible');
-      renderModeList();
+      renderSlashList();
     }
 
     function openFilePopup() {
@@ -1417,30 +1443,72 @@ export class WebUIServer {
       document.getElementById('file-popup').classList.remove('visible');
     }
 
-    function renderModeList(filter = '') {
+    function renderSlashList(filter = '') {
       const list = document.getElementById('cmd-list');
-      const filtered = MODES.filter(m =>
-        m.name.toLowerCase().includes(filter.toLowerCase()) ||
-        m.id.toLowerCase().includes(filter.toLowerCase())
+      const header = document.querySelector('#cmd-popup .cmd-popup-header');
+      header.textContent = 'Commands & Modes';
+
+      const filtered = ALL_SLASH_ITEMS.filter(item =>
+        item.name.toLowerCase().includes(filter.toLowerCase()) ||
+        item.id.toLowerCase().includes(filter.toLowerCase()) ||
+        item.desc.toLowerCase().includes(filter.toLowerCase())
       );
 
-      list.innerHTML = filtered.map((mode, i) => \`
-        <div class="cmd-item \${i === selectedCmdIndex ? 'selected' : ''}"
-             onclick="selectMode('\${mode.id}')"
-             onmouseenter="selectedCmdIndex = \${i}; renderModeList('\${filter}')">
-          <div class="cmd-item-icon">\${mode.icon}</div>
-          <div class="cmd-item-info">
-            <div class="cmd-item-name">\${mode.name}</div>
-            <div class="cmd-item-desc">\${mode.desc}</div>
-          </div>
-          <div class="cmd-item-color" style="background: \${mode.color}"></div>
-        </div>
-      \`).join('');
+      if (filtered.length === 0) {
+        list.innerHTML = '<div class="cmd-item"><div class="cmd-item-info"><div class="cmd-item-desc">No commands found</div></div></div>';
+        return;
+      }
+
+      // Group by category
+      const commands = filtered.filter(i => i.category === 'command');
+      const modes = filtered.filter(i => i.category === 'mode');
+
+      let html = '';
+
+      if (commands.length > 0) {
+        html += '<div class="cmd-section-header">Commands</div>';
+        commands.forEach((item, i) => {
+          const globalIdx = filtered.indexOf(item);
+          html += \`
+            <div class="cmd-item \${globalIdx === selectedCmdIndex ? 'selected' : ''}"
+                 onclick="executeSlashItem('\${item.id}', '\${item.category}')"
+                 onmouseenter="selectedCmdIndex = \${globalIdx}; renderSlashList('\${filter}')">
+              <div class="cmd-item-icon">\${item.icon}</div>
+              <div class="cmd-item-info">
+                <div class="cmd-item-name">\${item.name}</div>
+                <div class="cmd-item-desc">\${item.desc}</div>
+              </div>
+              <div class="cmd-item-color" style="background: \${item.color}"></div>
+            </div>
+          \`;
+        });
+      }
+
+      if (modes.length > 0) {
+        html += '<div class="cmd-section-header">Modes</div>';
+        modes.forEach((item, i) => {
+          const globalIdx = filtered.indexOf(item);
+          html += \`
+            <div class="cmd-item \${globalIdx === selectedCmdIndex ? 'selected' : ''}"
+                 onclick="executeSlashItem('\${item.id}', '\${item.category}')"
+                 onmouseenter="selectedCmdIndex = \${globalIdx}; renderSlashList('\${filter}')">
+              <div class="cmd-item-icon">\${item.icon}</div>
+              <div class="cmd-item-info">
+                <div class="cmd-item-name">\${item.name}</div>
+                <div class="cmd-item-desc">\${item.desc}</div>
+              </div>
+              <div class="cmd-item-color" style="background: \${item.color}"></div>
+            </div>
+          \`;
+        });
+      }
+
+      list.innerHTML = html;
     }
 
-    function filterModeList(filter) {
+    function filterSlashList(filter) {
       selectedCmdIndex = 0;
-      renderModeList(filter);
+      renderSlashList(filter);
     }
 
     async function loadFiles() {
@@ -1486,53 +1554,180 @@ export class WebUIServer {
 
     function navigatePopup(direction) {
       if (currentPopup === 'modes') {
-        const filteredModes = MODES.filter(m => {
-          const input = document.getElementById('user-input').value;
-          const match = input.match(/\\/([\\w]*)$/);
-          return !match || m.name.toLowerCase().includes(match[1].toLowerCase());
-        });
-        selectedCmdIndex = Math.max(0, Math.min(filteredModes.length - 1, selectedCmdIndex + direction));
-        renderModeList(document.getElementById('user-input').value.match(/\\/([\\w]*)$/)?.[1] || '');
+        const input = document.getElementById('user-input').value;
+        const match = input.match(/\\/([\\w]*)$/);
+        const filter = match ? match[1] : '';
+        const filtered = ALL_SLASH_ITEMS.filter(item =>
+          item.name.toLowerCase().includes(filter.toLowerCase()) ||
+          item.id.toLowerCase().includes(filter.toLowerCase())
+        );
+        selectedCmdIndex = Math.max(0, Math.min(filtered.length - 1, selectedCmdIndex + direction));
+        renderSlashList(filter);
       } else if (currentPopup === 'files') {
-        const filteredFiles = files.filter(f => {
-          const input = document.getElementById('user-input').value;
-          const match = input.match(/@([\\w\\.\\-\\/]*)$/);
-          return !match || f.toLowerCase().includes(match[1].toLowerCase());
-        }).slice(0, 20);
+        const input = document.getElementById('user-input').value;
+        const match = input.match(/@([\\w\\.\\-\\/]*)$/);
+        const filter = match ? match[1] : '';
+        const filteredFiles = files.filter(f =>
+          f.toLowerCase().includes(filter.toLowerCase())
+        ).slice(0, 20);
         selectedFileIndex = Math.max(0, Math.min(filteredFiles.length - 1, selectedFileIndex + direction));
-        renderFileList(document.getElementById('user-input').value.match(/@([\\w\\.\\-\\/]*)$/)?.[1] || '');
+        renderFileList(filter);
       }
     }
 
     function selectPopupItem() {
       if (currentPopup === 'modes') {
-        const filteredModes = MODES.filter(m => {
-          const input = document.getElementById('user-input').value;
-          const match = input.match(/\\/([\\w]*)$/);
-          return !match || m.name.toLowerCase().includes(match[1].toLowerCase());
-        });
-        if (filteredModes[selectedCmdIndex]) {
-          selectMode(filteredModes[selectedCmdIndex].id);
+        const input = document.getElementById('user-input').value;
+        const match = input.match(/\\/([\\w]*)$/);
+        const filter = match ? match[1] : '';
+        const filtered = ALL_SLASH_ITEMS.filter(item =>
+          item.name.toLowerCase().includes(filter.toLowerCase()) ||
+          item.id.toLowerCase().includes(filter.toLowerCase())
+        );
+        if (filtered[selectedCmdIndex]) {
+          executeSlashItem(filtered[selectedCmdIndex].id, filtered[selectedCmdIndex].category);
         }
       } else if (currentPopup === 'files') {
-        const filteredFiles = files.filter(f => {
-          const input = document.getElementById('user-input').value;
-          const match = input.match(/@([\\w\\.\\-\\/]*)$/);
-          return !match || f.toLowerCase().includes(match[1].toLowerCase());
-        }).slice(0, 20);
+        const input = document.getElementById('user-input').value;
+        const match = input.match(/@([\\w\\.\\-\\/]*)$/);
+        const filter = match ? match[1] : '';
+        const filteredFiles = files.filter(f =>
+          f.toLowerCase().includes(filter.toLowerCase())
+        ).slice(0, 20);
         if (filteredFiles[selectedFileIndex]) {
           selectFile(filteredFiles[selectedFileIndex]);
         }
       }
     }
 
-    function selectMode(modeId) {
+    let currentMode = 'agent';
+
+    async function executeSlashItem(itemId, category) {
       const input = document.getElementById('user-input');
-      // Replace /xxx with mode switch command
-      input.value = input.value.replace(/\\/[\\w]*$/, '/mode ' + modeId);
+      input.value = ''; // Clear input
       closePopups();
       input.focus();
-      document.getElementById('current-mode').textContent = MODES.find(m => m.id === modeId)?.name || modeId;
+
+      if (category === 'mode') {
+        // Switch mode
+        currentMode = itemId;
+        const mode = MODES.find(m => m.id === itemId);
+        document.getElementById('current-mode').textContent = mode?.name || itemId;
+        addMessage('system', \`Switched to \${mode?.icon || ''} \${mode?.name || itemId} mode\`);
+
+        // Send mode switch command to TUI
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'message', content: '/mode ' + itemId }));
+        }
+        return;
+      }
+
+      // Execute command
+      switch (itemId) {
+        case 'clear':
+          document.getElementById('messages').innerHTML = '<div class="message system">Chat cleared. Type <span class="hint-key">/</span> for commands.</div>';
+          break;
+
+        case 'help':
+          const helpText = \`**Available Commands:**
+- **/clear** - Clear chat messages
+- **/help** - Show this help
+- **/diff** - Show git diff
+- **/status** - Show git status
+- **/test** - Run project tests
+- **/format** - Format code
+- **/reset** - Reset session
+- **/files** - List project files
+- **/mode [name]** - Switch agent mode
+
+**Available Modes:** agent, plan, tester, debugger, security, review, team_leader, architect, engineer, seo, product, data, researcher
+
+**Tips:**
+- Type **@** to reference files
+- Press **Enter** to send, **Shift+Enter** for new line\`;
+          addMessage('assistant', helpText);
+          break;
+
+        case 'diff':
+          showThinking(true, 'Getting git diff...');
+          try {
+            const diffRes = await fetch('/api/git/diff');
+            const diffData = await diffRes.json();
+            showThinking(false);
+            if (diffData.success && diffData.diff) {
+              addMessage('assistant', '**Git Diff:**\\n\`\`\`diff\\n' + diffData.diff + '\\n\`\`\`');
+            } else {
+              addMessage('system', 'No changes to show or not a git repository.');
+            }
+          } catch (e) {
+            showThinking(false);
+            addMessage('system', 'Failed to get git diff');
+          }
+          break;
+
+        case 'status':
+          showThinking(true, 'Getting git status...');
+          try {
+            const statusRes = await fetch('/api/git/status');
+            const statusData = await statusRes.json();
+            showThinking(false);
+            if (statusData.success) {
+              const statusMsg = \`**Git Status:**
+- Branch: **\${statusData.branch || 'unknown'}**
+- Status: \${statusData.clean ? '✅ Clean' : '⚠️ Uncommitted changes'}
+- Modified: \${statusData.modifiedCount || 0} files
+- Staged: \${statusData.stagedCount || 0} files
+- Untracked: \${statusData.untrackedCount || 0} files\`;
+              addMessage('assistant', statusMsg);
+            } else {
+              addMessage('system', 'Not a git repository or git not available.');
+            }
+          } catch (e) {
+            showThinking(false);
+            addMessage('system', 'Failed to get git status');
+          }
+          break;
+
+        case 'test':
+          addMessage('system', 'Running tests...');
+          // Send to TUI to run tests
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'message', content: 'Run the project tests' }));
+          }
+          break;
+
+        case 'format':
+          addMessage('system', 'Formatting code...');
+          // Send to TUI to format
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'message', content: 'Format the code in this project using the appropriate formatter' }));
+          }
+          break;
+
+        case 'reset':
+          document.getElementById('messages').innerHTML = '<div class="message system">Session reset. Welcome to XibeCode.</div>';
+          currentMode = 'agent';
+          document.getElementById('current-mode').textContent = 'Agent';
+          break;
+
+        case 'files':
+          showThinking(true, 'Listing files...');
+          try {
+            const filesRes = await fetch('/api/files');
+            const filesData = await filesRes.json();
+            showThinking(false);
+            if (filesData.success && filesData.files) {
+              const filesList = filesData.files.slice(0, 50).join('\\n');
+              addMessage('assistant', \`**Project Files (\${filesData.files.length} total):**\\n\\\`\\\`\\\`\\n\${filesList}\${filesData.files.length > 50 ? '\\n... and more' : ''}\\n\\\`\\\`\\\`\`);
+            } else {
+              addMessage('system', 'Failed to list files.');
+            }
+          } catch (e) {
+            showThinking(false);
+            addMessage('system', 'Failed to list files');
+          }
+          break;
+      }
     }
 
     function selectFile(file) {
