@@ -1,72 +1,287 @@
 /**
  * Multi-mode architecture for XibeCode
- * Defines different operating modes with specific capabilities and restrictions
+ *
+ * Defines 13 specialized agent modes (personas) with distinct capabilities,
+ * tool permissions, and behavioral characteristics. Each mode represents a
+ * different AI personality optimized for specific types of tasks.
+ *
+ * @module modes
+ * @category Core Systems
+ * @since 0.1.0
  */
 
+/**
+ * Agent operating modes (personas)
+ *
+ * XibeCode operates in one of 13 specialized modes, each with a unique persona:
+ *
+ * **Planning & Analysis:**
+ * - `plan` - Aria the Architect: Read-only planning and analysis
+ * - `researcher` - Sanvi the Scholar: Deep research and investigation
+ *
+ * **Development:**
+ * - `agent` - Blaze the Builder: Full-capability coding agent
+ * - `engineer` - Alex the Implementer: Feature implementation
+ * - `architect` - Anna the Designer: System architecture design
+ *
+ * **Quality & Testing:**
+ * - `tester` - Tess the QA Engineer: Test writing and execution
+ * - `debugger` - Dex the Detective: Bug investigation and fixing
+ * - `review` - Nova the Critic: Code review and quality checks
+ * - `security` - Sentinel the Guardian: Security audits and hardening
+ *
+ * **Specialized Roles:**
+ * - `seo` - Siri the Optimizer: SEO analysis and optimization
+ * - `data` - David the Analyst: Data analysis and insights
+ * - `product` - Agni the Strategist: Product strategy and roadmap
+ * - `team_leader` - Arya the Leader: Task delegation and orchestration
+ *
+ * @example
+ * ```typescript
+ * let mode: AgentMode = 'plan';  // Start in planning mode
+ * mode = 'agent';  // Switch to full coding mode
+ * mode = 'tester'; // Switch to testing mode
+ * ```
+ *
+ * @category Types
+ * @since 0.1.0
+ */
 export type AgentMode =
-  | 'plan'
-  | 'agent'
-  | 'tester'
-  | 'debugger'
-  | 'security'
-  | 'review'
-  | 'team_leader'    // Arya
-  | 'seo'            // Siri
-  | 'product'        // Agni
-  | 'architect'      // Anna
-  | 'engineer'       // Alex
-  | 'data'           // David
-  | 'researcher';    // Sanvi
+  | 'plan'           // Aria - Planning
+  | 'agent'          // Blaze - Full coding
+  | 'tester'         // Tess - Testing
+  | 'debugger'       // Dex - Debugging
+  | 'security'       // Sentinel - Security
+  | 'review'         // Nova - Code review
+  | 'team_leader'    // Arya - Orchestration
+  | 'seo'            // Siri - SEO
+  | 'product'        // Agni - Product strategy
+  | 'architect'      // Anna - Architecture
+  | 'engineer'       // Alex - Implementation
+  | 'data'           // David - Data analysis
+  | 'researcher';    // Sanvi - Research
 
+/**
+ * Tool category classifications
+ *
+ * Tools are grouped into categories for permission management. Each mode
+ * specifies which categories of tools it can access.
+ *
+ * **Categories:**
+ * - `read_only` - File reading, no modifications
+ * - `write_fs` - File writing and modification
+ * - `git_read` - Git status, diff, log (read-only)
+ * - `git_mutation` - Git commit, reset (modifying)
+ * - `shell_command` - Execute shell commands
+ * - `tests` - Run tests and get results
+ * - `network` - Web search, HTTP requests
+ * - `context` - Code search, context discovery
+ *
+ * @example
+ * ```typescript
+ * const planModeCategories: ToolCategory[] = [
+ *   'read_only',
+ *   'git_read',
+ *   'context'
+ * ];
+ * ```
+ *
+ * @category Types
+ * @since 0.1.0
+ */
 export type ToolCategory =
-  | 'read_only'
-  | 'write_fs'
-  | 'git_read'
-  | 'git_mutation'
-  | 'shell_command'
-  | 'tests'
-  | 'network'
-  | 'context';
+  | 'read_only'      // Read files
+  | 'write_fs'       // Write/edit files
+  | 'git_read'       // Git read operations
+  | 'git_mutation'   // Git write operations
+  | 'shell_command'  // Execute commands
+  | 'tests'          // Run tests
+  | 'network'        // Web/HTTP operations
+  | 'context';       // Code search
 
+/**
+ * Mode capabilities and configuration
+ *
+ * Defines the capabilities, permissions, and characteristics of an agent mode.
+ * Each mode has a unique persona with specific tool access, behavioral traits,
+ * and risk tolerance.
+ *
+ * Used by the mode system to:
+ * - Control tool permissions
+ * - Display persona information in UI
+ * - Configure default behavior (dry-run, confirmations)
+ * - Inject mode-specific instructions into system prompt
+ *
+ * @example
+ * ```typescript
+ * const planMode: ModeCapabilities = {
+ *   name: 'Plan',
+ *   personaName: 'Aria',
+ *   personaRole: 'the Architect',
+ *   allowedCategories: ['read_only', 'git_read', 'context'],
+ *   canModify: false,
+ *   defaultDryRun: true,
+ *   riskTolerance: 'low',
+ *   // ... other fields
+ * };
+ * ```
+ *
+ * @category Interfaces
+ * @since 0.1.0
+ */
 export interface ModeCapabilities {
-  /** Human-readable mode name */
+  /**
+   * Human-readable mode name
+   *
+   * Displayed in UI and documentation. Should be concise (one word).
+   *
+   * @example "Plan", "Agent", "Tester"
+   */
   name: string;
 
-  /** Short description of the mode */
+  /**
+   * Short description of what this mode does
+   *
+   * Brief explanation of the mode's purpose and capabilities.
+   *
+   * @example "Analyze and create plans without modifying code"
+   */
   description: string;
 
-  /** Agent persona name (friendly name for this mode) */
+  /**
+   * Agent persona name
+   *
+   * Friendly name for the AI personality in this mode.
+   *
+   * @example "Aria", "Blaze", "Tess"
+   */
   personaName: string;
 
-  /** Agent persona role description */
+  /**
+   * Agent persona role description
+   *
+   * Role descriptor used in prompts (with "the" prefix).
+   *
+   * @example "the Architect", "the Builder", "the QA Engineer"
+   */
   personaRole: string;
 
-  /** Tool categories allowed in this mode */
+  /**
+   * Tool categories allowed in this mode
+   *
+   * List of tool category strings that determine which tools the agent
+   * can access in this mode.
+   *
+   * @example ['read_only', 'git_read', 'context']
+   */
   allowedCategories: ToolCategory[];
 
-  /** Whether this mode can modify files */
+  /**
+   * Whether this mode can modify files
+   *
+   * If false, file write operations are blocked. Used as an additional
+   * safety check beyond tool categories.
+   */
   canModify: boolean;
 
-  /** Whether dry-run is enabled by default */
+  /**
+   * Whether dry-run is enabled by default
+   *
+   * If true, operations are previewed without execution unless explicitly
+   * overridden. Useful for planning and review modes.
+   */
   defaultDryRun: boolean;
 
-  /** Color for TUI display (for chalk) */
+  /**
+   * Color for TUI display
+   *
+   * Hex color code used to style this mode in the terminal UI.
+   *
+   * @example "#40C4FF" (light blue), "#FF5252" (red)
+   */
   displayColor: string;
 
-  /** Icon/emoji for TUI display */
+  /**
+   * Icon/emoji for TUI display
+   *
+   * Emoji icon representing this mode in the terminal UI.
+   *
+   * @example "📋" (plan), "🔥" (agent), "🧪" (tester)
+   */
   icon: string;
 
-  /** Additional system prompt instructions for this mode */
+  /**
+   * Additional system prompt instructions
+   *
+   * Mode-specific instructions injected into the AI's system prompt.
+   * Defines the mode's personality, goals, and behavioral guidelines.
+   *
+   * Should include:
+   * - Mode description and role
+   * - Key responsibilities
+   * - Best practices
+   * - When to transition to other modes
+   */
   promptSuffix: string;
 
-  /** Risk tolerance level for operations */
+  /**
+   * Risk tolerance level for operations
+   *
+   * Determines how cautious the agent should be:
+   * - `low` - Minimize risks, prefer read-only operations
+   * - `medium` - Balanced approach, reversible changes OK
+   * - `high` - Accept higher risks for full capabilities
+   */
   riskTolerance: 'low' | 'medium' | 'high';
 
-  /** Whether mode transitions require confirmation */
+  /**
+   * Whether mode transitions require user confirmation
+   *
+   * If true, user must approve before switching to/from this mode.
+   * Used for high-risk modes to prevent unwanted transitions.
+   */
   requiresConfirmation: boolean;
 }
 
+/**
+ * Configuration for all 13 agent modes
+ *
+ * Central registry of mode capabilities, personas, and permissions.
+ * Maps each AgentMode to its complete configuration including:
+ * - Persona details (name, role, icon)
+ * - Tool permissions (allowed categories)
+ * - Behavioral settings (dry-run, risk tolerance)
+ * - System prompt instructions
+ *
+ * @example
+ * ```typescript
+ * // Get configuration for a mode
+ * const planConfig = MODE_CONFIG['plan'];
+ * console.log(planConfig.personaName); // "Aria"
+ * console.log(planConfig.allowedCategories); // ['read_only', 'git_read', 'context']
+ *
+ * // Check if mode can modify files
+ * const agentConfig = MODE_CONFIG['agent'];
+ * if (agentConfig.canModify) {
+ *   // Allow file modifications
+ * }
+ * ```
+ *
+ * @category Configuration
+ * @since 0.1.0
+ */
 export const MODE_CONFIG: Record<AgentMode, ModeCapabilities> = {
+  /**
+   * Plan Mode - Aria the Architect 📋
+   *
+   * Read-only planning and analysis mode. Perfect for:
+   * - Understanding codebases
+   * - Creating implementation plans
+   * - Architectural design
+   * - Risk assessment
+   *
+   * Cannot modify code, ensuring safe exploration.
+   */
   plan: {
     name: 'Plan',
     description: 'Analyze and create plans without modifying code',
@@ -600,6 +815,34 @@ const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   'update_memory': 'write_fs', // Allows writing to project memory
 };
 
+/**
+ * Check if a tool is allowed in the given mode
+ *
+ * Validates tool permissions based on the mode's allowed categories.
+ * Tools are categorized (e.g., 'read_only', 'write_fs') and each mode
+ * specifies which categories it can access.
+ *
+ * @example
+ * ```typescript
+ * // Check if 'write_file' is allowed in 'plan' mode
+ * const check = isToolAllowed('plan', 'write_file');
+ * if (!check.allowed) {
+ *   console.error(check.reason);
+ *   // "Tool 'write_file' (write_fs) is not allowed in plan mode"
+ * }
+ *
+ * // Check if 'read_file' is allowed in 'plan' mode
+ * const readCheck = isToolAllowed('plan', 'read_file');
+ * console.log(readCheck.allowed); // true
+ * ```
+ *
+ * @param mode - Current agent mode
+ * @param toolName - Name of the tool to check
+ * @returns Object with allowed status and optional reason if blocked
+ *
+ * @category Permission Control
+ * @since 0.1.0
+ */
 export function isToolAllowed(mode: AgentMode, toolName: string): { allowed: boolean; reason?: string } {
   const category = TOOL_CATEGORIES[toolName];
   if (!category) {
@@ -660,31 +903,94 @@ export function getModeTransitionMessage(fromMode: AgentMode, toMode: AgentMode)
 
 /**
  * Mode state for tracking in agent session
+ *
+ * Maintains the current mode and transition history throughout the agent's
+ * execution. Used to:
+ * - Track mode changes over time
+ * - Implement transition confirmation workflows
+ * - Analyze mode usage patterns
+ * - Prevent invalid or rapid mode switching
+ *
+ * @example
+ * ```typescript
+ * const state: ModeState = {
+ *   current: 'agent',
+ *   previous: 'plan',
+ *   history: [
+ *     { mode: 'plan', timestamp: Date.now() - 60000, reason: 'Initial planning' },
+ *     { mode: 'agent', timestamp: Date.now(), reason: 'Ready to implement' }
+ *   ]
+ * };
+ * ```
+ *
+ * @category Interfaces
+ * @since 0.3.0
  */
 export interface ModeState {
+  /** Current active mode */
   current: AgentMode;
+
+  /** Previously active mode (if any) */
   previous?: AgentMode;
+
+  /** Complete history of mode transitions */
   history: Array<{ mode: AgentMode; timestamp: number; reason?: string }>;
+
+  /** Transition currently in progress (awaiting confirmation) */
   transitionInProgress?: {
     from: AgentMode;
     to: AgentMode;
     awaitingConfirmation: boolean;
   };
+
+  /** Pending transition request not yet processed */
   pendingRequest?: ModeTransitionRequest;
 }
 
 /**
  * Mode transition request
+ *
+ * Represents a request to change modes, including metadata about the
+ * request source and reason.
+ *
+ * @example
+ * ```typescript
+ * const request: ModeTransitionRequest = {
+ *   targetMode: 'debugger',
+ *   reason: 'Need to investigate failing tests',
+ *   source: 'model',  // AI requested the transition
+ *   timestamp: Date.now()
+ * };
+ * ```
+ *
+ * @category Interfaces
+ * @since 0.3.0
  */
 export interface ModeTransitionRequest {
+  /** Mode to transition to */
   targetMode: AgentMode;
+
+  /** Reason for the transition */
   reason: string;
+
+  /** Source of the request */
   source: 'model' | 'user' | 'system';
+
+  /** When the request was made (Unix timestamp) */
   timestamp: number;
 }
 
 /**
- * Auto-approval policy for mode escalation
+ * Auto-approval policy for mode transitions
+ *
+ * Controls when mode transitions require user confirmation:
+ * - `never` - Always require confirmation
+ * - `prompt-only` - Require confirmation for escalation (read → write)
+ * - `always-for-debugger` - Auto-approve transitions to debugger mode
+ * - `always` - Auto-approve all transitions (⚠️ use with caution)
+ *
+ * @category Types
+ * @since 0.3.0
  */
 export type AutoApprovalPolicy = 'never' | 'prompt-only' | 'always-for-debugger' | 'always';
 
