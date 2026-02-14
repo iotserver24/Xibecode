@@ -53,7 +53,7 @@ export interface ToolExecutor {
  * - Context Operations: code search, file finding, context discovery
  * - Test Operations: run tests, get results
  * - Memory Operations: update neural memory
- * - Browser Operations: web automation with Puppeteer
+ * - Browser Operations: web automation with Playwright
  *
  * Features:
  * - Mode-based tool permissions
@@ -541,6 +541,43 @@ export class CodingToolExecutor implements ToolExecutor {
         return this.browserManager.getConsoleLogs(p.url);
       }
 
+      case 'run_visual_test': {
+        if (!p.url || typeof p.url !== 'string') return { error: true, success: false, message: 'Missing url' };
+        if (!p.baseline_path || typeof p.baseline_path !== 'string') return { error: true, success: false, message: 'Missing baseline_path' };
+        const outputDir = p.output_dir || '.playwright-baselines';
+        return this.browserManager.runVisualTest(p.url, this.resolvePath(p.baseline_path), this.resolvePath(outputDir));
+      }
+
+      case 'check_accessibility': {
+        if (!p.url || typeof p.url !== 'string') return { error: true, success: false, message: 'Missing url' };
+        return this.browserManager.checkAccessibility(p.url);
+      }
+
+      case 'measure_performance': {
+        if (!p.url || typeof p.url !== 'string') return { error: true, success: false, message: 'Missing url' };
+        return this.browserManager.measurePerformance(p.url);
+      }
+
+      case 'test_responsive': {
+        if (!p.url || typeof p.url !== 'string') return { error: true, success: false, message: 'Missing url' };
+        const outputDir = p.output_dir || '.responsive-screenshots';
+        return this.browserManager.testResponsive(p.url, this.resolvePath(outputDir), p.viewports);
+      }
+
+      case 'capture_network': {
+        if (!p.url || typeof p.url !== 'string') return { error: true, success: false, message: 'Missing url' };
+        return this.browserManager.captureNetworkRequests(p.url);
+      }
+
+      case 'run_playwright_test': {
+        if (!p.test_path || typeof p.test_path !== 'string') return { error: true, success: false, message: 'Missing test_path' };
+        return this.browserManager.runPlaywrightTest(this.resolvePath(p.test_path), {
+          headed: p.headed,
+          browser: p.browser,
+          timeout: p.timeout,
+        });
+      }
+
       case 'search_skills_sh': {
         if (!p.query || typeof p.query !== 'string') {
           return { error: true, success: false, message: 'Missing required parameter: query (string)' };
@@ -556,7 +593,7 @@ export class CodingToolExecutor implements ToolExecutor {
       }
 
       default:
-        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, take_screenshot, get_console_logs, search_skills_sh, install_skill_from_skills_sh` };
+        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, take_screenshot, get_console_logs, run_visual_test, check_accessibility, measure_performance, test_responsive, capture_network, run_playwright_test, search_skills_sh, install_skill_from_skills_sh` };
     }
   }
 
@@ -1101,6 +1138,90 @@ export class CodingToolExecutor implements ToolExecutor {
             url: { type: 'string', description: 'URL to visit' }
           },
           required: ['url']
+        }
+      },
+      {
+        name: 'run_visual_test',
+        description: 'Run visual regression testing by comparing screenshots. Creates baseline on first run, then compares subsequent screenshots against it. Perfect for catching unintended UI changes.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            url: { type: 'string', description: 'URL to test (e.g., http://localhost:3000)' },
+            baseline_path: { type: 'string', description: 'Path to baseline screenshot file (e.g., baselines/homepage.png)' },
+            output_dir: { type: 'string', description: 'Directory for test output (default: .playwright-baselines)' }
+          },
+          required: ['url', 'baseline_path']
+        }
+      },
+      {
+        name: 'check_accessibility',
+        description: 'Run accessibility audit on a webpage. Checks for missing alt text, form labels, heading hierarchy, color contrast, and other WCAG issues. Returns errors, warnings, and notices.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            url: { type: 'string', description: 'URL to audit (e.g., http://localhost:3000)' }
+          },
+          required: ['url']
+        }
+      },
+      {
+        name: 'measure_performance',
+        description: 'Measure Core Web Vitals and performance metrics: First Contentful Paint (FCP), Largest Contentful Paint (LCP), Cumulative Layout Shift (CLS), Time to Interactive (TTI), and DOM Content Loaded. Essential for UX and SEO.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            url: { type: 'string', description: 'URL to measure (e.g., http://localhost:3000)' }
+          },
+          required: ['url']
+        }
+      },
+      {
+        name: 'test_responsive',
+        description: 'Test a page across multiple viewport sizes (mobile, tablet, desktop). Takes screenshots at each breakpoint and reports any JavaScript errors. Perfect for responsive design testing.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            url: { type: 'string', description: 'URL to test (e.g., http://localhost:3000)' },
+            output_dir: { type: 'string', description: 'Directory for screenshots (default: .responsive-screenshots)' },
+            viewports: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  width: { type: 'number' },
+                  height: { type: 'number' }
+                }
+              },
+              description: 'Custom viewports. Default: mobile (375x667), tablet (768x1024), desktop (1280x800), desktop-large (1920x1080)'
+            }
+          },
+          required: ['url']
+        }
+      },
+      {
+        name: 'capture_network',
+        description: 'Capture all network requests made during page load. Shows URLs, methods, status codes, resource types, and timing. Useful for debugging API calls, detecting failed requests, and performance analysis.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            url: { type: 'string', description: 'URL to load and monitor (e.g., http://localhost:3000)' }
+          },
+          required: ['url']
+        }
+      },
+      {
+        name: 'run_playwright_test',
+        description: 'Execute a Playwright test file. Runs the test and returns pass/fail results with output. Great for running E2E tests, integration tests, and component tests.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            test_path: { type: 'string', description: 'Path to the Playwright test file (e.g., tests/homepage.spec.ts)' },
+            headed: { type: 'boolean', description: 'Run with visible browser window (default: false)' },
+            browser: { type: 'string', enum: ['chromium', 'firefox', 'webkit'], description: 'Browser to use (default: chromium)' },
+            timeout: { type: 'number', description: 'Test timeout in milliseconds (default: 120000)' }
+          },
+          required: ['test_path']
         }
       },
       {
