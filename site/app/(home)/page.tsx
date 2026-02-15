@@ -60,7 +60,7 @@ const installCommands = [
   { tab: 'npm', cmd: 'npm install -g xibecode' },
   { tab: 'pnpm', cmd: 'pnpm add -g xibecode' },
   { tab: 'bun', cmd: 'bun add -g xibecode' },
-  { tab: 'curl', cmd: 'curl -fsSL https://raw.githubusercontent.com/iotserver24/Xibecode/main/install.sh | bash' },
+  { tab: 'curl', cmd: 'curl -fsSL https://xibecode.vercel.app/install.sh | bash' },
 ];
 
 function InstallBox() {
