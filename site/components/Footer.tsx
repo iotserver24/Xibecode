@@ -57,6 +57,8 @@ export function Footer() {
               <li><a href="https://www.npmjs.com/package/xibecode" className="text-zinc-400 hover:text-violet-400 transition-colors">npm Package</a></li>
               <li><Link href="/docs/examples" className="text-zinc-400 hover:text-violet-400 transition-colors">Examples</Link></li>
               <li><Link href="/docs/configuration" className="text-zinc-400 hover:text-violet-400 transition-colors">Configuration</Link></li>
+              <li><Link href="/donate" className="text-violet-400 hover:text-violet-300 transition-colors">Donate</Link></li>
+              <li><Link href="/sponsors" className="text-zinc-400 hover:text-violet-400 transition-colors">Sponsors</Link></li>
             </ul>
           </div>
         </div>

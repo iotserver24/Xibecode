@@ -26,6 +26,10 @@ export function baseOptions(): BaseLayoutProps {
         url: '/docs',
       },
       {
+        text: 'Donate',
+        url: '/donate',
+      },
+      {
         type: 'icon',
         text: 'GitHub',
         url: 'https://github.com/iotserver24/Xibecode',

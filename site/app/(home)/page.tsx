@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight, Check, X, Minus, Terminal, Bot, Zap, Code2, Shield, GitBranch, TestTube, Settings, Layers, Globe, Puzzle, Brain, Sparkles, Monitor } from 'lucide-react';
+import { ArrowRight, Check, X, Minus, Terminal, Bot, Zap, Code2, Shield, GitBranch, TestTube, Settings, Layers, Globe, Puzzle, Brain, Sparkles, Monitor, Heart } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 function useTypewriter(text: string, speed = 80) {
@@ -109,6 +109,12 @@ export default function HomePage() {
   const modesSection = useScrollAnimation();
   const featuresSection = useScrollAnimation();
   const comparisonSection = useScrollAnimation();
+  const sponsorsSection = useScrollAnimation();
+
+  const [sponsorsData, setSponsorsData] = useState<{ sponsors: any[]; stats: { totalSponsors: number; totalRaisedINR: number; totalRaisedUSD: number } } | null>(null);
+  useEffect(() => {
+    fetch('/api/sponsors').then(r => r.json()).then(setSponsorsData).catch(() => {});
+  }, []);
 
   return (
     <div className="flex flex-col items-center w-full overflow-hidden text-zinc-100">
@@ -308,6 +314,61 @@ export default function HomePage() {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Sponsors */}
+      <div ref={sponsorsSection.ref} className={`w-full max-w-5xl mx-auto px-4 py-16 transition-all duration-700 ${sponsorsSection.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
+        <div className="text-center mb-10">
+          <p className="text-sm font-medium text-violet-400 tracking-wider uppercase mb-3">Community</p>
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">Our Sponsors</h2>
+          <p className="text-zinc-400 max-w-xl mx-auto">XibeCode is free and open-source. These amazing people help keep the project alive.</p>
+        </div>
+
+        {sponsorsData && sponsorsData.stats.totalSponsors > 0 ? (
+          <>
+            <div className="grid grid-cols-3 gap-4 mb-8">
+              <div className="text-center p-4 rounded-xl border border-zinc-800 bg-zinc-900/30">
+                <div className="text-2xl font-bold text-white">{sponsorsData.stats.totalSponsors}</div>
+                <div className="text-zinc-500 text-sm">Sponsors</div>
+              </div>
+              <div className="text-center p-4 rounded-xl border border-zinc-800 bg-zinc-900/30">
+                <div className="text-2xl font-bold text-white">{'\u20B9'}{sponsorsData.stats.totalRaisedINR.toLocaleString()}</div>
+                <div className="text-zinc-500 text-sm">Raised (INR)</div>
+              </div>
+              <div className="text-center p-4 rounded-xl border border-zinc-800 bg-zinc-900/30">
+                <div className="text-2xl font-bold text-white">${sponsorsData.stats.totalRaisedUSD.toLocaleString()}</div>
+                <div className="text-zinc-500 text-sm">Raised (USD)</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap justify-center gap-3 mb-8">
+              {sponsorsData.sponsors.slice(0, 10).map((s: any, i: number) => (
+                <div key={i} className="flex items-center gap-2 px-4 py-2 rounded-full border border-zinc-800 bg-zinc-900/30">
+                  <div className="w-6 h-6 rounded-full bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400 text-xs font-bold">
+                    {s.name.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="text-zinc-300 text-sm">{s.name}</span>
+                  <span className="text-emerald-400 text-sm font-semibold">{s.currency === 'INR' ? '\u20B9' : '$'}{s.amount}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="text-center py-8 rounded-xl border border-zinc-800 bg-zinc-900/20 mb-8">
+            <Heart className="w-10 h-10 text-zinc-700 mx-auto mb-3" />
+            <p className="text-zinc-500">No sponsors yet. Be the first to support XibeCode!</p>
+          </div>
+        )}
+
+        <div className="flex justify-center gap-4">
+          <Link href="/donate" className="inline-flex items-center gap-2 px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-full font-semibold transition-all">
+            <Heart className="w-4 h-4" /> Become a Sponsor
+          </Link>
+          {sponsorsData && sponsorsData.stats.totalSponsors > 0 && (
+            <Link href="/sponsors" className="px-6 py-3 text-zinc-400 hover:text-violet-300 font-medium transition-colors">
+              View all sponsors
+            </Link>
+          )}
         </div>
       </div>
 
