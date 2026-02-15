@@ -11,7 +11,7 @@ XibeCode features 13 specialized agent modes (personas), each optimized for diff
 | Mode | Persona | Best For | Can Modify |
 |------|---------|----------|------------|
 | `agent` | (Default) | Full-stack development | Yes |
-| `plan` | Aria the Architect | Planning, analysis | No |
+| `plan` | Strategic Planner | Interactive planning with web research | Yes (implementations.md only) |
 | `debugger` | Dex the Detective | Bug hunting, fixing | Yes |
 | `tester` | Tess the QA Engineer | Testing, quality | Yes |
 | `security` | Sentinel the Guardian | Security audits | No |
@@ -67,16 +67,23 @@ xibecode run "Implement the checkout flow" --mode engineer
 
 ### Plan Mode
 
-**Persona:** Aria the Architect
+**Persona:** Strategic Planner
 
-Read-only mode for planning and analysis without modifications.
+Interactive planning mode with web research, clarifying questions, and structured `implementations.md` generation.
 
-**Best For:** Understanding codebases, creating implementation plans, architectural analysis, risk assessment, technical documentation.
+**Best For:** Creating detailed implementation plans, researching solutions, breaking down complex features into tasks, generating step-by-step plans with code snippets.
 
-**Restrictions:** Cannot modify files, dry-run enabled by default.
+**How It Works:**
+1. Reads the codebase and researches online
+2. Asks clarifying questions (multiple-choice in WebUI, inquirer prompts in CLI)
+3. Generates `implementations.md` with checkbox tasks, file paths, and code snippets
+4. Shows a plan preview with "View Plan" and "Build" buttons
+5. On "Build", switches to Agent mode to execute the plan automatically
+
+**Tools Available:** File reading, web search, fetch URL, git read, context search, and write to `implementations.md` only.
 
 ```bash
-xibecode run "Analyze this codebase and suggest improvements" --mode plan
+xibecode run "Plan how to add authentication to this app" --mode plan
 ```
 
 ### Architect Mode

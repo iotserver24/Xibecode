@@ -9,7 +9,20 @@ AI-powered autonomous coding assistant for your terminal and browser.
 
 XibeCode is a CLI agent that can read and edit code, run commands, and iterate on tasks from your terminal using LLMs. It now includes a **WebUI** for a browser-based experience, **AI-powered test generation**, and **multi-model support** for both Anthropic and OpenAI models.
 
-## What's New in v0.4.4
+## What's New in v0.5.0
+
+- **Interactive Plan Mode** - Plan mode now asks clarifying questions, searches the web, and generates detailed `implementations.md` with checkboxes. Click "Build" to auto-execute the plan.
+- **Chat History** - Full conversation persistence with per-project storage. Resume any previous chat from the History panel.
+- **Environment Variables Editor** - Visual `.env` file editor with auto-detection, secret masking, and live editing.
+- **Media File Preview** - Images, videos, and audio files render as proper previews instead of binary in the editor.
+- **Thinking Animation** - Loading spinner and "Thinking..." indicator shown while the AI processes your request.
+- **Improved Tool Rendering** - Tool calls display with descriptive icons, status badges, and live progress indicators.
+- **Session Info Bar** - Status bar shows model, mode, session name, tools status, and theme.
+- **XibeCode ASCII Banner** - Beautiful gradient ASCII art branding in the chat welcome screen.
+- **Donate Button** - Support XibeCode development via the activity bar.
+- **Smart Auto-Scroll** - Chat no longer force-scrolls when you're reading earlier messages.
+
+### Previous (v0.4.x)
 
 - **v0.dev-inspired UI** - Modern split-panel layout with resizable chat and code areas
 - **Multi-Terminal Support** - Create/manage multiple terminal tabs with + and X buttons
@@ -220,7 +233,7 @@ Type `/` in the input to open the command palette:
 | Mode | Icon | Description |
 |------|------|-------------|
 | `/mode agent` | 🤖 | Autonomous coding (default) |
-| `/mode plan` | 📋 | Analyze without modifying |
+| `/mode plan` | 📝 | Interactive planning with web research |
 | `/mode tester` | 🧪 | Testing and QA |
 | `/mode debugger` | 🐛 | Bug investigation |
 | `/mode security` | 🔒 | Security analysis |
