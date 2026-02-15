@@ -111,7 +111,7 @@ export default function HomePage() {
   const comparisonSection = useScrollAnimation();
   const sponsorsSection = useScrollAnimation();
 
-  const [sponsorsData, setSponsorsData] = useState<{ sponsors: any[]; stats: { totalSponsors: number; totalRaisedINR: number; totalRaisedUSD: number } } | null>(null);
+  const [sponsorsData, setSponsorsData] = useState<{ sponsors: any[]; reviews: any[]; stats: { totalSponsors: number; totalRaisedINR: number; totalRaisedUSD: number } } | null>(null);
   useEffect(() => {
     fetch('/api/sponsors').then(r => r.json()).then(setSponsorsData).catch(() => {});
   }, []);
@@ -344,14 +344,41 @@ export default function HomePage() {
             <div className="flex flex-wrap justify-center gap-3 mb-8">
               {sponsorsData.sponsors.slice(0, 10).map((s: any, i: number) => (
                 <div key={i} className="flex items-center gap-2 px-4 py-2 rounded-full border border-zinc-800 bg-zinc-900/30">
-                  <div className="w-6 h-6 rounded-full bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400 text-xs font-bold">
-                    {s.name.charAt(0).toUpperCase()}
-                  </div>
+                  {s.avatarUrl ? (
+                    <img src={s.avatarUrl} alt={s.name} className="w-6 h-6 rounded-full object-cover border border-zinc-700" />
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400 text-xs font-bold">
+                      {s.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
                   <span className="text-zinc-300 text-sm">{s.name}</span>
                   <span className="text-emerald-400 text-sm font-semibold">{s.currency === 'INR' ? '\u20B9' : '$'}{s.amount}</span>
                 </div>
               ))}
             </div>
+            {/* Reviews carousel */}
+            {sponsorsData.reviews && sponsorsData.reviews.length > 0 && (
+              <div className="mb-8">
+                <div className="grid md:grid-cols-3 gap-4">
+                  {sponsorsData.reviews.slice(0, 3).map((r: any, i: number) => (
+                    <div key={i} className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/20 text-left">
+                      <p className="text-zinc-300 text-sm mb-3 leading-relaxed line-clamp-3">&ldquo;{r.description}&rdquo;</p>
+                      <div className="flex items-center gap-2">
+                        {r.avatarUrl ? (
+                          <img src={r.avatarUrl} alt={r.name} className="w-6 h-6 rounded-full object-cover border border-zinc-700" />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400 text-xs font-bold">
+                            {r.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <span className="text-white text-xs font-medium">{r.name}</span>
+                        <span className="text-emerald-400 text-xs">{r.currency === 'INR' ? '\u20B9' : '$'}{r.amount}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <div className="text-center py-8 rounded-xl border border-zinc-800 bg-zinc-900/20 mb-8">
