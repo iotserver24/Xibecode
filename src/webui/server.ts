@@ -180,7 +180,7 @@ export class WebUIServer {
     try {
       // Health check
       if (pathname === '/api/health') {
-        sendJSON({ status: 'ok', version: '0.4.4' });
+        sendJSON({ status: 'ok', version: '0.4.7' });
         return;
       }
 
@@ -485,6 +485,47 @@ export class WebUIServer {
         return;
       }
 
+      // Serve raw binary files (images, videos, audio) for media preview
+      if (pathname === '/api/files/raw') {
+        const url = new URL(req.url || '/', `http://${req.headers.host}`);
+        const filePath = url.searchParams.get('path');
+        if (!filePath) {
+          sendJSON({ success: false, error: 'Missing path parameter' }, 400);
+          return;
+        }
+        const fullPath = path.resolve(this.workingDir, filePath);
+        // Path traversal protection
+        if (!fullPath.startsWith(path.resolve(this.workingDir))) {
+          sendJSON({ success: false, error: 'Invalid path' }, 403);
+          return;
+        }
+        try {
+          const content = await fs.readFile(fullPath);
+          const ext = path.extname(fullPath).toLowerCase();
+          const mimeTypes: Record<string, string> = {
+            '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
+            '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.bmp': 'image/bmp',
+            '.avif': 'image/avif', '.tiff': 'image/tiff', '.tif': 'image/tiff',
+            '.mp4': 'video/mp4', '.webm': 'video/webm', '.ogg': 'video/ogg', '.mov': 'video/quicktime',
+            '.avi': 'video/x-msvideo', '.mkv': 'video/x-matroska',
+            '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.flac': 'audio/flac', '.aac': 'audio/aac',
+            '.m4a': 'audio/mp4', '.opus': 'audio/opus',
+            '.pdf': 'application/pdf',
+            '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.otf': 'font/otf',
+          };
+          const contentType = mimeTypes[ext] || 'application/octet-stream';
+          res.writeHead(200, {
+            'Content-Type': contentType,
+            'Content-Length': content.length.toString(),
+            'Cache-Control': 'public, max-age=3600',
+          });
+          res.end(content);
+        } catch (error: any) {
+          sendJSON({ success: false, error: error.message }, 404);
+        }
+        return;
+      }
+
       // Session management
       if (pathname === '/api/session/create') {
         const sessionId = this.createSession();
@@ -574,6 +615,116 @@ export class WebUIServer {
         });
         sendJSON(result);
         return;
+      }
+
+      // Environment variables (.env file management)
+      if (pathname === '/api/env') {
+        if (req.method === 'GET') {
+          // Auto-detect .env file in the working directory
+          const envFiles = ['.env', '.env.local', '.env.development', '.env.production'];
+          let envFilePath: string | null = null;
+          let envContent = '';
+
+          for (const envFile of envFiles) {
+            const fullEnvPath = path.join(this.workingDir, envFile);
+            try {
+              envContent = await fs.readFile(fullEnvPath, 'utf-8');
+              envFilePath = envFile;
+              break;
+            } catch {
+              // File doesn't exist, try next
+            }
+          }
+
+          if (!envFilePath) {
+            // No .env file found, return empty state with suggested path
+            sendJSON({
+              success: true,
+              exists: false,
+              path: '.env',
+              fullPath: path.join(this.workingDir, '.env'),
+              variables: [],
+              raw: '',
+            });
+            return;
+          }
+
+          // Parse the .env file content into structured variables
+          const variables: Array<{ key: string; value: string; comment?: string; isComment: boolean; raw: string }> = [];
+          const lines = envContent.split('\n');
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed === '') {
+              variables.push({ key: '', value: '', isComment: false, raw: line });
+            } else if (trimmed.startsWith('#')) {
+              variables.push({ key: '', value: '', comment: trimmed.slice(1).trim(), isComment: true, raw: line });
+            } else {
+              const eqIndex = trimmed.indexOf('=');
+              if (eqIndex !== -1) {
+                const key = trimmed.substring(0, eqIndex).trim();
+                let value = trimmed.substring(eqIndex + 1).trim();
+                // Remove surrounding quotes if present
+                if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+                  value = value.slice(1, -1);
+                }
+                variables.push({ key, value, isComment: false, raw: line });
+              } else {
+                variables.push({ key: trimmed, value: '', isComment: false, raw: line });
+              }
+            }
+          }
+
+          sendJSON({
+            success: true,
+            exists: true,
+            path: envFilePath,
+            fullPath: path.join(this.workingDir, envFilePath),
+            variables,
+            raw: envContent,
+          });
+          return;
+        }
+
+        if (req.method === 'PUT') {
+          const body = await parseBody();
+          const envFileName = body.path || '.env';
+          const fullEnvPath = path.join(this.workingDir, envFileName);
+
+          // Path traversal protection
+          if (!fullEnvPath.startsWith(path.resolve(this.workingDir))) {
+            sendJSON({ success: false, error: 'Invalid path' }, 400);
+            return;
+          }
+
+          try {
+            if (body.raw !== undefined) {
+              // Write raw content directly
+              await fs.writeFile(fullEnvPath, body.raw, 'utf-8');
+            } else if (body.variables) {
+              // Build .env content from structured variables
+              const lines: string[] = [];
+              for (const v of body.variables) {
+                if (v.isComment) {
+                  lines.push(`# ${v.comment || ''}`);
+                } else if (v.key === '' && v.value === '') {
+                  lines.push('');
+                } else {
+                  const needsQuotes = v.value && (v.value.includes(' ') || v.value.includes('#') || v.value.includes('"'));
+                  const quotedValue = needsQuotes ? `"${v.value}"` : (v.value || '');
+                  lines.push(`${v.key}=${quotedValue}`);
+                }
+              }
+              await fs.writeFile(fullEnvPath, lines.join('\n') + '\n', 'utf-8');
+            } else {
+              sendJSON({ success: false, error: 'Missing raw or variables field' }, 400);
+              return;
+            }
+            sendJSON({ success: true, path: envFileName, fullPath: fullEnvPath });
+          } catch (error: any) {
+            sendJSON({ success: false, error: error.message }, 500);
+          }
+          return;
+        }
       }
 
       // File list for @ command (simple GET)
