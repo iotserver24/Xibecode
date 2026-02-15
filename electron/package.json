@@ -5,6 +5,14 @@
   "main": "dist/main.js",
   "author": "Anish Kumar (R3AP3R editz) <https://github.com/iotserver24>",
   "license": "Apache-2.0",
+  "homepage": "https://github.com/iotserver24/xibecode#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iotserver24/xibecode"
+  },
+  "bugs": {
+    "url": "https://github.com/iotserver24/xibecode/issues"
+  },
   "scripts": {
     "build:ts": "tsc",
     "build:linux": "npm run build:ts && electron-builder --linux",
