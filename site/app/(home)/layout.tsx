@@ -5,10 +5,7 @@ export default function Layout({ children }: LayoutProps<'/'>) {
   return (
     <HomeLayout
       {...baseOptions()}
-      nav={{
-        ...baseOptions().nav,
-        enableSearch: false,
-      }}
+      searchToggle={{ enabled: false }}
     >
       {children}
     </HomeLayout>
