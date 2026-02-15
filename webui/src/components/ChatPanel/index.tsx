@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useChatStore, ChatMessage, AgentMode } from '../../stores/chatStore';
-import { createWebSocket } from '../../utils/api';
+import { useEditorStore } from '../../stores/editorStore';
+import { createWebSocket, api } from '../../utils/api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -9,8 +10,10 @@ import {
   Bot, User, Terminal,
   ChevronDown, FileCode, Sparkles, Hash,
   Layout, Shield, Search, Zap, Check, AlertCircle,
-  ArrowUp, Plus, Paperclip, X
+  ArrowUp, Plus, Paperclip, X, Loader2,
+  FileText, Play, Eye
 } from 'lucide-react';
+import { PlanQuestionsOverlay, type PlanQuestion } from '../PlanQuestions';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -31,7 +34,7 @@ const COMMANDS = [
 
 const MODES: { id: AgentMode; name: string; icon: any; desc: string; color: string }[] = [
   { id: 'agent', name: 'Agent', icon: <Bot size={16} />, desc: 'Autonomous coding assistant', color: 'text-emerald-400' },
-  { id: 'plan', name: 'Planner', icon: <Layout size={16} />, desc: 'Analyze and plan tasks', color: 'text-cyan-400' },
+  { id: 'plan', name: 'Plan', icon: <Layout size={16} />, desc: 'Interactive planning with web research', color: 'text-orange-400' },
   { id: 'tester', name: 'Tester', icon: <Terminal size={16} />, desc: 'Testing and QA specialist', color: 'text-pink-400' },
   { id: 'debugger', name: 'Debugger', icon: <AlertCircle size={16} />, desc: 'Bug investigation expert', color: 'text-amber-400' },
   { id: 'security', name: 'Security', icon: <Shield size={16} />, desc: 'Security analysis', color: 'text-red-400' },
@@ -55,17 +58,27 @@ type PopupType = 'slash' | 'files' | 'modes' | null;
 export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, width }: ChatPanelProps) {
   const {
     messages, isProcessing, isConnected, currentMode, streamingContent,
-    setWebSocket, setConnected, addMessage, setProcessing, setCurrentMode,
+    setWebSocket, setConnected, addMessage, updateLastMessage, setProcessing, setCurrentMode,
     setStreamingContent, appendStreamingContent, finalizeStreamingMessage,
     sendMessage, clearMessages,
   } = useChatStore();
+
+  const { openFile } = useEditorStore();
 
   const [inputValue, setInputValue] = useState('');
   const [popup, setPopup] = useState<PopupType>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [files, setFiles] = useState<string[]>([]);
   const [showModeSelector, setShowModeSelector] = useState(false);
+  const [thinkingText, setThinkingText] = useState<string | null>(null);
+
+  // Plan mode state
+  const [planQuestions, setPlanQuestions] = useState<PlanQuestion[] | null>(null);
+  const [planContent, setPlanContent] = useState<string | null>(null);
+  const [planPath, setPlanPath] = useState<string>('implementations.md');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const userScrolledUpRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -91,15 +104,40 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
       case 'user_message':
         if (data.source === 'tui') addMessage({ role: 'user', content: data.data.content, source: 'tui' });
         setProcessing(true);
+        setThinkingText('Thinking...');
         break;
-      case 'stream_start': setStreamingContent(''); break;
+      case 'thinking':
+        setThinkingText(data.data?.text || 'Thinking...');
+        break;
+      case 'stream_start':
+        setStreamingContent('');
+        setThinkingText(null);
+        break;
       case 'stream_text': appendStreamingContent(data.data?.text || ''); break;
-      case 'stream_end': finalizeStreamingMessage(); setProcessing(false); break;
-      case 'assistant_message': addMessage({ role: 'assistant', content: data.data.content }); setProcessing(false); break;
-      case 'tool_call': addMessage({ role: 'tool', content: data.data.name, toolName: data.data.name, toolStatus: 'running' }); break;
-      case 'tool_result': break;
-      case 'thinking': break;
-      case 'error': addMessage({ role: 'system', content: `Error: ${data.data?.error || data.error}` }); setProcessing(false); break;
+      case 'stream_end':
+        finalizeStreamingMessage();
+        setProcessing(false);
+        setThinkingText(null);
+        break;
+      case 'assistant_message':
+        addMessage({ role: 'assistant', content: data.data.content });
+        setProcessing(false);
+        setThinkingText(null);
+        break;
+      case 'tool_call':
+        addMessage({ role: 'tool', content: data.data.name, toolName: data.data.name, toolStatus: 'running' });
+        setThinkingText(null);
+        break;
+      case 'tool_result': {
+        const success = data.data?.success !== false;
+        updateLastMessage(success ? 'success' : 'error');
+        break;
+      }
+      case 'error':
+        addMessage({ role: 'system', content: `Error: ${data.data?.error || data.error}` });
+        setProcessing(false);
+        setThinkingText(null);
+        break;
       case 'history':
         data.data?.messages?.forEach((msg: any) => {
           if (msg.role === 'user') addMessage({ role: 'user', content: msg.content, source: msg.source });
@@ -107,13 +145,61 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
           else if (msg.role === 'tool') addMessage({ role: 'tool', content: msg.toolName || msg.content, toolName: msg.toolName, toolStatus: msg.toolStatus });
         });
         break;
-      case 'clear': clearMessages(); break;
+      case 'plan_questions':
+        if (data.data?.questions) {
+          setPlanQuestions(data.data.questions);
+        }
+        break;
+      case 'plan_ready':
+        if (data.data?.planContent) {
+          setPlanContent(data.data.planContent);
+          setPlanPath(data.data.planPath || 'implementations.md');
+        }
+        break;
+      case 'clear': clearMessages(); setPlanContent(null); setPlanQuestions(null); break;
     }
   };
 
+  // Smart auto-scroll: only scroll to bottom if user hasn't scrolled up
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!userScrolledUpRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages, streamingContent]);
+
+  // Detect when user scrolls up manually
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      // If user is within 100px of bottom, consider them "at bottom"
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+      userScrolledUpRef.current = !isNearBottom;
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Reset scroll lock when processing finishes (new message complete)
+  useEffect(() => {
+    if (!isProcessing && !streamingContent) {
+      // Small delay then check if we should snap to bottom
+      setTimeout(() => {
+        const container = messagesContainerRef.current;
+        if (container) {
+          const { scrollTop, scrollHeight, clientHeight } = container;
+          const isNearBottom = scrollHeight - scrollTop - clientHeight < 200;
+          if (isNearBottom) {
+            userScrolledUpRef.current = false;
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }
+        }
+      }, 100);
+    }
+  }, [isProcessing, streamingContent]);
 
   const loadFiles = async () => {
     try {
@@ -227,7 +313,9 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
 
   const handleSend = () => {
     if (!inputValue.trim() || isProcessing) return;
-    sendMessage(inputValue.trim()); setInputValue('');
+    sendMessage(inputValue.trim());
+    setInputValue('');
+    setThinkingText('Thinking...');
   };
 
   if (isCollapsed) return null;
@@ -236,19 +324,56 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
   const filteredFiles = getFilteredFiles();
   const currentModeData = MODES.find(m => m.id === currentMode);
 
+  const handlePlanQuestionsSubmit = (answers: Record<string, string | string[]>) => {
+    // Format answers and send back to the AI
+    const lines = Object.entries(answers).map(([id, val]) => {
+      const q = planQuestions?.find(q => q.id === id);
+      const qText = q?.question || id;
+      const answerText = Array.isArray(val) ? val.join(', ') : val;
+      return `- ${qText}: **${answerText}**`;
+    });
+    const message = `Here are my answers:\n${lines.join('\n')}`;
+    sendMessage(message);
+    setPlanQuestions(null);
+  };
+
   return (
     <div
       className="flex flex-col bg-[#0a0a0a] relative border-r border-zinc-800/40"
       style={{ width: width || 380, minWidth: 280 }}
     >
+      {/* Plan Questions Overlay */}
+      {planQuestions && planQuestions.length > 0 && (
+        <PlanQuestionsOverlay
+          questions={planQuestions}
+          onSubmit={handlePlanQuestionsSubmit}
+          onSkip={() => {
+            sendMessage('Skip questions - proceed with your best judgment.');
+            setPlanQuestions(null);
+          }}
+        />
+      )}
+
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {messages.length === 0 && !streamingContent && (
           <div className="flex flex-col items-center justify-center h-full text-center px-6">
-            <div className="w-10 h-10 rounded-xl bg-zinc-800/80 flex items-center justify-center mb-4 border border-zinc-700/50">
-              <Sparkles size={20} className="text-zinc-400" />
+            {/* XibeCode branded welcome */}
+            <div className="mb-5">
+              <pre className="text-[6px] leading-[7px] font-mono select-none" style={{
+                background: 'linear-gradient(90deg, #5995eb, #e06c75)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+              }}>{`██╗  ██╗██╗██████╗ ███████╗ ██████╗ ██████╗ ██████╗ ███████╗
+╚██╗██╔╝██║██╔══██╗██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝
+ ╚███╔╝ ██║██████╔╝█████╗  ██║     ██║   ██║██║  ██║█████╗
+ ██╔██╗ ██║██╔══██╗██╔══╝  ██║     ██║   ██║██╔══██╗██╔══╝
+██╔╝ ██╗██║██████╔╝███████╗╚██████╗╚██████╔╝██████╔╝███████╗
+╚═╝  ╚═╝╚═╝╚═════╝ ╚══════╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝`}</pre>
             </div>
-            <h2 className="text-base font-semibold text-zinc-200 mb-1.5">What do you want to build?</h2>
+            <h2 className="text-base font-semibold text-zinc-200 mb-1">What do you want to build?</h2>
+            <p className="text-[10px] text-zinc-600 mb-1">AI-powered autonomous coding assistant</p>
             <p className="text-xs text-zinc-500 max-w-[220px] leading-relaxed mb-6">
               Ask me anything. I can help you write, debug, test, and deploy code.
             </p>
@@ -271,6 +396,28 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
           <MessageItem key={msg.id} message={msg} />
         ))}
 
+        {/* Thinking / Loading indicator */}
+        {isProcessing && !streamingContent && (
+          <div className="flex gap-3">
+            <div className="w-6 h-6 rounded-md bg-zinc-800 border border-zinc-700/50 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Bot size={13} className="text-zinc-300" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] font-medium text-zinc-500 mb-1">Assistant</div>
+              <div className="flex items-center gap-2.5">
+                <Loader2 size={14} className="text-zinc-400 animate-spin" />
+                <span className="text-[12px] text-zinc-500">{thinkingText || 'Thinking...'}</span>
+                <span className="flex gap-1 ml-1">
+                  <span className="w-1 h-1 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1 h-1 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1 h-1 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Streaming content */}
         {streamingContent && (
           <div className="flex gap-3">
             <div className="w-6 h-6 rounded-md bg-zinc-800 border border-zinc-700/50 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -308,6 +455,68 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
                 </div>
                 <span className="inline-block w-1 h-3.5 bg-zinc-400 ml-0.5 animate-pulse" />
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Inline Plan Preview Card */}
+        {planContent && (
+          <div className="rounded-xl border border-zinc-700/60 bg-zinc-900/80 overflow-hidden">
+            {/* Card header */}
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800/60 bg-zinc-900">
+              <FileText size={13} className="text-orange-400" />
+              <span className="text-[11px] font-mono text-zinc-400">{planPath}</span>
+              <div className="flex-1" />
+            </div>
+
+            {/* Rendered plan preview (truncated) */}
+            <div className="px-3 py-3 max-h-[280px] overflow-hidden relative">
+              <div className="text-[12px] text-zinc-300 leading-relaxed markdown-content plan-preview">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {planContent.split('\n').slice(0, 30).join('\n')}
+                </ReactMarkdown>
+              </div>
+              {/* Fade out gradient */}
+              <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-zinc-900/80 to-transparent pointer-events-none" />
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center justify-between px-3 py-2.5 border-t border-zinc-800/60 bg-zinc-900/50">
+              <button
+                onClick={async () => {
+                  try {
+                    const result = await api.files.read(planPath);
+                    if (result.success && result.content !== undefined) {
+                      openFile({ path: planPath, content: result.content });
+                    }
+                  } catch { /* ignore */ }
+                }}
+                className="flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors font-medium"
+              >
+                <Eye size={13} />
+                View Plan
+              </button>
+              <button
+                onClick={() => {
+                  if (wsRef.current?.readyState === WebSocket.OPEN) {
+                    wsRef.current.send(JSON.stringify({ type: 'message', content: '/mode agent' }));
+                    setTimeout(() => {
+                      if (wsRef.current?.readyState === WebSocket.OPEN) {
+                        wsRef.current.send(JSON.stringify({
+                          type: 'message',
+                          content: 'Execute the plan in implementations.md. Work through each task, check off completed items by changing [ ] to [x]. When all tasks are done, delete implementations.md.'
+                        }));
+                      }
+                    }, 500);
+                  }
+                  setPlanContent(null);
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-[11px] font-semibold transition-colors"
+              >
+                <Play size={12} />
+                Build
+                <span className="text-orange-200/50 text-[9px] font-normal ml-0.5">Ctrl+⏎</span>
+              </button>
             </div>
           </div>
         )}
@@ -432,20 +641,64 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
   );
 }
 
+// Map tool names to descriptive icons and labels
+const TOOL_ICONS: Record<string, { icon: string; label: string }> = {
+  read_file: { icon: '📄', label: 'Read' },
+  write_file: { icon: '✏️', label: 'Write' },
+  edit_file: { icon: '🔧', label: 'Edit' },
+  edit_lines: { icon: '🔧', label: 'Edit Lines' },
+  verified_edit: { icon: '✅', label: 'Verified Edit' },
+  list_directory: { icon: '📂', label: 'List Dir' },
+  search_code: { icon: '🔍', label: 'Search' },
+  run_command: { icon: '💻', label: 'Run' },
+  web_search: { icon: '🌐', label: 'Web Search' },
+  fetch_url: { icon: '🔗', label: 'Fetch URL' },
+  get_git_status: { icon: '📊', label: 'Git Status' },
+  git_diff: { icon: '📝', label: 'Git Diff' },
+  run_tests: { icon: '🧪', label: 'Run Tests' },
+  delete_file: { icon: '🗑️', label: 'Delete' },
+  create_directory: { icon: '📁', label: 'Create Dir' },
+};
+
 function MessageItem({ message }: { message: ChatMessage }) {
   if (message.role === 'tool') {
+    const toolInfo = TOOL_ICONS[message.toolName || ''] || { icon: '🔧', label: message.toolName || 'Tool' };
+    const isRunning = message.toolStatus === 'running';
+    const isSuccess = message.toolStatus === 'success';
+    const isError = message.toolStatus === 'error';
+
     return (
-      <div className="flex items-center gap-2 py-1">
-        <div className={cn(
-          "w-1.5 h-1.5 rounded-full flex-shrink-0",
-          message.toolStatus === 'running' ? "bg-amber-500 animate-pulse" :
-          message.toolStatus === 'success' ? "bg-emerald-500" : "bg-red-500"
-        )} />
-        <span className="text-[11px] font-medium text-zinc-500">
-          {message.toolName}
+      <div className={cn(
+        "flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[11px] transition-all",
+        isRunning ? "bg-amber-500/5 border border-amber-500/20" :
+        isSuccess ? "bg-emerald-500/5 border border-emerald-500/10" :
+        isError ? "bg-red-500/5 border border-red-500/10" :
+        "bg-zinc-800/30 border border-zinc-800/30"
+      )}>
+        <span className="text-sm flex-shrink-0">{toolInfo.icon}</span>
+        <span className={cn(
+          "font-medium flex-1 truncate",
+          isRunning ? "text-amber-400" :
+          isSuccess ? "text-zinc-400" :
+          isError ? "text-red-400" : "text-zinc-500"
+        )}>
+          {toolInfo.label}
+          {message.toolName && toolInfo.label !== message.toolName && (
+            <span className="text-zinc-600 font-normal ml-1.5 font-mono text-[10px]">{message.toolName}</span>
+          )}
         </span>
-        <span className="text-[10px] text-zinc-600">
-          {message.toolStatus || 'running'}
+        <span className={cn(
+          "flex items-center gap-1 flex-shrink-0",
+          isRunning ? "text-amber-500" :
+          isSuccess ? "text-emerald-500" :
+          isError ? "text-red-400" : "text-zinc-600"
+        )}>
+          {isRunning && <Loader2 size={10} className="animate-spin" />}
+          {isSuccess && <Check size={10} />}
+          {isError && <AlertCircle size={10} />}
+          <span className="text-[10px]">
+            {isRunning ? 'running' : isSuccess ? 'done' : isError ? 'failed' : message.toolStatus}
+          </span>
         </span>
       </div>
     );

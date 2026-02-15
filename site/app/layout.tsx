@@ -1,33 +1,43 @@
+import { RootProvider } from 'fumadocs-ui/provider/next';
+import './global.css';
+import { Inter } from 'next/font/google';
+import { Footer } from '@/components/Footer';
 import type { Metadata } from 'next';
-import './globals.css';
-import Navigation from '@/components/Navigation';
-import Footer from '@/components/Footer';
+
+const inter = Inter({
+  subsets: ['latin'],
+});
 
 export const metadata: Metadata = {
-  title: 'XibeCode — Autonomous AI Coding Assistant',
-  description: 'Production-ready autonomous coding agent for your terminal. Open-source, free, and fully customizable with smart context management, MCP support, and plugin system.',
-  keywords: ['XibeCode', 'AI coding assistant', 'autonomous agent', 'AI', 'CLI tool', 'open source', 'MCP'],
+  title: {
+    default: 'XibeCode - AI-Powered Autonomous Coding Assistant',
+    template: '%s | XibeCode',
+  },
+  description: 'AI-powered autonomous coding assistant for your terminal and browser. 13 agent modes, 40+ tools, MCP protocol support, and a modern WebUI.',
+  keywords: ['AI coding assistant', 'CLI tool', 'autonomous agent', 'code generation', 'MCP protocol', 'WebUI', 'XibeCode'],
   authors: [{ name: 'Anish Kumar (R3AP3R editz)', url: 'https://github.com/iotserver24' }],
   openGraph: {
-    title: 'XibeCode — Autonomous AI Coding Assistant',
-    description: 'Production-ready autonomous coding agent for your terminal. Free and open-source.',
+    title: 'XibeCode - AI-Powered Autonomous Coding Assistant',
+    description: 'AI-powered autonomous coding assistant for your terminal and browser.',
+    siteName: 'XibeCode',
     type: 'website',
   },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark">
-      <body className="font-sans antialiased noise-bg">
-        <div className="min-h-screen flex flex-col">
-          <Navigation />
+    <html lang="en" className={`${inter.className} dark`} suppressHydrationWarning>
+      <body className="flex flex-col min-h-screen" suppressHydrationWarning>
+        <RootProvider
+          theme={{
+            defaultTheme: 'dark',
+            forcedTheme: 'dark',
+            enableSystem: false,
+          }}
+        >
           <main className="flex-1">{children}</main>
           <Footer />
-        </div>
+        </RootProvider>
       </body>
     </html>
   );

@@ -1,0 +1,267 @@
+---
+title: Agent Modes
+description: 13 specialized agent personas, each optimized for different development tasks. Switch between plan, agent, debugger, tester, security, review, engineer, architect, team leader, researcher, seo, product, and data modes.
+keywords: [agent modes, personas, modes, plan, agent, debugger, tester, security, review, engineer, architect, team leader, researcher, seo, product, data, Aria, Dex, Tess, Sentinel, Nova, Alex, Anna, Arya, Sanvi, Siri, Agni, David, switch mode, mode command, permissions, tool access, read only, write, coding mode, how many modes, what modes]
+---
+
+XibeCode features 13 specialized agent modes (personas), each optimized for different types of tasks. Each mode has a unique personality, set of allowed tools, and behavioral characteristics.
+
+## Quick Reference
+
+| Mode | Persona | Best For | Can Modify |
+|------|---------|----------|------------|
+| `agent` | (Default) | Full-stack development | Yes |
+| `plan` | Strategic Planner | Interactive planning with web research | Yes (implementations.md only) |
+| `debugger` | Dex the Detective | Bug hunting, fixing | Yes |
+| `tester` | Tess the QA Engineer | Testing, quality | Yes |
+| `security` | Sentinel the Guardian | Security audits | No |
+| `review` | Nova the Critic | Code reviews | No |
+| `engineer` | Alex the Implementer | Feature implementation | Yes |
+| `architect` | Anna the Designer | System design | Yes |
+| `team_leader` | Arya the Leader | Task orchestration | Yes |
+| `researcher` | Sanvi the Scholar | Deep research | Yes |
+| `seo` | Siri the Optimizer | SEO, web optimization | Yes |
+| `product` | Agni the Strategist | Product strategy | Yes |
+| `data` | David the Analyst | Data analysis | Yes |
+
+## Switching Modes
+
+```bash
+# Via CLI flag
+xibecode run "task" --mode plan
+xibecode run "task" --mode debugger
+
+# In chat mode
+xibecode chat
+> /mode plan
+> /mode agent
+```
+
+## Development Modes
+
+### Agent Mode (Default)
+
+Full autonomous coding with all capabilities enabled.
+
+**Best For:** Building new features, full-stack development, multi-step coding tasks, installing dependencies, running tests and commands.
+
+**Capabilities:** Read and modify files, create new files and directories, run shell commands, execute tests, git operations (read and write), web search and fetch.
+
+```bash
+xibecode run "Add a user authentication system" --mode agent
+```
+
+### Engineer Mode
+
+**Persona:** Alex the Implementer
+
+Focused implementation mode for building features.
+
+**Best For:** Implementing specific features, writing clean maintainable code, following specifications, writing tests for implementations.
+
+```bash
+xibecode run "Implement the checkout flow" --mode engineer
+```
+
+## Planning & Analysis Modes
+
+### Plan Mode
+
+**Persona:** Strategic Planner
+
+Interactive planning mode with web research, clarifying questions, and structured `implementations.md` generation.
+
+**Best For:** Creating detailed implementation plans, researching solutions, breaking down complex features into tasks, generating step-by-step plans with code snippets.
+
+**How It Works:**
+1. Reads the codebase and researches online
+2. Asks clarifying questions (multiple-choice in WebUI, inquirer prompts in CLI)
+3. Generates `implementations.md` with checkbox tasks, file paths, and code snippets
+4. Shows a plan preview with "View Plan" and "Build" buttons
+5. On "Build", switches to Agent mode to execute the plan automatically
+
+**Tools Available:** File reading, web search, fetch URL, git read, context search, and write to `implementations.md` only.
+
+```bash
+xibecode run "Plan how to add authentication to this app" --mode plan
+```
+
+### Architect Mode
+
+**Persona:** Anna the Designer
+
+System design and high-level architecture planning.
+
+**Best For:** System design documents, component architecture, tech stack selection, design patterns, scalability planning.
+
+```bash
+xibecode run "Design the microservices architecture" --mode architect
+```
+
+### Researcher Mode
+
+**Persona:** Sanvi the Scholar
+
+Deep research and investigation mode.
+
+**Best For:** Investigating complex topics, reading documentation, analyzing papers and specs, synthesizing information.
+
+```bash
+xibecode run "Research best practices for API rate limiting" --mode researcher
+```
+
+## Quality & Testing Modes
+
+### Debugger Mode
+
+**Persona:** Dex the Detective
+
+Systematic debugging and root cause analysis.
+
+**Best For:** Finding and fixing bugs, analyzing error messages, root cause investigation, targeted surgical fixes.
+
+**Approach:**
+1. Reproduce the issue
+2. Isolate the root cause
+3. Apply minimal fix
+4. Verify the fix works
+
+```bash
+xibecode run "The login form is not working. Fix it." --mode debugger
+```
+
+### Tester Mode
+
+**Persona:** Tess the QA Engineer
+
+Comprehensive testing and quality assurance.
+
+**Best For:** Writing unit tests, integration testing, test coverage improvement, TDD workflows.
+
+```bash
+xibecode run "Write tests for the user service" --mode tester
+```
+
+### Review Mode
+
+**Persona:** Nova the Critic
+
+Code review and quality analysis (read-only).
+
+**Best For:** Code quality review, best practices check, performance analysis, maintainability assessment.
+
+**Restrictions:** Cannot modify files.
+
+```bash
+xibecode run "Review the authentication module" --mode review
+```
+
+### Security Mode
+
+**Persona:** Sentinel the Guardian
+
+Security analysis and vulnerability detection (read-only).
+
+**Best For:** Security audits, vulnerability scanning, injection attack detection, authentication review, data exposure analysis.
+
+**Restrictions:** Cannot modify files, requires confirmation.
+
+```bash
+xibecode run "Perform a security audit" --mode security
+```
+
+## Specialized Modes
+
+### Team Leader Mode
+
+**Persona:** Arya the Leader
+
+Task coordination and delegation to other modes.
+
+**Best For:** Complex multi-step projects, coordinating multiple concerns, breaking down large tasks.
+
+The Team Leader delegates tasks to specialized agents (Engineer, Architect, Tester, etc.) rather than implementing directly.
+
+```bash
+xibecode run "Build a complete e-commerce system" --mode team_leader
+```
+
+### Product Mode
+
+**Persona:** Agni the Strategist
+
+Product requirements and user stories.
+
+**Best For:** Requirements gathering, user stories, feature prioritization, PRD creation.
+
+```bash
+xibecode run "Create user stories for the dashboard" --mode product
+```
+
+### SEO Mode
+
+**Persona:** Siri the Optimizer
+
+SEO and web optimization.
+
+**Best For:** Keyword research, on-page SEO, meta tag optimization, web performance.
+
+```bash
+xibecode run "Optimize the landing page for SEO" --mode seo
+```
+
+### Data Mode
+
+**Persona:** David the Analyst
+
+Data processing and analysis.
+
+**Best For:** Data analysis, log processing, metrics definition, data visualization prep.
+
+```bash
+xibecode run "Analyze the server logs for errors" --mode data
+```
+
+## Tool Permissions by Mode
+
+Each mode has access to specific tool categories:
+
+| Category | Description | Modes with Access |
+|----------|-------------|-------------------|
+| `read_only` | Read files | All modes |
+| `write_fs` | Write/edit files | agent, engineer, tester, debugger, architect, team_leader, product, seo, data, researcher |
+| `git_read` | Git status, diff | All modes |
+| `git_mutation` | Git commit, reset | agent, engineer, tester, debugger |
+| `shell_command` | Run commands | agent, engineer, debugger, security, data |
+| `tests` | Run tests | agent, engineer, tester, debugger, security, review |
+| `network` | Web search, fetch | agent, engineer, seo, researcher |
+| `context` | Code search | All modes |
+
+## Mode Transitions
+
+Modes can automatically transition based on the task:
+- Plan mode may suggest switching to Agent mode for implementation
+- Team Leader delegates to Engineer for coding tasks
+- Agent can switch to Debugger when encountering bugs
+
+Configure auto-approval policy in your config:
+
+```json
+{
+  "autoApprovalPolicy": "always"
+}
+```
+
+## Best Practices
+
+- **Start with Plan mode** for complex tasks to understand the codebase first
+- **Use Debugger mode** for bugs rather than Agent mode for more targeted fixes
+- **Use Security mode** before deploying to production
+- **Use Review mode** for code quality checks without modifications
+- **Use Team Leader** for complex projects that span multiple concerns
+
+## Next Steps
+
+- [Tools Reference](/docs/tools) — Explore all 40+ tools
+- [Configuration](/docs/configuration) — Configure mode behavior
+- [Examples](/docs/examples) — See modes in action
