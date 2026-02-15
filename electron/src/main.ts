@@ -5,7 +5,7 @@ import {
   ipcMain,
   shell,
 } from 'electron';
-import { execSync, spawn, ChildProcess } from 'child_process';
+import { execSync, spawn, spawnSync, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -245,7 +245,13 @@ function registerIpc(): void {
 
   ipcMain.handle('clone-repo', async (_e, url: string, dest: string) => {
     try {
-      execSync(`git clone ${url} ${dest}`, { encoding: 'utf-8' });
+      const result = spawnSync('git', ['clone', url, dest], {
+        encoding: 'utf-8',
+        stdio: 'pipe',
+      });
+      if (result.status !== 0) {
+        return { success: false, error: result.stderr || 'git clone failed' };
+      }
       openFolder(dest);
       return { success: true };
     } catch (err: any) {
