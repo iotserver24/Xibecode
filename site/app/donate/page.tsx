@@ -70,11 +70,11 @@ export default function DonatePage() {
     setLoading(true);
 
     try {
-      // 1. Create Razorpay order
+      // 1. Create Razorpay order (includes donor info in notes for webhook)
       const res = await fetch('/api/donate/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: finalAmount, currency, name, email }),
+        body: JSON.stringify({ amount: finalAmount, currency, name, email, github: github.trim(), description: description.trim() }),
       });
 
       if (!res.ok) {
@@ -95,7 +95,7 @@ export default function DonatePage() {
         prefill: { name, email },
         theme: { color: '#8b5cf6' },
         handler: async (response: any) => {
-          // 3. Verify payment
+          // 3. Verify payment signature (webhook handles actual storage)
           try {
             const verifyRes = await fetch('/api/donate/verify', {
               method: 'POST',
@@ -104,12 +104,6 @@ export default function DonatePage() {
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
-                name,
-                email,
-                github: github.trim(),
-                description: description.trim(),
-                amount: finalAmount,
-                currency,
               }),
             });
 

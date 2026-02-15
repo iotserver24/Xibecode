@@ -1,22 +1,10 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { getDb } from '@/lib/mongodb';
 
-async function getGitHubAvatar(username: string): Promise<string> {
-  if (!username) return '';
-  try {
-    const res = await fetch(`https://api.github.com/users/${username}`, {
-      headers: { 'Accept': 'application/vnd.github.v3+json' },
-      next: { revalidate: 86400 }, // cache for 24h
-    });
-    if (res.ok) {
-      const data = await res.json();
-      return data.avatar_url || '';
-    }
-  } catch {}
-  // Fallback: GitHub serves avatars directly by username
-  return `https://github.com/${username}.png`;
-}
+// Lightweight client-side verification for immediate UX feedback.
+// The actual sponsor storage happens via the Razorpay webhook.
+// This endpoint just confirms the payment signature is valid so the
+// client can show "Thank you" immediately without waiting for the webhook.
 
 export async function POST(req: Request) {
   try {
@@ -24,12 +12,6 @@ export async function POST(req: Request) {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
-      name,
-      email,
-      github,
-      description,
-      amount,
-      currency,
     } = await req.json();
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
@@ -41,7 +23,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Razorpay not configured' }, { status: 500 });
     }
 
-    // Verify signature
+    // Verify client-side signature (order_id|payment_id with API key secret)
     const expectedSignature = crypto
       .createHmac('sha256', keySecret)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
@@ -51,27 +33,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid payment signature' }, { status: 400 });
     }
 
-    // Fetch GitHub avatar if username provided
-    const githubUsername = (github || '').trim();
-    const avatarUrl = githubUsername ? await getGitHubAvatar(githubUsername) : '';
-
-    // Payment verified - store sponsor in MongoDB
-    const db = await getDb();
-    await db.collection('sponsors').insertOne({
-      name: name || 'Anonymous',
-      email: email || '',
-      github: githubUsername,
-      avatarUrl,
-      description: (description || '').trim().slice(0, 280),
-      amount: amount || 0,
-      currency: currency || 'INR',
-      date: new Date().toISOString(),
-      paymentId: razorpay_payment_id,
-      orderId: razorpay_order_id,
-      createdAt: new Date(),
-    });
-
-    return NextResponse.json({ success: true, message: 'Thank you for your donation!' });
+    // Signature valid - the webhook will handle storing the sponsor
+    return NextResponse.json({ success: true, message: 'Payment verified. Thank you!' });
   } catch (error) {
     console.error('Verify error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
