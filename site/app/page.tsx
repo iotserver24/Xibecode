@@ -139,6 +139,75 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Screenshots Section */}
+      <section className="relative py-16 md:py-24">
+        <div className="absolute top-0 inset-x-0 glow-line" />
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7 }}
+            className="text-center mb-12"
+          >
+            <p className="text-sm font-medium text-violet-400 tracking-wider uppercase mb-4">
+              See It In Action
+            </p>
+            <h2 className="text-3xl md:text-4xl font-bold mb-6 tracking-tight">
+              Modern WebUI
+              <span className="text-zinc-500"> Built for Developers</span>
+            </h2>
+            <p className="text-lg text-zinc-400 max-w-2xl mx-auto">
+              A v0.dev-inspired interface with Monaco editor, multi-terminal support, Git integration, and real-time AI chat.
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7, delay: 0.2 }}
+            className="space-y-8"
+          >
+            <div className="rounded-2xl border border-white/10 overflow-hidden">
+              <img src="/screenshots/01-main-interface.png" alt="XibeCode Main Interface" className="w-full" />
+              <div className="p-4 bg-white/[0.02] border-t border-white/5">
+                <h3 className="font-semibold text-white mb-1">Main Interface</h3>
+                <p className="text-sm text-zinc-400">Activity bar, resizable panels, code editor, and integrated terminal</p>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="rounded-xl border border-white/10 overflow-hidden">
+                <img src="/screenshots/06-ai-provider-settings.png" alt="AI Provider Settings" className="w-full" />
+                <div className="p-3 bg-white/[0.02] border-t border-white/5">
+                  <h3 className="font-semibold text-white text-sm mb-1">AI Provider Settings</h3>
+                  <p className="text-xs text-zinc-400">Configure models, API keys, and endpoints</p>
+                </div>
+              </div>
+              
+              <div className="rounded-xl border border-white/10 overflow-hidden">
+                <img src="/screenshots/04-git-panel.png" alt="Git Panel" className="w-full" />
+                <div className="p-3 bg-white/[0.02] border-t border-white/5">
+                  <h3 className="font-semibold text-white text-sm mb-1">Git Integration</h3>
+                  <p className="text-xs text-zinc-400">Visual commit history and staging</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-center">
+              <Link
+                href="/docs/webui"
+                className="inline-flex items-center text-violet-400 hover:text-violet-300 font-medium"
+              >
+                View more screenshots and features
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </Link>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
       {/* Comparison Section */}
       <section className="relative py-24 md:py-36">
         <div className="absolute top-0 inset-x-0 glow-line" />
