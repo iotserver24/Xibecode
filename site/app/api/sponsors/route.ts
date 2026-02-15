@@ -1,24 +1,19 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-
-const SPONSORS_PATH = path.join(process.cwd(), 'data', 'sponsors.json');
+import { getDb } from '@/lib/mongodb';
 
 export async function GET() {
   try {
-    let sponsors: any[] = [];
-    try {
-      const data = fs.readFileSync(SPONSORS_PATH, 'utf-8');
-      sponsors = JSON.parse(data);
-    } catch {
-      sponsors = [];
-    }
+    const db = await getDb();
 
-    // Sort by date descending (most recent first)
-    sponsors.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    // Get all sponsors sorted by date descending
+    const sponsors = await db
+      .collection('sponsors')
+      .find({})
+      .sort({ createdAt: -1 })
+      .toArray();
 
     // Strip email for privacy, only return public info
-    const publicSponsors = sponsors.map((s: any) => ({
+    const publicSponsors = sponsors.map((s) => ({
       name: s.name,
       amount: s.amount,
       currency: s.currency,
@@ -28,11 +23,11 @@ export async function GET() {
     // Calculate stats
     const totalSponsors = sponsors.length;
     const totalRaisedINR = sponsors
-      .filter((s: any) => s.currency === 'INR')
-      .reduce((sum: number, s: any) => sum + s.amount, 0);
+      .filter((s) => s.currency === 'INR')
+      .reduce((sum, s) => sum + (s.amount || 0), 0);
     const totalRaisedUSD = sponsors
-      .filter((s: any) => s.currency === 'USD')
-      .reduce((sum: number, s: any) => sum + s.amount, 0);
+      .filter((s) => s.currency === 'USD')
+      .reduce((sum, s) => sum + (s.amount || 0), 0);
 
     return NextResponse.json({
       sponsors: publicSponsors,
@@ -44,6 +39,9 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Sponsors API error:', error);
-    return NextResponse.json({ sponsors: [], stats: { totalSponsors: 0, totalRaisedINR: 0, totalRaisedUSD: 0 } });
+    return NextResponse.json({
+      sponsors: [],
+      stats: { totalSponsors: 0, totalRaisedINR: 0, totalRaisedUSD: 0 },
+    });
   }
 }

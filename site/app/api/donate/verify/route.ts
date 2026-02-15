@@ -1,22 +1,6 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
-import fs from 'fs';
-import path from 'path';
-
-const SPONSORS_PATH = path.join(process.cwd(), 'data', 'sponsors.json');
-
-function readSponsors() {
-  try {
-    const data = fs.readFileSync(SPONSORS_PATH, 'utf-8');
-    return JSON.parse(data);
-  } catch {
-    return [];
-  }
-}
-
-function writeSponsors(sponsors: any[]) {
-  fs.writeFileSync(SPONSORS_PATH, JSON.stringify(sponsors, null, 2));
-}
+import { getDb } from '@/lib/mongodb';
 
 export async function POST(req: Request) {
   try {
@@ -49,9 +33,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid payment signature' }, { status: 400 });
     }
 
-    // Payment verified - store sponsor
-    const sponsors = readSponsors();
-    sponsors.push({
+    // Payment verified - store sponsor in MongoDB
+    const db = await getDb();
+    await db.collection('sponsors').insertOne({
       name: name || 'Anonymous',
       email: email || '',
       amount: amount || 0,
@@ -59,8 +43,8 @@ export async function POST(req: Request) {
       date: new Date().toISOString(),
       paymentId: razorpay_payment_id,
       orderId: razorpay_order_id,
+      createdAt: new Date(),
     });
-    writeSponsors(sponsors);
 
     return NextResponse.json({ success: true, message: 'Thank you for your donation!' });
   } catch (error) {
