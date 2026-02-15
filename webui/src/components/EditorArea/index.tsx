@@ -2,13 +2,43 @@ import { useCallback, useRef } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
 import { useEditorStore, OpenFile } from '../../stores/editorStore';
 import { api } from '../../utils/api';
-import { X, Loader2, Sparkles } from 'lucide-react';
+import { X, Loader2, Sparkles, Image, Film, Music, FileWarning } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
 }
+
+// File extensions that are media/binary and should not be opened in Monaco
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico', '.bmp', '.tiff', '.tif', '.avif']);
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv', '.flv', '.wmv']);
+const AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.wma', '.opus']);
+const BINARY_EXTENSIONS = new Set(['.pdf', '.zip', '.tar', '.gz', '.rar', '.7z', '.exe', '.dll', '.so', '.dylib', '.woff', '.woff2', '.ttf', '.otf', '.eot']);
+
+function getFileExtension(path: string): string {
+  const name = path.split('/').pop() || '';
+  const dotIndex = name.lastIndexOf('.');
+  return dotIndex >= 0 ? name.substring(dotIndex).toLowerCase() : '';
+}
+
+function isImageFile(path: string): boolean {
+  return IMAGE_EXTENSIONS.has(getFileExtension(path));
+}
+
+function isVideoFile(path: string): boolean {
+  return VIDEO_EXTENSIONS.has(getFileExtension(path));
+}
+
+function isAudioFile(path: string): boolean {
+  return AUDIO_EXTENSIONS.has(getFileExtension(path));
+}
+
+function isBinaryFile(path: string): boolean {
+  const ext = getFileExtension(path);
+  return BINARY_EXTENSIONS.has(ext) || IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext) || AUDIO_EXTENSIONS.has(ext);
+}
+
 
 export function EditorArea() {
   const { openFiles, activeFilePath, setActiveFile, closeFile, updateFileContent, markFileSaved, setCursorPosition, fontSize, tabSize, wordWrap, minimap } = useEditorStore();
@@ -71,19 +101,23 @@ export function EditorArea() {
         })}
       </div>
 
-      {/* Editor */}
+      {/* Editor or Media Preview */}
       <div className="flex-1 min-h-0">
         {activeFile && (
-          <MonacoEditorWrapper
-            file={activeFile}
-            fontSize={fontSize}
-            tabSize={tabSize}
-            wordWrap={wordWrap}
-            minimap={minimap}
-            onChange={(content) => updateFileContent(activeFile.path, content)}
-            onSave={() => handleSave(activeFile)}
-            onCursorChange={setCursorPosition}
-          />
+          isBinaryFile(activeFile.path) ? (
+            <MediaPreview file={activeFile} />
+          ) : (
+            <MonacoEditorWrapper
+              file={activeFile}
+              fontSize={fontSize}
+              tabSize={tabSize}
+              wordWrap={wordWrap}
+              minimap={minimap}
+              onChange={(content) => updateFileContent(activeFile.path, content)}
+              onSave={() => handleSave(activeFile)}
+              onCursorChange={setCursorPosition}
+            />
+          )
         )}
       </div>
     </div>
@@ -158,6 +192,97 @@ function MonacoEditorWrapper({ file, fontSize, tabSize, wordWrap, minimap, onCha
         </div>
       }
     />
+  );
+}
+
+function MediaPreview({ file }: { file: OpenFile }) {
+  const filePath = file.path;
+  const fileName = file.name;
+  const mediaUrl = `/api/files/raw?path=${encodeURIComponent(filePath)}`;
+
+  if (isImageFile(filePath)) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-[#0c0c0c] p-6 overflow-auto">
+        <div className="flex items-center gap-2 mb-4 text-zinc-500">
+          <Image size={16} />
+          <span className="text-xs font-medium">{fileName}</span>
+          <span className="text-[10px] text-zinc-600 bg-zinc-800 px-1.5 py-0.5 rounded">{getFileExtension(filePath).toUpperCase()}</span>
+        </div>
+        <div className="relative max-w-full max-h-[70vh] rounded-lg overflow-hidden border border-zinc-800 bg-[#111]">
+          {/* Checkerboard background for transparency */}
+          <div className="absolute inset-0" style={{
+            backgroundImage: 'linear-gradient(45deg, #1a1a1a 25%, transparent 25%), linear-gradient(-45deg, #1a1a1a 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #1a1a1a 75%), linear-gradient(-45deg, transparent 75%, #1a1a1a 75%)',
+            backgroundSize: '16px 16px',
+            backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
+          }} />
+          <img
+            src={mediaUrl}
+            alt={fileName}
+            className="relative max-w-full max-h-[70vh] object-contain"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+              (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="p-8 text-center text-zinc-500 text-xs">Failed to load image</div>';
+            }}
+          />
+        </div>
+        <span className="text-[10px] text-zinc-600 mt-3">Image preview</span>
+      </div>
+    );
+  }
+
+  if (isVideoFile(filePath)) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-[#0c0c0c] p-6">
+        <div className="flex items-center gap-2 mb-4 text-zinc-500">
+          <Film size={16} />
+          <span className="text-xs font-medium">{fileName}</span>
+          <span className="text-[10px] text-zinc-600 bg-zinc-800 px-1.5 py-0.5 rounded">{getFileExtension(filePath).toUpperCase()}</span>
+        </div>
+        <div className="max-w-[80%] max-h-[70vh] rounded-lg overflow-hidden border border-zinc-800 bg-black">
+          <video
+            src={mediaUrl}
+            controls
+            className="max-w-full max-h-[70vh]"
+          >
+            Your browser does not support this video format.
+          </video>
+        </div>
+        <span className="text-[10px] text-zinc-600 mt-3">Video preview</span>
+      </div>
+    );
+  }
+
+  if (isAudioFile(filePath)) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-[#0c0c0c] p-6">
+        <div className="w-16 h-16 rounded-2xl bg-zinc-800 border border-zinc-700/50 flex items-center justify-center mb-4">
+          <Music size={28} className="text-zinc-400" />
+        </div>
+        <span className="text-sm font-medium text-zinc-300 mb-1">{fileName}</span>
+        <span className="text-[10px] text-zinc-600 mb-4">{getFileExtension(filePath).toUpperCase()} Audio</span>
+        <audio
+          src={mediaUrl}
+          controls
+          className="max-w-[400px]"
+        >
+          Your browser does not support this audio format.
+        </audio>
+      </div>
+    );
+  }
+
+  // Generic binary file - not viewable
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center bg-[#0c0c0c] p-6">
+      <div className="w-14 h-14 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-4">
+        <FileWarning size={24} className="text-zinc-500" />
+      </div>
+      <span className="text-sm font-medium text-zinc-300 mb-1">{fileName}</span>
+      <span className="text-[10px] text-zinc-600 mb-2">{getFileExtension(filePath).toUpperCase()} file</span>
+      <p className="text-xs text-zinc-500 max-w-[300px] text-center">
+        This binary file cannot be displayed in the editor. Use an external application to open it.
+      </p>
+    </div>
   );
 }
 

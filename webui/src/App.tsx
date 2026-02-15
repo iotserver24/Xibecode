@@ -6,6 +6,7 @@ import { ChatPanel } from './components/ChatPanel';
 import { BottomPanel } from './components/BottomPanel';
 import { StatusBar } from './components/StatusBar';
 import { SettingsPanel } from './components/SettingsPanel';
+import { EnvPanel } from './components/EnvPanel';
 import { useUIStore } from './stores/uiStore';
 
 export type SidebarPanel = 'explorer' | 'git' | 'search' | 'settings' | null;
@@ -26,20 +27,19 @@ function App() {
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Active activity bar tab - 'chat' shows the chat, others map to sidebar panels
-  const [activeTab, setActiveTab] = useState<string>('chat');
+  // Active activity bar tab - maps to sidebar panels or special views
+  const [activeTab, setActiveTab] = useState<string>('git');
 
   const handleActivityTabChange = (tab: string) => {
-    if (tab === 'chat') {
-      setActiveTab('chat');
-      if (isChatCollapsed) setIsChatCollapsed(false);
-      // Keep sidebar as-is
-    } else if (tab === 'settings') {
+    if (tab === 'settings') {
       setActiveTab('settings');
       setActiveSidebarPanel('settings');
     } else if (tab === 'git') {
       setActiveTab('git');
       setActiveSidebarPanel('git');
+    } else if (tab === 'env') {
+      setActiveTab('env');
+      // Env panel replaces the main content area, no sidebar needed
     } else {
       setActiveTab(tab);
     }
@@ -86,7 +86,6 @@ function App() {
 
   const handleExpandChat = () => {
     setIsChatCollapsed(false);
-    setActiveTab('chat');
   };
 
   return (
@@ -97,8 +96,6 @@ function App() {
         <ActivityBar
           activeTab={activeTab}
           onTabChange={handleActivityTabChange}
-          isChatCollapsed={isChatCollapsed}
-          onToggleChat={handleExpandChat}
         />
 
         {/* Chat Panel (left side) */}
@@ -203,19 +200,26 @@ function App() {
 
           {/* Editor + Sidebar area */}
           <div className="flex-1 flex overflow-hidden">
-            {/* File explorer sidebar */}
-            <Sidebar
-              activePanel={activeSidebarPanel}
-              isCollapsed={activeSidebarPanel === null}
-            />
+            {activeTab === 'env' ? (
+              /* Env Panel - full width when active */
+              <EnvPanel />
+            ) : (
+              <>
+                {/* File explorer sidebar */}
+                <Sidebar
+                  activePanel={activeSidebarPanel}
+                  isCollapsed={activeSidebarPanel === null}
+                />
 
-            {/* Editor + Bottom panel */}
-            <div className="flex-1 flex flex-col min-w-0">
-              <EditorArea />
-              {!isBottomPanelCollapsed && (
-                <BottomPanel isCollapsed={false} />
-              )}
-            </div>
+                {/* Editor + Bottom panel */}
+                <div className="flex-1 flex flex-col min-w-0">
+                  <EditorArea />
+                  {!isBottomPanelCollapsed && (
+                    <BottomPanel isCollapsed={false} />
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

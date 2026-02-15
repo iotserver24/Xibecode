@@ -9,7 +9,7 @@ import {
   Bot, User, Terminal,
   ChevronDown, FileCode, Sparkles, Hash,
   Layout, Shield, Search, Zap, Check, AlertCircle,
-  ArrowUp, Plus, Paperclip, X
+  ArrowUp, Plus, Paperclip, X, Loader2
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -65,6 +65,7 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [files, setFiles] = useState<string[]>([]);
   const [showModeSelector, setShowModeSelector] = useState(false);
+  const [thinkingText, setThinkingText] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -91,15 +92,36 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
       case 'user_message':
         if (data.source === 'tui') addMessage({ role: 'user', content: data.data.content, source: 'tui' });
         setProcessing(true);
+        setThinkingText('Thinking...');
         break;
-      case 'stream_start': setStreamingContent(''); break;
+      case 'thinking':
+        setThinkingText(data.data?.text || 'Thinking...');
+        break;
+      case 'stream_start':
+        setStreamingContent('');
+        setThinkingText(null);
+        break;
       case 'stream_text': appendStreamingContent(data.data?.text || ''); break;
-      case 'stream_end': finalizeStreamingMessage(); setProcessing(false); break;
-      case 'assistant_message': addMessage({ role: 'assistant', content: data.data.content }); setProcessing(false); break;
-      case 'tool_call': addMessage({ role: 'tool', content: data.data.name, toolName: data.data.name, toolStatus: 'running' }); break;
+      case 'stream_end':
+        finalizeStreamingMessage();
+        setProcessing(false);
+        setThinkingText(null);
+        break;
+      case 'assistant_message':
+        addMessage({ role: 'assistant', content: data.data.content });
+        setProcessing(false);
+        setThinkingText(null);
+        break;
+      case 'tool_call':
+        addMessage({ role: 'tool', content: data.data.name, toolName: data.data.name, toolStatus: 'running' });
+        setThinkingText(null);
+        break;
       case 'tool_result': break;
-      case 'thinking': break;
-      case 'error': addMessage({ role: 'system', content: `Error: ${data.data?.error || data.error}` }); setProcessing(false); break;
+      case 'error':
+        addMessage({ role: 'system', content: `Error: ${data.data?.error || data.error}` });
+        setProcessing(false);
+        setThinkingText(null);
+        break;
       case 'history':
         data.data?.messages?.forEach((msg: any) => {
           if (msg.role === 'user') addMessage({ role: 'user', content: msg.content, source: msg.source });
@@ -227,7 +249,9 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
 
   const handleSend = () => {
     if (!inputValue.trim() || isProcessing) return;
-    sendMessage(inputValue.trim()); setInputValue('');
+    sendMessage(inputValue.trim());
+    setInputValue('');
+    setThinkingText('Thinking...');
   };
 
   if (isCollapsed) return null;
@@ -271,6 +295,28 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
           <MessageItem key={msg.id} message={msg} />
         ))}
 
+        {/* Thinking / Loading indicator */}
+        {isProcessing && !streamingContent && (
+          <div className="flex gap-3">
+            <div className="w-6 h-6 rounded-md bg-zinc-800 border border-zinc-700/50 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Bot size={13} className="text-zinc-300" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] font-medium text-zinc-500 mb-1">Assistant</div>
+              <div className="flex items-center gap-2.5">
+                <Loader2 size={14} className="text-zinc-400 animate-spin" />
+                <span className="text-[12px] text-zinc-500">{thinkingText || 'Thinking...'}</span>
+                <span className="flex gap-1 ml-1">
+                  <span className="w-1 h-1 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1 h-1 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1 h-1 rounded-full bg-zinc-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Streaming content */}
         {streamingContent && (
           <div className="flex gap-3">
             <div className="w-6 h-6 rounded-md bg-zinc-800 border border-zinc-700/50 flex items-center justify-center flex-shrink-0 mt-0.5">
