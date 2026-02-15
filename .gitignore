@@ -59,6 +59,6 @@ Skill-marketplace
 next/
 
 # Electron
-electron/node_modules/
-electron/dist/
-electron/release/
+electron-app/node_modules/
+electron-app/dist/
+electron-app/release/
