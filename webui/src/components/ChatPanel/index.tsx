@@ -1,0 +1,520 @@
+import { useEffect, useRef, useState } from 'react';
+import { useChatStore, ChatMessage, AgentMode } from '../../stores/chatStore';
+import { createWebSocket } from '../../utils/api';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import {
+  Bot, User, Terminal,
+  ChevronDown, FileCode, Sparkles, Hash,
+  Layout, Shield, Search, Zap, Check, AlertCircle,
+  ArrowUp, Plus, Paperclip, X
+} from 'lucide-react';
+import { clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs: (string | undefined | null | false)[]) {
+  return twMerge(clsx(inputs));
+}
+
+const COMMANDS = [
+  { id: 'clear', name: '/clear', icon: <Zap size={14} />, desc: 'Clear chat messages' },
+  { id: 'help', name: '/help', icon: <AlertCircle size={14} />, desc: 'Show available commands' },
+  { id: 'diff', name: '/diff', icon: <FileCode size={14} />, desc: 'Show git diff' },
+  { id: 'status', name: '/status', icon: <Hash size={14} />, desc: 'Show git status' },
+  { id: 'test', name: '/test', icon: <Terminal size={14} />, desc: 'Run project tests' },
+  { id: 'format', name: '/format', icon: <Sparkles size={14} />, desc: 'Format code in project' },
+  { id: 'reset', name: '/reset', icon: <X size={14} />, desc: 'Reset chat session' },
+  { id: 'files', name: '/files', icon: <Paperclip size={14} />, desc: 'List project files' },
+];
+
+const MODES: { id: AgentMode; name: string; icon: any; desc: string; color: string }[] = [
+  { id: 'agent', name: 'Agent', icon: <Bot size={16} />, desc: 'Autonomous coding assistant', color: 'text-emerald-400' },
+  { id: 'plan', name: 'Planner', icon: <Layout size={16} />, desc: 'Analyze and plan tasks', color: 'text-cyan-400' },
+  { id: 'tester', name: 'Tester', icon: <Terminal size={16} />, desc: 'Testing and QA specialist', color: 'text-pink-400' },
+  { id: 'debugger', name: 'Debugger', icon: <AlertCircle size={16} />, desc: 'Bug investigation expert', color: 'text-amber-400' },
+  { id: 'security', name: 'Security', icon: <Shield size={16} />, desc: 'Security analysis', color: 'text-red-400' },
+  { id: 'review', name: 'Reviewer', icon: <Check size={16} />, desc: 'Code review specialist', color: 'text-purple-400' },
+  { id: 'architect', name: 'Architect', icon: <Layout size={16} />, desc: 'System design expert', color: 'text-violet-400' },
+  { id: 'engineer', name: 'Engineer', icon: <Terminal size={16} />, desc: 'Implementation focused', color: 'text-green-400' },
+  { id: 'seo', name: 'SEO', icon: <Search size={16} />, desc: 'SEO optimization', color: 'text-sky-400' },
+  { id: 'product', name: 'Product', icon: <Sparkles size={16} />, desc: 'Product strategy', color: 'text-orange-400' },
+  { id: 'data', name: 'Data', icon: <Hash size={16} />, desc: 'Data analysis', color: 'text-teal-400' },
+  { id: 'researcher', name: 'Researcher', icon: <Search size={16} />, desc: 'Deep research mode', color: 'text-rose-400' },
+];
+
+interface ChatPanelProps {
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
+  width?: number;
+}
+
+type PopupType = 'slash' | 'files' | 'modes' | null;
+
+export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, width }: ChatPanelProps) {
+  const {
+    messages, isProcessing, isConnected, currentMode, streamingContent,
+    setWebSocket, setConnected, addMessage, setProcessing, setCurrentMode,
+    setStreamingContent, appendStreamingContent, finalizeStreamingMessage,
+    sendMessage, clearMessages,
+  } = useChatStore();
+
+  const [inputValue, setInputValue] = useState('');
+  const [popup, setPopup] = useState<PopupType>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [files, setFiles] = useState<string[]>([]);
+  const [showModeSelector, setShowModeSelector] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  // WebSocket connection
+  useEffect(() => {
+    const socket = createWebSocket();
+    wsRef.current = socket;
+    socket.onopen = () => { setConnected(true); setWebSocket(socket); };
+    socket.onclose = () => { setConnected(false); setWebSocket(null); };
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        handleWSMessage(data);
+      } catch (e) {
+        console.error('Failed to parse WS message:', e);
+      }
+    };
+    return () => { socket.close(); };
+  }, []);
+
+  const handleWSMessage = (data: any) => {
+    switch (data.type) {
+      case 'user_message':
+        if (data.source === 'tui') addMessage({ role: 'user', content: data.data.content, source: 'tui' });
+        setProcessing(true);
+        break;
+      case 'stream_start': setStreamingContent(''); break;
+      case 'stream_text': appendStreamingContent(data.data?.text || ''); break;
+      case 'stream_end': finalizeStreamingMessage(); setProcessing(false); break;
+      case 'assistant_message': addMessage({ role: 'assistant', content: data.data.content }); setProcessing(false); break;
+      case 'tool_call': addMessage({ role: 'tool', content: data.data.name, toolName: data.data.name, toolStatus: 'running' }); break;
+      case 'tool_result': break;
+      case 'thinking': break;
+      case 'error': addMessage({ role: 'system', content: `Error: ${data.data?.error || data.error}` }); setProcessing(false); break;
+      case 'history':
+        data.data?.messages?.forEach((msg: any) => {
+          if (msg.role === 'user') addMessage({ role: 'user', content: msg.content, source: msg.source });
+          else if (msg.role === 'assistant') addMessage({ role: 'assistant', content: msg.content });
+          else if (msg.role === 'tool') addMessage({ role: 'tool', content: msg.toolName || msg.content, toolName: msg.toolName, toolStatus: msg.toolStatus });
+        });
+        break;
+      case 'clear': clearMessages(); break;
+    }
+  };
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, streamingContent]);
+
+  const loadFiles = async () => {
+    try {
+      const res = await fetch('/api/files');
+      const data = await res.json();
+      setFiles(data.files || []);
+    } catch { setFiles([]); }
+  };
+
+  const handleInputChange = (value: string) => {
+    setInputValue(value);
+    const lastChar = value.slice(-1);
+    const beforeLast = value.slice(0, -1);
+
+    if (lastChar === '/' && (beforeLast === '' || beforeLast.endsWith(' '))) {
+      setPopup('slash'); setSelectedIndex(0); return;
+    }
+    if (lastChar === '@' && (beforeLast === '' || beforeLast.endsWith(' '))) {
+      setPopup('files'); setSelectedIndex(0); loadFiles(); return;
+    }
+    if (popup === 'slash') {
+      const match = value.match(/\/[\w]*$/);
+      if (!match) setPopup(null);
+    } else if (popup === 'files') {
+      const match = value.match(/@[\w.\-/]*$/);
+      if (!match) setPopup(null);
+    }
+  };
+
+  const getFilteredSlashItems = () => {
+    const match = inputValue.match(/\/(\w*)$/);
+    const filter = match ? match[1].toLowerCase() : '';
+    const commands = COMMANDS.filter(c => c.name.toLowerCase().includes(filter) || c.desc.toLowerCase().includes(filter));
+    const modes = MODES.filter(m => m.name.toLowerCase().includes(filter) || m.id.toLowerCase().includes(filter));
+    return { commands, modes };
+  };
+
+  const getFilteredFiles = () => {
+    const match = inputValue.match(/@([\w.\-/]*)$/);
+    const filter = match ? match[1].toLowerCase() : '';
+    return files.filter(f => f.toLowerCase().includes(filter)).slice(0, 15);
+  };
+
+  const executeCommand = async (cmdId: string) => {
+    setInputValue(''); setPopup(null);
+    switch (cmdId) {
+      case 'clear':
+        clearMessages();
+        if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify({ type: 'message', content: '/clear' }));
+        break;
+      case 'help':
+        addMessage({ role: 'assistant', content: `## Available Commands\n\n| Command | Description |\n|---------|-------------|\n| **/clear** | Clear chat messages |\n| **/help** | Show this help |\n| **/diff** | Show git diff |\n| **/status** | Show git status |\n| **/test** | Run project tests |\n| **/format** | Format code |\n| **/reset** | Reset session |\n| **/files** | List project files |` });
+        break;
+      case 'reset':
+        clearMessages(); setCurrentMode('agent');
+        addMessage({ role: 'system', content: 'Session reset.' });
+        if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify({ type: 'message', content: '/clear' }));
+        break;
+      default:
+        if (['diff', 'status', 'files'].includes(cmdId)) {
+          setProcessing(true);
+          try {
+            const res = await fetch(`/api/${cmdId === 'files' ? 'files' : 'git/' + cmdId}`);
+            const data = await res.json();
+            if (data.success) {
+              let content = '';
+              if (cmdId === 'diff') content = data.diff ? '```diff\n' + data.diff + '\n```' : 'No changes.';
+              else if (cmdId === 'status') content = `Branch: ${data.branch}\nStatus: ${data.clean ? 'Clean' : 'Dirty'}`;
+              else if (cmdId === 'files') content = '```\n' + data.files.slice(0, 50).join('\n') + '\n```';
+              addMessage({ role: 'assistant', content });
+            } else {
+              addMessage({ role: 'system', content: `Failed: ${data.error || 'Unknown error'}` });
+            }
+          } catch { addMessage({ role: 'system', content: 'Network error' }); }
+          setProcessing(false);
+        } else {
+          addMessage({ role: 'system', content: `Executing ${cmdId}...` });
+          if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify({ type: 'message', content: '/' + cmdId }));
+        }
+    }
+  };
+
+  const switchMode = (modeId: AgentMode) => {
+    setInputValue(''); setPopup(null); setShowModeSelector(false); setCurrentMode(modeId);
+    if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify({ type: 'message', content: '/mode ' + modeId }));
+  };
+
+  const selectFile = (file: string) => {
+    setInputValue(inputValue.replace(/@[\w.\-/]*$/, '@' + file + ' ')); setPopup(null); inputRef.current?.focus();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (popup) {
+      const { commands, modes } = getFilteredSlashItems();
+      const filteredFiles = getFilteredFiles();
+      const totalItems = popup === 'slash' ? commands.length + modes.length : filteredFiles.length;
+
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIndex(i => Math.min(i + 1, totalItems - 1)); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedIndex(i => Math.max(i - 1, 0)); }
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (popup === 'slash') {
+          if (selectedIndex < commands.length) executeCommand(commands[selectedIndex].id);
+          else switchMode(modes[selectedIndex - commands.length].id);
+        } else if (popup === 'files' && filteredFiles[selectedIndex]) selectFile(filteredFiles[selectedIndex]);
+      } else if (e.key === 'Escape') setPopup(null);
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault(); handleSend();
+    }
+  };
+
+  const handleSend = () => {
+    if (!inputValue.trim() || isProcessing) return;
+    sendMessage(inputValue.trim()); setInputValue('');
+  };
+
+  if (isCollapsed) return null;
+
+  const { commands, modes } = getFilteredSlashItems();
+  const filteredFiles = getFilteredFiles();
+  const currentModeData = MODES.find(m => m.id === currentMode);
+
+  return (
+    <div
+      className="flex flex-col bg-[#0a0a0a] relative border-r border-zinc-800/40"
+      style={{ width: width || 380, minWidth: 280 }}
+    >
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        {messages.length === 0 && !streamingContent && (
+          <div className="flex flex-col items-center justify-center h-full text-center px-6">
+            <div className="w-10 h-10 rounded-xl bg-zinc-800/80 flex items-center justify-center mb-4 border border-zinc-700/50">
+              <Sparkles size={20} className="text-zinc-400" />
+            </div>
+            <h2 className="text-base font-semibold text-zinc-200 mb-1.5">What do you want to build?</h2>
+            <p className="text-xs text-zinc-500 max-w-[220px] leading-relaxed mb-6">
+              Ask me anything. I can help you write, debug, test, and deploy code.
+            </p>
+            <div className="flex flex-col gap-1.5 w-full max-w-[200px]">
+              {[
+                { key: '/', desc: 'Commands' },
+                { key: '@', desc: 'Files & Context' },
+                { key: 'Enter', desc: 'Send Message' }
+              ].map(hint => (
+                <div key={hint.key} className="flex items-center justify-between text-[11px] text-zinc-500 px-2.5 py-1.5 rounded-md bg-zinc-900/50 border border-zinc-800/50">
+                  <span>{hint.desc}</span>
+                  <kbd className="font-mono text-zinc-400 text-[10px] bg-zinc-800 px-1 py-0.5 rounded border border-zinc-700/50">{hint.key}</kbd>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {messages.map((msg) => (
+          <MessageItem key={msg.id} message={msg} />
+        ))}
+
+        {streamingContent && (
+          <div className="flex gap-3">
+            <div className="w-6 h-6 rounded-md bg-zinc-800 border border-zinc-700/50 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Bot size={13} className="text-zinc-300" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] font-medium text-zinc-500 mb-1 flex items-center gap-1.5">
+                Assistant <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
+              </div>
+              <div className="text-[13px] text-zinc-300 leading-relaxed">
+                <div className="markdown-content">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      code({ node, inline, className, children, ...props }: any) {
+                        const match = /language-(\w+)/.exec(className || '')
+                        return !inline && match ? (
+                          <SyntaxHighlighter
+                            style={vscDarkPlus}
+                            language={match[1]}
+                            PreTag="div"
+                            customStyle={{ margin: 0, borderRadius: '0.375rem', fontSize: '0.75rem', background: '#111111' }}
+                            {...props}
+                          >
+                            {String(children).replace(/\n$/, '')}
+                          </SyntaxHighlighter>
+                        ) : (
+                          <code className={className} {...props}>{children}</code>
+                        )
+                      }
+                    }}
+                  >
+                    {streamingContent}
+                  </ReactMarkdown>
+                </div>
+                <span className="inline-block w-1 h-3.5 bg-zinc-400 ml-0.5 animate-pulse" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input Area - v0 style */}
+      <div className="px-3 pb-3 relative">
+        {/* Popup */}
+        {popup && (
+          <div className="absolute bottom-full left-3 right-3 mb-2 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto z-50">
+            {(popup === 'slash' ? commands : []).map((cmd, i) => (
+              <div key={cmd.id} onClick={() => executeCommand(cmd.id)} className={cn("flex items-center gap-3 px-3 py-2 cursor-pointer text-sm", i === selectedIndex ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200")}>
+                <div className="text-zinc-500">{cmd.icon}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium">{cmd.name}</div>
+                  <div className="text-[11px] text-zinc-500 truncate">{cmd.desc}</div>
+                </div>
+              </div>
+            ))}
+            {(popup === 'slash' ? modes : []).map((mode, i) => (
+              <div key={mode.id} onClick={() => switchMode(mode.id)} className={cn("flex items-center gap-3 px-3 py-2 cursor-pointer", i + commands.length === selectedIndex ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200")}>
+                <div className={cn(mode.color)}>{mode.icon}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium">{mode.name}</div>
+                  <div className="text-[11px] text-zinc-500 truncate">{mode.desc}</div>
+                </div>
+              </div>
+            ))}
+            {(popup === 'files' ? filteredFiles : []).map((file, i) => (
+              <div key={file} onClick={() => selectFile(file)} className={cn("flex items-center gap-3 px-3 py-2 cursor-pointer", i === selectedIndex ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200")}>
+                <FileCode size={14} className="text-zinc-500" />
+                <div className="text-sm truncate">{file}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Mode selector dropdown */}
+        {showModeSelector && (
+          <div className="absolute bottom-full left-3 right-3 mb-2 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-50 p-2">
+            <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider px-2 py-1 mb-1">Select Mode</div>
+            <div className="grid grid-cols-2 gap-1">
+              {MODES.map(mode => (
+                <button
+                  key={mode.id}
+                  onClick={() => switchMode(mode.id)}
+                  className={cn(
+                    "flex items-center gap-2 p-2 rounded-lg text-left transition-colors",
+                    currentMode === mode.id ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:bg-zinc-800/50"
+                  )}
+                >
+                  <span className={cn(mode.color, "flex-shrink-0")}>{mode.icon}</span>
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium truncate">{mode.name}</div>
+                    <div className="text-[9px] text-zinc-600 truncate">{mode.desc}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Input box - v0 style with rounded container */}
+        <div className="bg-zinc-900/80 rounded-xl border border-zinc-800 focus-within:border-zinc-700 transition-colors">
+          <textarea
+            ref={inputRef}
+            value={inputValue}
+            onChange={(e) => handleInputChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask a follow-up..."
+            className="w-full bg-transparent border-none px-3.5 pt-3 pb-1 min-h-[44px] max-h-[180px] resize-none focus:ring-0 focus:outline-none text-[13px] text-zinc-200 placeholder-zinc-600"
+            rows={1}
+            disabled={isProcessing || !isConnected}
+          />
+
+          {/* Bottom toolbar */}
+          <div className="flex items-center justify-between px-2 pb-2">
+            <div className="flex items-center gap-1">
+              <button
+                className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+                title="New Chat"
+                onClick={() => {
+                  clearMessages();
+                  if (wsRef.current?.readyState === WebSocket.OPEN) {
+                    wsRef.current.send(JSON.stringify({ type: 'message', content: '/clear' }));
+                  }
+                }}
+              >
+                <Plus size={16} />
+              </button>
+              <button
+                onClick={() => setShowModeSelector(!showModeSelector)}
+                className="flex items-center gap-1 px-2 py-1 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors text-xs"
+              >
+                <span className={cn(currentModeData?.color, "flex-shrink-0")}>{currentModeData?.icon}</span>
+                <span className="font-medium text-zinc-400">{currentModeData?.name}</span>
+                <ChevronDown size={10} className="text-zinc-600" />
+              </button>
+            </div>
+
+            <button
+              onClick={handleSend}
+              disabled={!inputValue.trim() || isProcessing || !isConnected}
+              className="p-1.5 rounded-lg bg-zinc-100 text-zinc-900 hover:bg-white disabled:opacity-20 disabled:bg-zinc-700 disabled:text-zinc-500 transition-all"
+            >
+              <ArrowUp size={16} strokeWidth={2.5} />
+            </button>
+          </div>
+        </div>
+
+        {/* Connection status */}
+        {!isConnected && (
+          <div className="flex items-center justify-center gap-1.5 mt-2 text-[10px] text-amber-500/80">
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            Connecting...
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MessageItem({ message }: { message: ChatMessage }) {
+  if (message.role === 'tool') {
+    return (
+      <div className="flex items-center gap-2 py-1">
+        <div className={cn(
+          "w-1.5 h-1.5 rounded-full flex-shrink-0",
+          message.toolStatus === 'running' ? "bg-amber-500 animate-pulse" :
+          message.toolStatus === 'success' ? "bg-emerald-500" : "bg-red-500"
+        )} />
+        <span className="text-[11px] font-medium text-zinc-500">
+          {message.toolName}
+        </span>
+        <span className="text-[10px] text-zinc-600">
+          {message.toolStatus || 'running'}
+        </span>
+      </div>
+    );
+  }
+
+  if (message.role === 'system') {
+    return (
+      <div className="flex items-center gap-2 py-1.5 text-[11px] text-zinc-500">
+        <AlertCircle size={12} className="flex-shrink-0" />
+        <span>{message.content}</span>
+      </div>
+    );
+  }
+
+  const isUser = message.role === 'user';
+
+  if (isUser) {
+    return (
+      <div className="flex gap-3">
+        <div className="w-6 h-6 rounded-md bg-zinc-800 border border-zinc-700/50 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <User size={13} className="text-zinc-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[10px] font-medium text-zinc-500 mb-1 flex items-center gap-1.5">
+            You
+            {message.source === 'tui' && <span className="text-[9px] bg-zinc-800 px-1 rounded text-zinc-500">TUI</span>}
+          </div>
+          <div className="text-[13px] text-zinc-200 leading-relaxed whitespace-pre-wrap">{message.content}</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Assistant message
+  return (
+    <div className="flex gap-3">
+      <div className="w-6 h-6 rounded-md bg-zinc-800 border border-zinc-700/50 flex items-center justify-center flex-shrink-0 mt-0.5">
+        <Bot size={13} className="text-zinc-300" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[10px] font-medium text-zinc-500 mb-1">Assistant</div>
+        <div className="text-[13px] text-zinc-300 leading-relaxed">
+          <div className="markdown-content">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                code({ node, inline, className, children, ...props }: any) {
+                  const match = /language-(\w+)/.exec(className || '')
+                  return !inline && match ? (
+                    <SyntaxHighlighter
+                      style={vscDarkPlus}
+                      language={match[1]}
+                      PreTag="div"
+                      customStyle={{ margin: '0.75rem 0', borderRadius: '0.375rem', fontSize: '0.75rem', background: '#111111', border: '1px solid #1f1f1f' }}
+                      {...props}
+                    >
+                      {String(children).replace(/\n$/, '')}
+                    </SyntaxHighlighter>
+                  ) : (
+                    <code className={className} {...props}>{children}</code>
+                  )
+                }
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
