@@ -9,15 +9,19 @@ AI-powered autonomous coding assistant for your terminal and browser.
 
 XibeCode is a CLI agent that can read and edit code, run commands, and iterate on tasks from your terminal using LLMs. It now includes a **WebUI** for a browser-based experience, **AI-powered test generation**, and **multi-model support** for both Anthropic and OpenAI models.
 
-## What's New in v0.4.0
+## What's New in v0.4.4
 
-- **TUI-WebUI Sync** - Real-time bidirectional sync between terminal and browser
-- **Slash Commands** - Type `/` in WebUI to switch between 13 agent modes
-- **File References** - Type `@` to browse and reference project files
-- **Custom Model Support** - Use any OpenAI-compatible API endpoint
-- **Tool Execution Display** - See tool calls and results in real-time
-- **Markdown Rendering** - Rich text formatting in chat responses
-- **Minimalistic Design** - Clean, terminal-style interface
+- **v0.dev-inspired UI** - Modern split-panel layout with resizable chat and code areas
+- **Multi-Terminal Support** - Create/manage multiple terminal tabs with + and X buttons
+- **Monaco Code Editor** - Full syntax highlighting and IntelliSense in the browser
+- **Settings Modal** - Configure AI provider, display, dev settings, and MCP servers
+- **MCP JSON Editor** - Edit mcp-servers.json directly with Monaco syntax highlighting
+- **Git History Graph** - Visual commit timeline with branch/tag indicators
+- **Custom Model Support** - Add any model (Claude, GPT, DeepSeek, etc.) via WebUI or CLI
+- **Real PTY Terminal** - Fully interactive shell with colors, tab-completion, and all terminal features
+- **File Tree Explorer** - Browse and open files with recursive directory tree
+- **Current Model Display** - Status bar shows active AI model
+- **Drag-to-Resize Panels** - Adjustable chat/code split layout
 
 ## Installation
 
@@ -68,12 +72,20 @@ xibecode ui -p 8080      # Custom port
 ```
 
 Features:
-- **Dashboard** - Project stats, git status, test runner info
-- **Chat Interface** - Real-time streaming responses
-- **Visual Diff** - Colorized git diff viewer
-- **AI Test Generator** - Generate tests with one click
-- **Multi-Model Selector** - Switch models instantly
-- **Configuration Panel** - Manage API keys and settings
+- **v0.dev-style Layout** - Activity bar (left) → Chat panel (resizable) → Code editor (right)
+- **Monaco Code Editor** - Professional code editor with syntax highlighting and IntelliSense
+- **File Tree Explorer** - Browse and open project files with recursive directory tree
+- **Multi-Terminal Tabs** - Create/manage multiple shell sessions with + and X buttons
+- **Real PTY Terminal** - Fully interactive bash/zsh with colors, tab-completion, vim/nano support
+- **Git Integration** - Commit history graph, stage/unstage files, view diffs, write commits
+- **Settings Modal** - Configure AI provider, display preferences, dev tools, and MCP servers
+- **MCP JSON Editor** - Edit mcp-servers.json directly with Monaco syntax highlighting
+- **Custom Models** - Add any AI model (Claude, GPT-4, DeepSeek, Llama) via dropdown + text input
+- **Real-time Chat** - Streaming AI responses with markdown rendering
+- **Status Bar** - Connection status, current mode, active AI model, cursor position
+- **Resizable Panels** - Drag the divider between chat and code areas to adjust layout
+- **Slash Commands** - Type `/` for commands and mode switching, `@` for file references
+- **New Chat Button** - Clear conversation with + button in chat input
 
 ### `xibecode run`
 Autonomous coding workflow.

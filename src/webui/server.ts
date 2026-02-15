@@ -16,6 +16,7 @@ import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import { spawn, ChildProcess } from 'child_process';
 import { ConfigManager } from '../utils/config.js';
 import { EnhancedAgent } from '../core/agent.js';
 import { CodingToolExecutor } from '../core/tools.js';
@@ -179,32 +180,72 @@ export class WebUIServer {
     try {
       // Health check
       if (pathname === '/api/health') {
-        sendJSON({ status: 'ok', version: '0.4.0' });
+        sendJSON({ status: 'ok', version: '0.4.4' });
         return;
       }
 
       // Configuration
       if (pathname === '/api/config') {
         if (req.method === 'GET') {
-          const config = this.configManager.getDisplayConfig();
+          const display = this.configManager.getDisplayConfig();
           const currentModel = this.configManager.getModel();
           const apiKeySet = !!this.configManager.getApiKey();
+          const allConfig = this.configManager.getAll();
           sendJSON({
-            ...config,
+            ...display,
             apiKeySet,
             currentModel,
             availableModels: AVAILABLE_MODELS,
+            // Raw config values for the settings panel
+            raw: {
+              provider: allConfig.provider || '',
+              model: allConfig.model || 'claude-sonnet-4-5-20250929',
+              apiKey: apiKeySet ? '••••••••' : '',
+              baseUrl: allConfig.baseUrl || '',
+              anthropicBaseUrl: allConfig.anthropicBaseUrl || '',
+              openaiBaseUrl: allConfig.openaiBaseUrl || '',
+              maxIterations: allConfig.maxIterations ?? 50,
+              theme: allConfig.theme || 'default',
+              showDetails: this.configManager.getShowDetails(),
+              showThinking: this.configManager.getShowThinking(),
+              compactThreshold: allConfig.compactThreshold ?? 50000,
+              preferredPackageManager: allConfig.preferredPackageManager || 'pnpm',
+              enableDryRunByDefault: allConfig.enableDryRunByDefault ?? false,
+              gitCheckpointStrategy: allConfig.gitCheckpointStrategy || 'stash',
+              testCommandOverride: allConfig.testCommandOverride || '',
+              defaultEditor: allConfig.defaultEditor || '',
+              statusBarEnabled: allConfig.statusBarEnabled ?? true,
+              headerMinimal: allConfig.headerMinimal ?? false,
+              sessionDirectory: allConfig.sessionDirectory || '',
+              plugins: allConfig.plugins || [],
+            },
           });
           return;
         }
         if (req.method === 'PUT') {
           const body = await parseBody();
+          // Core AI settings
           if (body.apiKey) this.configManager.set('apiKey', body.apiKey);
           if (body.model) this.configManager.set('model', body.model);
-          if (body.provider) this.configManager.set('provider', body.provider);
-          if (body.baseUrl) this.configManager.set('baseUrl', body.baseUrl);
-          if (body.maxIterations) this.configManager.set('maxIterations', body.maxIterations);
-          if (body.theme) this.configManager.set('theme', body.theme);
+          if (body.provider !== undefined) this.configManager.set('provider', body.provider);
+          if (body.baseUrl !== undefined) this.configManager.set('baseUrl', body.baseUrl);
+          if (body.anthropicBaseUrl !== undefined) this.configManager.set('anthropicBaseUrl', body.anthropicBaseUrl);
+          if (body.openaiBaseUrl !== undefined) this.configManager.set('openaiBaseUrl', body.openaiBaseUrl);
+          if (body.maxIterations !== undefined) this.configManager.set('maxIterations', body.maxIterations);
+          // Display settings
+          if (body.theme !== undefined) this.configManager.set('theme', body.theme);
+          if (body.showDetails !== undefined) this.configManager.set('showDetails', body.showDetails);
+          if (body.showThinking !== undefined) this.configManager.set('showThinking', body.showThinking);
+          if (body.compactThreshold !== undefined) this.configManager.set('compactThreshold', body.compactThreshold);
+          // Dev settings
+          if (body.preferredPackageManager !== undefined) this.configManager.set('preferredPackageManager', body.preferredPackageManager);
+          if (body.enableDryRunByDefault !== undefined) this.configManager.set('enableDryRunByDefault', body.enableDryRunByDefault);
+          if (body.gitCheckpointStrategy !== undefined) this.configManager.set('gitCheckpointStrategy', body.gitCheckpointStrategy);
+          if (body.testCommandOverride !== undefined) this.configManager.set('testCommandOverride', body.testCommandOverride);
+          if (body.defaultEditor !== undefined) this.configManager.set('defaultEditor', body.defaultEditor);
+          if (body.statusBarEnabled !== undefined) this.configManager.set('statusBarEnabled', body.statusBarEnabled);
+          if (body.headerMinimal !== undefined) this.configManager.set('headerMinimal', body.headerMinimal);
+          if (body.sessionDirectory !== undefined) this.configManager.set('sessionDirectory', body.sessionDirectory);
           sendJSON({ success: true });
           return;
         }
@@ -217,6 +258,49 @@ export class WebUIServer {
           current: this.configManager.getModel(),
         });
         return;
+      }
+
+      // MCP servers JSON file (read/write for the Monaco editor)
+      if (pathname === '/api/mcp/file') {
+        const mcpFilePath = path.join(
+          process.env.HOME || process.env.USERPROFILE || '.',
+          '.xibecode',
+          'mcp-servers.json'
+        );
+
+        if (req.method === 'GET') {
+          try {
+            const content = await fs.readFile(mcpFilePath, 'utf-8');
+            sendJSON({ success: true, content, path: mcpFilePath });
+          } catch {
+            // File doesn't exist yet, return default template
+            const defaultContent = JSON.stringify({
+              mcpServers: {}
+            }, null, 2);
+            sendJSON({ success: true, content: defaultContent, path: mcpFilePath });
+          }
+          return;
+        }
+
+        if (req.method === 'PUT') {
+          const body = await parseBody();
+          if (!body.content) {
+            sendJSON({ success: false, error: 'Missing content' }, 400);
+            return;
+          }
+          try {
+            // Validate it's valid JSON
+            JSON.parse(body.content);
+            // Ensure directory exists
+            const dir = path.dirname(mcpFilePath);
+            await fs.mkdir(dir, { recursive: true });
+            await fs.writeFile(mcpFilePath, body.content, 'utf-8');
+            sendJSON({ success: true });
+          } catch (error: any) {
+            sendJSON({ success: false, error: error.message || 'Invalid JSON' }, 400);
+          }
+          return;
+        }
       }
 
       // Project info
@@ -251,6 +335,60 @@ export class WebUIServer {
         return;
       }
 
+      // Git log (commit history)
+      if (pathname === '/api/git/log') {
+        try {
+          const { execSync } = await import('child_process');
+          const count = 30;
+          const logOutput = execSync(
+            `git log --pretty=format:'{"hash":"%H","shortHash":"%h","author":"%an","email":"%ae","date":"%ai","message":"%s","refs":"%D"}' -${count}`,
+            { cwd: this.workingDir, encoding: 'utf-8', timeout: 5000 }
+          );
+          const commits = logOutput.trim().split('\n').filter(Boolean).map(line => {
+            try {
+              // Handle special chars in commit messages
+              const sanitized = line.replace(/\\/g, '\\\\').replace(/(?<!\\)"/g, (match, offset) => {
+                // Only escape quotes inside the message field
+                return match;
+              });
+              return JSON.parse(sanitized);
+            } catch {
+              // Fallback: parse manually
+              const hashMatch = line.match(/"hash":"([^"]+)"/);
+              const shortMatch = line.match(/"shortHash":"([^"]+)"/);
+              const authorMatch = line.match(/"author":"([^"]+)"/);
+              const dateMatch = line.match(/"date":"([^"]+)"/);
+              const messageMatch = line.match(/"message":"(.+?)","refs"/);
+              const refsMatch = line.match(/"refs":"([^"]*)"/);
+              return {
+                hash: hashMatch?.[1] || '',
+                shortHash: shortMatch?.[1] || '',
+                author: authorMatch?.[1] || '',
+                email: '',
+                date: dateMatch?.[1] || '',
+                message: messageMatch?.[1] || 'commit',
+                refs: refsMatch?.[1] || '',
+              };
+            }
+          });
+
+          // Also get graph lines
+          let graph: string[] = [];
+          try {
+            const graphOutput = execSync(
+              `git log --graph --oneline --decorate -${count}`,
+              { cwd: this.workingDir, encoding: 'utf-8', timeout: 5000 }
+            );
+            graph = graphOutput.trim().split('\n');
+          } catch {}
+
+          sendJSON({ success: true, commits, graph });
+        } catch (error: any) {
+          sendJSON({ success: false, error: error.message, commits: [], graph: [] }, 500);
+        }
+        return;
+      }
+
       // File operations
       if (pathname === '/api/files/list') {
         const body = await parseBody();
@@ -264,6 +402,67 @@ export class WebUIServer {
             path: path.join(dirPath, entry.name),
           }));
           sendJSON({ success: true, files });
+        } catch (error: any) {
+          sendJSON({ success: false, error: error.message }, 500);
+        }
+        return;
+      }
+
+      // Recursive file tree for the WebUI file explorer
+      if (pathname === '/api/files/tree') {
+        const body = await parseBody();
+        const dirPath = body.path || '.';
+        const maxDepth = body.depth || 10;
+        const SKIP_DIRS = new Set([
+          'node_modules', '.git', 'dist', 'build', '.next', '.cache',
+          '__pycache__', '.venv', 'venv', '.tox', 'coverage', '.nyc_output',
+          '.svn', '.hg', 'bower_components', '.parcel-cache', '.turbo',
+        ]);
+
+        const buildTree = async (currentPath: string, relativePath: string, depth: number): Promise<any[]> => {
+          if (depth <= 0) return [];
+          const fullPath = path.resolve(this.workingDir, currentPath);
+          // Path traversal protection
+          if (!fullPath.startsWith(path.resolve(this.workingDir))) return [];
+          try {
+            const entries = await fs.readdir(fullPath, { withFileTypes: true });
+            const nodes: any[] = [];
+            // Sort: directories first, then alphabetically
+            const sorted = entries.sort((a, b) => {
+              if (a.isDirectory() && !b.isDirectory()) return -1;
+              if (!a.isDirectory() && b.isDirectory()) return 1;
+              return a.name.localeCompare(b.name);
+            });
+            for (const entry of sorted) {
+              if (entry.name.startsWith('.') && entry.name !== '.env' && entry.name !== '.env.local') {
+                // Skip most hidden files/dirs but allow .env
+                if (entry.isDirectory()) continue;
+              }
+              if (entry.isDirectory() && SKIP_DIRS.has(entry.name)) continue;
+              const entryRelPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+              const node: any = {
+                name: entry.name,
+                path: entryRelPath,
+                isDirectory: entry.isDirectory(),
+              };
+              if (entry.isDirectory()) {
+                node.children = await buildTree(
+                  path.join(currentPath, entry.name),
+                  entryRelPath,
+                  depth - 1
+                );
+              }
+              nodes.push(node);
+            }
+            return nodes;
+          } catch {
+            return [];
+          }
+        };
+
+        try {
+          const tree = await buildTree(dirPath, '', maxDepth);
+          sendJSON({ success: true, tree });
         } catch (error: any) {
           sendJSON({ success: false, error: error.message }, 500);
         }
@@ -386,11 +585,11 @@ export class WebUIServer {
             for (const entry of entries) {
               // Skip hidden files, node_modules, dist, etc.
               if (entry.name.startsWith('.') ||
-                  entry.name === 'node_modules' ||
-                  entry.name === 'dist' ||
-                  entry.name === 'build' ||
-                  entry.name === 'coverage' ||
-                  entry.name === '__pycache__') {
+                entry.name === 'node_modules' ||
+                entry.name === 'dist' ||
+                entry.name === 'build' ||
+                entry.name === 'coverage' ||
+                entry.name === '__pycache__') {
                 continue;
               }
               const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
@@ -500,6 +699,137 @@ export class WebUIServer {
 
       ws.on('close', () => {
         SessionBridge.unregisterWebSocket(ws);
+      });
+
+      return;
+    }
+
+    // Terminal mode - spawn a real shell with PTY via Python bridge
+    if (mode === 'terminal') {
+      let ptyProcess: ChildProcess | null = null;
+
+      ws.on('message', (data) => {
+        try {
+          const message = JSON.parse(data.toString());
+
+          if (message.type === 'terminal:create') {
+            const cwd = message.cwd ? path.resolve(this.workingDir, message.cwd) : this.workingDir;
+            const shell = process.env.SHELL || '/bin/bash';
+            const cols = message.cols || 120;
+            const rows = message.rows || 30;
+
+            // Python PTY bridge script - creates a real pseudo-terminal
+            const ptyBridge = `
+import pty, os, sys, select, signal, struct, fcntl, termios
+
+def set_winsize(fd, rows, cols):
+    s = struct.pack('HHHH', rows, cols, 0, 0)
+    fcntl.ioctl(fd, termios.TIOCSWINSZ, s)
+
+master, slave = pty.openpty()
+set_winsize(master, ${rows}, ${cols})
+
+pid = os.fork()
+if pid == 0:
+    os.close(master)
+    os.setsid()
+    os.dup2(slave, 0)
+    os.dup2(slave, 1)
+    os.dup2(slave, 2)
+    os.close(slave)
+    os.environ['TERM'] = 'xterm-256color'
+    os.environ['COLORTERM'] = 'truecolor'
+    os.chdir('${cwd.replace(/'/g, "\\'")}')
+    os.execvp('${shell}', ['${shell}', '-i'])
+else:
+    os.close(slave)
+    stdin_fd = sys.stdin.fileno()
+    stdout_fd = sys.stdout.fileno()
+    try:
+        while True:
+            r, _, _ = select.select([stdin_fd, master], [], [], 0.02)
+            if stdin_fd in r:
+                d = os.read(stdin_fd, 4096)
+                if not d: break
+                os.write(master, d)
+            if master in r:
+                try:
+                    d = os.read(master, 4096)
+                except OSError: break
+                if not d: break
+                os.write(stdout_fd, d)
+    except (IOError, OSError): pass
+    finally:
+        try: os.kill(pid, signal.SIGTERM)
+        except: pass
+`;
+
+            ptyProcess = spawn('python3', ['-u', '-c', ptyBridge], {
+              cwd,
+              env: { ...process.env, PYTHONUNBUFFERED: '1' },
+              stdio: ['pipe', 'pipe', 'pipe'],
+            });
+
+            if (ptyProcess.stdout) {
+              ptyProcess.stdout.on('data', (chunk: Buffer) => {
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ type: 'terminal:output', data: chunk.toString('utf-8') }));
+                }
+              });
+            }
+
+            if (ptyProcess.stderr) {
+              ptyProcess.stderr.on('data', (chunk: Buffer) => {
+                // stderr from the PTY bridge (mostly shell startup messages)
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ type: 'terminal:output', data: chunk.toString('utf-8') }));
+                }
+              });
+            }
+
+            ptyProcess.on('exit', (code) => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'terminal:output', data: `\r\n\x1b[90mShell exited (code ${code})\x1b[0m\r\n` }));
+              }
+            });
+
+            ptyProcess.on('error', (err) => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'terminal:output', data: `\r\n\x1b[31mError: ${err.message}\x1b[0m\r\n` }));
+              }
+            });
+
+            ws.send(JSON.stringify({ type: 'terminal:created', pid: ptyProcess.pid }));
+          }
+
+          if (message.type === 'terminal:input' && ptyProcess?.stdin) {
+            ptyProcess.stdin.write(message.data);
+          }
+
+          if (message.type === 'terminal:resize' && ptyProcess?.pid) {
+            // For resize, we'd need to signal the Python bridge
+            // The Python bridge will handle SIGWINCH
+            try {
+              process.kill(ptyProcess.pid, 'SIGWINCH');
+            } catch {
+              // ignore
+            }
+          }
+        } catch (error) {
+          console.error('Terminal WebSocket error:', error);
+        }
+      });
+
+      ws.on('close', () => {
+        if (ptyProcess) {
+          try {
+            ptyProcess.kill('SIGTERM');
+            setTimeout(() => {
+              try { ptyProcess?.kill('SIGKILL'); } catch {}
+            }, 1000);
+          } catch {}
+          ptyProcess = null;
+        }
       });
 
       return;
