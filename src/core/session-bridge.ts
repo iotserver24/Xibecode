@@ -9,7 +9,8 @@ import { EventEmitter } from 'events';
 
 export interface BridgeMessage {
   type: 'user_message' | 'assistant_message' | 'stream_start' | 'stream_text' | 'stream_end' |
-        'tool_call' | 'tool_result' | 'thinking' | 'error' | 'session_sync';
+        'tool_call' | 'tool_result' | 'thinking' | 'error' | 'session_sync' |
+        'plan_questions' | 'plan_ready';
   data: any;
   source: 'tui' | 'webui';
   timestamp: number;
@@ -238,6 +239,34 @@ class SessionBridgeClass extends EventEmitter {
     };
     this.state.isProcessing = false;
     this.broadcastToWebUI(message);
+  }
+
+  /**
+   * Called when planner mode emits questions for the user
+   */
+  onPlanQuestions(questions: any[]): void {
+    const message: BridgeMessage = {
+      type: 'plan_questions',
+      data: { questions },
+      source: 'tui',
+      timestamp: Date.now(),
+    };
+    this.broadcastToWebUI(message);
+    this.emit('plan_questions', questions);
+  }
+
+  /**
+   * Called when planner mode has finished writing implementations.md
+   */
+  onPlanReady(planContent: string, planPath: string): void {
+    const message: BridgeMessage = {
+      type: 'plan_ready',
+      data: { planContent, planPath },
+      source: 'tui',
+      timestamp: Date.now(),
+    };
+    this.broadcastToWebUI(message);
+    this.emit('plan_ready', planContent, planPath);
   }
 
   /**

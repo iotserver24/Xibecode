@@ -125,6 +125,105 @@ export async function chatCommand(options: ChatOptions) {
   const allModes = getAllModes();
   let currentMode: AgentMode = agent.getMode();
 
+  // Buffer to accumulate streamed text for plan parsing
+  let streamBuffer = '';
+
+  function parsePlannerOutput(text: string): void {
+    // Check for [[QUESTIONS: {...}]] block
+    const questionsMatch = text.match(/\[\[QUESTIONS:\s*([\s\S]*?)\]\]/);
+    if (questionsMatch) {
+      try {
+        const parsed = JSON.parse(questionsMatch[1]);
+        const questions = parsed.questions || [];
+        if (questions.length > 0) {
+          SessionBridge.onPlanQuestions(questions);
+          // In CLI mode, handle questions via inquirer
+          handlePlannerQuestions(questions).catch(() => {});
+        }
+      } catch (e) {
+        // JSON parse failed, ignore
+      }
+    }
+
+    // Check for [[PLAN_READY]] tag
+    if (text.includes('[[PLAN_READY]]')) {
+      // Read the implementations.md file content
+      const fs = require('fs');
+      const path = require('path');
+      const planPath = path.join(process.cwd(), 'implementations.md');
+      try {
+        const planContent = fs.readFileSync(planPath, 'utf-8');
+        SessionBridge.onPlanReady(planContent, 'implementations.md');
+      } catch {
+        // File might not exist yet
+      }
+    }
+  }
+
+  async function handlePlannerQuestions(questions: any[]): Promise<void> {
+    try {
+      const inquirer = (await import('inquirer')).default;
+      const answers: Record<string, string> = {};
+
+      for (const q of questions) {
+        const choices = q.options.map((o: any) => ({ name: o.label, value: o.id }));
+        if (q.hasOther) {
+          choices.push({ name: 'Other (please type)', value: '__other__' });
+        }
+
+        if (q.allowMultiple) {
+          const result = await inquirer.prompt([{
+            type: 'checkbox',
+            name: 'answer',
+            message: q.question,
+            choices,
+          }]);
+          const selected = result.answer as string[];
+          if (selected.includes('__other__')) {
+            const otherResult = await inquirer.prompt([{
+              type: 'input',
+              name: 'other',
+              message: 'Please specify:',
+            }]);
+            answers[q.id] = [...selected.filter((s: string) => s !== '__other__'), otherResult.other].join(', ');
+          } else {
+            answers[q.id] = selected.join(', ');
+          }
+        } else {
+          const result = await inquirer.prompt([{
+            type: 'list',
+            name: 'answer',
+            message: q.question,
+            choices,
+          }]);
+          if (result.answer === '__other__') {
+            const otherResult = await inquirer.prompt([{
+              type: 'input',
+              name: 'other',
+              message: 'Please specify:',
+            }]);
+            answers[q.id] = otherResult.other;
+          } else {
+            answers[q.id] = result.answer;
+          }
+        }
+      }
+
+      // Inject answers back into the conversation
+      const answerText = Object.entries(answers)
+        .map(([id, val]) => `${id}: ${val}`)
+        .join('\n');
+      const message = `Here are my answers to your questions:\n${answerText}`;
+
+      // Send as a user message
+      const tools = enableTools ? toolExecutor.getTools() : [];
+      agent.getMessages().push({ role: 'user', content: message });
+      await agent.run(message, tools, toolExecutor);
+    } catch {
+      // Inquirer not available or error
+    }
+  }
+
   function setupAgentHandlers() {
     agent.removeAllListeners('event');
     agent.on('event', (event: any) => {
@@ -141,16 +240,23 @@ export async function chatCommand(options: ChatOptions) {
           ui.startAssistantResponse(event.data.persona);
           SessionBridge.onStreamStart(event.data.persona);
           hasResponse = true;
+          streamBuffer = '';
           break;
 
         case 'stream_text':
           ui.streamText(event.data.text);
           SessionBridge.onStreamText(event.data.text);
+          streamBuffer += event.data.text;
           break;
 
         case 'stream_end':
           ui.endAssistantResponse();
           SessionBridge.onStreamEnd();
+          // Parse planner output tags from accumulated stream
+          if (streamBuffer) {
+            parsePlannerOutput(streamBuffer);
+            streamBuffer = '';
+          }
           break;
 
         // ── Non-streaming fallback ──

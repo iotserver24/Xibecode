@@ -7,6 +7,7 @@ import { BottomPanel } from './components/BottomPanel';
 import { StatusBar } from './components/StatusBar';
 import { SettingsPanel } from './components/SettingsPanel';
 import { EnvPanel } from './components/EnvPanel';
+import { HistoryPanel } from './components/HistoryPanel';
 import { useUIStore } from './stores/uiStore';
 
 export type SidebarPanel = 'explorer' | 'git' | 'search' | 'settings' | null;
@@ -39,7 +40,8 @@ function App() {
       setActiveSidebarPanel('git');
     } else if (tab === 'env') {
       setActiveTab('env');
-      // Env panel replaces the main content area, no sidebar needed
+    } else if (tab === 'history') {
+      setActiveTab('history');
     } else {
       setActiveTab(tab);
     }
@@ -201,8 +203,9 @@ function App() {
           {/* Editor + Sidebar area */}
           <div className="flex-1 flex overflow-hidden">
             {activeTab === 'env' ? (
-              /* Env Panel - full width when active */
               <EnvPanel />
+            ) : activeTab === 'history' ? (
+              <HistoryPanel onConversationLoad={() => setActiveTab('git')} />
             ) : (
               <>
                 {/* File explorer sidebar */}

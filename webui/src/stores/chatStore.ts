@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { history as historyApi, type SavedConversation } from '../utils/api';
 
 export interface ChatMessage {
   id: string;
@@ -11,7 +12,7 @@ export interface ChatMessage {
 }
 
 export type AgentMode =
-  | 'agent' | 'plan' | 'tester' | 'debugger' | 'security'
+  | 'agent' | 'plan' | 'planner' | 'tester' | 'debugger' | 'security'
   | 'review' | 'team_leader' | 'architect' | 'engineer'
   | 'seo' | 'product' | 'data' | 'researcher';
 
@@ -21,6 +22,10 @@ interface ChatState {
   isConnected: boolean;
   currentMode: AgentMode;
   streamingContent: string;
+
+  // Conversation persistence
+  conversationId: string | null;
+  conversationTitle: string;
 
   // WebSocket
   ws: WebSocket | null;
@@ -37,7 +42,15 @@ interface ChatState {
   finalizeStreamingMessage: () => void;
   setWebSocket: (ws: WebSocket | null) => void;
   sendMessage: (content: string) => void;
+
+  // History actions
+  autoSave: () => void;
+  loadConversation: (id: string) => Promise<void>;
+  newConversation: () => void;
 }
+
+// Debounce timer for auto-save
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
@@ -45,6 +58,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isConnected: false,
   currentMode: 'agent',
   streamingContent: '',
+  conversationId: null,
+  conversationTitle: '',
   ws: null,
 
   addMessage: (message) => {
@@ -54,6 +69,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       timestamp: Date.now(),
     };
     set((state) => ({ messages: [...state.messages, newMessage] }));
+
+    // Generate conversation ID and title on first user message
+    if (message.role === 'user' && !get().conversationId) {
+      const convId = `conv_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+      const title = message.content.length > 80
+        ? message.content.substring(0, 77) + '...'
+        : message.content;
+      set({ conversationId: convId, conversationTitle: title });
+    }
   },
 
   updateLastMessage: (content) => {
@@ -72,7 +96,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  clearMessages: () => set({ messages: [], streamingContent: '' }),
+  clearMessages: () => set({
+    messages: [],
+    streamingContent: '',
+    conversationId: null,
+    conversationTitle: '',
+  }),
 
   setProcessing: (processing) => set({ isProcessing: processing }),
   setConnected: (connected) => set({ isConnected: connected }),
@@ -84,10 +113,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   finalizeStreamingMessage: () => {
-    const { streamingContent, addMessage } = get();
+    const { streamingContent, addMessage, autoSave } = get();
     if (streamingContent) {
       addMessage({ role: 'assistant', content: streamingContent });
       set({ streamingContent: '' });
+      // Auto-save after assistant message is finalized
+      autoSave();
     }
   },
 
@@ -100,5 +131,64 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ws.send(JSON.stringify({ type: 'message', content }));
       setProcessing(true);
     }
+  },
+
+  // Auto-save conversation to backend (debounced)
+  autoSave: () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      const { conversationId, conversationTitle, messages, currentMode } = get();
+      if (!conversationId || messages.length === 0) return;
+
+      try {
+        const conversation: SavedConversation = {
+          id: conversationId,
+          title: conversationTitle,
+          projectPath: '',
+          projectName: '',
+          created: new Date(messages[0]?.timestamp || Date.now()).toISOString(),
+          updated: new Date().toISOString(),
+          model: '',
+          mode: currentMode,
+          messages: messages,
+        };
+        await historyApi.save(conversation);
+      } catch {
+        // Silently fail - history is not critical
+      }
+    }, 1500);
+  },
+
+  // Load a previous conversation
+  loadConversation: async (id: string) => {
+    try {
+      const result = await historyApi.get(id);
+      if (result.success && result.conversation) {
+        set({
+          messages: result.conversation.messages || [],
+          conversationId: result.conversation.id,
+          conversationTitle: result.conversation.title,
+          streamingContent: '',
+          isProcessing: false,
+        });
+      }
+    } catch {
+      // Failed to load conversation
+    }
+  },
+
+  // Start a new conversation (saves current first)
+  newConversation: () => {
+    const { autoSave, messages } = get();
+    if (messages.length > 0) {
+      autoSave(); // Save current conversation first
+    }
+    set({
+      messages: [],
+      streamingContent: '',
+      conversationId: null,
+      conversationTitle: '',
+      isProcessing: false,
+    });
   },
 }));

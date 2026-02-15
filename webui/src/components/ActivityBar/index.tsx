@@ -1,5 +1,5 @@
 import {
-  GitBranch, FileKey, Settings, Heart
+  GitBranch, FileKey, Settings, Heart, Clock
 } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import { clsx } from 'clsx';
@@ -17,6 +17,7 @@ interface ActivityBarProps {
 const TABS = [
   { id: 'git', icon: GitBranch, label: 'Git' },
   { id: 'env', icon: FileKey, label: 'Env' },
+  { id: 'history', icon: Clock, label: 'History' },
   { id: 'settings', icon: Settings, label: 'Settings' },
 ];
 
