@@ -23,6 +23,60 @@ export default function WebUIPage() {
         </div>
       </div>
 
+      {/* Screenshots */}
+      <div>
+        <h2 className="text-2xl font-bold mb-6">Screenshots</h2>
+        <div className="space-y-8">
+          <div>
+            <h3 className="text-lg font-semibold text-emerald-400 mb-3">Main Interface</h3>
+            <p className="text-zinc-400 mb-3">Modern v0.dev-inspired interface with activity bar, chat panel, code editor, and terminal</p>
+            <img src="/screenshots/01-main-interface.png" alt="Main Interface" className="w-full rounded-lg border border-white/10" />
+          </div>
+          
+          <div>
+            <h3 className="text-lg font-semibold text-emerald-400 mb-3">File Explorer</h3>
+            <p className="text-zinc-400 mb-3">Browse and open files with recursive directory tree</p>
+            <img src="/screenshots/02-file-explorer.png" alt="File Explorer" className="w-full rounded-lg border border-white/10" />
+          </div>
+          
+          <div>
+            <h3 className="text-lg font-semibold text-emerald-400 mb-3">Chat Interface</h3>
+            <p className="text-zinc-400 mb-3">Interactive AI chat with streaming responses and markdown rendering</p>
+            <img src="/screenshots/03-chat-interface.png" alt="Chat Interface" className="w-full rounded-lg border border-white/10" />
+          </div>
+          
+          <div>
+            <h3 className="text-lg font-semibold text-emerald-400 mb-3">Git Panel</h3>
+            <p className="text-zinc-400 mb-3">Git integration with commit history, staging, and diffs</p>
+            <img src="/screenshots/04-git-panel.png" alt="Git Panel" className="w-full rounded-lg border border-white/10" />
+          </div>
+          
+          <div>
+            <h3 className="text-lg font-semibold text-emerald-400 mb-3">Settings Panel</h3>
+            <p className="text-zinc-400 mb-3">Comprehensive settings modal with multiple configuration categories</p>
+            <img src="/screenshots/05-settings-panel.png" alt="Settings Panel" className="w-full rounded-lg border border-white/10" />
+          </div>
+          
+          <div>
+            <h3 className="text-lg font-semibold text-emerald-400 mb-3">AI Provider Settings</h3>
+            <p className="text-zinc-400 mb-3">Configure AI models, API keys, and provider settings</p>
+            <img src="/screenshots/06-ai-provider-settings.png" alt="AI Provider Settings" className="w-full rounded-lg border border-white/10" />
+          </div>
+          
+          <div>
+            <h3 className="text-lg font-semibold text-emerald-400 mb-3">MCP Servers Editor</h3>
+            <p className="text-zinc-400 mb-3">Edit MCP server configuration with Monaco editor and syntax highlighting</p>
+            <img src="/screenshots/07-mcp-servers-editor.png" alt="MCP Servers Editor" className="w-full rounded-lg border border-white/10" />
+          </div>
+          
+          <div>
+            <h3 className="text-lg font-semibold text-emerald-400 mb-3">Terminal View</h3>
+            <p className="text-zinc-400 mb-3">Fully interactive terminal with PTY support, colors, and tab completion</p>
+            <img src="/screenshots/08-terminal-view.png" alt="Terminal View" className="w-full rounded-lg border border-white/10" />
+          </div>
+        </div>
+      </div>
+
       {/* New in v0.4.0 */}
       <div className="p-6 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
         <h2 className="text-xl font-bold text-white mb-4">New in v0.4.0</h2>

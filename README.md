@@ -23,6 +23,40 @@ XibeCode is a CLI agent that can read and edit code, run commands, and iterate o
 - **Current Model Display** - Status bar shows active AI model
 - **Drag-to-Resize Panels** - Adjustable chat/code split layout
 
+## Screenshots
+
+### Main Interface
+![Main Interface](screenshots/01-main-interface.png)
+*Modern v0.dev-inspired interface with activity bar, chat panel, code editor, and terminal*
+
+### File Explorer
+![File Explorer](screenshots/02-file-explorer.png)
+*Browse and open files with recursive directory tree*
+
+### Chat Interface
+![Chat Interface](screenshots/03-chat-interface.png)
+*Interactive AI chat with streaming responses and markdown rendering*
+
+### Git Panel
+![Git Panel](screenshots/04-git-panel.png)
+*Git integration with commit history, staging, and diffs*
+
+### Settings Panel
+![Settings Panel](screenshots/05-settings-panel.png)
+*Comprehensive settings modal with multiple configuration categories*
+
+### AI Provider Settings
+![AI Provider Settings](screenshots/06-ai-provider-settings.png)
+*Configure AI models, API keys, and provider settings*
+
+### MCP Servers Editor
+![MCP Servers Editor](screenshots/07-mcp-servers-editor.png)
+*Edit MCP server configuration with Monaco editor and syntax highlighting*
+
+### Terminal View
+![Terminal View](screenshots/08-terminal-view.png)
+*Fully interactive terminal with PTY support, colors, and tab completion*
+
 ## Installation
 
 ```bash
