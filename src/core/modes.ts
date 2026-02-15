@@ -47,8 +47,7 @@
  * @since 0.1.0
  */
 export type AgentMode =
-  | 'plan'           // Aria - Planning
-  | 'planner'        // Planner - Interactive planning with questions + implementations.md
+  | 'plan'           // Interactive planning with questions + implementations.md
   | 'agent'          // Full autonomous coding
   | 'tester'         // Tess - Testing
   | 'debugger'       // Dex - Debugging
@@ -273,59 +272,7 @@ export interface ModeCapabilities {
  */
 export const MODE_CONFIG: Record<AgentMode, ModeCapabilities> = {
   /**
-   * Plan Mode - Aria the Architect 📋
-   *
-   * Read-only planning and analysis mode. Perfect for:
-   * - Understanding codebases
-   * - Creating implementation plans
-   * - Architectural design
-   * - Risk assessment
-   *
-   * Cannot modify code, ensuring safe exploration.
-   */
-  plan: {
-    name: 'Plan',
-    description: 'Analyze and create plans without modifying code',
-    personaName: 'Aria',
-    personaRole: 'the Architect',
-    allowedCategories: ['read_only', 'git_read', 'context'],
-    canModify: false,
-    defaultDryRun: true,
-    displayColor: '#40C4FF', // light blue
-    icon: '📋',
-    riskTolerance: 'low',
-    requiresConfirmation: false,
-    promptSuffix: `
-## PLAN MODE - Read-Only Planning
-### You are Aria the Architect 📋
-
-You are operating in PLAN MODE. Your role is to:
-
-- Analyze existing codebases and understand project structure
-- Identify problems, requirements, and potential solutions
-- Create detailed implementation plans with step-by-step instructions
-- Suggest architectural improvements and refactoring approaches
-- Evaluate different implementation strategies
-
-### Your Goal
-After analysis, present a clear, actionable plan and request the appropriate mode switch.
-
-### Best Practices
-- Be thorough in your analysis - read relevant files first
-- Consider edge cases and potential pitfalls
-- Provide concrete, actionable steps
-- Suggest appropriate tools and approaches for implementation
-
-### Mode Switching
-When your analysis is complete and you need to execute the plan:
-- Request a switch to **Agent Mode** by including:
-  [[REQUEST_MODE: agent | reason=Ready to implement the plan]]
-- For security-focused plans, you may recommend **Sentinel (Security Mode)** instead
-- The system will handle the transition automatically if approved`,
-  },
-
-  /**
-   * Planner Mode - Interactive Planning with Web Research
+   * Plan Mode - Interactive Planning with Web Research
    *
    * Creates detailed implementation plans with:
    * - Codebase analysis and web research
@@ -333,8 +280,8 @@ When your analysis is complete and you need to execute the plan:
    * - Structured implementations.md with checkboxes
    * - Transition to Agent mode for execution
    */
-  planner: {
-    name: 'Planner',
+  plan: {
+    name: 'Plan',
     description: 'Interactive planning with questions, web research, and implementations.md generation',
     personaName: 'Planner',
     personaRole: 'the Strategic Planner',
@@ -346,7 +293,7 @@ When your analysis is complete and you need to execute the plan:
     riskTolerance: 'low',
     requiresConfirmation: false,
     promptSuffix: `
-## PLANNER MODE - Interactive Implementation Planning
+## PLAN MODE - Interactive Implementation Planning
 
 You are operating in PLANNER MODE. Your job is to create a thorough, detailed implementation plan.
 

@@ -68,7 +68,18 @@ Fully interactive terminal with PTY support, colors, and tab completion.
 
 ![Terminal View](/screenshots/08-terminal-view.png)
 
-## New in v0.4.0
+## New in v0.5.0
+
+- **Interactive Plan Mode** - Plan mode asks questions, searches the web, generates `implementations.md`, and has "Build" to auto-execute
+- **Chat History** - Persistent conversations with per-project storage, History panel in activity bar
+- **Environment Variables Editor** - Visual `.env` editor with auto-detection, secret masking, live editing
+- **Media Preview** - Images, videos, audio render as proper previews instead of binary
+- **Thinking Animation** - Loading spinner while AI processes requests
+- **Improved Tool Rendering** - Icons, status badges, and progress indicators for tool calls
+- **Smart Scroll** - No more forced scrolling when reading earlier messages
+- **Donate Button** - Support XibeCode from the activity bar
+
+### Previous (v0.4.x)
 
 - TUI-WebUI bidirectional sync
 - Slash commands for mode switching
@@ -111,7 +122,7 @@ Type `/` in the input to open the command palette. Use arrow keys to navigate an
 | Mode | Icon | Description |
 |------|------|-------------|
 | `/mode agent` | 🤖 | Autonomous coding (default) |
-| `/mode plan` | 📋 | Analyze without modifying code |
+| `/mode plan` | 📝 | Interactive planning with web research |
 | `/mode tester` | 🧪 | Testing and QA |
 | `/mode debugger` | 🐛 | Bug investigation |
 | `/mode security` | 🔒 | Security analysis |

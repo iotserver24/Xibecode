@@ -34,8 +34,7 @@ const COMMANDS = [
 
 const MODES: { id: AgentMode; name: string; icon: any; desc: string; color: string }[] = [
   { id: 'agent', name: 'Agent', icon: <Bot size={16} />, desc: 'Autonomous coding assistant', color: 'text-emerald-400' },
-  { id: 'planner', name: 'Planner', icon: <Layout size={16} />, desc: 'Interactive planning with web research', color: 'text-orange-400' },
-  { id: 'plan', name: 'Plan', icon: <Layout size={16} />, desc: 'Read-only analysis and planning', color: 'text-cyan-400' },
+  { id: 'plan', name: 'Plan', icon: <Layout size={16} />, desc: 'Interactive planning with web research', color: 'text-orange-400' },
   { id: 'tester', name: 'Tester', icon: <Terminal size={16} />, desc: 'Testing and QA specialist', color: 'text-pink-400' },
   { id: 'debugger', name: 'Debugger', icon: <AlertCircle size={16} />, desc: 'Bug investigation expert', color: 'text-amber-400' },
   { id: 'security', name: 'Security', icon: <Shield size={16} />, desc: 'Security analysis', color: 'text-red-400' },
@@ -59,7 +58,7 @@ type PopupType = 'slash' | 'files' | 'modes' | null;
 export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, width }: ChatPanelProps) {
   const {
     messages, isProcessing, isConnected, currentMode, streamingContent,
-    setWebSocket, setConnected, addMessage, setProcessing, setCurrentMode,
+    setWebSocket, setConnected, addMessage, updateLastMessage, setProcessing, setCurrentMode,
     setStreamingContent, appendStreamingContent, finalizeStreamingMessage,
     sendMessage, clearMessages,
   } = useChatStore();
@@ -78,6 +77,8 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
   const [planContent, setPlanContent] = useState<string | null>(null);
   const [planPath, setPlanPath] = useState<string>('implementations.md');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const userScrolledUpRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -127,7 +128,11 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
         addMessage({ role: 'tool', content: data.data.name, toolName: data.data.name, toolStatus: 'running' });
         setThinkingText(null);
         break;
-      case 'tool_result': break;
+      case 'tool_result': {
+        const success = data.data?.success !== false;
+        updateLastMessage(success ? 'success' : 'error');
+        break;
+      }
       case 'error':
         addMessage({ role: 'system', content: `Error: ${data.data?.error || data.error}` });
         setProcessing(false);
@@ -155,9 +160,46 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
     }
   };
 
+  // Smart auto-scroll: only scroll to bottom if user hasn't scrolled up
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!userScrolledUpRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages, streamingContent]);
+
+  // Detect when user scrolls up manually
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      // If user is within 100px of bottom, consider them "at bottom"
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+      userScrolledUpRef.current = !isNearBottom;
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Reset scroll lock when processing finishes (new message complete)
+  useEffect(() => {
+    if (!isProcessing && !streamingContent) {
+      // Small delay then check if we should snap to bottom
+      setTimeout(() => {
+        const container = messagesContainerRef.current;
+        if (container) {
+          const { scrollTop, scrollHeight, clientHeight } = container;
+          const isNearBottom = scrollHeight - scrollTop - clientHeight < 200;
+          if (isNearBottom) {
+            userScrolledUpRef.current = false;
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }
+        }
+      }, 100);
+    }
+  }, [isProcessing, streamingContent]);
 
   const loadFiles = async () => {
     try {
@@ -313,13 +355,25 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
       )}
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {messages.length === 0 && !streamingContent && (
           <div className="flex flex-col items-center justify-center h-full text-center px-6">
-            <div className="w-10 h-10 rounded-xl bg-zinc-800/80 flex items-center justify-center mb-4 border border-zinc-700/50">
-              <Sparkles size={20} className="text-zinc-400" />
+            {/* XibeCode branded welcome */}
+            <div className="mb-5">
+              <pre className="text-[6px] leading-[7px] font-mono select-none" style={{
+                background: 'linear-gradient(90deg, #5995eb, #e06c75)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+              }}>{`██╗  ██╗██╗██████╗ ███████╗ ██████╗ ██████╗ ██████╗ ███████╗
+╚██╗██╔╝██║██╔══██╗██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝
+ ╚███╔╝ ██║██████╔╝█████╗  ██║     ██║   ██║██║  ██║█████╗
+ ██╔██╗ ██║██╔══██╗██╔══╝  ██║     ██║   ██║██╔══██╗██╔══╝
+██╔╝ ██╗██║██████╔╝███████╗╚██████╗╚██████╔╝██████╔╝███████╗
+╚═╝  ╚═╝╚═╝╚═════╝ ╚══════╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝`}</pre>
             </div>
-            <h2 className="text-base font-semibold text-zinc-200 mb-1.5">What do you want to build?</h2>
+            <h2 className="text-base font-semibold text-zinc-200 mb-1">What do you want to build?</h2>
+            <p className="text-[10px] text-zinc-600 mb-1">AI-powered autonomous coding assistant</p>
             <p className="text-xs text-zinc-500 max-w-[220px] leading-relaxed mb-6">
               Ask me anything. I can help you write, debug, test, and deploy code.
             </p>
@@ -587,20 +641,64 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
   );
 }
 
+// Map tool names to descriptive icons and labels
+const TOOL_ICONS: Record<string, { icon: string; label: string }> = {
+  read_file: { icon: '📄', label: 'Read' },
+  write_file: { icon: '✏️', label: 'Write' },
+  edit_file: { icon: '🔧', label: 'Edit' },
+  edit_lines: { icon: '🔧', label: 'Edit Lines' },
+  verified_edit: { icon: '✅', label: 'Verified Edit' },
+  list_directory: { icon: '📂', label: 'List Dir' },
+  search_code: { icon: '🔍', label: 'Search' },
+  run_command: { icon: '💻', label: 'Run' },
+  web_search: { icon: '🌐', label: 'Web Search' },
+  fetch_url: { icon: '🔗', label: 'Fetch URL' },
+  get_git_status: { icon: '📊', label: 'Git Status' },
+  git_diff: { icon: '📝', label: 'Git Diff' },
+  run_tests: { icon: '🧪', label: 'Run Tests' },
+  delete_file: { icon: '🗑️', label: 'Delete' },
+  create_directory: { icon: '📁', label: 'Create Dir' },
+};
+
 function MessageItem({ message }: { message: ChatMessage }) {
   if (message.role === 'tool') {
+    const toolInfo = TOOL_ICONS[message.toolName || ''] || { icon: '🔧', label: message.toolName || 'Tool' };
+    const isRunning = message.toolStatus === 'running';
+    const isSuccess = message.toolStatus === 'success';
+    const isError = message.toolStatus === 'error';
+
     return (
-      <div className="flex items-center gap-2 py-1">
-        <div className={cn(
-          "w-1.5 h-1.5 rounded-full flex-shrink-0",
-          message.toolStatus === 'running' ? "bg-amber-500 animate-pulse" :
-          message.toolStatus === 'success' ? "bg-emerald-500" : "bg-red-500"
-        )} />
-        <span className="text-[11px] font-medium text-zinc-500">
-          {message.toolName}
+      <div className={cn(
+        "flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[11px] transition-all",
+        isRunning ? "bg-amber-500/5 border border-amber-500/20" :
+        isSuccess ? "bg-emerald-500/5 border border-emerald-500/10" :
+        isError ? "bg-red-500/5 border border-red-500/10" :
+        "bg-zinc-800/30 border border-zinc-800/30"
+      )}>
+        <span className="text-sm flex-shrink-0">{toolInfo.icon}</span>
+        <span className={cn(
+          "font-medium flex-1 truncate",
+          isRunning ? "text-amber-400" :
+          isSuccess ? "text-zinc-400" :
+          isError ? "text-red-400" : "text-zinc-500"
+        )}>
+          {toolInfo.label}
+          {message.toolName && toolInfo.label !== message.toolName && (
+            <span className="text-zinc-600 font-normal ml-1.5 font-mono text-[10px]">{message.toolName}</span>
+          )}
         </span>
-        <span className="text-[10px] text-zinc-600">
-          {message.toolStatus || 'running'}
+        <span className={cn(
+          "flex items-center gap-1 flex-shrink-0",
+          isRunning ? "text-amber-500" :
+          isSuccess ? "text-emerald-500" :
+          isError ? "text-red-400" : "text-zinc-600"
+        )}>
+          {isRunning && <Loader2 size={10} className="animate-spin" />}
+          {isSuccess && <Check size={10} />}
+          {isError && <AlertCircle size={10} />}
+          <span className="text-[10px]">
+            {isRunning ? 'running' : isSuccess ? 'done' : isError ? 'failed' : message.toolStatus}
+          </span>
         </span>
       </div>
     );

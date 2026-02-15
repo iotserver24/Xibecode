@@ -12,7 +12,7 @@ export interface ChatMessage {
 }
 
 export type AgentMode =
-  | 'agent' | 'plan' | 'planner' | 'tester' | 'debugger' | 'security'
+  | 'agent' | 'plan' | 'tester' | 'debugger' | 'security'
   | 'review' | 'team_leader' | 'architect' | 'engineer'
   | 'seo' | 'product' | 'data' | 'researcher';
 
