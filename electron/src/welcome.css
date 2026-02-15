@@ -1,0 +1,370 @@
+/* ── Reset & Base ── */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: #0a0a0a;
+  color: #e4e4e7;
+  height: 100vh;
+  overflow: hidden;
+  -webkit-app-region: drag;
+}
+
+button, a, input { -webkit-app-region: no-drag; }
+
+/* ── Layout ── */
+.container {
+  display: flex;
+  height: calc(100vh - 32px);
+  gap: 1px;
+}
+
+.left-panel {
+  flex: 0 0 420px;
+  padding: 40px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  overflow-y: auto;
+}
+
+.right-panel {
+  flex: 1;
+  padding: 40px 28px;
+  background: #0d0d0d;
+  border-left: 1px solid #1a1a1a;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Logo ── */
+.logo-section {
+  margin-bottom: 4px;
+}
+
+.ascii-logo {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  font-size: 5.5px;
+  line-height: 6.5px;
+  letter-spacing: 0;
+  white-space: pre;
+  background: linear-gradient(90deg, #5995eb, #e06c75);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  user-select: none;
+  margin-bottom: 10px;
+}
+
+.tagline {
+  font-size: 12px;
+  color: #52525b;
+  font-weight: 400;
+}
+
+/* ── Sections ── */
+.section-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: #52525b;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  margin-bottom: 10px;
+}
+
+/* ── Action Buttons ── */
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+  color: #a1a1aa;
+}
+
+.action-btn:hover {
+  background: #18181b;
+  border-color: #27272a;
+  color: #e4e4e7;
+}
+
+.action-icon {
+  font-size: 18px;
+  width: 28px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.action-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.action-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: inherit;
+}
+
+.action-desc {
+  font-size: 11px;
+  color: #52525b;
+}
+
+/* ── Help Links ── */
+.help-link {
+  display: block;
+  padding: 5px 14px;
+  font-size: 12px;
+  color: #5995eb;
+  text-decoration: none;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.help-link:hover {
+  color: #7bb3ff;
+  background: #18181b;
+}
+
+/* ── Recent Projects ── */
+.recent-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.recent-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+
+.recent-item:hover {
+  background: #18181b;
+}
+
+.recent-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.recent-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.recent-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #d4d4d8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-path {
+  font-size: 11px;
+  color: #3f3f46;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.recent-time {
+  font-size: 10px;
+  color: #3f3f46;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.recent-remove {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #52525b;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: all 0.15s;
+}
+
+.recent-item:hover .recent-remove {
+  opacity: 1;
+}
+
+.recent-remove:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #27272a;
+  font-size: 13px;
+}
+
+/* ── Dialog ── */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  -webkit-app-region: no-drag;
+}
+
+.dialog {
+  background: #18181b;
+  border: 1px solid #27272a;
+  border-radius: 12px;
+  padding: 24px;
+  width: 400px;
+  max-width: 90vw;
+}
+
+.dialog-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #e4e4e7;
+  margin-bottom: 16px;
+}
+
+.dialog-label {
+  display: block;
+  font-size: 12px;
+  color: #71717a;
+  margin-bottom: 6px;
+}
+
+.dialog-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: #0a0a0a;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  color: #e4e4e7;
+  font-size: 13px;
+  font-family: 'JetBrains Mono', monospace;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.dialog-input:focus {
+  border-color: #5995eb;
+}
+
+.dialog-input::placeholder {
+  color: #3f3f46;
+}
+
+.dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.dialog-btn {
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+
+.dialog-btn.cancel {
+  background: transparent;
+  color: #71717a;
+  border-color: #27272a;
+}
+
+.dialog-btn.cancel:hover {
+  color: #a1a1aa;
+  background: #27272a;
+}
+
+.dialog-btn.primary {
+  background: #5995eb;
+  color: #fff;
+}
+
+.dialog-btn.primary:hover {
+  background: #7bb3ff;
+}
+
+/* ── Footer ── */
+.footer {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-top: 1px solid #18181b;
+  background: #0a0a0a;
+}
+
+.cli-status {
+  font-size: 11px;
+  color: #3f3f46;
+}
+
+.cli-status.installed {
+  color: #22c55e;
+}
+
+.cli-status.not-installed {
+  color: #f59e0b;
+}
+
+.install-hint {
+  font-family: 'JetBrains Mono', monospace;
+  color: #71717a;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
