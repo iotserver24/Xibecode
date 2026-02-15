@@ -1,0 +1,127 @@
+---
+title: AI Test Generation
+description: Automatically generate comprehensive test suites for your code using AI-powered analysis. Supports Vitest, Jest, Mocha, pytest, and Go test.
+keywords: [test generation, generate tests, ai tests, testing, unit test, integration test, vitest, jest, mocha, pytest, go test, edge cases, mocks, code analysis, test suite, coverage, TDD, write tests, auto generate, test framework, how to generate tests, create tests]
+---
+
+Automatically generate comprehensive test suites for your code using AI-powered analysis.
+
+## Quick Start
+
+### Via CLI (in chat mode)
+
+```bash
+xibecode chat
+> generate tests for src/utils/helpers.ts
+```
+
+### Via WebUI
+
+1. Open the WebUI: `xibecode ui --open`
+2. Go to the "Test Generator" tab
+3. Enter file path
+4. Click "Generate Tests"
+
+## Supported Frameworks
+
+| Framework | Language | Features |
+|-----------|----------|----------|
+| Vitest | JavaScript/TypeScript | describe/it blocks, vi.mock() setup, expect assertions |
+| Jest | JavaScript/TypeScript | describe/it blocks, jest.mock() setup, expect assertions |
+| Mocha | JavaScript/TypeScript | describe/it blocks, Sinon mocks, Chai assertions |
+| pytest | Python | class TestX format, Mock/patch setup, assert statements |
+| Go test | Go | func TestX format, testify/mock, assert package |
+| Auto-detect | Any | Reads package.json, checks dependencies, falls back to Vitest |
+
+## Features
+
+- **Code Analysis** — Understands functions, classes, types, imports, and exports. Detects complexity and dependencies.
+- **Edge Case Generation** — Automatically generates tests for null values, empty strings, boundary conditions, and error cases.
+- **Type Checking** — Creates assertions for return types, ensuring functions return expected data types.
+- **Mock Setup** — Automatically configures mocks for dependencies and external modules.
+
+## Tool API
+
+### generate_tests
+
+Analyze a source file and generate comprehensive test cases.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `file_path` | string | Path to source file (required) |
+| `framework` | string | vitest, jest, mocha, pytest, go (auto-detected) |
+| `output_dir` | string | Custom output directory for tests |
+| `include_edge_cases` | boolean | Include edge case tests (default: true) |
+| `include_mocks` | boolean | Include mock setup code (default: true) |
+| `max_tests_per_function` | number | Maximum tests per function (default: 5) |
+| `write_file` | boolean | Write to file (default: false) |
+
+### analyze_code_for_tests
+
+Analyze a source file to understand its structure before generating tests.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `file_path` | string | Path to source file (required) |
+
+## Example Output
+
+Given a file with a `calculateTotal` function:
+
+```javascript
+import { describe, it, expect, vi } from 'vitest';
+import { calculateTotal } from '../utils/helpers';
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe('calculateTotal', () => {
+  it('should execute calculateTotal successfully', () => {
+    expect(calculateTotal([])).toBeDefined();
+  });
+
+  it('should return correct type from calculateTotal', () => {
+    expect(typeof calculateTotal([])).toBe('number');
+  });
+
+  it('should handle empty array', () => {
+    expect(calculateTotal([])).toBe(0);
+  });
+
+  it('should handle single element', () => {
+    expect(calculateTotal([10])).toBe(10);
+  });
+
+  it('should handle errors in calculateTotal', () => {
+    expect(() => calculateTotal(undefined)).toThrow();
+  });
+});
+```
+
+## Generated Test Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `unit` | Basic functionality tests | Function returns expected value |
+| `edge` | Edge case and boundary tests | Empty string, null, MAX_INT |
+| `boundary` | Boundary condition tests | Array length 0, 1, MAX |
+| `error` | Error handling tests | Invalid input throws error |
+
+## Best Practices
+
+- **Review generated tests** — AI-generated tests are a starting point, not the final product
+- **Add domain-specific assertions** — The generator may miss business logic requirements
+- **Use `write_file: false` first** — Preview tests before writing to disk
+- **Run tests after generation** — Verify they pass and cover expected behavior
+- **Customize edge cases** — Add project-specific edge cases as needed
+
+## WebUI Integration
+
+The easiest way to use test generation is through the WebUI:
+
+```bash
+xibecode ui --open
+```
+
+Then navigate to the "Test Generator" tab for a visual interface with file path input, framework selection, and instant preview of generated tests.
