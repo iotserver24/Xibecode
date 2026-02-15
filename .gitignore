@@ -57,3 +57,8 @@ playwright/.cache/
 # pnpm-lock.yaml
 Skill-marketplace
 next/
+
+# Electron
+electron-app/node_modules/
+electron-app/dist/
+electron-app/release/
