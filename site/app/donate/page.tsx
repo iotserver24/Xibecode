@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Heart, ArrowLeft, Check, Loader2 } from 'lucide-react';
+import { Heart, ArrowLeft, Check, Loader2, Github, MessageSquare } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -20,6 +20,8 @@ export default function DonatePage() {
   const [isCustom, setIsCustom] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [github, setGithub] = useState('');
+  const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -104,6 +106,8 @@ export default function DonatePage() {
                 razorpay_signature: response.razorpay_signature,
                 name,
                 email,
+                github: github.trim(),
+                description: description.trim(),
                 amount: finalAmount,
                 currency,
               }),
@@ -165,7 +169,6 @@ export default function DonatePage() {
 
   return (
     <div className="min-h-[80vh] max-w-2xl mx-auto px-4 py-16 md:py-24">
-      {/* Back link */}
       <Link href="/" className="inline-flex items-center gap-2 text-zinc-500 hover:text-violet-400 text-sm mb-8 transition-colors">
         <ArrowLeft className="w-4 h-4" />
         Back home
@@ -234,22 +237,49 @@ export default function DonatePage() {
         </div>
       </div>
 
-      {/* Name & Email */}
-      <div className="space-y-4 mb-8">
+      {/* Personal Info */}
+      <div className="space-y-4 mb-6">
         <input
           type="text"
-          placeholder="Your name"
+          placeholder="Your name *"
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="w-full px-4 py-3 rounded-xl border border-zinc-800 bg-zinc-900/50 text-white placeholder-zinc-600 outline-none focus:border-violet-500 transition-colors"
         />
         <input
           type="email"
-          placeholder="Email address"
+          placeholder="Email address *"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="w-full px-4 py-3 rounded-xl border border-zinc-800 bg-zinc-900/50 text-white placeholder-zinc-600 outline-none focus:border-violet-500 transition-colors"
         />
+        <div className="relative">
+          <Github className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+          <input
+            type="text"
+            placeholder="GitHub username (optional - shows your avatar)"
+            value={github}
+            onChange={(e) => setGithub(e.target.value.replace(/^@/, ''))}
+            className="w-full pl-10 pr-4 py-3 rounded-xl border border-zinc-800 bg-zinc-900/50 text-white placeholder-zinc-600 outline-none focus:border-violet-500 transition-colors"
+          />
+        </div>
+      </div>
+
+      {/* Description / Review */}
+      <div className="mb-8">
+        <div className="flex items-center gap-2 mb-2">
+          <MessageSquare className="w-4 h-4 text-zinc-500" />
+          <span className="text-zinc-500 text-sm">Leave a review (optional - shown on homepage)</span>
+        </div>
+        <textarea
+          placeholder="Share why you support XibeCode, or leave a kind word..."
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={3}
+          maxLength={280}
+          className="w-full px-4 py-3 rounded-xl border border-zinc-800 bg-zinc-900/50 text-white placeholder-zinc-600 outline-none focus:border-violet-500 transition-colors resize-none"
+        />
+        <div className="text-right text-xs text-zinc-600 mt-1">{description.length}/280</div>
       </div>
 
       {/* Error */}
@@ -279,7 +309,7 @@ export default function DonatePage() {
       </button>
 
       <p className="text-center text-zinc-600 text-xs mt-4">
-        Secure payment powered by Razorpay. Your donation info will be publicly listed on the sponsors page (amount only, email stays private).
+        Secure payment powered by Razorpay. Your name, avatar, amount, and review will be publicly listed. Email stays private.
       </p>
     </div>
   );

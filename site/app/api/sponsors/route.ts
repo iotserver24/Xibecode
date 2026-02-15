@@ -5,22 +5,23 @@ export async function GET() {
   try {
     const db = await getDb();
 
-    // Get all sponsors sorted by date descending
     const sponsors = await db
       .collection('sponsors')
       .find({})
       .sort({ createdAt: -1 })
       .toArray();
 
-    // Strip email for privacy, only return public info
+    // Public info only (no email, no paymentId)
     const publicSponsors = sponsors.map((s) => ({
       name: s.name,
+      github: s.github || '',
+      avatarUrl: s.avatarUrl || '',
+      description: s.description || '',
       amount: s.amount,
       currency: s.currency,
       date: s.date,
     }));
 
-    // Calculate stats
     const totalSponsors = sponsors.length;
     const totalRaisedINR = sponsors
       .filter((s) => s.currency === 'INR')
@@ -29,8 +30,12 @@ export async function GET() {
       .filter((s) => s.currency === 'USD')
       .reduce((sum, s) => sum + (s.amount || 0), 0);
 
+    // Sponsors with descriptions = reviews
+    const reviews = publicSponsors.filter((s) => s.description);
+
     return NextResponse.json({
       sponsors: publicSponsors,
+      reviews,
       stats: {
         totalSponsors,
         totalRaisedINR,
@@ -41,6 +46,7 @@ export async function GET() {
     console.error('Sponsors API error:', error);
     return NextResponse.json({
       sponsors: [],
+      reviews: [],
       stats: { totalSponsors: 0, totalRaisedINR: 0, totalRaisedUSD: 0 },
     });
   }

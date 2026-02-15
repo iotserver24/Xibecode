@@ -2,10 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Heart, ArrowLeft, Users, DollarSign, IndianRupee, Loader2 } from 'lucide-react';
+import { Heart, ArrowLeft, Users, DollarSign, IndianRupee, Loader2, Quote } from 'lucide-react';
 
 interface Sponsor {
   name: string;
+  github: string;
+  avatarUrl: string;
+  description: string;
   amount: number;
   currency: string;
   date: string;
@@ -13,11 +16,33 @@ interface Sponsor {
 
 interface SponsorsData {
   sponsors: Sponsor[];
+  reviews: Sponsor[];
   stats: {
     totalSponsors: number;
     totalRaisedINR: number;
     totalRaisedUSD: number;
   };
+}
+
+function SponsorAvatar({ sponsor, size = 'md' }: { sponsor: Sponsor; size?: 'sm' | 'md' | 'lg' }) {
+  const sizeClass = size === 'lg' ? 'w-12 h-12' : size === 'md' ? 'w-8 h-8' : 'w-6 h-6';
+  const textSize = size === 'lg' ? 'text-lg' : size === 'md' ? 'text-sm' : 'text-xs';
+
+  if (sponsor.avatarUrl) {
+    return (
+      <img
+        src={sponsor.avatarUrl}
+        alt={sponsor.name}
+        className={`${sizeClass} rounded-full object-cover border border-zinc-700`}
+      />
+    );
+  }
+
+  return (
+    <div className={`${sizeClass} rounded-full bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400 ${textSize} font-bold`}>
+      {sponsor.name.charAt(0).toUpperCase()}
+    </div>
+  );
 }
 
 export default function SponsorsPage() {
@@ -51,11 +76,10 @@ export default function SponsorsPage() {
         Back home
       </Link>
 
-      {/* Header */}
       <div className="text-center mb-12">
         <h1 className="text-3xl md:text-4xl font-bold text-white mb-3">Our Sponsors</h1>
         <p className="text-zinc-400 max-w-lg mx-auto">
-          These amazing people support XibeCode's development. Thank you for keeping open-source alive.
+          These amazing people support XibeCode&apos;s development. Thank you for keeping open-source alive.
         </p>
       </div>
 
@@ -86,6 +110,35 @@ export default function SponsorsPage() {
             </div>
           )}
 
+          {/* Reviews Section */}
+          {data && data.reviews.length > 0 && (
+            <div className="mb-12">
+              <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                <Quote className="w-5 h-5 text-violet-400" />
+                What Sponsors Say
+              </h2>
+              <div className="grid md:grid-cols-2 gap-4">
+                {data.reviews.map((r, i) => (
+                  <div key={i} className="p-5 rounded-xl border border-zinc-800 bg-zinc-900/20">
+                    <p className="text-zinc-300 text-sm mb-4 leading-relaxed">&ldquo;{r.description}&rdquo;</p>
+                    <div className="flex items-center gap-3">
+                      <SponsorAvatar sponsor={r} size="md" />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-white text-sm font-medium">{r.name}</span>
+                          {r.github && (
+                            <a href={`https://github.com/${r.github}`} target="_blank" rel="noopener noreferrer" className="text-zinc-500 hover:text-violet-400 text-xs">@{r.github}</a>
+                          )}
+                        </div>
+                        <span className="text-emerald-400 text-xs font-medium">{formatAmount(r.amount, r.currency)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Sponsor List */}
           {data && data.sponsors.length > 0 ? (
             <div className="rounded-xl border border-zinc-800 overflow-hidden">
@@ -102,10 +155,13 @@ export default function SponsorsPage() {
                     <tr key={i} className="border-b border-zinc-800/50 hover:bg-zinc-900/30 transition-colors">
                       <td className="py-3 px-5">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400 text-sm font-bold">
-                            {s.name.charAt(0).toUpperCase()}
+                          <SponsorAvatar sponsor={s} size="md" />
+                          <div>
+                            <span className="text-white text-sm font-medium">{s.name}</span>
+                            {s.github && (
+                              <a href={`https://github.com/${s.github}`} target="_blank" rel="noopener noreferrer" className="block text-zinc-500 hover:text-violet-400 text-xs">@{s.github}</a>
+                            )}
                           </div>
-                          <span className="text-white text-sm font-medium">{s.name}</span>
                         </div>
                       </td>
                       <td className="py-3 px-5 text-right">
