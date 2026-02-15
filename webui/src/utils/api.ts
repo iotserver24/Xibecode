@@ -220,6 +220,47 @@ export const env = {
     }),
 };
 
+// Chat history
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  created: string;
+  updated: string;
+  messageCount: number;
+  model: string;
+}
+
+export interface SavedConversation {
+  id: string;
+  title: string;
+  projectPath: string;
+  projectName: string;
+  created: string;
+  updated: string;
+  model: string;
+  mode: string;
+  messages: any[];
+}
+
+export const history = {
+  list: () =>
+    fetchApi<{ success: boolean; conversations: ConversationSummary[] }>('/api/history'),
+
+  get: (id: string) =>
+    fetchApi<{ success: boolean; conversation: SavedConversation }>(`/api/history/${encodeURIComponent(id)}`),
+
+  save: (conversation: SavedConversation) =>
+    fetchApi<{ success: boolean; id?: string; error?: string }>('/api/history', {
+      method: 'POST',
+      body: JSON.stringify({ conversation }),
+    }),
+
+  delete: (id: string) =>
+    fetchApi<{ success: boolean; error?: string }>(`/api/history/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+};
+
 // Project info
 export const project = {
   info: () =>
@@ -246,6 +287,7 @@ export const api = {
   skills,
   project,
   env,
+  history,
   createWebSocket,
 };
 

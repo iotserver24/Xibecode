@@ -24,6 +24,7 @@ import { GitUtils } from '../utils/git.js';
 import { TestRunnerDetector } from '../utils/testRunner.js';
 import { TestGenerator, writeTestFile } from '../tools/test-generator.js';
 import { SessionBridge } from '../core/session-bridge.js';
+import { HistoryManager, type SavedConversation, type HistoryMessage } from '../core/history-manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -72,6 +73,7 @@ export class WebUIServer {
   private sessions: Map<string, AgentSession> = new Map();
   private wsClients: Map<string, WebSocket> = new Map();
   private workingDir: string;
+  private historyManager: HistoryManager;
 
   constructor(config: Partial<WebUIServerConfig> = {}) {
     this.config = {
@@ -82,6 +84,7 @@ export class WebUIServer {
     };
     this.workingDir = this.config.workingDir!;
     this.configManager = new ConfigManager();
+    this.historyManager = new HistoryManager(this.workingDir);
   }
 
   /**
@@ -769,6 +772,65 @@ export class WebUIServer {
           sendJSON({ success: false, error: error.message }, 500);
         }
         return;
+      }
+
+      // Chat history API
+      if (pathname === '/api/history') {
+        if (req.method === 'GET') {
+          try {
+            const conversations = await this.historyManager.list();
+            sendJSON({ success: true, conversations });
+          } catch (error: any) {
+            sendJSON({ success: false, error: error.message }, 500);
+          }
+          return;
+        }
+        if (req.method === 'POST') {
+          const body = await parseBody();
+          try {
+            if (body.conversation) {
+              await this.historyManager.save(body.conversation as SavedConversation);
+              sendJSON({ success: true, id: body.conversation.id });
+            } else {
+              sendJSON({ success: false, error: 'Missing conversation data' }, 400);
+            }
+          } catch (error: any) {
+            sendJSON({ success: false, error: error.message }, 500);
+          }
+          return;
+        }
+      }
+
+      // Load specific conversation
+      if (pathname.startsWith('/api/history/') && req.method === 'GET') {
+        const id = pathname.split('/')[3];
+        if (id) {
+          try {
+            const conversation = await this.historyManager.load(id);
+            if (conversation) {
+              sendJSON({ success: true, conversation });
+            } else {
+              sendJSON({ success: false, error: 'Conversation not found' }, 404);
+            }
+          } catch (error: any) {
+            sendJSON({ success: false, error: error.message }, 500);
+          }
+          return;
+        }
+      }
+
+      // Delete specific conversation
+      if (pathname.startsWith('/api/history/') && req.method === 'DELETE') {
+        const id = pathname.split('/')[3];
+        if (id) {
+          try {
+            const deleted = await this.historyManager.delete(id);
+            sendJSON({ success: deleted, error: deleted ? undefined : 'Not found' });
+          } catch (error: any) {
+            sendJSON({ success: false, error: error.message }, 500);
+          }
+          return;
+        }
       }
 
       // 404 for unknown API routes

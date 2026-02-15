@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useChatStore, ChatMessage, AgentMode } from '../../stores/chatStore';
-import { createWebSocket } from '../../utils/api';
+import { useEditorStore } from '../../stores/editorStore';
+import { createWebSocket, api } from '../../utils/api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -9,8 +10,10 @@ import {
   Bot, User, Terminal,
   ChevronDown, FileCode, Sparkles, Hash,
   Layout, Shield, Search, Zap, Check, AlertCircle,
-  ArrowUp, Plus, Paperclip, X, Loader2
+  ArrowUp, Plus, Paperclip, X, Loader2,
+  FileText, Play, Eye
 } from 'lucide-react';
+import { PlanQuestionsOverlay, type PlanQuestion } from '../PlanQuestions';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -31,7 +34,8 @@ const COMMANDS = [
 
 const MODES: { id: AgentMode; name: string; icon: any; desc: string; color: string }[] = [
   { id: 'agent', name: 'Agent', icon: <Bot size={16} />, desc: 'Autonomous coding assistant', color: 'text-emerald-400' },
-  { id: 'plan', name: 'Planner', icon: <Layout size={16} />, desc: 'Analyze and plan tasks', color: 'text-cyan-400' },
+  { id: 'planner', name: 'Planner', icon: <Layout size={16} />, desc: 'Interactive planning with web research', color: 'text-orange-400' },
+  { id: 'plan', name: 'Plan', icon: <Layout size={16} />, desc: 'Read-only analysis and planning', color: 'text-cyan-400' },
   { id: 'tester', name: 'Tester', icon: <Terminal size={16} />, desc: 'Testing and QA specialist', color: 'text-pink-400' },
   { id: 'debugger', name: 'Debugger', icon: <AlertCircle size={16} />, desc: 'Bug investigation expert', color: 'text-amber-400' },
   { id: 'security', name: 'Security', icon: <Shield size={16} />, desc: 'Security analysis', color: 'text-red-400' },
@@ -60,12 +64,19 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
     sendMessage, clearMessages,
   } = useChatStore();
 
+  const { openFile } = useEditorStore();
+
   const [inputValue, setInputValue] = useState('');
   const [popup, setPopup] = useState<PopupType>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [files, setFiles] = useState<string[]>([]);
   const [showModeSelector, setShowModeSelector] = useState(false);
   const [thinkingText, setThinkingText] = useState<string | null>(null);
+
+  // Plan mode state
+  const [planQuestions, setPlanQuestions] = useState<PlanQuestion[] | null>(null);
+  const [planContent, setPlanContent] = useState<string | null>(null);
+  const [planPath, setPlanPath] = useState<string>('implementations.md');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -129,7 +140,18 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
           else if (msg.role === 'tool') addMessage({ role: 'tool', content: msg.toolName || msg.content, toolName: msg.toolName, toolStatus: msg.toolStatus });
         });
         break;
-      case 'clear': clearMessages(); break;
+      case 'plan_questions':
+        if (data.data?.questions) {
+          setPlanQuestions(data.data.questions);
+        }
+        break;
+      case 'plan_ready':
+        if (data.data?.planContent) {
+          setPlanContent(data.data.planContent);
+          setPlanPath(data.data.planPath || 'implementations.md');
+        }
+        break;
+      case 'clear': clearMessages(); setPlanContent(null); setPlanQuestions(null); break;
     }
   };
 
@@ -260,11 +282,36 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
   const filteredFiles = getFilteredFiles();
   const currentModeData = MODES.find(m => m.id === currentMode);
 
+  const handlePlanQuestionsSubmit = (answers: Record<string, string | string[]>) => {
+    // Format answers and send back to the AI
+    const lines = Object.entries(answers).map(([id, val]) => {
+      const q = planQuestions?.find(q => q.id === id);
+      const qText = q?.question || id;
+      const answerText = Array.isArray(val) ? val.join(', ') : val;
+      return `- ${qText}: **${answerText}**`;
+    });
+    const message = `Here are my answers:\n${lines.join('\n')}`;
+    sendMessage(message);
+    setPlanQuestions(null);
+  };
+
   return (
     <div
       className="flex flex-col bg-[#0a0a0a] relative border-r border-zinc-800/40"
       style={{ width: width || 380, minWidth: 280 }}
     >
+      {/* Plan Questions Overlay */}
+      {planQuestions && planQuestions.length > 0 && (
+        <PlanQuestionsOverlay
+          questions={planQuestions}
+          onSubmit={handlePlanQuestionsSubmit}
+          onSkip={() => {
+            sendMessage('Skip questions - proceed with your best judgment.');
+            setPlanQuestions(null);
+          }}
+        />
+      )}
+
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {messages.length === 0 && !streamingContent && (
@@ -354,6 +401,68 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
                 </div>
                 <span className="inline-block w-1 h-3.5 bg-zinc-400 ml-0.5 animate-pulse" />
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Inline Plan Preview Card */}
+        {planContent && (
+          <div className="rounded-xl border border-zinc-700/60 bg-zinc-900/80 overflow-hidden">
+            {/* Card header */}
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800/60 bg-zinc-900">
+              <FileText size={13} className="text-orange-400" />
+              <span className="text-[11px] font-mono text-zinc-400">{planPath}</span>
+              <div className="flex-1" />
+            </div>
+
+            {/* Rendered plan preview (truncated) */}
+            <div className="px-3 py-3 max-h-[280px] overflow-hidden relative">
+              <div className="text-[12px] text-zinc-300 leading-relaxed markdown-content plan-preview">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {planContent.split('\n').slice(0, 30).join('\n')}
+                </ReactMarkdown>
+              </div>
+              {/* Fade out gradient */}
+              <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-zinc-900/80 to-transparent pointer-events-none" />
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center justify-between px-3 py-2.5 border-t border-zinc-800/60 bg-zinc-900/50">
+              <button
+                onClick={async () => {
+                  try {
+                    const result = await api.files.read(planPath);
+                    if (result.success && result.content !== undefined) {
+                      openFile({ path: planPath, content: result.content });
+                    }
+                  } catch { /* ignore */ }
+                }}
+                className="flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors font-medium"
+              >
+                <Eye size={13} />
+                View Plan
+              </button>
+              <button
+                onClick={() => {
+                  if (wsRef.current?.readyState === WebSocket.OPEN) {
+                    wsRef.current.send(JSON.stringify({ type: 'message', content: '/mode agent' }));
+                    setTimeout(() => {
+                      if (wsRef.current?.readyState === WebSocket.OPEN) {
+                        wsRef.current.send(JSON.stringify({
+                          type: 'message',
+                          content: 'Execute the plan in implementations.md. Work through each task, check off completed items by changing [ ] to [x]. When all tasks are done, delete implementations.md.'
+                        }));
+                      }
+                    }, 500);
+                  }
+                  setPlanContent(null);
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-[11px] font-semibold transition-colors"
+              >
+                <Play size={12} />
+                Build
+                <span className="text-orange-200/50 text-[9px] font-normal ml-0.5">Ctrl+⏎</span>
+              </button>
             </div>
           </div>
         )}
