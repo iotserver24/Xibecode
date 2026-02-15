@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self';" />
+  <title>XibeCode</title>
+  <link rel="stylesheet" href="welcome.css" />
+</head>
+<body>
+  <div class="container">
+    <!-- Left: Branding -->
+    <aside class="sidebar">
+      <div class="logo">
+        <pre class="ascii-logo">
+ __  __  _  _
+ \ \/ / (_)| |__    ___
+  \  /  | || '_ \  / _ \
+  /  \  | || |_) ||  __/
+ /_/\_\ |_||_.__/  \___|
+   C  o  d  e
+        </pre>
+        <h1>XibeCode</h1>
+        <p class="tagline">AI Coding Assistant</p>
+      </div>
+
+      <div class="actions">
+        <button id="btn-open" class="action-btn primary">
+          <span class="icon">📂</span> Open Folder
+        </button>
+        <button id="btn-clone" class="action-btn">
+          <span class="icon">🔗</span> Clone Repository
+        </button>
+        <button id="btn-new" class="action-btn">
+          <span class="icon">✨</span> New Project
+        </button>
+      </div>
+
+      <footer class="status" id="cli-status">Checking CLI…</footer>
+    </aside>
+
+    <!-- Right: Recent Projects -->
+    <main class="content">
+      <h2>Recent Projects</h2>
+      <ul id="recent-list" class="recent-list">
+        <li class="empty">No recent projects</li>
+      </ul>
+    </main>
+  </div>
+
+  <!-- Clone dialog -->
+  <div id="clone-dialog" class="dialog-overlay hidden">
+    <div class="dialog">
+      <h3>Clone Repository</h3>
+      <label>
+        Repository URL
+        <input type="text" id="clone-url" placeholder="https://github.com/user/repo.git" />
+      </label>
+      <label>
+        Destination folder
+        <input type="text" id="clone-dest" placeholder="/home/user/projects/repo" />
+      </label>
+      <div class="dialog-actions">
+        <button id="clone-cancel" class="action-btn">Cancel</button>
+        <button id="clone-confirm" class="action-btn primary">Clone</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New-project dialog -->
+  <div id="new-dialog" class="dialog-overlay hidden">
+    <div class="dialog">
+      <h3>New Project</h3>
+      <label>
+        Project name
+        <input type="text" id="new-name" placeholder="my-project" />
+      </label>
+      <div class="dialog-actions">
+        <button id="new-cancel" class="action-btn">Cancel</button>
+        <button id="new-confirm" class="action-btn primary">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../dist/welcome.js"></script>
+</body>
+</html>
