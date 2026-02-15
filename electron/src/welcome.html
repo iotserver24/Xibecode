@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XibeCode</title>
+  <link rel="stylesheet" href="welcome.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Left side: Branding + Actions -->
+    <div class="left-panel">
+      <!-- Logo -->
+      <div class="logo-section">
+        <pre class="ascii-logo">██╗  ██╗██╗██████╗ ███████╗ ██████╗ ██████╗ ██████╗ ███████╗
+╚██╗██╔╝██║██╔══██╗██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝
+ ╚███╔╝ ██║██████╔╝█████╗  ██║     ██║   ██║██║  ██║█████╗
+ ██╔██╗ ██║██╔══██╗██╔══╝  ██║     ██║   ██║██╔══██╗██╔══╝
+██╔╝ ██╗██║██████╔╝███████╗╚██████╗╚██████╔╝██████╔╝███████╗
+╚═╝  ╚═╝╚═╝╚═════╝ ╚══════╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝</pre>
+        <div class="tagline">AI-powered autonomous coding assistant</div>
+      </div>
+
+      <!-- Start section -->
+      <div class="section">
+        <h2 class="section-title">Start</h2>
+        <button class="action-btn" id="btn-open-folder">
+          <span class="action-icon">📂</span>
+          <div class="action-text">
+            <span class="action-label">Open Folder</span>
+            <span class="action-desc">Open an existing project</span>
+          </div>
+        </button>
+        <button class="action-btn" id="btn-clone-repo">
+          <span class="action-icon">📦</span>
+          <div class="action-text">
+            <span class="action-label">Clone Repository</span>
+            <span class="action-desc">Clone a Git repository</span>
+          </div>
+        </button>
+        <button class="action-btn" id="btn-new-project">
+          <span class="action-icon">✨</span>
+          <div class="action-text">
+            <span class="action-label">New Project</span>
+            <span class="action-desc">Create a new empty project</span>
+          </div>
+        </button>
+      </div>
+
+      <!-- Help section -->
+      <div class="section">
+        <h2 class="section-title">Help</h2>
+        <a class="help-link" id="link-docs">Documentation</a>
+        <a class="help-link" id="link-github">GitHub Repository</a>
+        <a class="help-link" id="link-donate">Support XibeCode</a>
+      </div>
+    </div>
+
+    <!-- Right side: Recent Projects -->
+    <div class="right-panel">
+      <h2 class="section-title">Recent</h2>
+      <div id="recent-list" class="recent-list">
+        <div class="empty-state">No recent projects</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Clone dialog -->
+  <div class="dialog-overlay" id="clone-dialog" style="display:none">
+    <div class="dialog">
+      <h3 class="dialog-title">Clone Repository</h3>
+      <label class="dialog-label">Repository URL</label>
+      <input type="text" class="dialog-input" id="clone-url" placeholder="https://github.com/user/repo.git">
+      <div class="dialog-buttons">
+        <button class="dialog-btn cancel" id="clone-cancel">Cancel</button>
+        <button class="dialog-btn primary" id="clone-confirm">Clone</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New project dialog -->
+  <div class="dialog-overlay" id="new-dialog" style="display:none">
+    <div class="dialog">
+      <h3 class="dialog-title">New Project</h3>
+      <label class="dialog-label">Project Name</label>
+      <input type="text" class="dialog-input" id="new-name" placeholder="my-project">
+      <div class="dialog-buttons">
+        <button class="dialog-btn cancel" id="new-cancel">Cancel</button>
+        <button class="dialog-btn primary" id="new-confirm">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <span id="cli-status" class="cli-status">Checking xibecode...</span>
+  </div>
+
+  <script>
+    // ── API from preload ──
+    const api = window.xibecode;
+
+    // ── Relative time helper ──
+    function relativeTime(isoDate) {
+      const diff = Date.now() - new Date(isoDate).getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'just now';
+      if (mins < 60) return mins + 'm ago';
+      const hours = Math.floor(mins / 60);
+      if (hours < 24) return hours + 'h ago';
+      const days = Math.floor(hours / 24);
+      if (days < 30) return days + 'd ago';
+      return Math.floor(days / 30) + 'mo ago';
+    }
+
+    // ── Load recent projects ──
+    async function loadRecent() {
+      const projects = await api.getRecentProjects();
+      const list = document.getElementById('recent-list');
+
+      if (!projects || projects.length === 0) {
+        list.innerHTML = '<div class="empty-state">No recent projects</div>';
+        return;
+      }
+
+      list.innerHTML = projects.map(p => `
+        <div class="recent-item" data-path="${p.path.replace(/"/g, '&quot;')}">
+          <div class="recent-icon">📁</div>
+          <div class="recent-info">
+            <div class="recent-name">${p.name}</div>
+            <div class="recent-path">${p.path}</div>
+          </div>
+          <div class="recent-time">${relativeTime(p.lastOpened)}</div>
+          <button class="recent-remove" data-path="${p.path.replace(/"/g, '&quot;')}" title="Remove from list">&times;</button>
+        </div>
+      `).join('');
+
+      // Click to open
+      list.querySelectorAll('.recent-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          if (e.target.classList.contains('recent-remove')) return;
+          api.openRecent(item.dataset.path);
+        });
+      });
+
+      // Remove button
+      list.querySelectorAll('.recent-remove').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await api.removeRecent(btn.dataset.path);
+          loadRecent();
+        });
+      });
+    }
+
+    // ── Check CLI status ──
+    async function checkCli() {
+      const installed = await api.getCliInstalled();
+      const statusEl = document.getElementById('cli-status');
+
+      if (installed) {
+        const version = await api.getCliVersion();
+        statusEl.textContent = `xibecode v${version} installed`;
+        statusEl.className = 'cli-status installed';
+      } else {
+        statusEl.innerHTML = 'xibecode not found — <span class="install-hint">Install with: npm i -g xibecode</span>';
+        statusEl.className = 'cli-status not-installed';
+      }
+    }
+
+    // ── Button handlers ──
+    document.getElementById('btn-open-folder').addEventListener('click', () => {
+      api.openFolder();
+    });
+
+    document.getElementById('btn-clone-repo').addEventListener('click', () => {
+      document.getElementById('clone-dialog').style.display = 'flex';
+      document.getElementById('clone-url').focus();
+    });
+
+    document.getElementById('btn-new-project').addEventListener('click', () => {
+      document.getElementById('new-dialog').style.display = 'flex';
+      document.getElementById('new-name').focus();
+    });
+
+    // Clone dialog
+    document.getElementById('clone-cancel').addEventListener('click', () => {
+      document.getElementById('clone-dialog').style.display = 'none';
+    });
+    document.getElementById('clone-confirm').addEventListener('click', async () => {
+      const url = document.getElementById('clone-url').value.trim();
+      if (!url) return;
+      document.getElementById('clone-dialog').style.display = 'none';
+      const result = await api.cloneRepo(url, '');
+      if (!result.success) {
+        alert('Clone failed: ' + result.error);
+      }
+    });
+
+    // New project dialog
+    document.getElementById('new-cancel').addEventListener('click', () => {
+      document.getElementById('new-dialog').style.display = 'none';
+    });
+    document.getElementById('new-confirm').addEventListener('click', async () => {
+      const name = document.getElementById('new-name').value.trim();
+      if (!name) return;
+      document.getElementById('new-dialog').style.display = 'none';
+      const result = await api.newProject(name);
+      if (!result.success) {
+        alert('Create failed: ' + result.error);
+      }
+    });
+
+    // Help links
+    document.getElementById('link-docs').addEventListener('click', () => {
+      api.openExternal('https://xibeai.in/docs');
+    });
+    document.getElementById('link-github').addEventListener('click', () => {
+      api.openExternal('https://github.com/iotserver24/xibecode');
+    });
+    document.getElementById('link-donate').addEventListener('click', () => {
+      api.openExternal('https://xibeai.in/donate');
+    });
+
+    // Close dialogs on overlay click
+    document.querySelectorAll('.dialog-overlay').forEach(overlay => {
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.style.display = 'none';
+      });
+    });
+
+    // Enter key in inputs
+    document.getElementById('clone-url').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('clone-confirm').click();
+    });
+    document.getElementById('new-name').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('new-confirm').click();
+    });
+
+    // ── Init ──
+    loadRecent();
+    checkCli();
+  </script>
+</body>
+</html>
