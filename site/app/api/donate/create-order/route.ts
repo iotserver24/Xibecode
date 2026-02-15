@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
   try {
-    const { amount, currency, name, email } = await req.json();
+    const { amount, currency, name, email, github, description } = await req.json();
 
     if (!amount || !currency || !name || !email) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -17,7 +17,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Amount must be at least 1' }, { status: 400 });
     }
 
-    // Convert to smallest unit (paise for INR, cents for USD)
     const amountInSmallestUnit = Math.round(amount * 100);
 
     const keyId = process.env.RAZORPAY_KEY_ID;
@@ -27,6 +26,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Razorpay not configured' }, { status: 500 });
     }
 
+    // Store ALL donor info in order notes so the webhook can read it
     const response = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
       headers: {
@@ -37,7 +37,15 @@ export async function POST(req: Request) {
         amount: amountInSmallestUnit,
         currency,
         receipt: `donate_${Date.now()}`,
-        notes: { name, email, source: 'xibecode-website' },
+        notes: {
+          donor_name: name,
+          donor_email: email,
+          donor_github: (github || '').trim(),
+          donor_description: (description || '').trim().slice(0, 280),
+          donor_amount: String(amount),
+          donor_currency: currency,
+          source: 'xibecode-website',
+        },
       }),
     });
 

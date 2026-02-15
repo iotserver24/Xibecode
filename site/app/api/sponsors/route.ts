@@ -20,6 +20,7 @@ export async function GET() {
       amount: s.amount,
       currency: s.currency,
       date: s.date,
+      dateIST: s.dateIST || '',
     }));
 
     const totalSponsors = sponsors.length;
