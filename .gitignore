@@ -11,6 +11,11 @@ build/
 *.tgz
 .next/
 
+# Electron build artifacts
+electron/dist/
+electron/release/
+electron/node_modules/
+
 # Environment
 .env
 .env.local
