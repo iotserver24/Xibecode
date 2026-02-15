@@ -1,0 +1,219 @@
+---
+title: Configuration
+description: Customize models, API endpoints, package managers, and all XibeCode settings. 23 config options including apiKey, model, maxIterations, and more.
+keywords: [configuration, config, settings, configure, xibecode config, api key, apiKey, base url, model, max iterations, verbose, package manager, pnpm, bun, npm, dry run, git checkpoint, stash, commit, default mode, auto approval, test command, plugins, mcp servers, environment variables, ANTHROPIC_API_KEY, OPENAI_API_KEY, priority order, azure, aws bedrock, custom endpoint, project config, backup, how to configure, change settings, set api key, set model]
+---
+
+XibeCode stores its configuration in `~/.xibecode/`. You can manage settings via the CLI or by editing the config file directly.
+
+## Interactive Setup
+
+```bash
+xibecode config
+```
+
+This opens an interactive menu to configure all settings including API key, model, package manager, default mode, and safety settings.
+
+## Quick Commands
+
+```bash
+# Set API key
+xibecode config --set-key YOUR_ANTHROPIC_API_KEY
+
+# Set custom API endpoint
+xibecode config --set-url https://your-custom-endpoint.com
+
+# Set default model
+xibecode config --set-model claude-sonnet-4-5-20250929
+
+# View current config
+xibecode config --show
+
+# Reset all settings
+xibecode config --reset
+```
+
+## Configuration File
+
+The main configuration file is located at `~/.xibecode/config.json`:
+
+```json
+{
+  "apiKey": "sk-ant-...",
+  "baseUrl": "https://api.anthropic.com",
+  "model": "claude-sonnet-4-5-20250929",
+  "maxIterations": 50,
+  "defaultVerbose": false,
+  "preferredPackageManager": "pnpm",
+  "enableDryRunByDefault": false,
+  "gitCheckpointStrategy": "stash",
+  "defaultMode": "agent",
+  "autoApprovalPolicy": "always",
+  "plugins": [],
+  "mcpServers": {}
+}
+```
+
+## Configuration Options
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `apiKey` | Your AI provider API key (Anthropic, OpenAI) | — |
+| `baseUrl` | Custom API endpoint (Azure, AWS Bedrock, etc.) | Anthropic default |
+| `model` | Default AI model to use | `claude-sonnet-4-5-20250929` |
+| `maxIterations` | Maximum autonomous iterations before stopping | `50` |
+| `defaultVerbose` | Enable verbose logging by default | `false` |
+| `preferredPackageManager` | Package manager: pnpm, bun, npm, or yarn | `pnpm` |
+| `enableDryRunByDefault` | Run in dry-run mode by default | `false` |
+| `gitCheckpointStrategy` | Git checkpoint method: stash or commit | `stash` |
+| `defaultMode` | Default agent mode to start in | `agent` |
+| `autoApprovalPolicy` | Mode transition approval: always, prompt-only, never | `always` |
+| `testCommandOverride` | Custom test command (overrides auto-detection) | Auto-detected |
+| `plugins` | Array of plugin file paths | `[]` |
+| `mcpServers` | MCP server configurations | `{}` |
+
+## Environment Variables
+
+```bash
+# API Keys
+ANTHROPIC_API_KEY=your_key        # Anthropic API key
+OPENAI_API_KEY=your_key           # OpenAI API key
+
+# API Configuration
+ANTHROPIC_BASE_URL=https://...    # Custom endpoint
+XIBECODE_MODEL=claude-opus-4-...  # Default model
+
+# Behavior
+XIBECODE_DRY_RUN=true             # Enable dry-run by default
+XIBECODE_VERBOSE=true             # Enable verbose logging
+XIBECODE_MODE=plan                # Default agent mode
+```
+
+## Priority Order
+
+Configuration is resolved in this order (highest priority first):
+
+1. **CLI flags** (e.g., `--api-key`, `--model`)
+2. **Environment variables**
+3. **Project-level config** (`.xibecode/config.json`)
+4. **Global config file** (`~/.xibecode/config.json`)
+
+## Agent Mode Configuration
+
+```json
+{
+  "defaultMode": "agent",
+  "autoApprovalPolicy": "prompt-only"
+}
+```
+
+Auto-approval policies:
+- `always` — Auto-approve all mode transitions
+- `prompt-only` — Require confirmation for escalation (read -> write)
+- `always-for-debugger` — Auto-approve only debugger transitions
+- `never` — Always require confirmation
+
+## Custom API Endpoints
+
+XibeCode supports custom API endpoints, making it compatible with Azure OpenAI, AWS Bedrock, or any Claude-compatible API:
+
+```bash
+# Via config
+xibecode config --set-url https://your-custom-endpoint.com
+
+# Via CLI flag
+xibecode run "task" --base-url https://your-custom-endpoint.com
+
+# Via environment variable
+export ANTHROPIC_BASE_URL=https://your-custom-endpoint.com
+```
+
+### Azure OpenAI Example
+
+```json
+{
+  "baseUrl": "https://your-resource.openai.azure.com",
+  "apiKey": "your-azure-api-key",
+  "model": "your-deployment-name"
+}
+```
+
+### AWS Bedrock Example
+
+```json
+{
+  "baseUrl": "https://bedrock-runtime.us-east-1.amazonaws.com",
+  "apiKey": "your-aws-credentials",
+  "model": "anthropic.claude-3-sonnet-20240229-v1:0"
+}
+```
+
+## Package Manager Detection
+
+XibeCode automatically detects your preferred package manager by checking for lock files:
+
+1. `pnpm-lock.yaml` → pnpm
+2. `bun.lockb` → bun
+3. `yarn.lock` → yarn
+4. `package-lock.json` → npm
+
+Override this with the `preferredPackageManager` setting.
+
+## Test Runner Configuration
+
+XibeCode auto-detects test runners:
+
+- **Vitest** — vitest.config.ts or vitest in package.json
+- **Jest** — jest.config.js or jest in package.json
+- **Mocha** — .mocharc.js or mocha in package.json
+- **pytest** — pytest.ini or pyproject.toml
+- **Go test** — go.mod file present
+- **Cargo test** — Cargo.toml file present
+
+Override with a custom test command:
+
+```json
+{
+  "testCommandOverride": "npm run test:unit"
+}
+```
+
+## Git Checkpoint Strategies
+
+- `stash` — Uses git stash (recommended, lightweight)
+- `commit` — Creates a commit (persistent history)
+
+```json
+{
+  "gitCheckpointStrategy": "stash"
+}
+```
+
+## Project-Level Configuration
+
+Create a `.xibecode/config.json` in your project root for project-specific settings:
+
+```json
+{
+  "testCommandOverride": "pnpm test",
+  "defaultMode": "tester",
+  "plugins": ["./custom-plugin.js"]
+}
+```
+
+## Backup Configuration
+
+XibeCode automatically backs up files before editing. Backups are stored in `~/.xibecode/backups/` with timestamps:
+
+```
+~/.xibecode/backups/
+  ├── src_app.ts_2024-01-15T10-30-00.bak
+  ├── src_utils_helper.ts_2024-01-15T10-31-00.bak
+  └── ...
+```
+
+## Next Steps
+
+- [Agent Modes](/docs/modes) — Learn about all 13 personas
+- [MCP Integration](/docs/mcp) — Set up external tool servers
+- [Plugins](/docs/plugins) — Create custom plugins

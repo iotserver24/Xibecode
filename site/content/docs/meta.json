@@ -1,0 +1,19 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "installation",
+    "quickstart",
+    "---",
+    "modes",
+    "tools",
+    "configuration",
+    "---",
+    "webui",
+    "test-generation",
+    "---",
+    "mcp",
+    "plugins",
+    "examples"
+  ]
+}
