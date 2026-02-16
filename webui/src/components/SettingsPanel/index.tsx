@@ -33,6 +33,7 @@ interface RawConfig {
   headerMinimal: boolean;
   sessionDirectory: string;
   plugins: string[];
+  customProviderFormat?: 'openai' | 'anthropic';
 }
 
 interface AvailableModel {
@@ -759,6 +760,20 @@ function AIProviderSettings({
           )}
         />
       </SettingRow>
+
+      {isCustomProvider && (
+        <SettingRow label="API Format">
+          <select
+            value={config.customProviderFormat || 'openai'}
+            onChange={(e) => updateConfig('customProviderFormat', e.target.value)}
+            className="setting-input w-56"
+          >
+            <option value="openai">OpenAI Compatible (Default)</option>
+            <option value="anthropic">Anthropic Compatible</option>
+          </select>
+        </SettingRow>
+      )}
+
       {!isCustomProvider && (
         <SettingHint>Base URL is managed automatically by the selected provider.</SettingHint>
       )}

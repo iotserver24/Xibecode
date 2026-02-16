@@ -15,6 +15,7 @@ export interface AgentConfig {
   verbose?: boolean;
   mode?: AgentMode;
   provider?: ProviderType;
+  customProviderFormat?: 'openai' | 'anthropic';
 }
 
 export interface AgentEvent {
@@ -146,7 +147,7 @@ export class EnhancedAgent extends EventEmitter {
   private messages: MessageParam[] = [];
   private loopDetector = new LoopDetector();
   private thinkFilter = new ThinkTagFilter();
-  private config: Required<AgentConfig>;
+  private config: Required<AgentConfig> & { customProviderFormat: 'openai' | 'anthropic' };
   private iterationCount = 0;
   private toolCallCount = 0;
   private filesChanged: Set<string> = new Set();
@@ -185,6 +186,7 @@ export class EnhancedAgent extends EventEmitter {
       verbose: config.verbose ?? false,
       mode: config.mode ?? 'agent',
       provider: config.provider ?? this.detectProvider(config.model),
+      customProviderFormat: config.customProviderFormat ?? 'openai',
     };
 
     // Initialize mode state and orchestrator
@@ -517,8 +519,16 @@ export class EnhancedAgent extends EventEmitter {
   private async callModel(tools: Tool[]): Promise<{ message: any; streamed: boolean; persona?: { name: string; color: string } }> {
     // Route to provider-specific implementation
     // Check if the provider uses the Anthropic format or OpenAI format
-    const providerConfig = PROVIDER_CONFIGS[this.provider];
-    const isAnthropicFormat = providerConfig?.format === 'anthropic';
+    // Check if the provider uses the Anthropic format or OpenAI format
+    let isAnthropicFormat = false;
+    if (this.provider !== 'custom') {
+      isAnthropicFormat = PROVIDER_CONFIGS[this.provider as keyof typeof PROVIDER_CONFIGS]?.format === 'anthropic';
+    }
+
+    // If custom provider, check specific format config
+    if (this.provider === 'custom') {
+      isAnthropicFormat = this.config.customProviderFormat === 'anthropic';
+    }
 
     // If it's NOT Anthropic format, use the OpenAI-compatible client
     if (!isAnthropicFormat) {
@@ -689,8 +699,8 @@ export class EnhancedAgent extends EventEmitter {
 
     // Determine Base URL: Config -> Provider Default -> OpenAI Default
     let base = this.config.baseUrl;
-    if (!base && this.provider && PROVIDER_CONFIGS[this.provider]) {
-      base = PROVIDER_CONFIGS[this.provider].baseUrl;
+    if (!base && this.provider && this.provider !== 'custom' && PROVIDER_CONFIGS[this.provider as keyof typeof PROVIDER_CONFIGS]) {
+      base = PROVIDER_CONFIGS[this.provider as keyof typeof PROVIDER_CONFIGS].baseUrl;
     }
     base = (base || 'https://api.openai.com').replace(/\/+$/, '');
 
