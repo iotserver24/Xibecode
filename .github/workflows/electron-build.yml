@@ -41,6 +41,9 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -54,21 +57,18 @@ jobs:
       - name: Build TypeScript
         working-directory: electron
         run: npm run build:ts
-      - name: Build Windows x64
+      - name: Build Windows ${{ matrix.arch }}
         working-directory: electron
-        run: npx electron-builder --win --x64
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build Windows arm64
-        working-directory: electron
-        run: npx electron-builder --win --arm64
+        run: npx electron-builder --win --${{ matrix.arch }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: windows
-          path: electron/release/**/*.exe
+          name: windows-${{ matrix.arch }}
+          path: |
+            electron/release/*Setup*.exe
+            electron/release/*setup*.exe
           if-no-files-found: warn
 
   build-mac:
@@ -110,6 +110,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+      - name: List all artifacts
+        run: find artifacts -type f
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -118,5 +120,6 @@ jobs:
           files: |
             artifacts/linux-x64/**/*
             artifacts/linux-arm64/**/*
-            artifacts/windows/**/*
+            artifacts/windows-x64/**/*
+            artifacts/windows-arm64/**/*
             artifacts/macos/**/*
