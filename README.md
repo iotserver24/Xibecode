@@ -472,7 +472,7 @@ POST /api/tests/run       # Run project tests
 
 ## Project Structure
 
-```
+```text
 xibecode/
 ├── src/
 │   ├── core/           # Agent, tools, context
@@ -484,6 +484,10 @@ xibecode/
 ├── site/               # Documentation site
 └── tests/              # Test suites
 ```
+
+## Dependency Map
+
+![Dependency Map](dependencies.svg)
 
 ## Project Docs
 
