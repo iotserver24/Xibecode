@@ -10,19 +10,24 @@ AI-powered autonomous coding assistant for your terminal, browser, and desktop.
 
 XibeCode is a CLI agent that can read and edit code, run commands, and iterate on tasks from your terminal using LLMs. It includes a **WebUI** for a browser-based experience, a **Desktop App** (Electron) for native IDE-like usage, **AI-powered test generation**, and **multi-model support** for both Anthropic and OpenAI models.
 
-## What's New in v0.5.6
+## What's New in v0.5.7
 
-### 🚀 Massive Model Update (2025-2026)
+### 🚀 Native Gemini Support
 
-We've integrated the latest flagship models from all major providers:
+XibeCode now supports Google Gemini natively via their OpenAI-compatible endpoint.
 
-- **OpenAI**: **GPT-5 Series** (5.2, 5.1, 5), **Reasoning** (o3-deep-research, o3-pro, o4-mini).
-- **Anthropic**: **Claude 4 Series** (Opus 4.6, Sonnet 4.5), **Claude 3.7** (Hybrid Reasoning).
-- **Google**: **Gemini 3 Series** (3-pro), **Gemini 2.5** (Flash, Pro).
-- **Zhipu AI**: **GLM-5** (744B MoE), **GLM-4** (4.7, 4.6).
-- **Alibaba**: **Qwen 3** (3.5-coder-plus, 3.5-max), **Qwen 2.5**.
-- **Moonshot**: **Kimi K2** (K2.5, K2-thinking).
-- **xAI**: **Grok-4** (4.1-fast-reasoning, 4), **Grok-3**.
+- **New Models**: Gemini 3 Deep Think, Gemini 3 Flash Preview, Gemini 2.5 Pro.
+- **Direct Integration**: Use your Google API Key without proxies.
+
+### 🔒 Settings Security & UI
+
+- **Eye Toggle**: Added visibility toggle for API keys in Settings.
+- **Improved Masking**: Better feedback for existing keys.
+- **Native Providers**: Added native Google option in the provider dropdown.
+
+### ⚡ Comprehensive Model Update (2025-2026)
+
+Verified support for the latest flagships from OpenAI (GPT-5.2), Anthropic (Claude 4.6), Zhipu AI (GLM-5), and more.
 
 ### ✨ Feature Improvements
 

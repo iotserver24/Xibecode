@@ -73,6 +73,13 @@ export const PROVIDER_CONFIGS = {
     envKey: 'OPENROUTER_API_KEY',
     name: 'OpenRouter'
   },
+  google: {
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    defaultModel: 'gemini-2.0-flash',
+    format: 'openai',
+    envKey: 'GOOGLE_API_KEY',
+    name: 'Google (Gemini)'
+  },
 } as const;
 
 export type ProviderType = keyof typeof PROVIDER_CONFIGS | 'custom';

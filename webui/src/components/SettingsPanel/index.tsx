@@ -3,7 +3,7 @@ import { useUIStore } from '../../stores/uiStore';
 import Editor from '@monaco-editor/react';
 import {
   X, Bot, Cpu, Keyboard, Loader2,
-  Wrench, Eye, Save, AlertTriangle
+  Wrench, Eye, EyeOff, Save, AlertTriangle
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -652,8 +652,9 @@ function AIProviderSettings({
             m.provider === 'kimi' ? 'Moonshot' :
               m.provider === 'alibaba' ? 'Alibaba' :
                 m.provider === 'grok' ? 'Grok' :
-                  m.provider === 'groq' ? 'Groq' :
-                    m.provider === 'openrouter' ? 'OpenRouter' : 'Other';
+                  m.provider === 'google' ? 'Google' :
+                    m.provider === 'groq' ? 'Groq' :
+                      m.provider === 'openrouter' ? 'OpenRouter' : 'Other';
     if (!groupedModels[key]) groupedModels[key] = [];
     groupedModels[key].push(m);
   });
@@ -677,6 +678,7 @@ function AIProviderSettings({
           <option value="kimi">Moonshot (Kimi)</option>
           <option value="alibaba">Alibaba (Qwen)</option>
           <option value="grok">xAI (Grok)</option>
+          <option value="google">Google (Gemini)</option>
           <option value="groq">Groq</option>
           <option value="openrouter">OpenRouter</option>
           <option value="custom">Custom (Compatible)</option>
@@ -743,16 +745,17 @@ function AIProviderSettings({
         <div className="relative w-56">
           <input
             type={showApiKey ? "text" : "password"}
-            value={config.apiKey === '••••••••' && !showApiKey ? '' : config.apiKey}
+            value={(config.apiKey === '••••••••' || !config.apiKey) && !showApiKey ? '' : config.apiKey}
             onChange={(e) => updateConfig('apiKey', e.target.value)}
-            placeholder={config.apiKey === '••••••••' ? '••••••••  (already set)' : 'sk-...'}
+            placeholder={config.apiKey === '••••••••' ? '••••••••  (already set)' : 'Enter API key...'}
             className="setting-input w-full pr-8"
           />
           <button
+            type="button"
             onClick={() => setShowApiKey(!showApiKey)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
           >
-            <Eye size={12} />
+            {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
         </div>
       </SettingRow>
