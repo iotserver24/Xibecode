@@ -91,9 +91,7 @@ function App() {
     setIsChatCollapsed(true);
   };
 
-  const handleExpandChat = () => {
-    setIsChatCollapsed(false);
-  };
+
 
   return (
     <div ref={containerRef} className="h-screen w-screen flex flex-col bg-[#0a0a0a] text-zinc-100 overflow-hidden">
@@ -116,9 +114,8 @@ function App() {
 
             {/* Resize Handle */}
             <div
-              className={`w-[3px] cursor-col-resize flex-shrink-0 relative group transition-colors ${
-                isDragging ? 'bg-indigo-500' : 'bg-zinc-800 hover:bg-indigo-500/50'
-              }`}
+              className={`w-[3px] cursor-col-resize flex-shrink-0 relative group transition-colors ${isDragging ? 'bg-indigo-500' : 'bg-zinc-800 hover:bg-indigo-500/50'
+                }`}
               onMouseDown={handleMouseDown}
             >
               <div className="absolute inset-y-0 -left-1 -right-1 z-10" />
@@ -135,11 +132,10 @@ function App() {
               {/* Expand/Collapse sidebar full width */}
               <button
                 onClick={() => setIsSidebarFullWidth(!isSidebarFullWidth)}
-                className={`flex items-center justify-center w-8 h-7 rounded-md transition-colors ${
-                  isSidebarFullWidth
+                className={`flex items-center justify-center w-8 h-7 rounded-md transition-colors ${isSidebarFullWidth
                     ? 'bg-zinc-800 text-zinc-200'
                     : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
-                }`}
+                  }`}
                 title={isSidebarFullWidth ? 'Collapse sidebar' : 'Expand sidebar full width'}
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -162,11 +158,10 @@ function App() {
               {/* Preview (eye) button */}
               <button
                 onClick={() => setRightPanelMode('preview')}
-                className={`flex items-center justify-center w-8 h-7 rounded-md transition-colors ${
-                  rightPanelMode === 'preview'
+                className={`flex items-center justify-center w-8 h-7 rounded-md transition-colors ${rightPanelMode === 'preview'
                     ? 'bg-zinc-800 text-zinc-200'
                     : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
-                }`}
+                  }`}
                 title="Preview (show running website)"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -180,11 +175,10 @@ function App() {
               {/* Code button */}
               <button
                 onClick={() => setRightPanelMode('code')}
-                className={`flex items-center justify-center w-8 h-7 rounded-md transition-colors ${
-                  rightPanelMode === 'code'
+                className={`flex items-center justify-center w-8 h-7 rounded-md transition-colors ${rightPanelMode === 'code'
                     ? 'bg-zinc-800 text-zinc-200'
                     : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
-                }`}
+                  }`}
                 title="Code (files & editor)"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -206,11 +200,10 @@ function App() {
                       setActiveSidebarPanel('explorer');
                     }
                   }}
-                  className={`p-1.5 rounded-md transition-colors ${
-                    activeSidebarPanel === 'explorer'
+                  className={`p-1.5 rounded-md transition-colors ${activeSidebarPanel === 'explorer'
                       ? 'text-zinc-200 bg-zinc-800'
                       : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'
-                  }`}
+                    }`}
                   title="Toggle file explorer"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -221,11 +214,10 @@ function App() {
               )}
               <button
                 onClick={() => setIsBottomPanelCollapsed(!isBottomPanelCollapsed)}
-                className={`p-1.5 rounded-md transition-colors ${
-                  !isBottomPanelCollapsed
+                className={`p-1.5 rounded-md transition-colors ${!isBottomPanelCollapsed
                     ? 'text-zinc-200 bg-zinc-800'
                     : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'
-                }`}
+                  }`}
                 title="Toggle terminal"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

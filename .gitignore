@@ -4,6 +4,8 @@ package-lock.json
 yarn.lock
 
 # Build
+.claude/
+.xibecode/
 dist/
 webui-dist/
 *.tsbuildinfo

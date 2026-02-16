@@ -61,6 +61,7 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
     setWebSocket, setConnected, addMessage, updateLastMessage, setProcessing, setCurrentMode,
     setStreamingContent, appendStreamingContent, finalizeStreamingMessage,
     sendMessage, clearMessages,
+    attachments, removeAttachment,
   } = useChatStore();
 
   const { openFile } = useEditorStore();
@@ -200,6 +201,8 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
       }, 100);
     }
   }, [isProcessing, streamingContent]);
+
+
 
   const loadFiles = async () => {
     try {
@@ -582,7 +585,27 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
         )}
 
         {/* Input box - v0 style with rounded container */}
+        {/* Input box - v0 style with rounded container */}
         <div className="bg-zinc-900/80 rounded-xl border border-zinc-800 focus-within:border-zinc-700 transition-colors">
+
+          {/* Attachments */}
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 px-3 pt-3">
+              {attachments.map((att) => (
+                <div key={att.id} className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-zinc-800 text-zinc-300 text-[11px] border border-zinc-700/50 group">
+                  <Terminal size={12} className="text-zinc-500" />
+                  <span className="max-w-[150px] truncate">{att.label}</span>
+                  <button
+                    onClick={() => removeAttachment(att.id)}
+                    className="ml-0.5 text-zinc-500 hover:text-zinc-300 opacity-60 hover:opacity-100 transition-opacity"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <textarea
             ref={inputRef}
             value={inputValue}
@@ -671,16 +694,16 @@ function MessageItem({ message }: { message: ChatMessage }) {
       <div className={cn(
         "flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[11px] transition-all",
         isRunning ? "bg-amber-500/5 border border-amber-500/20" :
-        isSuccess ? "bg-emerald-500/5 border border-emerald-500/10" :
-        isError ? "bg-red-500/5 border border-red-500/10" :
-        "bg-zinc-800/30 border border-zinc-800/30"
+          isSuccess ? "bg-emerald-500/5 border border-emerald-500/10" :
+            isError ? "bg-red-500/5 border border-red-500/10" :
+              "bg-zinc-800/30 border border-zinc-800/30"
       )}>
         <span className="text-sm flex-shrink-0">{toolInfo.icon}</span>
         <span className={cn(
           "font-medium flex-1 truncate",
           isRunning ? "text-amber-400" :
-          isSuccess ? "text-zinc-400" :
-          isError ? "text-red-400" : "text-zinc-500"
+            isSuccess ? "text-zinc-400" :
+              isError ? "text-red-400" : "text-zinc-500"
         )}>
           {toolInfo.label}
           {message.toolName && toolInfo.label !== message.toolName && (
@@ -690,8 +713,8 @@ function MessageItem({ message }: { message: ChatMessage }) {
         <span className={cn(
           "flex items-center gap-1 flex-shrink-0",
           isRunning ? "text-amber-500" :
-          isSuccess ? "text-emerald-500" :
-          isError ? "text-red-400" : "text-zinc-600"
+            isSuccess ? "text-emerald-500" :
+              isError ? "text-red-400" : "text-zinc-600"
         )}>
           {isRunning && <Loader2 size={10} className="animate-spin" />}
           {isSuccess && <Check size={10} />}
@@ -726,6 +749,19 @@ function MessageItem({ message }: { message: ChatMessage }) {
             You
             {message.source === 'tui' && <span className="text-[9px] bg-zinc-800 px-1 rounded text-zinc-500">TUI</span>}
           </div>
+
+          {/* Render Context Chips if present */}
+          {message.attachments && message.attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {message.attachments.map((att, i) => (
+                <div key={i} className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-zinc-800/50 text-zinc-400 text-[10px] border border-zinc-700/50 select-none">
+                  <Terminal size={10} className="text-zinc-500" />
+                  <span className="max-w-[200px] truncate">{att.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="text-[13px] text-zinc-200 leading-relaxed whitespace-pre-wrap">{message.content}</div>
         </div>
       </div>

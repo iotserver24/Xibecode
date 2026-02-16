@@ -9,6 +9,14 @@ export interface ChatMessage {
   toolName?: string;
   toolStatus?: 'running' | 'success' | 'error';
   timestamp: number;
+  attachments?: Attachment[];
+}
+
+export interface Attachment {
+  id: string;
+  type: 'terminal' | 'file';
+  content: string;
+  label: string;
 }
 
 export type AgentMode =
@@ -29,6 +37,12 @@ interface ChatState {
 
   // WebSocket
   ws: WebSocket | null;
+
+  // Attachments
+  attachments: Attachment[];
+  addAttachment: (attachment: Attachment) => void;
+  removeAttachment: (id: string) => void;
+  clearAttachments: () => void;
 
   // Actions
   addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
@@ -61,6 +75,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
   conversationId: null,
   conversationTitle: '',
   ws: null,
+  attachments: [],
+
+  addAttachment: (attachment) => set((state) => ({
+    attachments: [...state.attachments, attachment]
+  })),
+
+  removeAttachment: (id) => set((state) => ({
+    attachments: state.attachments.filter((a) => a.id !== id)
+  })),
+
+  clearAttachments: () => set({ attachments: [] }),
 
   addMessage: (message) => {
     const newMessage: ChatMessage = {
@@ -124,12 +149,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   setWebSocket: (ws) => set({ ws }),
 
+
   sendMessage: (content) => {
-    const { ws, addMessage, setProcessing } = get();
+    const { ws, addMessage, setProcessing, attachments, clearAttachments } = get();
     if (ws && ws.readyState === WebSocket.OPEN) {
-      addMessage({ role: 'user', content, source: 'webui' });
-      ws.send(JSON.stringify({ type: 'message', content }));
+      let fullContent = content;
+
+      // Construct the full prompt for the backend/AI
+      // This ensures the AI sees the context
+      if (attachments.length > 0) {
+        const contextParts = attachments.map(a => `[Context: ${a.label}]\n${a.content}`);
+        fullContent = `${contextParts.join('\n\n')}\n\n${content}`;
+      }
+
+      // Add message to UI with attachments but WITHOUT the full text prepended
+      // This keeps the UI clean (chips will be rendered instead)
+      addMessage({
+        role: 'user',
+        content: content, // Original user input
+        source: 'webui',
+        attachments: [...attachments] // Copy current attachments
+      });
+
+      // Send the FULL content to the backend so the AI sees it
+      ws.send(JSON.stringify({ type: 'message', content: fullContent }));
+
       setProcessing(true);
+      clearAttachments();
     }
   },
 
