@@ -50,36 +50,85 @@ export interface AgentSession {
  * Available AI models configuration
  */
 export const AVAILABLE_MODELS = [
-  // Anthropic Models
-  { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5', provider: 'anthropic', tier: 'standard' },
-  { id: 'claude-opus-4-5-20251101', name: 'Claude Opus 4.5', provider: 'anthropic', tier: 'premium' },
-  { id: 'claude-haiku-4-5-20251015', name: 'Claude Haiku 4.5', provider: 'anthropic', tier: 'fast' },
   // OpenAI Models
-  { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai', tier: 'premium' },
-  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'openai', tier: 'fast' },
-  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'openai', tier: 'standard' },
-  { id: 'o1-preview', name: 'O1 Preview', provider: 'openai', tier: 'reasoning' },
-  { id: 'o1-mini', name: 'O1 Mini', provider: 'openai', tier: 'reasoning' },
-  // DeepSeek
-  { id: 'deepseek-chat', name: 'DeepSeek V3', provider: 'deepseek', tier: 'standard' },
-  { id: 'deepseek-reasoner', name: 'DeepSeek R1', provider: 'deepseek', tier: 'reasoning' },
+  // GPT-5 Series
+  { id: 'gpt-5.2', name: 'GPT-5.2', provider: 'openai', tier: 'premium' },
+  { id: 'gpt-5.2-pro', name: 'GPT-5.2 Pro', provider: 'openai', tier: 'premium' },
+  { id: 'gpt-5.2-codex', name: 'GPT-5.2 Codex', provider: 'openai', tier: 'premium' },
+  { id: 'gpt-5.1', name: 'GPT-5.1', provider: 'openai', tier: 'standard' },
+  { id: 'gpt-5.1-codex', name: 'GPT-5.1 Codex', provider: 'openai', tier: 'standard' },
+  { id: 'gpt-5.1-chat', name: 'GPT-5.1 Chat', provider: 'openai', tier: 'standard' },
+  { id: 'gpt-5', name: 'GPT-5', provider: 'openai', tier: 'standard' },
+  { id: 'gpt-5-mini', name: 'GPT-5 Mini', provider: 'openai', tier: 'fast' },
+  { id: 'gpt-5-nano', name: 'GPT-5 Nano', provider: 'openai', tier: 'fast' },
+  { id: 'gpt-5-chat', name: 'GPT-5 Chat', provider: 'openai', tier: 'fast' },
+  // GPT-4 & Reasoning
+  { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai', tier: 'standard' },
+  { id: 'o3-deep-research', name: 'O3 Deep Research', provider: 'openai', tier: 'reasoning' },
+  { id: 'o3-pro', name: 'O3 Pro', provider: 'openai', tier: 'reasoning' },
+  { id: 'o3', name: 'O3', provider: 'openai', tier: 'reasoning' },
+  { id: 'o4-mini', name: 'O4 Mini', provider: 'openai', tier: 'reasoning' },
+  { id: 'o4-mini-deep-research', name: 'O4 Mini Deep Research', provider: 'openai', tier: 'reasoning' },
+
+  // Anthropic Models
+  // Claude 4 Series
+  { id: 'claude-opus-4.6', name: 'Claude Opus 4.6', provider: 'anthropic', tier: 'premium' },
+  { id: 'claude-opus-4.5', name: 'Claude Opus 4.5', provider: 'anthropic', tier: 'premium' },
+  { id: 'claude-haiku-4.5', name: 'Claude Haiku 4.5', provider: 'anthropic', tier: 'fast' },
+  { id: 'claude-sonnet-4.5', name: 'Claude Sonnet 4.5', provider: 'anthropic', tier: 'standard' },
+  { id: 'claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'anthropic', tier: 'standard' },
+  // Claude 3 Series
+  { id: 'claude-3.7-sonnet', name: 'Claude 3.7 Sonnet', provider: 'anthropic', tier: 'standard' },
+  { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', provider: 'anthropic', tier: 'standard' },
+
+  // Google (OpenRouter)
+  // Gemini 3 Series
+  { id: 'google/gemini-3-pro', name: 'Gemini 3 Pro', provider: 'openrouter', tier: 'premium' },
+  { id: 'google/gemini-3-pro-preview', name: 'Gemini 3 Pro Preview', provider: 'openrouter', tier: 'premium' },
+  // Gemini 2 Series
+  { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'openrouter', tier: 'standard' },
+  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'openrouter', tier: 'fast' },
+  { id: 'google/gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', provider: 'openrouter', tier: 'fast' },
+  { id: 'google/gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'openrouter', tier: 'fast' },
+  { id: 'google/gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite', provider: 'openrouter', tier: 'fast' },
+
   // Zhipu AI (GLM)
-  { id: 'glm-4.7', name: 'GLM-4.7', provider: 'zai', tier: 'premium' },
-  { id: 'glm-4', name: 'GLM-4', provider: 'zai', tier: 'standard' },
-  // Moonshot (Kimi)
-  { id: 'kimi-k2.5', name: 'Kimi k2.5', provider: 'kimi', tier: 'standard' },
+  { id: 'glm-5', name: 'GLM-5', provider: 'zai', tier: 'premium' },
+  { id: 'glm-4.7', name: 'GLM-4.7', provider: 'zai', tier: 'standard' },
+  { id: 'glm-4.6', name: 'GLM-4.6', provider: 'zai', tier: 'standard' },
+  { id: 'glm-4.5-air', name: 'GLM-4.5 Air', provider: 'zai', tier: 'fast' },
+  { id: 'glm-4-plus', name: 'GLM-4 Plus', provider: 'zai', tier: 'standard' },
+
   // Alibaba (Qwen)
-  { id: 'qwen3.5-coder-plus', name: 'Qwen 2.5 Coder', provider: 'alibaba', tier: 'standard' },
-  { id: 'qwen-max', name: 'Qwen Max', provider: 'alibaba', tier: 'premium' },
+  // Qwen 3 Series
+  { id: 'qwen3.5-coder-plus', name: 'Qwen 3.5 Coder Plus', provider: 'alibaba', tier: 'premium' },
+  { id: 'qwen3.5-max', name: 'Qwen 3.5 Max', provider: 'alibaba', tier: 'premium' },
+  { id: 'qwen3-max-thinking', name: 'Qwen 3 Max Thinking', provider: 'alibaba', tier: 'reasoning' },
+  { id: 'qwen3-coder-plus', name: 'Qwen 3 Coder Plus', provider: 'alibaba', tier: 'standard' },
+  { id: 'qwen3-235b', name: 'Qwen 3 235B', provider: 'alibaba', tier: 'standard' },
+  // Qwen 2 Series
+  { id: 'qwen2.5-coder', name: 'Qwen 2.5 Coder', provider: 'alibaba', tier: 'standard' },
+  { id: 'qwen2.5-math', name: 'Qwen 2.5 Math', provider: 'alibaba', tier: 'reasoning' },
+  { id: 'qwen2.5-72b', name: 'Qwen 2.5 72B', provider: 'alibaba', tier: 'standard' },
+
+  // Moonshot (Kimi)
+  // Kimi K2 Series
+  { id: 'kimi-k2.5', name: 'Kimi k2.5', provider: 'kimi', tier: 'standard' },
+  { id: 'kimi-k2-thinking', name: 'Kimi k2 Thinking', provider: 'kimi', tier: 'reasoning' },
+  { id: 'kimi-k2-turbo-preview', name: 'Kimi k2 Turbo Preview', provider: 'kimi', tier: 'fast' },
+  { id: 'kimi-k2-0905', name: 'Kimi k2 (0905)', provider: 'kimi', tier: 'standard' },
+  { id: 'kimi-k2-0711', name: 'Kimi k2 (0711)', provider: 'kimi', tier: 'standard' },
+
   // xAI (Grok)
+  // Grok-4 Series
+  { id: 'grok-4.1-fast-reasoning', name: 'Grok 4.1 Fast Reasoning', provider: 'grok', tier: 'reasoning' },
+  { id: 'grok-4.1-fast', name: 'Grok 4.1 Fast', provider: 'grok', tier: 'fast' },
   { id: 'grok-4', name: 'Grok 4', provider: 'grok', tier: 'premium' },
-  { id: 'grok-beta', name: 'Grok Beta', provider: 'grok', tier: 'standard' },
-  // Groq
-  { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B (Groq)', provider: 'groq', tier: 'fast' },
-  { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B (Groq)', provider: 'groq', tier: 'fast' },
-  // OpenRouter
-  { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet (OpenRouter)', provider: 'openrouter', tier: 'standard' },
-  { id: 'google/gemini-pro-1.5', name: 'Gemini Pro 1.5 (OpenRouter)', provider: 'openrouter', tier: 'standard' },
+  { id: 'grok-4-code', name: 'Grok 4 Code', provider: 'grok', tier: 'standard' },
+  { id: 'grok-4-0709', name: 'Grok 4 (0709)', provider: 'grok', tier: 'standard' },
+  // Grok-3 Series
+  { id: 'grok-3', name: 'Grok 3', provider: 'grok', tier: 'standard' },
+  { id: 'grok-3-mini', name: 'Grok 3 Mini', provider: 'grok', tier: 'fast' },
 ];
 
 /**

@@ -10,7 +10,27 @@ AI-powered autonomous coding assistant for your terminal, browser, and desktop.
 
 XibeCode is a CLI agent that can read and edit code, run commands, and iterate on tasks from your terminal using LLMs. It includes a **WebUI** for a browser-based experience, a **Desktop App** (Electron) for native IDE-like usage, **AI-powered test generation**, and **multi-model support** for both Anthropic and OpenAI models.
 
-## What's New in v0.5.4
+## What's New in v0.5.6
+
+### 🚀 Massive Model Update (2025-2026)
+
+We've integrated the latest flagship models from all major providers:
+
+- **OpenAI**: **GPT-5 Series** (5.2, 5.1, 5), **Reasoning** (o3-deep-research, o3-pro, o4-mini).
+- **Anthropic**: **Claude 4 Series** (Opus 4.6, Sonnet 4.5), **Claude 3.7** (Hybrid Reasoning).
+- **Google**: **Gemini 3 Series** (3-pro), **Gemini 2.5** (Flash, Pro).
+- **Zhipu AI**: **GLM-5** (744B MoE), **GLM-4** (4.7, 4.6).
+- **Alibaba**: **Qwen 3** (3.5-coder-plus, 3.5-max), **Qwen 2.5**.
+- **Moonshot**: **Kimi K2** (K2.5, K2-thinking).
+- **xAI**: **Grok-4** (4.1-fast-reasoning, 4), **Grok-3**.
+
+### ✨ Feature Improvements
+
+- **Enhanced Custom Providers**: Explicit "API Format" selection for custom endpoints.
+- **UI Fixes**: Improved "Apply Custom Model" button feedback and settings persistence.
+- **Performance**: Optimized model list loading and configuration handling.
+
+### v0.5.4
 
 - **Context Chips** - Terminal context (full buffer or selections) is now added as "chips" to the chat instead of raw text, keeping the interface clean while giving the AI full context.
 - **Interactive Plan Mode** - Plan mode now asks clarifying questions, searches the web, and generates detailed `implementations.md` with checkboxes. Click "Build" to auto-execute the plan.
