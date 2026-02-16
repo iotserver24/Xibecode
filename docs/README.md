@@ -1,9 +1,19 @@
 # XibeCode Documentation
 
-> **Version:** 0.3.5
-> **Last Updated:** February 14, 2026
+> **Version:** 0.5.0
+> **Last Updated:** February 16, 2026
 
 Welcome to the XibeCode documentation! This directory contains comprehensive documentation for developers, contributors, and users.
+
+## 🆕 What's New in v0.5.0
+
+- **Desktop App** - Native Electron app for Windows, macOS, and Linux ([Download](https://github.com/iotserver24/xibecode/releases))
+- **Interactive Plan Mode** - AI asks questions, searches the web, generates `implementations.md`, then builds on command
+- **Chat History** - Persistent conversations with per-project storage
+- **Environment Variables Editor** - Visual `.env` editor with live editing
+- **Media File Preview** - Images, videos, audio preview in the editor
+- **Thinking Animation** - Loading spinner while AI processes
+- **Improved Tool Rendering** - Icons, status badges, progress indicators
 
 ## 📚 Documentation Structure
 
