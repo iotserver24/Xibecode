@@ -94,6 +94,7 @@
   <!-- Footer -->
   <div class="footer">
     <span id="cli-status" class="cli-status">Checking xibecode...</span>
+    <button id="btn-install-cli" class="install-btn" style="display:none">Install XibeCode CLI</button>
   </div>
 
   <script>
@@ -154,19 +155,64 @@
     }
 
     // ── Check CLI status ──
+    let cliInstalled = false;
+
     async function checkCli() {
       const installed = await api.getCliInstalled();
+      cliInstalled = installed;
       const statusEl = document.getElementById('cli-status');
+      const installBtn = document.getElementById('btn-install-cli');
+      const actionBtns = document.querySelectorAll('.action-btn');
 
       if (installed) {
         const version = await api.getCliVersion();
         statusEl.textContent = `xibecode v${version} installed`;
         statusEl.className = 'cli-status installed';
+        installBtn.style.display = 'none';
+        actionBtns.forEach(btn => { btn.disabled = false; btn.style.opacity = '1'; });
       } else {
-        statusEl.innerHTML = 'xibecode not found — <span class="install-hint">Install with: npm i -g xibecode</span>';
-        statusEl.className = 'cli-status not-installed';
+        const hasNpm = await api.hasNpm();
+        if (hasNpm) {
+          statusEl.textContent = 'xibecode CLI not installed';
+          statusEl.className = 'cli-status not-installed';
+          installBtn.style.display = 'inline-flex';
+          installBtn.textContent = 'Install XibeCode CLI';
+          installBtn.disabled = false;
+        } else {
+          statusEl.innerHTML = 'Node.js not found — <span class="install-hint">Install from nodejs.org</span>';
+          statusEl.className = 'cli-status not-installed';
+          installBtn.style.display = 'none';
+        }
+        // Disable action buttons until CLI is installed
+        actionBtns.forEach(btn => { btn.disabled = true; btn.style.opacity = '0.4'; });
       }
     }
+
+    // ── Install CLI handler ──
+    document.getElementById('btn-install-cli').addEventListener('click', async () => {
+      const installBtn = document.getElementById('btn-install-cli');
+      const statusEl = document.getElementById('cli-status');
+
+      installBtn.disabled = true;
+      installBtn.textContent = 'Installing...';
+      statusEl.textContent = 'Installing xibecode globally via npm...';
+      statusEl.className = 'cli-status installing';
+
+      const result = await api.installCli();
+
+      if (result.success) {
+        statusEl.textContent = 'Installation complete!';
+        statusEl.className = 'cli-status installed';
+        installBtn.style.display = 'none';
+        // Re-check to update version and enable buttons
+        await checkCli();
+      } else {
+        statusEl.textContent = 'Install failed: ' + (result.error || 'Unknown error');
+        statusEl.className = 'cli-status not-installed';
+        installBtn.textContent = 'Retry Install';
+        installBtn.disabled = false;
+      }
+    });
 
     // ── Button handlers ──
     document.getElementById('btn-open-folder').addEventListener('click', () => {

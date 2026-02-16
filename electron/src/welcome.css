@@ -325,12 +325,14 @@ button, a, input { -webkit-app-region: no-drag; }
 
 /* ── Footer ── */
 .footer {
-  height: 32px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 12px;
   border-top: 1px solid #18181b;
   background: #0a0a0a;
+  padding: 0 16px;
 }
 
 .cli-status {
@@ -346,9 +348,38 @@ button, a, input { -webkit-app-region: no-drag; }
   color: #f59e0b;
 }
 
+.cli-status.installing {
+  color: #5995eb;
+}
+
 .install-hint {
   font-family: 'JetBrains Mono', monospace;
   color: #71717a;
+}
+
+.install-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  background: #5995eb;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.install-btn:hover {
+  background: #7bb3ff;
+}
+
+.install-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* ── Scrollbar ── */
