@@ -81,17 +81,15 @@ export const AVAILABLE_MODELS = [
   { id: 'claude-3.7-sonnet', name: 'Claude 3.7 Sonnet', provider: 'anthropic', tier: 'standard' },
   { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', provider: 'anthropic', tier: 'standard' },
 
-  // Google (OpenRouter)
-  // Gemini 3 Series
-  { id: 'google/gemini-3-pro', name: 'Gemini 3 Pro', provider: 'openrouter', tier: 'premium' },
-  { id: 'google/gemini-3-pro-preview', name: 'Gemini 3 Pro Preview', provider: 'openrouter', tier: 'premium' },
-  // Gemini 2 Series
-  { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'openrouter', tier: 'standard' },
-  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'openrouter', tier: 'fast' },
-  { id: 'google/gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', provider: 'openrouter', tier: 'fast' },
-  { id: 'google/gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'openrouter', tier: 'fast' },
-  { id: 'google/gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite', provider: 'openrouter', tier: 'fast' },
+  // Google (Native)
+  { id: 'gemini-3-deep-think', name: 'Gemini 3 Deep Think', provider: 'google', tier: 'reasoning' },
+  { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash Preview', provider: 'google', tier: 'fast' },
+  { id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro Preview', provider: 'google', tier: 'premium' },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'google', tier: 'premium' },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'google', tier: 'fast' },
 
+  // OpenRouter Models
+  { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet (OpenRouter)', provider: 'openrouter', tier: 'standard' },
   // Zhipu AI (GLM)
   { id: 'glm-5', name: 'GLM-5', provider: 'zai', tier: 'premium' },
   { id: 'glm-4.7', name: 'GLM-4.7', provider: 'zai', tier: 'standard' },
