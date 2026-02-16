@@ -75,7 +75,7 @@ export const PROVIDER_CONFIGS = {
   },
 } as const;
 
-export type ProviderType = keyof typeof PROVIDER_CONFIGS;
+export type ProviderType = keyof typeof PROVIDER_CONFIGS | 'custom';
 
 // Object-based MCP servers configuration
 export interface MCPServersConfig {
@@ -108,6 +108,7 @@ export interface XibeCodeConfig {
   anthropicBaseUrl?: string;
   openaiBaseUrl?: string;
   customModels?: { id: string; provider: ProviderType }[];
+  customProviderFormat?: 'openai' | 'anthropic';
   // UI / UX
   theme?: string;
   sessionDirectory?: string;
@@ -140,6 +141,7 @@ export class ConfigManager {
         gitCheckpointStrategy: 'stash',
         plugins: [],
         mcpServers: {},
+        customProviderFormat: 'openai',
         theme: 'default',
         showDetails: false,
         showThinking: true,
@@ -233,7 +235,7 @@ export class ConfigManager {
   getBaseUrl(): string | undefined {
     const provider = this.get('provider');
 
-    if (provider && PROVIDER_CONFIGS[provider]) {
+    if (provider && provider !== 'custom' && PROVIDER_CONFIGS[provider]) {
       // Prioritize explicit config, then specific env, then default from map
       if (provider === 'anthropic') {
         return this.get('anthropicBaseUrl') || this.get('baseUrl') || process.env.ANTHROPIC_BASE_URL || PROVIDER_CONFIGS.anthropic.baseUrl;
@@ -243,7 +245,7 @@ export class ConfigManager {
       }
 
       // For other providers, check generic baseUrl or return default
-      return this.get('baseUrl') || PROVIDER_CONFIGS[provider].baseUrl;
+      return this.get('baseUrl') || PROVIDER_CONFIGS[provider as keyof typeof PROVIDER_CONFIGS].baseUrl;
     }
 
     // Fallback when provider is not set
