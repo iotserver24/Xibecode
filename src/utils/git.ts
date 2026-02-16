@@ -415,4 +415,114 @@ export class GitUtils {
       return [];
     }
   }
+
+  /**
+   * Commit staged changes with optional AI attribution trailer
+   */
+  async commit(message: string, agentName?: string): Promise<{ success: boolean; hash?: string; error?: string }> {
+    try {
+      // Escape double quotes for shell safety
+      const escapedMessage = message.replace(/"/g, '\\"');
+      let command = `git commit -m "${escapedMessage}"`;
+
+      if (agentName) {
+        // Add trailer
+        command += ` --trailer "X-AI-Agent: ${agentName.replace(/"/g, '\\"')}"`;
+      }
+
+      await execAsync(command, { cwd: this.workingDir });
+
+      const hashResult = await execAsync('git rev-parse HEAD', { cwd: this.workingDir });
+      return { success: true, hash: hashResult.stdout.trim() };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get blame with AI attribution
+   * Returns a map of line number -> { author, agent, commit }
+   * simpler string output for now
+   */
+  async getBlame(filePath: string): Promise<string> {
+    try {
+      // Use --porcelain for easy parsing (not line-porcelain, standard porcelain is enough for hash+line)
+      // Actually standard porcelain is weird. --line-porcelain gives full commit info per line.
+      // Let's stick to --line-porcelain but ignore the commit info since it lacks trailers.
+      // Or just git blame -l -s (hash only)? No we need line numbers.
+      // Let's use --porcelain which is:
+      // hash orig_line final_line group_lines
+      // author ...
+      // HEADER fields...
+      // TAB content
+
+      const { stdout } = await execAsync(`git blame --line-porcelain "${filePath}"`, {
+        cwd: this.workingDir,
+        maxBuffer: 1024 * 1024 * 50 // 50MB buffer
+      });
+
+      const lines = stdout.split('\n');
+      const blkLines: { hash: string; lineNum: number; code: string; author: string }[] = [];
+      const uniqueHashes = new Set<string>();
+
+      let currentHash = '';
+      let currentLineNum = 0;
+      let currentAuthor = '';
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (/^[0-9a-f]{40} \d+ \d+/.test(line)) {
+          const parts = line.split(' ');
+          currentHash = parts[0];
+          currentLineNum = parseInt(parts[2], 10);
+          uniqueHashes.add(currentHash);
+        } else if (line.startsWith('author ')) {
+          currentAuthor = line.substring(7);
+        } else if (line.startsWith('\t')) {
+          blkLines.push({
+            hash: currentHash,
+            lineNum: currentLineNum,
+            code: line.substring(1),
+            author: currentAuthor
+          });
+        }
+      }
+
+      // Fetch trailers for all hashes
+      const hashes = Array.from(uniqueHashes);
+      const agentMap = new Map<string, string>();
+
+      if (hashes.length > 0) {
+        // Limit to reasonable batch size if needed, but git log can handle many args
+        // Format: Hash %x09 AgentName
+        // %(trailers:key=X-AI-Agent,valueonly=true)
+        const cmd = `git log --no-walk --format="%H%x09%(trailers:key=X-AI-Agent,valueonly=true)" ${hashes.join(' ')}`;
+        try {
+          const { stdout: logOut } = await execAsync(cmd, { cwd: this.workingDir });
+          const logLines = logOut.split('\n');
+          for (const logLine of logLines) {
+            const [hash, agent] = logLine.split('\t');
+            if (hash && agent && agent.trim()) {
+              agentMap.set(hash, agent.trim());
+            }
+          }
+        } catch (e) {
+          // If git log fails (e.g. too many args), we just don't show agents
+          console.error('Failed to fetch trailers:', e);
+        }
+      }
+
+      let output = '';
+      for (const item of blkLines) {
+        const agent = agentMap.get(item.hash);
+        const authorLabel = agent ? `🤖 ${agent}` : item.author;
+        output += `${item.lineNum.toString().padEnd(4)} ${item.hash.substring(0, 7)} (${authorLabel}) ${item.code}\n`;
+      }
+
+      return output;
+    } catch (error: any) {
+      return `Error running blame: ${error.message}`;
+    }
+  }
 }
+

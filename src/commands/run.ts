@@ -22,6 +22,7 @@ interface RunOptions {
   verbose: boolean;
   dryRun?: boolean;
   changedOnly?: boolean;
+  nonInteractive?: boolean;
 }
 
 export async function runCommand(prompt: string | undefined, options: RunOptions) {

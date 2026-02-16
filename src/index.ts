@@ -37,6 +37,7 @@ program
   .option('-v, --verbose', 'Show detailed logs', false)
   .option('--dry-run', 'Preview changes without making them', false)
   .option('--changed-only', 'Focus only on git-changed files', false)
+  .option('--non-interactive', 'Run in non-interactive mode (for background tasks)', false)
   .action(runCommand);
 
 // Interactive chat
