@@ -1,4 +1,4 @@
-import { ConfigManager, MCPServerConfig } from '../utils/config.js';
+import { ConfigManager, MCPServerConfig, PROVIDER_CONFIGS } from '../utils/config.js';
 import { EnhancedUI } from '../ui/enhanced-tui.js';
 import { mcpCommand } from './mcp.js';
 import inquirer from 'inquirer';
@@ -210,37 +210,26 @@ export async function configCommand(options: ConfigOptions) {
           {
             type: 'input',
             name: 'anthropicBaseUrl',
-            message: 'Anthropic base URL (leave empty for default https://api.anthropic.com):',
+            message: 'Anthropic base URL (default: https://api.anthropic.com):',
             default: '',
-            validate: (input) => {
-              if (!input) return true;
-              if (!input.startsWith('http')) {
-                return 'URL must start with http:// or https://';
-              }
-              return true;
-            },
           },
           {
             type: 'input',
             name: 'openaiBaseUrl',
-            message: 'OpenAI base URL (leave empty for default https://api.openai.com):',
+            message: 'OpenAI base URL (default: https://api.openai.com):',
             default: '',
-            validate: (input) => {
-              if (!input) return true;
-              if (!input.startsWith('http')) {
-                return 'URL must start with http:// or https://';
-              }
-              return true;
-            },
           },
+          {
+            type: 'input',
+            name: 'genericBaseUrl',
+            message: 'Generic/Other Provider base URL (optional override):',
+            default: '',
+          }
         ]);
 
-        if (answers.anthropicBaseUrl.trim()) {
-          config.set('anthropicBaseUrl', answers.anthropicBaseUrl.trim());
-        }
-        if (answers.openaiBaseUrl.trim()) {
-          config.set('openaiBaseUrl', answers.openaiBaseUrl.trim());
-        }
+        if (answers.anthropicBaseUrl.trim()) config.set('anthropicBaseUrl', answers.anthropicBaseUrl.trim());
+        if (answers.openaiBaseUrl.trim()) config.set('openaiBaseUrl', answers.openaiBaseUrl.trim());
+        if (answers.genericBaseUrl.trim()) config.set('baseUrl', answers.genericBaseUrl.trim());
 
         ui.success('Base URLs updated!');
         break;
@@ -270,11 +259,19 @@ export async function configCommand(options: ConfigOptions) {
               { name: 'Claude Sonnet 4.5 (Recommended)', value: fixedAnthropicModels[0] },
               { name: 'Claude Opus 4.5 (Most Capable)', value: fixedAnthropicModels[1] },
               { name: 'Claude Haiku 4.5 (Fastest)', value: fixedAnthropicModels[2] },
-              new inquirer.Separator('── OpenAI / OpenAI-compatible ──'),
-              { name: 'GPT-4.1 Mini', value: fixedOpenAIModels[0] },
+              new inquirer.Separator('── OpenAI ──'),
               { name: 'GPT-4.1', value: fixedOpenAIModels[1] },
-              { name: 'GPT-4o (Omni)', value: fixedOpenAIModels[2] },
-              { name: 'o3-mini (reasoning)', value: fixedOpenAIModels[3] },
+              { name: 'GPT-4o', value: fixedOpenAIModels[2] },
+              new inquirer.Separator('── DeepSeek ──'),
+              { name: 'DeepSeek Chat (V3)', value: PROVIDER_CONFIGS.deepseek.defaultModel },
+              new inquirer.Separator('── Z.ai (GLM) ──'),
+              { name: 'GLM-4 Flash (Fast & Free-tier)', value: PROVIDER_CONFIGS.zai.defaultModel },
+              new inquirer.Separator('── Kimi (Moonshot) ──'),
+              { name: 'Moonshot v1 8k', value: PROVIDER_CONFIGS.kimi.defaultModel },
+              new inquirer.Separator('── Grok (xAI) ──'),
+              { name: 'Grok Beta', value: PROVIDER_CONFIGS.grok.defaultModel },
+              new inquirer.Separator('── OpenRouter ──'),
+              { name: 'Claude 3.5 Sonnet (via OpenRouter)', value: PROVIDER_CONFIGS.openrouter.defaultModel },
               ...(customModels.length
                 ? [
                   new inquirer.Separator('── Saved custom models ──'),
@@ -311,18 +308,23 @@ export async function configCommand(options: ConfigOptions) {
           {
             type: 'list',
             name: 'provider',
-            message: 'Which API format does this model use?',
+            message: 'Select Provider / API Format:',
             choices: [
-              { name: 'Anthropic format (Claude / Messages API)', value: 'anthropic' },
-              { name: 'OpenAI-compatible format (chat/completions)', value: 'openai' },
-              { name: 'Both / auto-detect from model id', value: 'auto' },
+              { name: 'Auto-detect (Recommended)', value: 'auto' },
+              { name: 'Anthropic (Claude)', value: 'anthropic' },
+              { name: 'OpenAI', value: 'openai' },
+              { name: 'DeepSeek', value: 'deepseek' },
+              { name: 'Z.ai (GLM)', value: 'zai' },
+              { name: 'Kimi (Moonshot)', value: 'kimi' },
+              { name: 'Grok (xAI)', value: 'grok' },
+              { name: 'OpenRouter', value: 'openrouter' },
             ],
           },
         ]);
 
         if (provider === 'auto') {
           config.delete('provider');
-          ui.success('Provider set to: auto-detect from model id (supports both).');
+          ui.success('Provider set to: auto-detect.');
         } else {
           config.set('provider', provider);
           ui.success(`Provider set to: ${provider}`);
@@ -339,7 +341,7 @@ export async function configCommand(options: ConfigOptions) {
           // Remove any existing entry with same id
           updatedCustomModels = updatedCustomModels.filter(m => m.id !== chosenModelId);
           // Add new / updated entry (when provider is explicit; skip for auto)
-          if (provider === 'anthropic' || provider === 'openai') {
+          if (provider !== 'auto') {
             updatedCustomModels.push({ id: chosenModelId, provider });
           }
           config.set('customModels', updatedCustomModels);

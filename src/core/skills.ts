@@ -5,6 +5,7 @@ import { dirname } from 'path';
 import { crawlDocs, generateSkillFromDocs, type AISynthesisConfig } from './docs-scraper.js';
 import { MarketplaceClient, type MarketplaceSkillResult } from './marketplace-client.js';
 import { SkillsShClient, type SkillsShResult } from './skills-sh-client.js';
+import { ProviderType } from '../utils/config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -24,7 +25,7 @@ export class SkillManager {
     private skillsSh: SkillsShClient;
     private aiConfig: AISynthesisConfig;
 
-    constructor(workingDir: string = process.cwd(), apiKey?: string, baseUrl?: string, model?: string, provider?: 'anthropic' | 'openai') {
+    constructor(workingDir: string = process.cwd(), apiKey?: string, baseUrl?: string, model?: string, provider?: ProviderType) {
         // Built-in skills shipped with XibeCode
         this.builtInSkillsDir = path.join(__dirname, '..', '..', 'skills');
         // User-defined skills in project

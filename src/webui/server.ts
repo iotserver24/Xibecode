@@ -17,7 +17,7 @@ import * as fsSync from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn, ChildProcess } from 'child_process';
-import { ConfigManager } from '../utils/config.js';
+import { ConfigManager, PROVIDER_CONFIGS } from '../utils/config.js';
 import { EnhancedAgent } from '../core/agent.js';
 import { CodingToolExecutor } from '../core/tools.js';
 import { GitUtils } from '../utils/git.js';
@@ -60,6 +60,26 @@ export const AVAILABLE_MODELS = [
   { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'openai', tier: 'standard' },
   { id: 'o1-preview', name: 'O1 Preview', provider: 'openai', tier: 'reasoning' },
   { id: 'o1-mini', name: 'O1 Mini', provider: 'openai', tier: 'reasoning' },
+  // DeepSeek
+  { id: 'deepseek-chat', name: 'DeepSeek V3', provider: 'deepseek', tier: 'standard' },
+  { id: 'deepseek-reasoner', name: 'DeepSeek R1', provider: 'deepseek', tier: 'reasoning' },
+  // Zhipu AI (GLM)
+  { id: 'glm-4.7', name: 'GLM-4.7', provider: 'zai', tier: 'premium' },
+  { id: 'glm-4', name: 'GLM-4', provider: 'zai', tier: 'standard' },
+  // Moonshot (Kimi)
+  { id: 'kimi-k2.5', name: 'Kimi k2.5', provider: 'kimi', tier: 'standard' },
+  // Alibaba (Qwen)
+  { id: 'qwen3.5-coder-plus', name: 'Qwen 2.5 Coder', provider: 'alibaba', tier: 'standard' },
+  { id: 'qwen-max', name: 'Qwen Max', provider: 'alibaba', tier: 'premium' },
+  // xAI (Grok)
+  { id: 'grok-4', name: 'Grok 4', provider: 'grok', tier: 'premium' },
+  { id: 'grok-beta', name: 'Grok Beta', provider: 'grok', tier: 'standard' },
+  // Groq
+  { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B (Groq)', provider: 'groq', tier: 'fast' },
+  { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B (Groq)', provider: 'groq', tier: 'fast' },
+  // OpenRouter
+  { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet (OpenRouter)', provider: 'openrouter', tier: 'standard' },
+  { id: 'google/gemini-pro-1.5', name: 'Gemini Pro 1.5 (OpenRouter)', provider: 'openrouter', tier: 'standard' },
 ];
 
 /**
@@ -220,8 +240,10 @@ export class WebUIServer {
               statusBarEnabled: allConfig.statusBarEnabled ?? true,
               headerMinimal: allConfig.headerMinimal ?? false,
               sessionDirectory: allConfig.sessionDirectory || '',
+
               plugins: allConfig.plugins || [],
             },
+            providerConfigs: PROVIDER_CONFIGS,
           });
           return;
         }
@@ -383,7 +405,7 @@ export class WebUIServer {
               { cwd: this.workingDir, encoding: 'utf-8', timeout: 5000 }
             );
             graph = graphOutput.trim().split('\n');
-          } catch {}
+          } catch { }
 
           sendJSON({ success: true, commits, graph });
         } catch (error: any) {
@@ -1038,9 +1060,9 @@ else:
           try {
             ptyProcess.kill('SIGTERM');
             setTimeout(() => {
-              try { ptyProcess?.kill('SIGKILL'); } catch {}
+              try { ptyProcess?.kill('SIGKILL'); } catch { }
             }, 1000);
-          } catch {}
+          } catch { }
           ptyProcess = null;
         }
       });

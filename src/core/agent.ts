@@ -5,6 +5,7 @@ import * as fsSync from 'fs';
 import { EventEmitter } from 'events';
 import { AgentMode, MODE_CONFIG, ModeState, createModeState, transitionMode, ModeOrchestrator, parseModeRequest, stripModeRequests, parseTaskComplete, stripTaskComplete, ModeTransitionPolicy } from './modes.js';
 import { NeuralMemory } from './memory.js';
+import { PROVIDER_CONFIGS, ProviderType } from '../utils/config.js';
 
 export interface AgentConfig {
   apiKey: string;
@@ -13,6 +14,7 @@ export interface AgentConfig {
   maxIterations?: number;
   verbose?: boolean;
   mode?: AgentMode;
+  provider?: ProviderType;
 }
 
 export interface AgentEvent {
@@ -150,7 +152,7 @@ export class EnhancedAgent extends EventEmitter {
   private filesChanged: Set<string> = new Set();
   private modeState: ModeState;
   private modeOrchestrator: ModeOrchestrator;
-  private provider: 'anthropic' | 'openai';
+  private provider: ProviderType;
   private projectMemory: string = '';
   private totalInputTokens: number = 0;
   private totalOutputTokens: number = 0;
@@ -166,7 +168,7 @@ export class EnhancedAgent extends EventEmitter {
     'claude-opus-4-6-20251101': { input: 5, output: 25 },
   };
 
-  constructor(config: AgentConfig, providerOverride?: 'anthropic' | 'openai') {
+  constructor(config: AgentConfig, providerOverride?: ProviderType) {
     super();
 
     const clientConfig: any = { apiKey: config.apiKey };
@@ -182,6 +184,7 @@ export class EnhancedAgent extends EventEmitter {
       maxIterations: config.maxIterations ?? 150,
       verbose: config.verbose ?? false,
       mode: config.mode ?? 'agent',
+      provider: config.provider ?? this.detectProvider(config.model),
     };
 
     // Initialize mode state and orchestrator
@@ -191,7 +194,7 @@ export class EnhancedAgent extends EventEmitter {
       allowAutoEscalation: true,
     });
     // Prefer explicit provider override from config, otherwise auto-detect
-    this.provider = providerOverride ?? this.detectProvider(this.config.model, this.config.baseUrl);
+    this.provider = providerOverride ?? config.provider ?? this.detectProvider(this.config.model);
 
     // Load project memory if it exists
     this.memory = new NeuralMemory();
@@ -203,6 +206,20 @@ export class EnhancedAgent extends EventEmitter {
         this.projectMemory = fsSync.readFileSync(memoryPath, 'utf-8').trim();
       }
     } catch { /* no memory file */ }
+  }
+
+  detectProvider(model: string): ProviderType {
+    const m = model.toLowerCase();
+    if (m.startsWith('claude')) return 'anthropic';
+    if (m.startsWith('gpt') || m.startsWith('o1') || m.startsWith('o3')) return 'openai';
+    if (m.startsWith('glm')) return 'zai';
+    if (m.startsWith('qwen')) return 'alibaba';
+    if (m.startsWith('kimi') || m.startsWith('moonshot')) return 'kimi';
+    if (m.startsWith('grok')) return 'grok';
+    if (m.startsWith('deepseek')) return 'deepseek';
+    if (m.startsWith('llama') || m.startsWith('mixtral')) return 'groq';
+    if (m.includes('/')) return 'openrouter';
+    return 'openai';
   }
 
   emit(event: AgentEvent['type'], data: any): boolean {
@@ -499,7 +516,12 @@ export class EnhancedAgent extends EventEmitter {
    */
   private async callModel(tools: Tool[]): Promise<{ message: any; streamed: boolean; persona?: { name: string; color: string } }> {
     // Route to provider-specific implementation
-    if (this.provider === 'openai') {
+    // Check if the provider uses the Anthropic format or OpenAI format
+    const providerConfig = PROVIDER_CONFIGS[this.provider];
+    const isAnthropicFormat = providerConfig?.format === 'anthropic';
+
+    // If it's NOT Anthropic format, use the OpenAI-compatible client
+    if (!isAnthropicFormat) {
       const result = await this.callOpenAI(tools);
       const currentModeConfig = MODE_CONFIG[this.modeState.current];
       const persona = {
@@ -660,12 +682,22 @@ export class EnhancedAgent extends EventEmitter {
    */
   private async callOpenAI(tools: Tool[]): Promise<{ message: any; streamed: boolean; persona?: { name: string; color: string } }> {
     if (!this.config.apiKey) {
-      throw new Error('API key is required for OpenAI-compatible provider');
+      // Try to get from specifics if generic is missing, though ConfigManager should have handled this
+      // strict check might remain here
+      // throw new Error('API key is required for OpenAI-compatible provider');
     }
 
-    let base = (this.config.baseUrl || 'https://api.openai.com').replace(/\/+$/, '');
+    // Determine Base URL: Config -> Provider Default -> OpenAI Default
+    let base = this.config.baseUrl;
+    if (!base && this.provider && PROVIDER_CONFIGS[this.provider]) {
+      base = PROVIDER_CONFIGS[this.provider].baseUrl;
+    }
+    base = (base || 'https://api.openai.com').replace(/\/+$/, '');
+
     let url: string;
-    if (base.endsWith('/v1')) {
+    // Special handling for some providers that strictly follow /v1 or not
+    if (base.endsWith('/v1') || base.endsWith('/v4')) {
+      // Z.ai ends in /v4, others /v1. If already included, just append chat/completions
       url = `${base}/chat/completions`;
     } else {
       url = `${base}/v1/chat/completions`;
@@ -848,18 +880,7 @@ export class EnhancedAgent extends EventEmitter {
     }
   }
 
-  /**
-   * Very small heuristic to decide which provider to use based on model id.
-   * - Models starting with "gpt-" or "o1-" / "o3-" use OpenAI format.
-   * - Everything else defaults to Anthropic format.
-   */
-  private detectProvider(model: string, _baseUrl?: string): 'anthropic' | 'openai' {
-    const m = model.toLowerCase();
-    if (m.startsWith('gpt-') || m.startsWith('gpt4') || m.startsWith('o1-') || m.startsWith('o3-')) {
-      return 'openai';
-    }
-    return 'anthropic';
-  }
+
 
   private getSystemPrompt(): string {
     const platform = process.platform;
