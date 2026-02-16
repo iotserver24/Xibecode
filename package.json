@@ -1,6 +1,6 @@
 {
   "name": "xibecode",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "AI-powered autonomous coding assistant with WebUI, AI test generation, multi-model support, and plugin system",
   "main": "dist/index.js",
   "type": "module",
@@ -25,7 +25,7 @@
     "docs:generate": "typedoc --options typedoc.json",
     "docs:watch": "typedoc --options typedoc.json --watch",
     "docs:serve": "npx http-server ./docs/api-generated -p 8080 -o",
-    "postinstall": "npx playwright install chromium"
+    "postinstall": "npx playwright install chromium || echo \"Playwright install failed, skipping optional step...\""
   },
   "keywords": [
     "cli",

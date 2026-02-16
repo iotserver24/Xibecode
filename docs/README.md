@@ -1,6 +1,6 @@
 # XibeCode Documentation
 
-> **Version:** 0.5.3
+> **Version:** 0.5.4
 > **Last Updated:** February 16, 2026
 
 Welcome to the XibeCode documentation! This directory contains comprehensive documentation for developers, contributors, and users.

@@ -10,7 +10,7 @@ AI-powered autonomous coding assistant for your terminal, browser, and desktop.
 
 XibeCode is a CLI agent that can read and edit code, run commands, and iterate on tasks from your terminal using LLMs. It includes a **WebUI** for a browser-based experience, a **Desktop App** (Electron) for native IDE-like usage, **AI-powered test generation**, and **multi-model support** for both Anthropic and OpenAI models.
 
-## What's New in v0.5.3
+## What's New in v0.5.4
 
 - **Context Chips** - Terminal context (full buffer or selections) is now added as "chips" to the chat instead of raw text, keeping the interface clean while giving the AI full context.
 - **Interactive Plan Mode** - Plan mode now asks clarifying questions, searches the web, and generates detailed `implementations.md` with checkboxes. Click "Build" to auto-execute the plan.
