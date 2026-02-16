@@ -16,6 +16,7 @@ import { BrowserManager } from '../tools/browser.js';
 import * as os from 'os';
 import { SkillManager } from './skills.js';
 import { TestGenerator, generateTestsForFile, writeTestFile } from '../tools/test-generator.js';
+import { VisualFeedbackProvider } from './visual-feedback.js';
 
 const execAsync = promisify(exec);
 
@@ -99,6 +100,7 @@ export class CodingToolExecutor implements ToolExecutor {
   private mcpClientManager?: MCPClientManager;
   private memory?: NeuralMemory;
   private browserManager: BrowserManager;
+  private visualFeedback: VisualFeedbackProvider;
   private skillManager: SkillManager;
   private platform: string;
   private dryRun: boolean;
@@ -156,6 +158,7 @@ export class CodingToolExecutor implements ToolExecutor {
     this.mcpClientManager = options?.mcpClientManager;
     this.memory = options?.memory;
     this.browserManager = new BrowserManager();
+    this.visualFeedback = new VisualFeedbackProvider(workingDir);
     // Initialize skill manager if provided, otherwise create a default one
     this.skillManager = options?.skillManager || new SkillManager(workingDir);
     this.platform = os.platform();
@@ -607,6 +610,13 @@ export class CodingToolExecutor implements ToolExecutor {
         }, p.write_file);
       }
 
+      case 'preview_app': {
+        if (!p.url || typeof p.url !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: url (string)' };
+        }
+        return this.visualFeedback.capture(p.url, { fullPage: p.full_page });
+      }
+
       case 'analyze_code_for_tests': {
         if (!p.file_path || typeof p.file_path !== 'string') {
           return { error: true, success: false, message: 'Missing required parameter: file_path (string)' };
@@ -615,7 +625,7 @@ export class CodingToolExecutor implements ToolExecutor {
       }
 
       default:
-        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, take_screenshot, get_console_logs, run_visual_test, check_accessibility, measure_performance, test_responsive, capture_network, run_playwright_test, search_skills_sh, install_skill_from_skills_sh` };
+        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, take_screenshot, get_console_logs, run_visual_test, check_accessibility, measure_performance, test_responsive, capture_network, run_playwright_test, search_skills_sh, install_skill_from_skills_sh, preview_app` };
     }
   }
 
@@ -800,18 +810,36 @@ export class CodingToolExecutor implements ToolExecutor {
             },
             end_line: {
               type: 'number',
-              description: 'End line number (1-indexed, inclusive) of the content to replace',
+              description: 'End line number (inclusive)',
             },
             old_content: {
               type: 'string',
-              description: 'The exact content currently at lines start_line through end_line. This MUST match the actual file content or the edit will be rejected. Copy this directly from read_file output.',
+              description: 'The content currently at those lines (for verification)',
             },
             new_content: {
               type: 'string',
-              description: 'The new content to replace the old content with',
+              description: 'New content to replace those lines',
             },
           },
           required: ['path', 'start_line', 'end_line', 'old_content', 'new_content'],
+        },
+      },
+      {
+        name: 'preview_app',
+        description: 'Capture a visual preview of a web application. Returns a screenshot path and a simplified semantic representation of the DOM. Useful for validating UI changes and layouts.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            url: {
+              type: 'string',
+              description: 'URL of the application to preview',
+            },
+            full_page: {
+              type: 'boolean',
+              description: 'Capture full page screenshot instead of just viewport (default: false)',
+            },
+          },
+          required: ['url'],
         },
       },
       {
