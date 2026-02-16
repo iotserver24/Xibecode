@@ -628,9 +628,13 @@ function AIProviderSettings({
     }
   };
 
+  const [customModelApplied, setCustomModelApplied] = useState(false);
+
   const handleCustomModelApply = () => {
     if (customModelId.trim()) {
       updateConfig('model', customModelId.trim());
+      setCustomModelApplied(true);
+      setTimeout(() => setCustomModelApplied(false), 2000);
     }
   };
 
@@ -719,11 +723,17 @@ function AIProviderSettings({
               />
             </div>
             <button
+              type="button"
               onClick={handleCustomModelApply}
-              disabled={!customModelId.trim()}
-              className="w-full py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-zinc-800 text-zinc-200 text-[11px] rounded-md transition-colors"
+              disabled={!customModelId.trim() || customModelApplied}
+              className={cn(
+                "w-full py-1.5 text-[11px] rounded-md transition-colors",
+                customModelApplied
+                  ? "bg-emerald-600 text-white"
+                  : "bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-zinc-800 text-zinc-200"
+              )}
             >
-              Apply Custom Model
+              {customModelApplied ? 'Applied' : 'Apply Custom Model'}
             </button>
           </div>
         </>
