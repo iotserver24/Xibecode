@@ -4,7 +4,7 @@ import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
 import { ContextManager } from './context.js';
-import { AgentMode, MODE_CONFIG, isToolAllowed } from './modes.js';
+import { AgentMode, MODE_CONFIG, isToolAllowed, isValidMode } from './modes.js';
 import { FileEditor } from './editor.js';
 import { GitUtils } from '../utils/git.js';
 import { TestRunnerDetector } from '../utils/testRunner.js';
@@ -17,6 +17,11 @@ import * as os from 'os';
 import { SkillManager } from './skills.js';
 import { TestGenerator, generateTestsForFile, writeTestFile } from '../tools/test-generator.js';
 import { VisualFeedbackProvider } from './visual-feedback.js';
+import { PatternMiner } from './pattern-miner.js';
+import { BackgroundAgentManager } from './background-agent.js';
+import { CodeGraph } from './code-graph.js';
+import { ConflictSolver } from './conflict-solver.js';
+import { SwarmOrchestrator } from './swarm.js';
 
 const execAsync = promisify(exec);
 
@@ -102,6 +107,11 @@ export class CodingToolExecutor implements ToolExecutor {
   private browserManager: BrowserManager;
   private visualFeedback: VisualFeedbackProvider;
   private skillManager: SkillManager;
+  private patternMiner: PatternMiner;
+  private backgroundAgent: BackgroundAgentManager;
+  private codeGraph: CodeGraph;
+  private conflictSolver: ConflictSolver;
+  private swarmOrchestrator: SwarmOrchestrator;
   private platform: string;
   private dryRun: boolean;
   private testCommandOverride?: string;
@@ -159,6 +169,11 @@ export class CodingToolExecutor implements ToolExecutor {
     this.memory = options?.memory;
     this.browserManager = new BrowserManager();
     this.visualFeedback = new VisualFeedbackProvider(workingDir);
+    this.patternMiner = new PatternMiner(workingDir);
+    this.backgroundAgent = new BackgroundAgentManager(workingDir);
+    this.codeGraph = new CodeGraph(workingDir);
+    this.conflictSolver = new ConflictSolver(workingDir);
+    this.swarmOrchestrator = new SwarmOrchestrator(this.backgroundAgent);
     // Initialize skill manager if provided, otherwise create a default one
     this.skillManager = options?.skillManager || new SkillManager(workingDir);
     this.platform = os.platform();
@@ -255,8 +270,18 @@ export class CodingToolExecutor implements ToolExecutor {
    * @since 0.1.0
    */
   async execute(toolName: string, input: any): Promise<any> {
-    // Check tool permissions first
-    const permission = isToolAllowed(this.currentMode, toolName);
+    const p = this.parseInput(input);
+
+    // Check tool permissions
+    // Special exception: Allow writing implementations.md in plan mode
+    let permission = isToolAllowed(this.currentMode, toolName);
+
+    if (this.currentMode === 'plan' && toolName === 'write_file') {
+      const isImplPlan = p.path && (p.path === 'implementations.md' || p.path.endsWith('/implementations.md'));
+      if (isImplPlan) {
+        permission = { allowed: true };
+      }
+    }
 
     if (!permission.allowed) {
       return {
@@ -266,8 +291,6 @@ export class CodingToolExecutor implements ToolExecutor {
         blocked: true
       };
     }
-
-    const p = this.parseInput(input);
 
     // Check if it's an MCP tool (format: serverName::toolName)
     if (this.mcpClientManager && toolName.includes('::')) {
@@ -469,6 +492,16 @@ export class CodingToolExecutor implements ToolExecutor {
         return this.getGitChangedFiles(p.target);
       }
 
+      case 'git_commit': {
+        if (!p.message || typeof p.message !== 'string') return { error: true, success: false, message: 'Missing message' };
+        return this.gitCommit(p.message, p.agent_name);
+      }
+
+      case 'git_blame_ai': {
+        if (!p.file_path || typeof p.file_path !== 'string') return { error: true, success: false, message: 'Missing file_path' };
+        return this.gitBlameAi(p.file_path);
+      }
+
       case 'create_git_checkpoint': {
         if (!p.message || typeof p.message !== 'string') {
           return { error: true, success: false, message: 'Missing required parameter: message (string)' };
@@ -617,6 +650,83 @@ export class CodingToolExecutor implements ToolExecutor {
         return this.visualFeedback.capture(p.url, { fullPage: p.full_page });
       }
 
+      case 'mine_project_patterns': {
+        const patterns = await this.patternMiner.mine();
+        if (patterns.length === 0) {
+          return { success: true, message: 'No significant repeated patterns found in the project.' };
+        }
+
+        // Format for AI consumption
+        const summary = patterns.map(p =>
+          `Pattern: ${p.description}\n` +
+          `- Occurrences: ${p.frequency}\n` +
+          `- Locations: ${p.chunks.map(c => `${path.relative(this.workingDir, c.filePath)}:${c.startLine}`).join(', ')}\n` +
+          `- Example Code:\n\`\`\`typescript\n${p.chunks[0].content}\n\`\`\`\n`
+        ).join('\n---\n\n');
+
+        return {
+          success: true,
+          message: `Found ${patterns.length} pattern clusters.`,
+          patterns: summary
+        };
+      }
+
+      case 'start_background_task': {
+        if (!p.prompt || typeof p.prompt !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: prompt (string)' };
+        }
+        const taskId = await this.backgroundAgent.startTask(p.prompt);
+        return { success: true, message: `Background task started with ID: ${taskId}`, task_id: taskId };
+      }
+
+      case 'list_background_tasks': {
+        const tasks = await this.backgroundAgent.listTasks();
+        const summary = tasks.map(t =>
+          `ID: ${t.id} | Status: ${t.status} | Started: ${new Date(t.startTime).toISOString()} | Prompt: "${t.prompt.substring(0, 50)}..."`
+        ).join('\n');
+        return { success: true, message: `Active Tasks:\n${summary || 'No active tasks.'}` };
+      }
+
+      case 'check_background_task': {
+        if (!p.task_id || typeof p.task_id !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: task_id (string)' };
+        }
+        const logs = await this.backgroundAgent.getTaskLogs(p.task_id);
+        return { success: true, logs };
+      }
+
+      case 'start_background_task': {
+        if (!p.prompt || typeof p.prompt !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: prompt (string)' };
+        }
+        const taskId = await this.backgroundAgent.startTask(p.prompt);
+        return { success: true, message: `Background task started with ID: ${taskId}`, task_id: taskId };
+      }
+
+      case 'list_background_tasks': {
+        const tasks = await this.backgroundAgent.listTasks();
+        const summary = tasks.map(t =>
+          `ID: ${t.id} | Status: ${t.status} | Started: ${new Date(t.startTime).toISOString()} | Prompt: "${t.prompt.substring(0, 50)}..."`
+        ).join('\n');
+        return { success: true, message: `Active Tasks:\n${summary || 'No active tasks.'}` };
+      }
+
+      case 'check_background_task': {
+        if (!p.task_id || typeof p.task_id !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: task_id (string)' };
+        }
+        const logs = await this.backgroundAgent.getTaskLogs(p.task_id);
+        return { success: true, logs };
+      }
+
+      case 'search_code_graph': {
+        if (!p.query || typeof p.query !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: query (symbol name)' };
+        }
+        const results = await this.codeGraph.findReferences(p.query);
+        return { success: true, message: results };
+      }
+
       case 'analyze_code_for_tests': {
         if (!p.file_path || typeof p.file_path !== 'string') {
           return { error: true, success: false, message: 'Missing required parameter: file_path (string)' };
@@ -624,8 +734,55 @@ export class CodingToolExecutor implements ToolExecutor {
         return this.analyzeCodeForTests(p.file_path);
       }
 
+      case 'resolve_merge_conflicts': {
+        const files = await this.conflictSolver.findConflictingFiles();
+        if (files.length === 0) {
+          return { success: true, message: 'No merge conflicts found in the project.' };
+        }
+
+        // If specific file requested, use it; otherwise default to first
+        const targetFile = (p.file_path && typeof p.file_path === 'string') ? p.file_path : files[0];
+
+        // Ensure target is in the list or we try to parse it anyway
+        const conflictData = await this.conflictSolver.parseConflicts(targetFile);
+
+        if (!conflictData) {
+          return { success: false, message: `Could not parse conflicts in ${targetFile}. Markers might be missing or malformed.`, other_files: files };
+        }
+
+        return {
+          success: true,
+          message: `Found ${files.length} conflicting files. Showing conflicts for: ${targetFile}`,
+          conflicts: conflictData.conflicts.map(c => ({
+            id: c.index,
+            lines: `${c.startLine}-${c.endLine}`,
+            ours: c.ours,
+            theirs: c.theirs,
+            base: c.base
+          })),
+          other_conflicting_files: files.filter(f => f !== targetFile)
+        };
+      }
+
+      case 'delegate_subtask': {
+        if (!p.task || typeof p.task !== 'string') return { error: true, success: false, message: 'Missing task' };
+        if (!p.worker_type || typeof p.worker_type !== 'string') return { error: true, success: false, message: 'Missing worker_type (agent mode)' };
+
+        if (!isValidMode(p.worker_type)) {
+          return { error: true, success: false, message: `Invalid worker_type: ${p.worker_type}. Must be a valid AgentMode.` };
+        }
+
+        const result = await this.swarmOrchestrator.delegateSubtask(p.worker_type as AgentMode, p.task);
+        return {
+          success: result.success,
+          result: result.result,
+          status: result.status,
+          worker: p.worker_type
+        };
+      }
+
       default:
-        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, take_screenshot, get_console_logs, run_visual_test, check_accessibility, measure_performance, test_responsive, capture_network, run_playwright_test, search_skills_sh, install_skill_from_skills_sh, preview_app` };
+        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, take_screenshot, get_console_logs, run_visual_test, check_accessibility, measure_performance, test_responsive, capture_network, run_playwright_test, search_skills_sh, install_skill_from_skills_sh, preview_app, delegate_subtask` };
     }
   }
 
@@ -825,6 +982,14 @@ export class CodingToolExecutor implements ToolExecutor {
         },
       },
       {
+        name: 'mine_project_patterns',
+        description: 'Analyze the project codebase to find repeated code patterns, structural duplication, and similar logic. Returns a list of pattern clusters that can be used to synthesize new skills.',
+        input_schema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
         name: 'preview_app',
         description: 'Capture a visual preview of a web application. Returns a screenshot path and a simplified semantic representation of the DOM. Useful for validating UI changes and layouts.',
         input_schema: {
@@ -841,6 +1006,53 @@ export class CodingToolExecutor implements ToolExecutor {
           },
           required: ['url'],
         },
+      },
+      {
+        name: 'start_background_task',
+        description: 'Start a long-running task in the background. The agent will run in a detached process.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            prompt: {
+              type: 'string',
+              description: 'The task instructions for the background agent',
+            },
+          },
+          required: ['prompt'],
+        },
+      },
+      {
+        name: 'list_background_tasks',
+        description: 'List all running and completed background tasks.',
+        input_schema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'check_background_task',
+        description: 'Get the logs and status of a specific background task.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            task_id: {
+              type: 'string',
+              description: 'The ID of the task to check',
+            },
+          },
+          required: ['task_id'],
+        },
+      },
+      {
+        name: 'search_code_graph',
+        description: 'Semantic code search using ts-morph. Finds where a symbol (class, function, variable) is defined and referenced in the project. More powerful than text search for code understanding.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'The symbol name to search for (e.g. "User", "authService")' }
+          },
+          required: ['query']
+        }
       },
       {
         name: 'list_directory',
@@ -1038,6 +1250,29 @@ export class CodingToolExecutor implements ToolExecutor {
         },
       },
       {
+        name: 'git_commit',
+        description: 'Commit staged changes with optional AI attribution trailer (X-AI-Agent). Use this instead of run_command("git commit") to ensure proper credit.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            message: { type: 'string', description: 'Commit message' },
+            agent_name: { type: 'string', description: 'Name of the AI agent/persona (e.g. "Arya", "Coder")' }
+          },
+          required: ['message']
+        }
+      },
+      {
+        name: 'git_blame_ai',
+        description: 'Get git blame output with AI attribution. Shows who (Human or AI Agent) wrote each line.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            file_path: { type: 'string', description: 'Path to file' }
+          },
+          required: ['file_path']
+        }
+      },
+      {
         name: 'create_git_checkpoint',
         description: 'Create a safe restore point before making risky changes. Can use git stash or commit strategy.',
         input_schema: {
@@ -1103,6 +1338,32 @@ export class CodingToolExecutor implements ToolExecutor {
           type: 'object',
           properties: {},
         },
+      },
+      {
+        name: 'resolve_merge_conflicts',
+        description: 'Scan for git merge conflicts and get details for resolution. Returns the conflict blocks (ours/theirs) so the agent can fix them.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            file_path: { type: 'string', description: 'Optional: Specific file to resolve. If omitted, picks the first conflicting file.' }
+          }
+        }
+      },
+      {
+        name: 'delegate_subtask',
+        description: 'Delegate a task to a specialized sub-agent (swarm worker). The main agent waits for the result. Useful for parallelizing or isolating complex tasks.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            task: { type: 'string', description: 'Task description for the worker.' },
+            worker_type: {
+              type: 'string',
+              description: 'Agent mode/persona to use (e.g. "engineer", "reviewer", "planner")',
+              enum: ['plan', 'agent', 'tester', 'debugger', 'security', 'review', 'team_leader', 'seo', 'product', 'architect', 'engineer', 'data', 'researcher']
+            }
+          },
+          required: ['task', 'worker_type']
+        }
       },
       {
         name: 'grep_code',
@@ -2187,6 +2448,18 @@ export class CodingToolExecutor implements ToolExecutor {
         message: `Failed to get changed files: ${error.message}`,
       };
     }
+  }
+
+  private async gitCommit(message: string, agentName?: string): Promise<any> {
+    if (this.dryRun) {
+      return { success: true, dryRun: true, message: `[DRY RUN] Would commit: "${message}" (Agent: ${agentName})` };
+    }
+    return this.gitUtils.commit(message, agentName);
+  }
+
+  private async gitBlameAi(filePath: string): Promise<any> {
+    const result = await this.gitUtils.getBlame(filePath);
+    return { success: true, blame: result };
   }
 
   private async createGitCheckpoint(
