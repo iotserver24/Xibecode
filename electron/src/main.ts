@@ -176,60 +176,77 @@ async function openFolder(folderPath: string): Promise<void> {
   };
   runningServers.set(port, serverInfo);
 
-  // Wait for server to be ready
-  let ready = false;
-  const maxWait = 15000; // 15 seconds
-  const startTime = Date.now();
+  const serverUrl = `http://localhost:${port}`;
+  let serverExited = false;
 
   serverProcess.stdout?.on('data', (data: Buffer) => {
-    const text = data.toString();
-    if (text.includes('running at') || text.includes('Server running')) {
-      ready = true;
-    }
+    console.log(`[xibecode] ${data.toString().trim()}`);
   });
 
   serverProcess.stderr?.on('data', (data: Buffer) => {
-    console.error(`[xibecode stderr] ${data.toString()}`);
+    console.error(`[xibecode stderr] ${data.toString().trim()}`);
   });
 
   serverProcess.on('exit', (code) => {
+    serverExited = true;
     runningServers.delete(port);
     if (!ideWindow.isDestroyed()) {
-      if (!ready) {
-        ideWindow.loadURL(`data:text/html,
-          <html>
-          <body style="background:#0a0a0a;color:#f55;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:system-ui">
-            <div style="text-align:center">
-              <div style="font-size:24px;margin-bottom:8px">Server Exited</div>
-              <div>xibecode exited with code ${code}</div>
-              <div style="margin-top:16px;color:#888;font-size:13px">Try running "xibecode ui" in terminal to debug</div>
-            </div>
-          </body>
-          </html>
-        `);
-      }
+      ideWindow.loadURL(`data:text/html,
+        <html>
+        <body style="background:#0a0a0a;color:#f55;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:system-ui">
+          <div style="text-align:center">
+            <div style="font-size:24px;margin-bottom:8px">Server Exited</div>
+            <div>xibecode exited with code ${code}</div>
+            <div style="margin-top:16px;color:#888;font-size:13px">Try running "xibecode ui" in terminal to debug</div>
+          </div>
+        </body>
+        </html>
+      `);
     }
   });
 
-  // Poll until ready
-  const checkReady = () => {
-    if (ready) {
+  // Poll the health endpoint until server is ready
+  const maxWait = 20000;
+  const startTime = Date.now();
+
+  const checkHealth = async () => {
+    if (serverExited || ideWindow.isDestroyed()) return;
+
+    try {
+      const http = await import('http');
+      await new Promise<void>((resolve, reject) => {
+        const req = http.get(`${serverUrl}/api/health`, (res) => {
+          if (res.statusCode === 200) {
+            resolve();
+          } else {
+            reject(new Error(`Status ${res.statusCode}`));
+          }
+          res.resume();
+        });
+        req.on('error', reject);
+        req.setTimeout(1000, () => { req.destroy(); reject(new Error('timeout')); });
+      });
+
+      // Server is ready - load the WebUI
       if (!ideWindow.isDestroyed()) {
-        ideWindow.loadURL(`http://127.0.0.1:${port}`);
+        ideWindow.loadURL(serverUrl);
         ideWindow.setTitle(`XibeCode - ${path.basename(folderPath)}`);
       }
-      return;
-    }
-    if (Date.now() - startTime > maxWait) {
-      // Timeout - try loading anyway
-      if (!ideWindow.isDestroyed()) {
-        ideWindow.loadURL(`http://127.0.0.1:${port}`);
+    } catch {
+      // Not ready yet - retry
+      if (Date.now() - startTime < maxWait) {
+        setTimeout(checkHealth, 500);
+      } else {
+        // Timeout - try loading anyway
+        if (!ideWindow.isDestroyed()) {
+          ideWindow.loadURL(serverUrl);
+        }
       }
-      return;
     }
-    setTimeout(checkReady, 300);
   };
-  setTimeout(checkReady, 500);
+
+  // Start checking after a short delay
+  setTimeout(checkHealth, 800);
 
   // Clean up server when window closes
   ideWindow.on('closed', () => {
