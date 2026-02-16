@@ -6,6 +6,7 @@ import { Search } from 'lucide-react';
 interface SidebarProps {
   activePanel: SidebarPanel;
   isCollapsed: boolean;
+  fullWidth?: boolean;
 }
 
 const panelTitles: Record<string, string> = {
@@ -14,13 +15,13 @@ const panelTitles: Record<string, string> = {
   search: 'SEARCH',
 };
 
-export function Sidebar({ activePanel, isCollapsed }: SidebarProps) {
+export function Sidebar({ activePanel, isCollapsed, fullWidth }: SidebarProps) {
   if (isCollapsed || !activePanel || activePanel === 'settings') {
     return null;
   }
 
   return (
-    <div className="w-56 bg-[#111111] border-r border-zinc-800/60 flex flex-col h-full flex-shrink-0">
+    <div className={`${fullWidth ? 'flex-1' : 'w-56'} bg-[#111111] border-r border-zinc-800/60 flex flex-col h-full flex-shrink-0`}>
       <div className="h-9 px-3 flex items-center flex-shrink-0 border-b border-zinc-800/60">
         <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider truncate">
           {panelTitles[activePanel] || ''}
