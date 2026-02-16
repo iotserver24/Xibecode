@@ -2,6 +2,11 @@
   "name": "xibecode-desktop",
   "version": "0.5.0",
   "description": "XibeCode Desktop - AI Coding Assistant",
+  "homepage": "https://github.com/iotserver24/xibecode",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iotserver24/xibecode"
+  },
   "main": "dist/main.js",
   "author": "Anish Kumar (R3AP3R editz) <https://github.com/iotserver24>",
   "license": "Apache-2.0",
