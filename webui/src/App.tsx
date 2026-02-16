@@ -8,6 +8,7 @@ import { StatusBar } from './components/StatusBar';
 import { SettingsPanel } from './components/SettingsPanel';
 import { EnvPanel } from './components/EnvPanel';
 import { HistoryPanel } from './components/HistoryPanel';
+import { PreviewPanel } from './components/PreviewPanel';
 import { useUIStore } from './stores/uiStore';
 
 export type SidebarPanel = 'explorer' | 'git' | 'search' | 'settings' | null;
@@ -23,6 +24,10 @@ function App() {
     setIsBottomPanelCollapsed,
     chatWidth,
     setChatWidth,
+    rightPanelMode,
+    setRightPanelMode,
+    isSidebarFullWidth,
+    setIsSidebarFullWidth,
   } = useUIStore();
 
   const [isDragging, setIsDragging] = useState(false);
@@ -123,39 +128,68 @@ function App() {
 
         {/* Right Side - Code Editor Area */}
         <div className="flex-1 flex flex-col min-w-0 bg-[#0c0c0c]">
-          {/* Top toolbar with collapse/expand + preview/code toggle */}
+          {/* Top toolbar with mode toggle */}
           <div className="h-10 border-b border-zinc-800/80 flex items-center px-3 gap-2 bg-[#0a0a0a] flex-shrink-0">
-            {/* Collapse/Expand chat button */}
-            <button
-              onClick={isChatCollapsed ? handleExpandChat : handleCollapseChat}
-              className="flex items-center gap-1 px-2 py-1 rounded-md text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors text-xs"
-              title={isChatCollapsed ? 'Show chat' : 'Hide chat'}
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                {isChatCollapsed ? (
-                  <path d="M6 3l5 5-5 5" />
-                ) : (
-                  <path d="M10 3L5 8l5 5" />
-                )}
-              </svg>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                {isChatCollapsed ? (
-                  <path d="M6 3l5 5-5 5" />
-                ) : (
-                  <path d="M10 3L5 8l5 5" />
-                )}
-              </svg>
-            </button>
+            {/* Three-button toggle group: Expand | Preview | Code */}
+            <div className="flex items-center bg-zinc-900 rounded-lg p-0.5 border border-zinc-800">
+              {/* Expand/Collapse sidebar full width */}
+              <button
+                onClick={() => setIsSidebarFullWidth(!isSidebarFullWidth)}
+                className={`flex items-center justify-center w-8 h-7 rounded-md transition-colors ${
+                  isSidebarFullWidth
+                    ? 'bg-zinc-800 text-zinc-200'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
+                }`}
+                title={isSidebarFullWidth ? 'Collapse sidebar' : 'Expand sidebar full width'}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  {isSidebarFullWidth ? (
+                    <>
+                      <path d="M5 3l5 5-5 5" />
+                      <path d="M9 3l5 5-5 5" />
+                    </>
+                  ) : (
+                    <>
+                      <path d="M11 3L6 8l5 5" />
+                      <path d="M7 3L2 8l5 5" />
+                    </>
+                  )}
+                </svg>
+              </button>
 
-            <div className="w-px h-4 bg-zinc-800 mx-1" />
+              <div className="w-px h-4 bg-zinc-700/50 mx-0.5" />
 
-            {/* Preview / Code toggle - v0 style */}
-            <div className="flex items-center gap-1 bg-zinc-900 rounded-lg p-0.5 border border-zinc-800">
-              <button className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-800 text-zinc-200 transition-colors">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              {/* Preview (eye) button */}
+              <button
+                onClick={() => setRightPanelMode('preview')}
+                className={`flex items-center justify-center w-8 h-7 rounded-md transition-colors ${
+                  rightPanelMode === 'preview'
+                    ? 'bg-zinc-800 text-zinc-200'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
+                }`}
+                title="Preview (show running website)"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+
+              <div className="w-px h-4 bg-zinc-700/50 mx-0.5" />
+
+              {/* Code button */}
+              <button
+                onClick={() => setRightPanelMode('code')}
+                className={`flex items-center justify-center w-8 h-7 rounded-md transition-colors ${
+                  rightPanelMode === 'code'
+                    ? 'bg-zinc-800 text-zinc-200'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
+                }`}
+                title="Code (files & editor)"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" />
                 </svg>
-                Code
               </button>
             </div>
 
@@ -163,26 +197,28 @@ function App() {
 
             {/* Right side toolbar actions */}
             <div className="flex items-center gap-1">
-              <button
-                onClick={() => {
-                  if (activeSidebarPanel === 'explorer') {
-                    setActiveSidebarPanel(null);
-                  } else {
-                    setActiveSidebarPanel('explorer');
-                  }
-                }}
-                className={`p-1.5 rounded-md transition-colors ${
-                  activeSidebarPanel === 'explorer'
-                    ? 'text-zinc-200 bg-zinc-800'
-                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'
-                }`}
-                title="Toggle file explorer"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <path d="M9 3v18" />
-                </svg>
-              </button>
+              {rightPanelMode === 'code' && (
+                <button
+                  onClick={() => {
+                    if (activeSidebarPanel === 'explorer') {
+                      setActiveSidebarPanel(null);
+                    } else {
+                      setActiveSidebarPanel('explorer');
+                    }
+                  }}
+                  className={`p-1.5 rounded-md transition-colors ${
+                    activeSidebarPanel === 'explorer'
+                      ? 'text-zinc-200 bg-zinc-800'
+                      : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'
+                  }`}
+                  title="Toggle file explorer"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <path d="M9 3v18" />
+                  </svg>
+                </button>
+              )}
               <button
                 onClick={() => setIsBottomPanelCollapsed(!isBottomPanelCollapsed)}
                 className={`p-1.5 rounded-md transition-colors ${
@@ -206,17 +242,39 @@ function App() {
               <EnvPanel />
             ) : activeTab === 'history' ? (
               <HistoryPanel onConversationLoad={() => setActiveTab('git')} />
+            ) : rightPanelMode === 'preview' ? (
+              /* Preview mode: show iframe */
+              <div className="flex-1 flex flex-col min-w-0">
+                <PreviewPanel />
+                {!isBottomPanelCollapsed && (
+                  <BottomPanel isCollapsed={false} />
+                )}
+              </div>
             ) : (
+              /* Code mode: show file explorer + editor */
               <>
                 {/* File explorer sidebar */}
-                <Sidebar
-                  activePanel={activeSidebarPanel}
-                  isCollapsed={activeSidebarPanel === null}
-                />
+                {!isSidebarFullWidth && (
+                  <Sidebar
+                    activePanel={activeSidebarPanel}
+                    isCollapsed={activeSidebarPanel === null}
+                  />
+                )}
 
                 {/* Editor + Bottom panel */}
                 <div className="flex-1 flex flex-col min-w-0">
-                  <EditorArea />
+                  {isSidebarFullWidth ? (
+                    /* Full-width sidebar mode: show expanded file explorer */
+                    <div className="flex-1 flex overflow-hidden">
+                      <Sidebar
+                        activePanel="explorer"
+                        isCollapsed={false}
+                        fullWidth
+                      />
+                    </div>
+                  ) : (
+                    <EditorArea />
+                  )}
                   {!isBottomPanelCollapsed && (
                     <BottomPanel isCollapsed={false} />
                   )}

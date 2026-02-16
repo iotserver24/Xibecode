@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 export type SidebarPanel = 'explorer' | 'git' | 'search' | 'settings' | null;
 export type BottomPanelTab = 'terminal' | 'problems' | 'output';
+export type RightPanelMode = 'code' | 'preview';
 
 interface UIState {
   // Sidebar
@@ -15,6 +16,18 @@ interface UIState {
   chatWidth: number;
   setIsChatCollapsed: (collapsed: boolean) => void;
   setChatWidth: (width: number) => void;
+
+  // Right panel mode (code editor vs preview)
+  rightPanelMode: RightPanelMode;
+  setRightPanelMode: (mode: RightPanelMode) => void;
+
+  // Sidebar full-width toggle
+  isSidebarFullWidth: boolean;
+  setIsSidebarFullWidth: (full: boolean) => void;
+
+  // Preview URL for iframe
+  previewUrl: string;
+  setPreviewUrl: (url: string) => void;
 
   // Bottom panel
   isBottomPanelCollapsed: boolean;
@@ -48,6 +61,18 @@ export const useUIStore = create<UIState>((set) => ({
   chatWidth: 380,
   setIsChatCollapsed: (collapsed) => set({ isChatCollapsed: collapsed }),
   setChatWidth: (width) => set({ chatWidth: width }),
+
+  // Right panel mode
+  rightPanelMode: 'code',
+  setRightPanelMode: (mode) => set({ rightPanelMode: mode }),
+
+  // Sidebar full-width
+  isSidebarFullWidth: false,
+  setIsSidebarFullWidth: (full) => set({ isSidebarFullWidth: full }),
+
+  // Preview URL
+  previewUrl: 'http://localhost:3000',
+  setPreviewUrl: (url) => set({ previewUrl: url }),
 
   // Bottom panel
   isBottomPanelCollapsed: false,
