@@ -4,7 +4,7 @@ import { EnhancedAgent } from '../core/agent.js';
 import { CodingToolExecutor } from '../core/tools.js';
 import { MCPClientManager } from '../core/mcp-client.js';
 import { EnhancedUI } from '../ui/enhanced-tui.js';
-import { ConfigManager } from '../utils/config.js';
+import { ConfigManager, ProviderType } from '../utils/config.js';
 import { SessionManager, type ChatSession } from '../core/session-manager.js';
 import { exportSessionToMarkdown } from '../core/export.js';
 import { ContextManager } from '../core/context.js';
@@ -74,8 +74,8 @@ export async function chatCommand(options: ChatOptions) {
 
   const model = options.model || config.getModel();
   const baseUrl = options.baseUrl || config.getBaseUrl();
-  let currentProvider: 'anthropic' | 'openai' | undefined =
-    (options.provider as 'anthropic' | 'openai' | undefined) || config.get('provider');
+  let currentProvider: ProviderType | undefined =
+    (options.provider as ProviderType | undefined) || config.get('provider');
 
   skillManager = new SkillManager(process.cwd(), apiKey, baseUrl, model, currentProvider);
   await skillManager.loadSkills();
@@ -94,7 +94,7 @@ export async function chatCommand(options: ChatOptions) {
       maxIterations: 10,
       verbose: false,
     },
-    (currentProvider || 'anthropic') as 'anthropic' | 'openai'
+    currentProvider || 'anthropic'
   );
 
   // Gemini‑style intro screen
@@ -138,7 +138,7 @@ export async function chatCommand(options: ChatOptions) {
         if (questions.length > 0) {
           SessionBridge.onPlanQuestions(questions);
           // In CLI mode, handle questions via inquirer
-          handlePlannerQuestions(questions).catch(() => {});
+          handlePlannerQuestions(questions).catch(() => { });
         }
       } catch (e) {
         // JSON parse failed, ignore

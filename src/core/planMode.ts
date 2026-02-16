@@ -2,6 +2,7 @@ import { TodoManager, TodoItem, TodoDocument } from '../utils/todoManager.js';
 import { EnhancedAgent, AgentConfig, AgentEvent } from './agent.js';
 import { CodingToolExecutor } from './tools.js';
 import { SkillManager } from './skills.js';
+import { ProviderType } from '../utils/config.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import chalk from 'chalk';
@@ -23,7 +24,7 @@ export class PlanMode {
   constructor(
     private readonly rootDir: string,
     private readonly config: AgentConfig,
-    private readonly provider: 'anthropic' | 'openai'
+    private readonly provider: ProviderType
   ) { }
 
   /**

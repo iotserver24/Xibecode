@@ -9,6 +9,74 @@ export interface MCPServerConfig {
   env?: Record<string, string>; // Environment variables
 }
 
+export const PROVIDER_CONFIGS = {
+  anthropic: {
+    baseUrl: 'https://api.anthropic.com/v1',
+    defaultModel: 'claude-sonnet-4-5-20250929',
+    format: 'anthropic',
+    envKey: 'ANTHROPIC_API_KEY',
+    name: 'Anthropic'
+  },
+  zai: {
+    baseUrl: 'https://api.z.ai/v1',
+    defaultModel: 'glm-4.7',
+    format: 'anthropic',
+    envKey: 'ZAI_API_KEY',
+    name: 'Zhipu AI (z.ai)'
+  },
+  openai: {
+    baseUrl: 'https://api.openai.com/v1',
+    defaultModel: 'gpt-4o',
+    format: 'openai',
+    envKey: 'OPENAI_API_KEY',
+    name: 'OpenAI'
+  },
+  alibaba: {
+    baseUrl: 'https://coding-intl.dashscope.aliyuncs.com',
+    defaultModel: 'qwen3.5-coder-plus',
+    format: 'anthropic',
+    envKey: 'ALIBABA_API_KEY',
+    name: 'Alibaba (Qwen)'
+  },
+  kimi: {
+    baseUrl: 'https://api.moonshot.ai/anthropic',
+    defaultModel: 'kimi-k2.5',
+    format: 'anthropic',
+    envKey: 'MOONSHOT_API_KEY',
+    name: 'Moonshot (Kimi)'
+  },
+  grok: {
+    baseUrl: 'https://api.x.ai/v1',
+    defaultModel: 'grok-4',
+    format: 'openai',
+    envKey: 'XAI_API_KEY',
+    name: 'xAI (Grok)'
+  },
+  deepseek: {
+    baseUrl: 'https://api.deepseek.com',
+    defaultModel: 'deepseek-chat',
+    format: 'openai',
+    envKey: 'DEEPSEEK_API_KEY',
+    name: 'DeepSeek'
+  },
+  groq: {
+    baseUrl: 'https://api.groq.com/openai/v1',
+    defaultModel: 'llama-3.3-70b-versatile',
+    format: 'openai',
+    envKey: 'GROQ_API_KEY',
+    name: 'Groq'
+  },
+  openrouter: {
+    baseUrl: 'https://openrouter.ai/api/v1',
+    defaultModel: 'anthropic/claude-3.5-sonnet',
+    format: 'openai',
+    envKey: 'OPENROUTER_API_KEY',
+    name: 'OpenRouter'
+  },
+} as const;
+
+export type ProviderType = keyof typeof PROVIDER_CONFIGS;
+
 // Object-based MCP servers configuration
 export interface MCPServersConfig {
   [serverName: string]: MCPServerConfig;
@@ -36,10 +104,10 @@ export interface XibeCodeConfig {
   plugins?: string[];
   mcpServers?: MCPServersConfig;
   // Provider / endpoints
-  provider?: 'anthropic' | 'openai';
+  provider?: ProviderType;
   anthropicBaseUrl?: string;
   openaiBaseUrl?: string;
-   customModels?: { id: string; provider: 'anthropic' | 'openai' }[];
+  customModels?: { id: string; provider: ProviderType }[];
   // UI / UX
   theme?: string;
   sessionDirectory?: string;
@@ -59,7 +127,7 @@ export class ConfigManager {
   constructor() {
     this.configPath = path.join(os.homedir(), '.xibecode');
     this.mcpFileManager = new MCPServersFileManager();
-    
+
     this.store = new Conf<XibeCodeConfig>({
       projectName: 'xibecode',
       cwd: this.configPath,
@@ -147,33 +215,38 @@ export class ConfigManager {
     }
 
     // Fallback when provider is not set: try both styles
-    return this.get('apiKey') || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY;
+    return this.get('apiKey') ||
+      process.env.ANTHROPIC_API_KEY ||
+      process.env.OPENAI_API_KEY ||
+      process.env.DEEPSEEK_API_KEY ||
+      process.env.ZAI_API_KEY ||
+      process.env.ALIBABA_API_KEY ||
+      process.env.MOONSHOT_API_KEY ||
+      process.env.XAI_API_KEY ||
+      process.env.GROQ_API_KEY ||
+      process.env.OPENROUTER_API_KEY;
   }
 
   /**
    * Get base URL from config or environment.
-   * Supports both Anthropic and OpenAI style environment variables.
    */
   getBaseUrl(): string | undefined {
     const provider = this.get('provider');
 
-    if (provider === 'anthropic') {
-      return (
-        this.get('anthropicBaseUrl') ||
-        this.get('baseUrl') ||
-        process.env.ANTHROPIC_BASE_URL
-      );
+    if (provider && PROVIDER_CONFIGS[provider]) {
+      // Prioritize explicit config, then specific env, then default from map
+      if (provider === 'anthropic') {
+        return this.get('anthropicBaseUrl') || this.get('baseUrl') || process.env.ANTHROPIC_BASE_URL || PROVIDER_CONFIGS.anthropic.baseUrl;
+      }
+      if (provider === 'openai') {
+        return this.get('openaiBaseUrl') || this.get('baseUrl') || process.env.OPENAI_BASE_URL || PROVIDER_CONFIGS.openai.baseUrl;
+      }
+
+      // For other providers, check generic baseUrl or return default
+      return this.get('baseUrl') || PROVIDER_CONFIGS[provider].baseUrl;
     }
 
-    if (provider === 'openai') {
-      return (
-        this.get('openaiBaseUrl') ||
-        this.get('baseUrl') ||
-        process.env.OPENAI_BASE_URL
-      );
-    }
-
-    // Fallback when provider is not set: try generic + envs
+    // Fallback when provider is not set
     return this.get('baseUrl') || process.env.ANTHROPIC_BASE_URL || process.env.OPENAI_BASE_URL;
   }
 
@@ -273,7 +346,7 @@ export class ConfigManager {
    */
   export(includeSensitive: boolean = false): string {
     const config = this.getAll();
-    
+
     if (!includeSensitive) {
       const safe = { ...config };
       if (safe.apiKey) {
@@ -281,7 +354,7 @@ export class ConfigManager {
       }
       return JSON.stringify(safe, null, 2);
     }
-    
+
     return JSON.stringify(config, null, 2);
   }
 

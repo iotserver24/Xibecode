@@ -1,5 +1,6 @@
 import fetch from 'node-fetch';
 import Anthropic from '@anthropic-ai/sdk';
+import { ProviderType } from '../utils/config.js';
 
 /**
  * Fetch a URL and return both raw HTML and stripped text.
@@ -142,7 +143,7 @@ export interface AISynthesisConfig {
     apiKey: string;
     baseUrl?: string;
     model?: string;
-    provider?: 'anthropic' | 'openai';
+    provider?: ProviderType;
 }
 
 /**
@@ -294,13 +295,17 @@ async function synthesizeWithAnthropic(
 /**
  * Detect provider from model name (same heuristic as agent.ts)
  */
-function detectProvider(model?: string): 'anthropic' | 'openai' {
+function detectProvider(model?: string): ProviderType {
     if (!model) return 'anthropic';
     const m = model.toLowerCase();
     // Claude models → Anthropic
     if (m.includes('claude')) return 'anthropic';
     // GPT, O1, O3, Grok, and other non-Claude models → OpenAI-compatible
     if (m.startsWith('gpt-') || m.startsWith('gpt4') || m.startsWith('o1-') || m.startsWith('o3-') || m.includes('grok')) return 'openai';
+    if (m.startsWith('deepseek')) return 'deepseek';
+    if (m.startsWith('glm') || m.includes('glm-')) return 'zai';
+    if (m.startsWith('moonshot') || m.startsWith('kimi')) return 'kimi';
+    if (m.includes('/')) return 'openrouter';
     // Default to OpenAI format for unknown models (most custom endpoints use it)
     return 'openai';
 }
@@ -396,7 +401,8 @@ export async function generateSkillFromDocs(
             onProgress?.(`Using Anthropic API (${config.model || 'claude-sonnet-4-20250514'})...`);
             skillContent = await synthesizeWithAnthropic(prompt, config);
         } else {
-            onProgress?.(`Using OpenAI-compatible API (${config.model || 'gpt-4'})...`);
+            // All others use OpenAI-compatible
+            onProgress?.(`Using ${provider === 'openai' ? 'OpenAI' : provider}-compatible API...`);
             skillContent = await synthesizeWithOpenAI(prompt, config);
         }
 
