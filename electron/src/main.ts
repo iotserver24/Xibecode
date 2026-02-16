@@ -30,12 +30,70 @@ const RECENT_PROJECTS_FILE = path.join(XIBECODE_DIR, 'recent-projects.json');
 const runningServers: Map<number, RunningServer> = new Map();
 let welcomeWindow: BrowserWindow | null = null;
 
-// ── CLI Detection ──────────────────────────────────────
+// ── CLI Detection & Installation ───────────────────────
+
+// Build a full PATH that includes common global install locations
+function getFullPath(): string {
+  const home = os.homedir();
+  const extraPaths = [
+    path.join(home, '.local', 'share', 'pnpm'),
+    path.join(home, '.pnpm-global', 'bin'),
+    path.join(home, '.npm-global', 'bin'),
+    path.join(home, '.nvm', 'current', 'bin'),
+    path.join(home, '.volta', 'bin'),
+    path.join(home, '.bun', 'bin'),
+    '/usr/local/bin',
+    '/usr/bin',
+  ];
+
+  if (process.platform === 'win32') {
+    extraPaths.push(
+      path.join(home, 'AppData', 'Roaming', 'npm'),
+      path.join(home, 'AppData', 'Local', 'pnpm'),
+      'C:\\Program Files\\nodejs',
+    );
+  }
+
+  if (process.platform === 'darwin') {
+    extraPaths.push('/opt/homebrew/bin', '/usr/local/bin');
+  }
+
+  const existing = process.env.PATH || '';
+  const combined = [...extraPaths, ...existing.split(path.delimiter)];
+  return [...new Set(combined)].join(path.delimiter);
+}
+
+const FULL_PATH = getFullPath();
+const ENV_WITH_PATH = { ...process.env, PATH: FULL_PATH };
 
 function findCliPath(): string | null {
+  // First try direct file check in known locations
+  const home = os.homedir();
+  const candidates = [
+    path.join(home, '.local', 'share', 'pnpm', 'xibecode'),
+    path.join(home, '.npm-global', 'bin', 'xibecode'),
+    '/usr/local/bin/xibecode',
+    '/usr/bin/xibecode',
+  ];
+
+  if (process.platform === 'win32') {
+    candidates.push(
+      path.join(home, 'AppData', 'Roaming', 'npm', 'xibecode.cmd'),
+      path.join(home, 'AppData', 'Roaming', 'npm', 'xibecode'),
+      path.join(home, 'AppData', 'Local', 'pnpm', 'xibecode.cmd'),
+    );
+  }
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  // Fall back to which/where with enhanced PATH
   try {
     const cmd = process.platform === 'win32' ? 'where xibecode' : 'which xibecode';
-    return execSync(cmd, { encoding: 'utf-8' }).trim().split('\n')[0];
+    return execSync(cmd, { encoding: 'utf-8', env: ENV_WITH_PATH }).trim().split('\n')[0];
   } catch {
     return null;
   }
@@ -43,10 +101,66 @@ function findCliPath(): string | null {
 
 function getCliVersion(): string {
   try {
-    return execSync('xibecode --version', { encoding: 'utf-8' }).trim();
+    return execSync('xibecode --version', { encoding: 'utf-8', env: ENV_WITH_PATH }).trim();
   } catch {
     return '';
   }
+}
+
+function findNpm(): string | null {
+  try {
+    const cmd = process.platform === 'win32' ? 'where npm' : 'which npm';
+    return execSync(cmd, { encoding: 'utf-8', env: ENV_WITH_PATH }).trim().split('\n')[0];
+  } catch {
+    return null;
+  }
+}
+
+function installCli(): Promise<{ success: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    const npmPath = findNpm();
+    if (!npmPath) {
+      resolve({ success: false, error: 'npm not found. Please install Node.js from https://nodejs.org' });
+      return;
+    }
+
+    const installProcess = spawn(npmPath, ['install', '-g', 'xibecode'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: ENV_WITH_PATH,
+      shell: true,
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    installProcess.stdout?.on('data', (data: Buffer) => {
+      stdout += data.toString();
+      console.log(`[npm install] ${data.toString().trim()}`);
+    });
+
+    installProcess.stderr?.on('data', (data: Buffer) => {
+      stderr += data.toString();
+      console.error(`[npm install stderr] ${data.toString().trim()}`);
+    });
+
+    installProcess.on('exit', (code) => {
+      if (code === 0) {
+        resolve({ success: true });
+      } else {
+        resolve({ success: false, error: stderr || `npm install exited with code ${code}` });
+      }
+    });
+
+    installProcess.on('error', (err) => {
+      resolve({ success: false, error: err.message });
+    });
+
+    // Timeout after 2 minutes
+    setTimeout(() => {
+      try { installProcess.kill(); } catch { /* ignore */ }
+      resolve({ success: false, error: 'Installation timed out after 2 minutes' });
+    }, 120000);
+  });
 }
 
 // ── Recent Projects ────────────────────────────────────
@@ -165,7 +279,7 @@ async function openFolder(folderPath: string): Promise<void> {
   const serverProcess = spawn(cliPath, ['chat'], {
     cwd: folderPath,
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env },
+    env: ENV_WITH_PATH,
   });
 
   const serverInfo: RunningServer = {
@@ -340,6 +454,14 @@ function setupIPC(): void {
 
   ipcMain.handle('get-cli-installed', () => {
     return findCliPath() !== null;
+  });
+
+  ipcMain.handle('install-cli', async () => {
+    return await installCli();
+  });
+
+  ipcMain.handle('has-npm', () => {
+    return findNpm() !== null;
   });
 
   ipcMain.handle('clone-repo', async (_event, url: string, destFolder: string) => {

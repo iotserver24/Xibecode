@@ -26,6 +26,13 @@ contextBridge.exposeInMainWorld('xibecode', {
   getCliInstalled: (): Promise<boolean> =>
     ipcRenderer.invoke('get-cli-installed'),
 
+  // CLI installation
+  installCli: (): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('install-cli'),
+
+  hasNpm: (): Promise<boolean> =>
+    ipcRenderer.invoke('has-npm'),
+
   // Git clone
   cloneRepo: (url: string, dest: string): Promise<{ success: boolean; path?: string; error?: string }> =>
     ipcRenderer.invoke('clone-repo', url, dest),
