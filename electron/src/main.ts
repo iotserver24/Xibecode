@@ -130,7 +130,7 @@ async function openFolder(folderPath: string): Promise<void> {
 
   addRecentProject(folderPath);
 
-  const port = await findFreePort(3847 + Math.floor(Math.random() * 100));
+  const port = 3847; // xibecode chat always uses port 3847
 
   // Create IDE window
   const ideWindow = new BrowserWindow({
@@ -161,8 +161,8 @@ async function openFolder(folderPath: string): Promise<void> {
   `);
   ideWindow.show();
 
-  // Spawn xibecode ui
-  const serverProcess = spawn(cliPath, ['ui', '--port', String(port)], {
+  // Spawn xibecode chat (starts both the agent AND WebUI server on port 3847)
+  const serverProcess = spawn(cliPath, ['chat'], {
     cwd: folderPath,
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env },

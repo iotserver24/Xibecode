@@ -1,13 +1,14 @@
 # XibeCode
 
-AI-powered autonomous coding assistant for your terminal and browser.
+AI-powered autonomous coding assistant for your terminal, browser, and desktop.
 
 [![Donate](https://img.shields.io/badge/Donate-Support%20XibeCode-ff69b4?style=for-the-badge)](https://www.anishkumar.tech/donate)
 [![Version](https://img.shields.io/npm/v/xibecode?style=for-the-badge)](https://www.npmjs.com/package/xibecode)
+[![Desktop App](https://img.shields.io/badge/Desktop_App-Download-blue?style=for-the-badge)](https://github.com/iotserver24/xibecode/releases)
 
 ## Overview
 
-XibeCode is a CLI agent that can read and edit code, run commands, and iterate on tasks from your terminal using LLMs. It now includes a **WebUI** for a browser-based experience, **AI-powered test generation**, and **multi-model support** for both Anthropic and OpenAI models.
+XibeCode is a CLI agent that can read and edit code, run commands, and iterate on tasks from your terminal using LLMs. It includes a **WebUI** for a browser-based experience, a **Desktop App** (Electron) for native IDE-like usage, **AI-powered test generation**, and **multi-model support** for both Anthropic and OpenAI models.
 
 ## What's New in v0.5.0
 
@@ -70,7 +71,26 @@ XibeCode is a CLI agent that can read and edit code, run commands, and iterate o
 ![Terminal View](screenshots/08-terminal-view.png)
 *Fully interactive terminal with PTY support, colors, and tab completion*
 
+## Desktop App
+
+Download the native desktop app for your platform from [GitHub Releases](https://github.com/iotserver24/xibecode/releases):
+
+| Platform | Architecture | Download |
+|----------|-------------|----------|
+| **Windows** | x64 / arm64 | `.exe` installer |
+| **macOS** | Intel / Apple Silicon | `.dmg` |
+| **Linux** | x64 | `.deb`, `.rpm`, `.AppImage` |
+| **Linux** | arm64 | `.deb`, `.rpm`, `.AppImage` |
+
+The desktop app is a thin shell that runs the `xibecode` CLI underneath. Install the CLI first, then the desktop app gives you a native window with:
+- VS Code-style welcome screen with recent projects
+- Open Folder / Clone Repository / New Project
+- Full XibeCode WebUI in a native window
+- CLI updates automatically propagate (no app update needed)
+
 ## Installation
+
+### CLI (required)
 
 ```bash
 npm install -g xibecode
