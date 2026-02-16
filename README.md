@@ -10,8 +10,9 @@ AI-powered autonomous coding assistant for your terminal, browser, and desktop.
 
 XibeCode is a CLI agent that can read and edit code, run commands, and iterate on tasks from your terminal using LLMs. It includes a **WebUI** for a browser-based experience, a **Desktop App** (Electron) for native IDE-like usage, **AI-powered test generation**, and **multi-model support** for both Anthropic and OpenAI models.
 
-## What's New in v0.5.0
+## What's New in v0.5.3
 
+- **Context Chips** - Terminal context (full buffer or selections) is now added as "chips" to the chat instead of raw text, keeping the interface clean while giving the AI full context.
 - **Interactive Plan Mode** - Plan mode now asks clarifying questions, searches the web, and generates detailed `implementations.md` with checkboxes. Click "Build" to auto-execute the plan.
 - **Chat History** - Full conversation persistence with per-project storage. Resume any previous chat from the History panel.
 - **Environment Variables Editor** - Visual `.env` file editor with auto-detection, secret masking, and live editing.
@@ -40,34 +41,42 @@ XibeCode is a CLI agent that can read and edit code, run commands, and iterate o
 ## Screenshots
 
 ### Main Interface
+
 ![Main Interface](screenshots/01-main-interface.png)
 *Modern v0.dev-inspired interface with activity bar, chat panel, code editor, and terminal*
 
 ### File Explorer
+
 ![File Explorer](screenshots/02-file-explorer.png)
 *Browse and open files with recursive directory tree*
 
 ### Chat Interface
+
 ![Chat Interface](screenshots/03-chat-interface.png)
 *Interactive AI chat with streaming responses and markdown rendering*
 
 ### Git Panel
+
 ![Git Panel](screenshots/04-git-panel.png)
 *Git integration with commit history, staging, and diffs*
 
 ### Settings Panel
+
 ![Settings Panel](screenshots/05-settings-panel.png)
 *Comprehensive settings modal with multiple configuration categories*
 
 ### AI Provider Settings
+
 ![AI Provider Settings](screenshots/06-ai-provider-settings.png)
 *Configure AI models, API keys, and provider settings*
 
 ### MCP Servers Editor
+
 ![MCP Servers Editor](screenshots/07-mcp-servers-editor.png)
 *Edit MCP server configuration with Monaco editor and syntax highlighting*
 
 ### Terminal View
+
 ![Terminal View](screenshots/08-terminal-view.png)
 *Fully interactive terminal with PTY support, colors, and tab completion*
 
@@ -83,6 +92,7 @@ Download the native desktop app for your platform from [GitHub Releases](https:/
 | **Linux** | arm64 | `.deb`, `.rpm`, `.AppImage` |
 
 The desktop app is a thin shell that runs the `xibecode` CLI underneath. Install the CLI first, then the desktop app gives you a native window with:
+
 - VS Code-style welcome screen with recent projects
 - Open Folder / Clone Repository / New Project
 - Full XibeCode WebUI in a native window
@@ -130,6 +140,7 @@ xibecode run "Create an Express API with auth"
 ## Main Commands
 
 ### `xibecode ui`
+
 **NEW** - Start the WebUI in your browser.
 
 ```bash
@@ -139,6 +150,7 @@ xibecode ui -p 8080      # Custom port
 ```
 
 Features:
+
 - **v0.dev-style Layout** - Activity bar (left) → Chat panel (resizable) → Code editor (right)
 - **Monaco Code Editor** - Professional code editor with syntax highlighting and IntelliSense
 - **File Tree Explorer** - Browse and open project files with recursive directory tree
@@ -155,6 +167,7 @@ Features:
 - **New Chat Button** - Clear conversation with + button in chat input
 
 ### `xibecode run`
+
 Autonomous coding workflow.
 
 ```bash
@@ -164,6 +177,7 @@ xibecode run --file task.txt
 ```
 
 Options:
+
 - `-f, --file <path>` prompt from file
 - `-m, --model <model>` model override
 - `--mode <mode>` initial agent mode
@@ -176,9 +190,11 @@ Options:
 - `--changed-only`
 
 ### `xibecode chat`
+
 Interactive terminal chat + tool use.
 
 Options:
+
 - `-m, --model <model>`
 - `-b, --base-url <url>`
 - `-k, --api-key <key>`
@@ -187,6 +203,7 @@ Options:
 - `--session <id>`
 
 ### `xibecode config`
+
 Manage saved config:
 
 - `--set-key`, `--set-url`, `--set-model`
@@ -194,6 +211,7 @@ Manage saved config:
 - MCP helpers: `--list-mcp-servers`, `--add-mcp-server`, `--remove-mcp-server`
 
 ### `xibecode mcp`
+
 MCP server management:
 
 - `add`, `list`, `remove`, `file`, `edit`, `init`, `reload`
@@ -226,6 +244,7 @@ xibecode chat
 ### TUI-WebUI Sync
 
 When you run `xibecode chat`, both interfaces are connected:
+
 - Messages sent from **TUI** appear in **WebUI** (marked with "TUI")
 - Messages sent from **WebUI** are processed by **TUI**
 - Streaming responses show in both simultaneously
@@ -269,6 +288,7 @@ Type `/` in the input to open the command palette:
 ### File References (`@`)
 
 Type `@` to browse and reference files:
+
 - Shows project files and folders
 - Filter by typing after `@`
 - Select to include file path in message
@@ -277,6 +297,7 @@ Type `@` to browse and reference files:
 ### Settings Panel
 
 Click the ⚙️ Settings button to configure:
+
 - **Provider** - Anthropic, OpenAI, or Custom
 - **Model** - Select from available models
 - **Custom Model ID** - For custom/local models

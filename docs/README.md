@@ -1,6 +1,6 @@
 # XibeCode Documentation
 
-> **Version:** 0.5.0
+> **Version:** 0.5.3
 > **Last Updated:** February 16, 2026
 
 Welcome to the XibeCode documentation! This directory contains comprehensive documentation for developers, contributors, and users.
@@ -75,6 +75,7 @@ Agent persona documentation:
 - *Coming soon: Individual persona docs for all 13 personas*
 
 The 13 agent personas:
+
 1. **Aria** (plan) - The Architect
 2. **Blaze** (agent) - The Builder
 3. **Tess** (tester) - The QA Engineer
@@ -139,6 +140,7 @@ All documentation follows these principles:
 ### Code Documentation
 
 All public APIs include:
+
 - ✅ One-line summary
 - ✅ Detailed explanation
 - ✅ `@example` blocks with working code
@@ -175,6 +177,7 @@ Output will be in `docs/api-generated/`.
 ### Markdown Documentation
 
 All markdown files are human-written and located in:
+
 - `/` - Core docs (ARCHITECTURE.md, etc.)
 - `/docs/architecture/` - Architecture details
 - `/docs/api/` - API documentation
