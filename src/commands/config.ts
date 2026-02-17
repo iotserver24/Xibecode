@@ -168,7 +168,7 @@ export async function configCommand(options: ConfigOptions) {
         message: 'What would you like to configure?',
         choices: [
           { name: '🔑 Set API Key', value: 'set_key' },
-          { name: '🌐 Set Base URL (for custom endpoints)', value: 'set_url' },
+          { name: '🌐 Set Base URL', value: 'set_url' },
           { name: '🤖 Set Default Model (Anthropic & OpenAI)', value: 'set_model' },
           { name: '📡 Manage MCP Servers', value: 'mcp_servers' },
           { name: '👀 View Current Config', value: 'view' },
@@ -209,27 +209,17 @@ export async function configCommand(options: ConfigOptions) {
         const answers = await inquirer.prompt([
           {
             type: 'input',
-            name: 'anthropicBaseUrl',
-            message: 'Anthropic base URL (default: https://api.anthropic.com):',
-            default: '',
-          },
-          {
-            type: 'input',
-            name: 'openaiBaseUrl',
-            message: 'OpenAI base URL (default: https://api.openai.com):',
-            default: '',
-          },
-          {
-            type: 'input',
-            name: 'genericBaseUrl',
-            message: 'Generic/Other Provider base URL (optional override):',
-            default: '',
+            name: 'baseUrl',
+            message: 'Base URL (leave empty to reset):',
+            default: config.get('baseUrl') || '',
           }
         ]);
 
-        if (answers.anthropicBaseUrl.trim()) config.set('anthropicBaseUrl', answers.anthropicBaseUrl.trim());
-        if (answers.openaiBaseUrl.trim()) config.set('openaiBaseUrl', answers.openaiBaseUrl.trim());
-        if (answers.genericBaseUrl.trim()) config.set('baseUrl', answers.genericBaseUrl.trim());
+        if (answers.baseUrl.trim()) {
+          config.set('baseUrl', answers.baseUrl.trim());
+        } else {
+          config.set('baseUrl', '');
+        }
 
         ui.success('Base URLs updated!');
         break;

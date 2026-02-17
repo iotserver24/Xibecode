@@ -118,6 +118,8 @@ export async function chatCommand(options: ChatOptions) {
       model,
       maxIterations: 150,
       verbose: false,
+      provider: currentProvider,
+      customProviderFormat: config.get('customProviderFormat'),
     },
     currentProvider
   );
@@ -572,6 +574,8 @@ export async function chatCommand(options: ChatOptions) {
         model,
         maxIterations: 150,
         verbose: false,
+        provider: currentProvider || config.get('provider'),
+        customProviderFormat: config.get('customProviderFormat'),
       },
       currentProvider || config.get('provider')
     );

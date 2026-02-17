@@ -170,9 +170,10 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
       maxIterations,
       verbose: options.verbose,
       mode: (options.mode as any) || 'agent',
+      provider: provider as any,
+      customProviderFormat: config.get('customProviderFormat'),
     },
-    provider
-  );
+    provider as any);
   // Inject memory into agent (we'll need to update Agent to accept it or just let it use its own? Better to share same instance)
   (agent as any).memory = memory;
 

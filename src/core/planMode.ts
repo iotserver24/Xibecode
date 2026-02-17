@@ -78,7 +78,12 @@ export class PlanMode {
     const tools = toolExecutor.getTools();
 
     const architect = new EnhancedAgent(
-      { ...this.config, maxIterations: 10 }, // Limit iterations for planning
+      {
+        ...this.config,
+        maxIterations: 10,
+        provider: this.provider,
+        customProviderFormat: (this.config as any).customProviderFormat
+      },
       this.provider
     );
 

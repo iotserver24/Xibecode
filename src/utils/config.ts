@@ -112,8 +112,6 @@ export interface XibeCodeConfig {
   mcpServers?: MCPServersConfig;
   // Provider / endpoints
   provider?: ProviderType;
-  anthropicBaseUrl?: string;
-  openaiBaseUrl?: string;
   customModels?: { id: string; provider: ProviderType }[];
   customProviderFormat?: 'openai' | 'anthropic';
   // UI / UX
@@ -240,23 +238,29 @@ export class ConfigManager {
    * Get base URL from config or environment.
    */
   getBaseUrl(): string | undefined {
+    // 1. Check for explicit config override (works for all providers)
+    const configBaseUrl = this.get('baseUrl');
+    if (configBaseUrl) return configBaseUrl;
+
+    // 2. Check for provider-specific environment variables for backward compatibility
+    // checking them *before* assertions significantly simplifies things
     const provider = this.get('provider');
 
-    if (provider && provider !== 'custom' && PROVIDER_CONFIGS[provider]) {
-      // Prioritize explicit config, then specific env, then default from map
-      if (provider === 'anthropic') {
-        return this.get('anthropicBaseUrl') || this.get('baseUrl') || process.env.ANTHROPIC_BASE_URL || PROVIDER_CONFIGS.anthropic.baseUrl;
-      }
-      if (provider === 'openai') {
-        return this.get('openaiBaseUrl') || this.get('baseUrl') || process.env.OPENAI_BASE_URL || PROVIDER_CONFIGS.openai.baseUrl;
-      }
-
-      // For other providers, check generic baseUrl or return default
-      return this.get('baseUrl') || PROVIDER_CONFIGS[provider as keyof typeof PROVIDER_CONFIGS].baseUrl;
+    if (provider === 'anthropic') {
+      return process.env.ANTHROPIC_BASE_URL || PROVIDER_CONFIGS.anthropic.baseUrl;
     }
 
-    // Fallback when provider is not set
-    return this.get('baseUrl') || process.env.ANTHROPIC_BASE_URL || process.env.OPENAI_BASE_URL;
+    if (provider === 'openai') {
+      return process.env.OPENAI_BASE_URL || PROVIDER_CONFIGS.openai.baseUrl;
+    }
+
+    // 3. For other known providers, return their default
+    if (provider && provider !== 'custom' && PROVIDER_CONFIGS[provider as keyof typeof PROVIDER_CONFIGS]) {
+      return PROVIDER_CONFIGS[provider as keyof typeof PROVIDER_CONFIGS].baseUrl;
+    }
+
+    // 4. Fallback/Default
+    return process.env.ANTHROPIC_BASE_URL || process.env.OPENAI_BASE_URL;
   }
 
   /**
@@ -318,19 +322,9 @@ export class ConfigManager {
       errors.push('API key is not set. Use: xibecode config --set-key YOUR_KEY');
     }
 
-    const baseUrl = this.getBaseUrl();
+    const baseUrl = this.get('baseUrl');
     if (baseUrl && !baseUrl.startsWith('http')) {
       errors.push('Base URL must start with http:// or https://');
-    }
-
-    const anthropicBaseUrl = this.get('anthropicBaseUrl');
-    if (anthropicBaseUrl && !anthropicBaseUrl.startsWith('http')) {
-      errors.push('Anthropic base URL must start with http:// or https://');
-    }
-
-    const openaiBaseUrl = this.get('openaiBaseUrl');
-    if (openaiBaseUrl && !openaiBaseUrl.startsWith('http')) {
-      errors.push('OpenAI base URL must start with http:// or https://');
     }
 
     return {
@@ -391,9 +385,7 @@ export class ConfigManager {
     return {
       'API Key': config.apiKey ? this.maskApiKey(config.apiKey) : 'Not set',
       'Provider': config.provider || 'auto-detect',
-      'Base URL': config.baseUrl || 'Generic / legacy',
-      'Anthropic Base URL': config.anthropicBaseUrl || 'Default (api.anthropic.com)',
-      'OpenAI Base URL': config.openaiBaseUrl || 'Default (api.openai.com)',
+      'Base URL': config.baseUrl || 'Default',
       'Model': config.model || 'claude-sonnet-4-5-20250929',
       'Max Iterations': config.maxIterations?.toString() || '50',
       'Theme': config.theme || 'default',

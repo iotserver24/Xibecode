@@ -272,8 +272,6 @@ export class WebUIServer {
               model: allConfig.model || 'claude-sonnet-4-5-20250929',
               apiKey: apiKeySet ? '••••••••' : '',
               baseUrl: allConfig.baseUrl || '',
-              anthropicBaseUrl: allConfig.anthropicBaseUrl || '',
-              openaiBaseUrl: allConfig.openaiBaseUrl || '',
               maxIterations: allConfig.maxIterations ?? 50,
               theme: allConfig.theme || 'default',
               showDetails: this.configManager.getShowDetails(),
@@ -297,12 +295,12 @@ export class WebUIServer {
         if (req.method === 'PUT') {
           const body = await parseBody();
           // Core AI settings
-          if (body.apiKey) this.configManager.set('apiKey', body.apiKey);
+          if (body.apiKey && !body.apiKey.includes('••••') && !body.apiKey.includes('****')) {
+            this.configManager.set('apiKey', body.apiKey);
+          }
           if (body.model) this.configManager.set('model', body.model);
           if (body.provider !== undefined) this.configManager.set('provider', body.provider);
           if (body.baseUrl !== undefined) this.configManager.set('baseUrl', body.baseUrl);
-          if (body.anthropicBaseUrl !== undefined) this.configManager.set('anthropicBaseUrl', body.anthropicBaseUrl);
-          if (body.openaiBaseUrl !== undefined) this.configManager.set('openaiBaseUrl', body.openaiBaseUrl);
           if (body.maxIterations !== undefined) this.configManager.set('maxIterations', body.maxIterations);
           // Display settings
           if (body.theme !== undefined) this.configManager.set('theme', body.theme);
@@ -1198,7 +1196,9 @@ else:
           baseUrl: this.configManager.getBaseUrl(),
           model: this.configManager.getModel(),
           maxIterations: this.configManager.get('maxIterations') || 50,
-        });
+          provider: this.configManager.get('provider'),
+          customProviderFormat: this.configManager.get('customProviderFormat'),
+        }, this.configManager.get('provider'));
       }
 
       const agent = session.agent;
