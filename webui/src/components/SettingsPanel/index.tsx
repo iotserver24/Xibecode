@@ -17,8 +17,6 @@ interface RawConfig {
   model: string;
   apiKey: string;
   baseUrl: string;
-  anthropicBaseUrl: string;
-  openaiBaseUrl: string;
   maxIterations: number;
   theme: string;
   showDetails: boolean;
@@ -587,26 +585,18 @@ function AIProviderSettings({
 
   const selectedProvider = config.provider || 'openai';
 
-  let displayedBaseUrl = config.baseUrl;
   const isCustomProvider = selectedProvider === 'custom';
-
-  if (!isCustomProvider) {
-    const pConfig = providerConfigs && providerConfigs[selectedProvider];
-
-    if (!config.baseUrl && pConfig) {
-      displayedBaseUrl = pConfig.baseUrl;
-    }
-
-    if (selectedProvider === 'anthropic' && config.anthropicBaseUrl) displayedBaseUrl = config.anthropicBaseUrl;
-    if (selectedProvider === 'openai' && config.openaiBaseUrl) displayedBaseUrl = config.openaiBaseUrl;
-  }
+  const pConfig = providerConfigs && providerConfigs[selectedProvider];
+  const defaultBaseUrl = pConfig ? pConfig.baseUrl : '';
 
   const handleProviderChange = (newProvider: string) => {
     updateConfig('provider', newProvider);
 
-    if (newProvider !== 'custom') {
-      updateConfig('baseUrl', '');
-    }
+
+    // Clear base URL when switching providers to avoid using a wrong proxy/url
+    // unless it's a transition where we might want to keep it?
+    // For now, clearing it is safer and cleaner as per standard behavior.
+    updateConfig('baseUrl', '');
   };
 
   const handleModelSelectChange = (value: string) => {
@@ -621,9 +611,7 @@ function AIProviderSettings({
       if (m && m.provider && m.provider !== selectedProvider && selectedProvider !== 'custom') {
         const newProvider = m.provider;
         updateConfig('provider', newProvider);
-        if (newProvider !== 'custom') {
-          updateConfig('baseUrl', '');
-        }
+        updateConfig('baseUrl', '');
       }
     }
   };
@@ -763,14 +751,10 @@ function AIProviderSettings({
       <SettingRow label="Base URL">
         <input
           type="text"
-          value={displayedBaseUrl || ''}
+          value={config.baseUrl || ''}
           onChange={(e) => updateConfig('baseUrl', e.target.value)}
-          placeholder="Default"
-          disabled={!isCustomProvider}
-          className={cn(
-            "setting-input w-56",
-            !isCustomProvider && "bg-zinc-900/50 text-zinc-500 cursor-not-allowed"
-          )}
+          placeholder={defaultBaseUrl || (isCustomProvider ? 'Enter API URL...' : 'Default')}
+          className="setting-input w-56"
         />
       </SettingRow>
 
@@ -788,7 +772,7 @@ function AIProviderSettings({
       )}
 
       {!isCustomProvider && (
-        <SettingHint>Base URL is managed automatically by the selected provider.</SettingHint>
+        <SettingHint>Leave empty to use the default provider URL ({defaultBaseUrl}).</SettingHint>
       )}
       {isCustomProvider && (
         <SettingHint>Enter the full API endpoint URL.</SettingHint>

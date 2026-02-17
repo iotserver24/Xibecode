@@ -737,14 +737,28 @@ export class EnhancedAgent extends EventEmitter {
       });
 
       if (!streamResponse.ok || !streamResponse.body) {
-        throw new Error(`OpenAI-compatible streaming error: ${streamResponse.status}`);
+        let errorMsg = `OpenAI-compatible streaming error: ${streamResponse.status}`;
+        try {
+          const text = await streamResponse.text();
+          try {
+            const data = JSON.parse(text);
+            if (data.error && data.error.message) {
+              errorMsg = `API Error: ${data.error.message}`;
+            } else {
+              errorMsg = `API Error: ${text}`;
+            }
+          } catch {
+            errorMsg = `API Error: ${text}`;
+          }
+        } catch {
+          // ignore body read error
+        }
+        throw new Error(errorMsg);
       }
 
-      const reader = (streamResponse.body as any).getReader
-        ? (streamResponse.body as any).getReader()
-        : null;
-      if (!reader) {
-        throw new Error('Streaming reader not available');
+      const body = streamResponse.body;
+      if (!body) {
+        throw new Error('Streaming body not available');
       }
 
       let fullText = '';
@@ -754,11 +768,8 @@ export class EnhancedAgent extends EventEmitter {
 
       const textDecoder = new TextDecoder();
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += typeof value === 'string' ? value : textDecoder.decode(value, { stream: true });
+      for await (const value of body) {
+        buffer += typeof value === 'string' ? value : textDecoder.decode(value as BufferSource, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
