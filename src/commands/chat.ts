@@ -365,6 +365,24 @@ export async function chatCommand(options: ChatOptions) {
   let isAgentRunning = false;
   let rl: readline.Interface | null = null;
   let sigintCount = 0;
+  let lastSigintTime = 0;
+
+  function handleSigint() {
+    const now = Date.now();
+    // debounce in case both rl and keypress emit SIGINT
+    if (now - lastSigintTime < 100) return;
+    lastSigintTime = now;
+
+    if (sigintCount === 0) {
+      console.log('');
+      ui.warning('Press Ctrl+C again to exit.');
+      if (!isAgentRunning) promptUser();
+      sigintCount++;
+      setTimeout(() => { sigintCount = 0; }, 3000);
+    } else {
+      process.exit(0);
+    }
+  }
 
   function promptUser() {
     process.stdout.write(chalk.hex('#00E676').bold('❯ You ') + '');
@@ -399,17 +417,7 @@ export async function chatCommand(options: ChatOptions) {
       }
     });
 
-    rl.on('SIGINT', () => {
-      if (sigintCount === 0) {
-        console.log('');
-        ui.warning('Press Ctrl+C again to exit.');
-        if (!isAgentRunning) promptUser();
-        sigintCount++;
-        setTimeout(() => sigintCount = 0, 3000);
-      } else {
-        process.exit(0);
-      }
-    });
+    rl.on('SIGINT', handleSigint);
   }
 
   function closeRL() {
@@ -797,6 +805,10 @@ export async function chatCommand(options: ChatOptions) {
 
     process.stdin.on('keypress', (_str, key: any) => {
       if (!key) return;
+      if (key.ctrl && key.name === 'c') {
+        handleSigint();
+        return;
+      }
       if (key.name === 'tab') {
         const idx = allModes.indexOf(currentMode);
         const next = allModes[(idx + 1) % allModes.length];
