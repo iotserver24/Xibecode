@@ -164,6 +164,7 @@ export async function chatCommand(options: ChatOptions) {
 
   async function handlePlannerQuestions(questions: any[]): Promise<void> {
     try {
+      closeRL();
       const inquirer = (await import('inquirer')).default;
       const answers: Record<string, string> = {};
 
@@ -223,6 +224,8 @@ export async function chatCommand(options: ChatOptions) {
       await agent.run(message, tools, toolExecutor);
     } catch {
       // Inquirer not available or error
+    } finally {
+      createRL();
     }
   }
 
@@ -355,19 +358,81 @@ export async function chatCommand(options: ChatOptions) {
     isProcessing: false,
   });
 
-  // Queue for WebUI messages and resolver for interrupting TUI input
-  let pendingWebUIMessage: string | null = null;
-  let webUIMessageResolver: ((msg: string) => void) | null = null;
+  // Queue for pending inputs
+  interface QueuedInput { message: string; source: 'tui' | 'webui'; }
+  const inputQueue: QueuedInput[] = [];
+  let inputResolver: ((input: QueuedInput) => void) | null = null;
+  let isAgentRunning = false;
+  let rl: readline.Interface | null = null;
+  let sigintCount = 0;
+
+  function promptUser() {
+    process.stdout.write(chalk.hex('#00E676').bold('❯ You ') + '');
+  }
+
+  function createRL() {
+    if (rl) return;
+    rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      terminal: true
+    });
+
+    rl.on('line', (line) => {
+      const msg = line.trim();
+      if (!msg) {
+        if (!isAgentRunning) promptUser();
+        return;
+      }
+
+      if (isAgentRunning) {
+        agent.injectMessage(msg);
+        console.log('');
+        ui.success(`Message queued for agent's next step.`);
+      } else {
+        const item: QueuedInput = { message: msg, source: 'tui' };
+        if (inputResolver) {
+          inputResolver(item);
+        } else {
+          inputQueue.push(item);
+        }
+      }
+    });
+
+    rl.on('SIGINT', () => {
+      if (sigintCount === 0) {
+        console.log('');
+        ui.warning('Press Ctrl+C again to exit.');
+        if (!isAgentRunning) promptUser();
+        sigintCount++;
+        setTimeout(() => sigintCount = 0, 3000);
+      } else {
+        process.exit(0);
+      }
+    });
+  }
+
+  function closeRL() {
+    if (rl) {
+      rl.close();
+      rl = null;
+    }
+  }
 
   // Listen for messages from WebUI
   SessionBridge.on('user_message', async (content: string, source: string) => {
     if (source === 'webui') {
-      pendingWebUIMessage = content;
-      // If TUI is waiting for input, resolve immediately with WebUI message
-      if (webUIMessageResolver) {
-        webUIMessageResolver(content);
-        webUIMessageResolver = null;
-        pendingWebUIMessage = null;
+      if (isAgentRunning) {
+        agent.injectMessage(content);
+        console.log('');
+        ui.info(`WebUI message injected into agent's thought process.`);
+      } else {
+        const item: QueuedInput = { message: content, source: 'webui' };
+        if (inputResolver) {
+          inputResolver(item);
+        } else {
+          inputQueue.push(item);
+        }
       }
     }
   });
@@ -376,38 +441,17 @@ export async function chatCommand(options: ChatOptions) {
    * Get input from either TUI or WebUI (whichever comes first)
    */
   async function getInput(): Promise<{ message: string; source: 'tui' | 'webui' }> {
-    // Check if there's already a pending WebUI message
-    if (pendingWebUIMessage) {
-      const msg = pendingWebUIMessage;
-      pendingWebUIMessage = null;
-      return { message: msg, source: 'webui' };
+    createRL();
+    if (inputQueue.length > 0) {
+      return inputQueue.shift()!;
     }
 
     return new Promise((resolve) => {
-      // Set up resolver for WebUI messages
-      webUIMessageResolver = (msg: string) => {
-        rl.close();
-        resolve({ message: msg, source: 'webui' });
+      promptUser();
+      inputResolver = (input: QueuedInput) => {
+        inputResolver = null;
+        resolve(input);
       };
-
-      // Create readline interface for TUI input
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
-
-      // Show prompt
-      process.stdout.write(chalk.hex('#00E676').bold('❯ You ') + '');
-
-      rl.on('line', (line) => {
-        webUIMessageResolver = null;
-        rl.close();
-        resolve({ message: line, source: 'tui' });
-      });
-
-      rl.on('close', () => {
-        webUIMessageResolver = null;
-      });
     });
   }
 
@@ -543,6 +587,7 @@ export async function chatCommand(options: ChatOptions) {
       ui.info('No saved sessions yet.');
       return;
     }
+    closeRL();
     const { picked } = await inquirer.prompt([
       {
         type: 'list',
@@ -554,6 +599,7 @@ export async function chatCommand(options: ChatOptions) {
         })),
       },
     ]);
+    createRL();
 
     const loaded = await sessionManager.loadSession(picked);
     if (!loaded) {
@@ -594,6 +640,7 @@ export async function chatCommand(options: ChatOptions) {
     const customModels = (config.get('customModels') || []) as { id: string; provider: string }[];
     const unique = Array.from(new Set([current, ...fixedModels, ...customModels.map(m => m.id)]));
 
+    closeRL();
     const { picked } = await inquirer.prompt([
       {
         type: 'list',
@@ -607,12 +654,14 @@ export async function chatCommand(options: ChatOptions) {
         }),
       },
     ]);
+    createRL();
     config.set('model', picked);
     ui.success(`Model set to: ${picked}`);
   }
 
   async function handleThemesCommand() {
     const current = ui.getThemeName();
+    closeRL();
     const { picked } = await inquirer.prompt([
       {
         type: 'list',
@@ -624,6 +673,7 @@ export async function chatCommand(options: ChatOptions) {
         })),
       },
     ]);
+    createRL();
     ui.setTheme(picked);
     config.set('theme', picked);
     ui.success(`Theme set to: ${picked}`);
@@ -804,6 +854,7 @@ export async function chatCommand(options: ChatOptions) {
           };
         });
 
+        closeRL();
         const { picked } = await inquirer.prompt([
           {
             type: 'list',
@@ -822,9 +873,11 @@ export async function chatCommand(options: ChatOptions) {
             default: '@' + picked,
           },
         ]);
+        createRL();
 
         message = followUp.message;
       } catch (error: any) {
+        createRL();
         ui.error('Failed to list files for selection', error);
         continue;
       }
@@ -904,6 +957,7 @@ export async function chatCommand(options: ChatOptions) {
     }
 
     if (lowerMessage === '/provider') {
+      closeRL();
       const { picked } = await inquirer.prompt([
         {
           type: 'list',
@@ -915,6 +969,7 @@ export async function chatCommand(options: ChatOptions) {
           ],
         },
       ]);
+      createRL();
 
       currentProvider = picked;
       config.set('provider', picked);
@@ -1177,6 +1232,7 @@ export async function chatCommand(options: ChatOptions) {
         console.log('');
 
         // Prompt to install
+        closeRL();
         const { installChoice } = await inquirer.prompt([
           {
             type: 'list',
@@ -1191,6 +1247,7 @@ export async function chatCommand(options: ChatOptions) {
             ],
           },
         ]);
+        createRL();
 
         if (installChoice === '__cancel__') {
           continue;
@@ -1408,10 +1465,21 @@ export async function chatCommand(options: ChatOptions) {
         SessionBridge.onTUIUserMessage(message);
       }
 
+      isAgentRunning = true;
       // agent.run() resets its iteration/tool counters but KEEPS
       // the conversation history (this.messages), so the AI has
       // full context of everything discussed in this session.
       await agent.run(message, tools, toolExecutor);
+      isAgentRunning = false;
+
+      const unhandled = agent.getInjectedMessages();
+      if (unhandled.length > 0) {
+        agent.clearInjectedMessages();
+        for (const msg of unhandled) {
+          inputQueue.push({ message: msg, source: 'tui' });
+        }
+      }
+
       const stats = agent.getStats();
 
       // Update SessionBridge with latest messages
