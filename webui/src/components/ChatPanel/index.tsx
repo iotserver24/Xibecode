@@ -315,10 +315,12 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
   };
 
   const handleSend = () => {
-    if (!inputValue.trim() || isProcessing) return;
+    if (!inputValue.trim()) return;
     sendMessage(inputValue.trim());
     setInputValue('');
-    setThinkingText('Thinking...');
+    if (!isProcessing) {
+      setThinkingText('Thinking...');
+    }
   };
 
   if (isCollapsed) return null;
@@ -614,7 +616,7 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
             placeholder="Ask a follow-up..."
             className="w-full bg-transparent border-none px-3.5 pt-3 pb-1 min-h-[44px] max-h-[180px] resize-none focus:ring-0 focus:outline-none text-[13px] text-zinc-200 placeholder-zinc-600"
             rows={1}
-            disabled={isProcessing || !isConnected}
+            disabled={!isConnected}
           />
 
           {/* Bottom toolbar */}
@@ -644,7 +646,7 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
 
             <button
               onClick={handleSend}
-              disabled={!inputValue.trim() || isProcessing || !isConnected}
+              disabled={!inputValue.trim() || !isConnected}
               className="p-1.5 rounded-lg bg-zinc-100 text-zinc-900 hover:bg-white disabled:opacity-20 disabled:bg-zinc-700 disabled:text-zinc-500 transition-all"
             >
               <ArrowUp size={16} strokeWidth={2.5} />

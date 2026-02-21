@@ -160,6 +160,19 @@ export class EnhancedAgent extends EventEmitter {
   private sessionCost: number = 0;
   private activeSkill: { name: string; instructions: string } | null = null;
   private memory: NeuralMemory;
+  private injectedMessages: string[] = [];
+
+  public injectMessage(message: string): void {
+    this.injectedMessages.push(message);
+  }
+
+  public getInjectedMessages(): string[] {
+    return this.injectedMessages;
+  }
+
+  public clearInjectedMessages(): void {
+    this.injectedMessages = [];
+  }
 
   // Pricing per 1M tokens (input/output) — Claude models
   private static readonly PRICING: Record<string, { input: number; output: number }> = {
@@ -489,6 +502,17 @@ export class EnhancedAgent extends EventEmitter {
               is_error: true,
             });
           }
+        }
+
+        // Add injected messages if any exist
+        if (this.injectedMessages.length > 0) {
+          const combinedMsg = this.injectedMessages.join('\n');
+          toolResults.push({
+            type: 'text' as const,
+            text: `[USER INTERRUPT/UPDATE]:\n${combinedMsg}`
+          } as any);
+          this.emit('warning', { message: `Injected ${this.injectedMessages.length} user message(s) into context.` });
+          this.injectedMessages = [];
         }
 
         // Add results to conversation
