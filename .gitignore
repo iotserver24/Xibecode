@@ -65,6 +65,9 @@ playwright/.cache/
 Skill-marketplace
 next/
 
+# Site (not tracked in this repo)
+site/
+
 # Electron
 electron-app/node_modules/
 electron-app/dist/
