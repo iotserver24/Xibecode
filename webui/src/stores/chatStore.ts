@@ -20,7 +20,7 @@ export interface Attachment {
 }
 
 export type AgentMode =
-  | 'agent' | 'plan' | 'tester' | 'debugger' | 'security'
+  | 'agent' | 'plan' | 'tester' | 'debugger' | 'security' | 'pentest'
   | 'review' | 'team_leader' | 'architect' | 'engineer'
   | 'seo' | 'product' | 'data' | 'researcher';
 
