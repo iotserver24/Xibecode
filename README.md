@@ -301,6 +301,7 @@ Type `/` in the input to open the command palette:
 | `/mode tester` | 🧪 | Testing and QA |
 | `/mode debugger` | 🐛 | Bug investigation |
 | `/mode security` | 🔒 | Security analysis |
+| `/mode pentest` | 🔓 | Penetration testing - run app and probe for vulnerabilities |
 | `/mode review` | 👀 | Code review |
 | `/mode team_leader` | 👑 | Coordinate team |
 | `/mode architect` | 🏛️ | System design |

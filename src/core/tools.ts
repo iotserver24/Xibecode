@@ -283,6 +283,13 @@ export class CodingToolExecutor implements ToolExecutor {
       }
     }
 
+    if (this.currentMode === 'pentest' && toolName === 'write_file') {
+      const isPentestReport = p.path && (p.path === 'pentest-report.md' || p.path.endsWith('/pentest-report.md'));
+      if (isPentestReport) {
+        permission = { allowed: true };
+      }
+    }
+
     if (!permission.allowed) {
       return {
         error: true,

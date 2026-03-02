@@ -2252,7 +2252,7 @@ else:
 - **/files** - List project files
 - **/mode [name]** - Switch agent mode
 
-**Available Modes:** agent, plan, tester, debugger, security, review, team_leader, architect, engineer, seo, product, data, researcher
+**Available Modes:** agent, plan, tester, debugger, security, pentest, review, team_leader, architect, engineer, seo, product, data, researcher
 
 **Tips:**
 - Type **@** to reference files

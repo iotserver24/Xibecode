@@ -52,6 +52,7 @@ export type AgentMode =
   | 'tester'         // Tess - Testing
   | 'debugger'       // Dex - Debugging
   | 'security'       // Sentinel - Security
+  | 'pentest'        // Penetration testing - run app and probe for vulnerabilities
   | 'review'         // Nova - Code review
   | 'team_leader'    // Arya - Orchestration
   | 'seo'            // Siri - SEO
@@ -551,6 +552,89 @@ After completing your security analysis, request the appropriate mode:
 - Suggest specific remediation steps`,
   },
 
+  pentest: {
+    name: 'Pentest',
+    description: 'Penetration testing - run app and probe for vulnerabilities',
+    personaName: 'Penetester',
+    personaRole: 'the Penetration Tester',
+    allowedCategories: ['read_only', 'git_read', 'context', 'shell_command', 'network'],
+    canModify: false,
+    defaultDryRun: true,
+    displayColor: '#E91E63', // magenta/rose
+    icon: '🔓',
+    riskTolerance: 'medium',
+    requiresConfirmation: true,
+    promptSuffix: `
+## PENTEST MODE - Dynamic Penetration Testing
+### You are the Penetration Tester 🔓
+
+You are operating in PENTEST MODE. Your mission is to run the application and attempt to exploit it like a real attacker - WITHOUT modifying any source code.
+
+### Your Workflow (follow this order):
+
+**Phase 1: Discover the Application**
+1. Read \`package.json\` to identify the app type (Next.js, Express, Fastify, etc.) and start scripts
+2. Use \`grep_code\` and \`search_files\` to find API routes, auth logic, and entry points
+3. Identify the port (check config, or assume 3000/8080)
+
+**Phase 2: Start the Application**
+1. Run the dev/start command via \`run_command\` (e.g. \`npm run dev\`, \`pnpm dev\`, \`bun dev\`)
+2. Use a timeout and run in background if needed - or run and wait for "listening" output
+3. If the port is already in use, assume the app is running and proceed to probing
+
+**Phase 3: Probe and Attack**
+1. Use \`run_command\` with \`curl\` to send HTTP requests with malicious payloads:
+   - SQL injection: \`' OR 1=1--\`, \`"; DROP TABLE users--\`
+   - XSS: \`<script>alert(1)</script>\`, \`<img src=x onerror=alert(1)>\`
+   - Auth bypass: missing/invalid tokens, IDOR attempts
+   - Path traversal: \`../../../etc/passwd\`
+2. Use \`fetch_url\` for GET requests to endpoints
+3. Document each attempt: endpoint, payload, response (status, body snippet)
+
+**Phase 4: Write the Report**
+Write \`pentest-report.md\` in the project root using \`write_file\`. The report MUST follow this format:
+
+\`\`\`markdown
+# Penetration Test Report
+
+## Overview
+{Summary of app type, endpoints tested, duration of test}
+
+## Vulnerabilities Found
+| Severity | Type | Location | Description |
+|----------|------|----------|-------------|
+{Table of findings}
+
+## Attack Vectors Used
+- SQL Injection: {what was tried, results}
+- XSS: {what was tried, results}
+- Auth Bypass: {what was tried, results}
+- Other: {any other vectors}
+
+## Security Score: XX/100
+{0-100 score based on findings. 100 = no vulnerabilities found, lower = more critical issues}
+
+## Remediation Summary
+{Brief recommendations for each finding}
+\`\`\`
+
+After writing the file, output this EXACT tag:
+[[PENTEST_READY]]
+
+This signals the UI to show the report with a "Fix" button.
+
+### CRITICAL RULES
+- You may ONLY write to \`pentest-report.md\` - do NOT modify any other files
+- Do NOT change source code - only probe the running application
+- Be thorough but safe - do not attempt destructive attacks (e.g. actual DROP TABLE)
+- Calculate the security score fairly: critical vulns = -20 each, high = -15, medium = -10, low = -5
+
+### Mode Switching
+When the user wants to fix vulnerabilities, they will click "Fix". You can also request:
+- **Dex the Debugger** for targeted fixes: [[REQUEST_MODE: debugger | reason=Fix vulnerabilities from pentest-report.md]]
+- **Agent Mode** for broader security improvements: [[REQUEST_MODE: agent | reason=Implement security fixes from pentest report]]`,
+  },
+
   review: {
     name: 'Review',
     description: 'Code review and quality analysis',
@@ -948,6 +1032,10 @@ export function getModeTransitionMessage(fromMode: AgentMode, toMode: AgentMode)
     return `Switching to ${toConfig.name} mode for security analysis. This mode focuses on vulnerability detection and cannot modify files.`;
   }
 
+  if (toMode === 'pentest') {
+    return `Switching to ${toConfig.name} mode. This mode will run your application and probe it for vulnerabilities. No source code will be modified.`;
+  }
+
   if (!fromConfig.canModify && toConfig.canModify) {
     return `Escalating from ${fromConfig.name} (read-only) to ${toConfig.name} (write-enabled). ${toConfig.name} mode can modify files, run commands, and change git state.`;
   }
@@ -1264,14 +1352,14 @@ export function stripTaskComplete(text: string): string {
 
 export function isValidMode(mode: string): mode is AgentMode {
   return [
-    'plan', 'agent', 'tester', 'debugger', 'security', 'review',
+    'plan', 'agent', 'tester', 'debugger', 'security', 'pentest', 'review',
     'team_leader', 'seo', 'product', 'architect', 'engineer', 'data', 'researcher'
   ].includes(mode);
 }
 
 export function getAllModes(): AgentMode[] {
   return [
-    'plan', 'agent', 'tester', 'debugger', 'security', 'review',
+    'plan', 'agent', 'tester', 'debugger', 'security', 'pentest', 'review',
     'team_leader', 'seo', 'product', 'architect', 'engineer', 'data', 'researcher'
   ];
 }

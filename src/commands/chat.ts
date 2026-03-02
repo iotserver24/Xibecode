@@ -160,6 +160,19 @@ export async function chatCommand(options: ChatOptions) {
         // File might not exist yet
       }
     }
+
+    // Check for [[PENTEST_READY]] tag
+    if (text.includes('[[PENTEST_READY]]')) {
+      const fs = require('fs');
+      const path = require('path');
+      const reportPath = path.join(process.cwd(), 'pentest-report.md');
+      try {
+        const reportContent = fs.readFileSync(reportPath, 'utf-8');
+        SessionBridge.onPentestReady(reportContent, 'pentest-report.md');
+      } catch {
+        // File might not exist yet
+      }
+    }
   }
 
   async function handlePlannerQuestions(questions: any[]): Promise<void> {

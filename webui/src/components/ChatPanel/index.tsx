@@ -9,9 +9,9 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import {
   Bot, User, Terminal,
   ChevronDown, FileCode, Sparkles, Hash,
-  Layout, Shield, Search, Zap, Check, AlertCircle,
+  Layout, Shield, ShieldCheck, Search, Zap, Check, AlertCircle,
   ArrowUp, Plus, Paperclip, X, Loader2,
-  FileText, Play, Eye
+  FileText, Play, Eye, Wrench
 } from 'lucide-react';
 import { PlanQuestionsOverlay, type PlanQuestion } from '../PlanQuestions';
 import { clsx } from 'clsx';
@@ -38,6 +38,7 @@ const MODES: { id: AgentMode; name: string; icon: any; desc: string; color: stri
   { id: 'tester', name: 'Tester', icon: <Terminal size={16} />, desc: 'Testing and QA specialist', color: 'text-pink-400' },
   { id: 'debugger', name: 'Debugger', icon: <AlertCircle size={16} />, desc: 'Bug investigation expert', color: 'text-amber-400' },
   { id: 'security', name: 'Security', icon: <Shield size={16} />, desc: 'Security analysis', color: 'text-red-400' },
+  { id: 'pentest', name: 'Pentest', icon: <ShieldCheck size={16} />, desc: 'Penetration testing - run app and probe for vulnerabilities', color: 'text-rose-500' },
   { id: 'review', name: 'Reviewer', icon: <Check size={16} />, desc: 'Code review specialist', color: 'text-purple-400' },
   { id: 'architect', name: 'Architect', icon: <Layout size={16} />, desc: 'System design expert', color: 'text-violet-400' },
   { id: 'engineer', name: 'Engineer', icon: <Terminal size={16} />, desc: 'Implementation focused', color: 'text-green-400' },
@@ -77,6 +78,9 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
   const [planQuestions, setPlanQuestions] = useState<PlanQuestion[] | null>(null);
   const [planContent, setPlanContent] = useState<string | null>(null);
   const [planPath, setPlanPath] = useState<string>('implementations.md');
+  // Pentest mode state
+  const [pentestReportContent, setPentestReportContent] = useState<string | null>(null);
+  const [pentestReportPath, setPentestReportPath] = useState<string>('pentest-report.md');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
@@ -157,7 +161,13 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
           setPlanPath(data.data.planPath || 'implementations.md');
         }
         break;
-      case 'clear': clearMessages(); setPlanContent(null); setPlanQuestions(null); break;
+      case 'pentest_ready':
+        if (data.data?.reportContent) {
+          setPentestReportContent(data.data.reportContent);
+          setPentestReportPath(data.data.reportPath || 'pentest-report.md');
+        }
+        break;
+      case 'clear': clearMessages(); setPlanContent(null); setPlanQuestions(null); setPentestReportContent(null); break;
     }
   };
 
@@ -521,6 +531,67 @@ export function ChatPanel({ isCollapsed, onToggleCollapse: _onToggleCollapse, wi
                 <Play size={12} />
                 Build
                 <span className="text-orange-200/50 text-[9px] font-normal ml-0.5">Ctrl+⏎</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Inline Pentest Report Card */}
+        {pentestReportContent && (
+          <div className="rounded-xl border border-zinc-700/60 bg-zinc-900/80 overflow-hidden">
+            {/* Card header */}
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800/60 bg-zinc-900">
+              <ShieldCheck size={13} className="text-rose-500" />
+              <span className="text-[11px] font-mono text-zinc-400">{pentestReportPath}</span>
+              <div className="flex-1" />
+            </div>
+
+            {/* Rendered report preview (truncated) */}
+            <div className="px-3 py-3 max-h-[280px] overflow-hidden relative">
+              <div className="text-[12px] text-zinc-300 leading-relaxed markdown-content plan-preview">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {pentestReportContent.split('\n').slice(0, 30).join('\n')}
+                </ReactMarkdown>
+              </div>
+              {/* Fade out gradient */}
+              <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-zinc-900/80 to-transparent pointer-events-none" />
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center justify-between px-3 py-2.5 border-t border-zinc-800/60 bg-zinc-900/50">
+              <button
+                onClick={async () => {
+                  try {
+                    const result = await api.files.read(pentestReportPath);
+                    if (result.success && result.content !== undefined) {
+                      openFile({ path: pentestReportPath, content: result.content });
+                    }
+                  } catch { /* ignore */ }
+                }}
+                className="flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors font-medium"
+              >
+                <Eye size={13} />
+                View Report
+              </button>
+              <button
+                onClick={() => {
+                  if (wsRef.current?.readyState === WebSocket.OPEN) {
+                    wsRef.current.send(JSON.stringify({ type: 'message', content: '/mode debugger' }));
+                    setTimeout(() => {
+                      if (wsRef.current?.readyState === WebSocket.OPEN) {
+                        wsRef.current.send(JSON.stringify({
+                          type: 'message',
+                          content: 'Fix the security vulnerabilities documented in pentest-report.md. Address each finding systematically, run tests to verify fixes, and update the report with the new security score.'
+                        }));
+                      }
+                    }, 500);
+                  }
+                  setPentestReportContent(null);
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-semibold transition-colors"
+              >
+                <Wrench size={12} />
+                Fix
               </button>
             </div>
           </div>

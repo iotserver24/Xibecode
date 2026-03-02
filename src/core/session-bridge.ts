@@ -10,7 +10,7 @@ import { EventEmitter } from 'events';
 export interface BridgeMessage {
   type: 'user_message' | 'assistant_message' | 'stream_start' | 'stream_text' | 'stream_end' |
         'tool_call' | 'tool_result' | 'thinking' | 'error' | 'session_sync' |
-        'plan_questions' | 'plan_ready';
+        'plan_questions' | 'plan_ready' | 'pentest_ready';
   data: any;
   source: 'tui' | 'webui';
   timestamp: number;
@@ -267,6 +267,20 @@ class SessionBridgeClass extends EventEmitter {
     };
     this.broadcastToWebUI(message);
     this.emit('plan_ready', planContent, planPath);
+  }
+
+  /**
+   * Called when pentest mode has finished writing pentest-report.md
+   */
+  onPentestReady(reportContent: string, reportPath: string): void {
+    const message: BridgeMessage = {
+      type: 'pentest_ready',
+      data: { reportContent, reportPath },
+      source: 'tui',
+      timestamp: Date.now(),
+    };
+    this.broadcastToWebUI(message);
+    this.emit('pentest_ready', reportContent, reportPath);
   }
 
   /**
