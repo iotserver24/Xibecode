@@ -61,7 +61,7 @@
     "ink-markdown": "^1.0.4",
     "ink-select-input": "^6.2.0",
     "ink-text-input": "^6.0.0",
-    "inquirer": "^8.2.7",
+    "inquirer": "^13.3.0",
     "node-fetch": "^3.3.2",
     "open": "^10.0.0",
     "ora": "^5.4.1",
