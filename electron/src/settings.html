@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XibeCode Settings</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: #0a0a0a;
+      color: #fff;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .container {
+      display: flex;
+      height: 100%;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 220px;
+      background: #111;
+      border-right: 1px solid #222;
+      padding: 20px 0;
+    }
+
+    .sidebar-title {
+      padding: 0 20px 20px;
+      font-size: 20px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .nav-item {
+      padding: 12px 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: all 0.2s;
+      border-left: 3px solid transparent;
+    }
+
+    .nav-item:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .nav-item.active {
+      background: rgba(102, 126, 234, 0.1);
+      border-left-color: #667eea;
+      color: #667eea;
+    }
+
+    .nav-icon {
+      font-size: 18px;
+    }
+
+    /* Content */
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 30px;
+    }
+
+    .section {
+      display: none;
+      max-width: 600px;
+    }
+
+    .section.active {
+      display: block;
+    }
+
+    .section-title {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .section-desc {
+      color: #888;
+      margin-bottom: 30px;
+    }
+
+    .setting-item {
+      background: #111;
+      border: 1px solid #222;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .setting-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .setting-label {
+      font-weight: 500;
+      font-size: 15px;
+    }
+
+    .setting-desc {
+      color: #888;
+      font-size: 13px;
+    }
+
+    /* Toggle Switch */
+    .toggle {
+      width: 44px;
+      height: 24px;
+      background: #333;
+      border-radius: 12px;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    .toggle.active {
+      background: #667eea;
+    }
+
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background: #fff;
+      border-radius: 50%;
+      top: 2px;
+      left: 2px;
+      transition: transform 0.3s;
+    }
+
+    .toggle.active::after {
+      transform: translateX(20px);
+    }
+
+    /* Select */
+    .select {
+      width: 100%;
+      padding: 10px 12px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 14px;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+
+    .select:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    /* Input */
+    .input {
+      width: 100%;
+      padding: 10px 12px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 14px;
+      margin-top: 10px;
+    }
+
+    .input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 10px 20px;
+      background: #667eea;
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-top: 10px;
+    }
+
+    .btn:hover {
+      background: #5a6fd6;
+    }
+
+    .btn-secondary {
+      background: #333;
+    }
+
+    .btn-secondary:hover {
+      background: #444;
+    }
+
+    .btn-danger {
+      background: #e74c3c;
+    }
+
+    .btn-danger:hover {
+      background: #c0392b;
+    }
+
+    /* Credential item */
+    .credential-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+      background: #1a1a1a;
+      border-radius: 6px;
+      margin-top: 10px;
+    }
+
+    .credential-name {
+      font-weight: 500;
+    }
+
+    .credential-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-small {
+      padding: 6px 12px;
+      font-size: 12px;
+      margin-top: 0;
+    }
+
+    /* Backup list */
+    .backup-list {
+      margin-top: 10px;
+    }
+
+    .backup-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      background: #1a1a1a;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+
+    .backup-name {
+      font-family: monospace;
+      font-size: 13px;
+    }
+
+    /* Activity log */
+    .log-entry {
+      padding: 10px;
+      background: #1a1a1a;
+      border-radius: 6px;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+
+    .log-time {
+      color: #888;
+      font-size: 11px;
+    }
+
+    .log-action {
+      color: #667eea;
+      font-weight: 500;
+    }
+
+    /* Performance stats */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-top: 10px;
+    }
+
+    .stat-card {
+      background: #1a1a1a;
+      padding: 16px;
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: 600;
+      color: #667eea;
+    }
+
+    .stat-label {
+      color: #888;
+      font-size: 13px;
+      margin-top: 4px;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #0a0a0a;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #333;
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #444;
+    }
+
+    /* Status */
+    .status {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .status-success {
+      background: rgba(46, 204, 113, 0.2);
+      color: #2ecc71;
+    }
+
+    .status-error {
+      background: rgba(231, 76, 60, 0.2);
+      color: #e74c3c;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="sidebar">
+      <div class="sidebar-title">⚙️ Settings</div>
+      <div class="nav-item active" data-section="general">
+        <span class="nav-icon">🎨</span>
+        <span>General</span>
+      </div>
+      <div class="nav-item" data-section="security">
+        <span class="nav-icon">🔒</span>
+        <span>Security</span>
+      </div>
+      <div class="nav-item" data-section="backups">
+        <span class="nav-icon">💾</span>
+        <span>Backups</span>
+      </div>
+      <div class="nav-item" data-section="activity">
+        <span class="nav-icon">📊</span>
+        <span>Activity</span>
+      </div>
+      <div class="nav-item" data-section="performance">
+        <span class="nav-icon">⚡</span>
+        <span>Performance</span>
+      </div>
+      <div class="nav-item" data-section="about">
+        <span class="nav-icon">ℹ️</span>
+        <span>About</span>
+      </div>
+    </div>
+
+    <div class="content">
+      <!-- General Settings -->
+      <div class="section active" id="section-general">
+        <div class="section-title">General</div>
+        <div class="section-desc">Customize your XibeCode experience</div>
+
+        <div class="setting-item">
+          <div class="setting-header">
+            <div>
+              <div class="setting-label">Theme</div>
+              <div class="setting-desc">Choose your preferred color scheme</div>
+            </div>
+          </div>
+          <select class="select" id="theme-select">
+            <option value="system">System Default</option>
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-header">
+            <div>
+              <div class="setting-label">Global Hotkey</div>
+              <div class="setting-desc">Keyboard shortcut to open Quick Launcher</div>
+            </div>
+          </div>
+          <input type="text" class="input" id="hotkey-input" placeholder="CmdOrControl+Shift+X" readonly>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-header">
+            <div>
+              <div class="setting-label">Minimize to Tray</div>
+              <div class="setting-desc">Keep XibeCode running in the background</div>
+            </div>
+            <div class="toggle" id="toggle-tray"></div>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-header">
+            <div>
+              <div class="setting-label">Notifications</div>
+              <div class="setting-desc">Show desktop notifications for events</div>
+            </div>
+            <div class="toggle" id="toggle-notifications"></div>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-header">
+            <div>
+              <div class="setting-label">Auto-Update</div>
+              <div class="setting-desc">Automatically check for and install updates</div>
+            </div>
+            <div class="toggle" id="toggle-autoupdate"></div>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-header">
+            <div>
+              <div class="setting-label">Sandbox Mode</div>
+              <div class="setting-desc">Enable additional security isolation</div>
+            </div>
+            <div class="toggle" id="toggle-sandbox"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Security Settings -->
+      <div class="section" id="section-security">
+        <div class="section-title">Security</div>
+        <div class="section-desc">Manage your API keys and credentials</div>
+
+        <div class="setting-item">
+          <div class="setting-header">
+            <div>
+              <div class="setting-label">Anthropic API Key</div>
+              <div class="setting-desc">Securely stored in system keychain</div>
+            </div>
+          </div>
+          <div class="credential-item">
+            <span class="credential-name">anthropic-api-key</span>
+            <div class="credential-actions">
+              <button class="btn btn-small" id="btn-save-anthropic">Save</button>
+              <button class="btn btn-small btn-danger" id="btn-delete-anthropic">Delete</button>
+            </div>
+          </div>
+          <input type="password" class="input" id="input-anthropic" placeholder="Enter API key...">
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-header">
+            <div>
+              <div class="setting-label">OpenAI API Key</div>
+              <div class="setting-desc">Securely stored in system keychain</div>
+            </div>
+          </div>
+          <div class="credential-item">
+            <span class="credential-name">openai-api-key</span>
+            <div class="credential-actions">
+              <button class="btn btn-small" id="btn-save-openai">Save</button>
+              <button class="btn btn-small btn-danger" id="btn-delete-openai">Delete</button>
+            </div>
+          </div>
+          <input type="password" class="input" id="input-openai" placeholder="Enter API key...">
+        </div>
+      </div>
+
+      <!-- Backup Settings -->
+      <div class="section" id="section-backups">
+        <div class="section-title">Backups</div>
+        <div class="section-desc">Manage project backups and restore points</div>
+
+        <div class="setting-item">
+          <div class="setting-header">
+            <div>
+              <div class="setting-label">Enable Backups</div>
+              <div class="setting-desc">Create backups before opening projects</div>
+            </div>
+            <div class="toggle" id="toggle-backup"></div>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-header">
+            <div>
+              <div class="setting-label">Activity Logging</div>
+              <div class="setting-desc">Keep a log of all actions for debugging</div>
+            </div>
+            <div class="toggle" id="toggle-logging"></div>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-header">
+            <div>
+              <div class="setting-label">Recent Backups</div>
+              <div class="setting-desc">Available restore points</div>
+            </div>
+          </div>
+          <div class="backup-list" id="backup-list">
+            <div style="color: #888; padding: 10px;">Loading backups...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity Log -->
+      <div class="section" id="section-activity">
+        <div class="section-title">Activity Log</div>
+        <div class="section-desc">Recent actions and events</div>
+
+        <div class="setting-item">
+          <div id="activity-log">
+            <div style="color: #888;">Loading activity log...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Performance -->
+      <div class="section" id="section-performance">
+        <div class="section-title">Performance</div>
+        <div class="section-desc">Monitor resource usage and active servers</div>
+
+        <div class="setting-item">
+          <div class="setting-label">Memory Usage</div>
+          <div class="stat-grid" id="memory-stats">
+            <div class="stat-card">
+              <div class="stat-value" id="mem-used">--</div>
+              <div class="stat-label">Used (MB)</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="mem-heap">--</div>
+              <div class="stat-label">Heap (MB)</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-label">Active Servers</div>
+          <div id="server-list">
+            <div style="color: #888; padding: 10px;">No active servers</div>
+          </div>
+        </div>
+
+        <button class="btn" id="btn-refresh-perf">Refresh</button>
+      </div>
+
+      <!-- About -->
+      <div class="section" id="section-about">
+        <div class="section-title">About XibeCode</div>
+        <div class="section-desc">Version information and updates</div>
+
+        <div class="setting-item">
+          <div class="setting-label">Desktop App Version</div>
+          <div style="color: #888; margin-top: 8px;">v0.5.1</div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-label">CLI Version</div>
+          <div style="color: #888; margin-top: 8px;" id="cli-version">Checking...</div>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-label">Electron Version</div>
+          <div style="color: #888; margin-top: 8px;">v33.0.0</div>
+        </div>
+
+        <button class="btn" id="btn-check-update">Check for Updates</button>
+        <button class="btn btn-secondary" id="btn-open-logs" style="margin-left: 10px;">Open Log Files</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const api = window.xibecode;
+    let settings = {};
+
+    // Navigation
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        
+        item.classList.add('active');
+        const sectionId = 'section-' + item.dataset.section;
+        document.getElementById(sectionId).classList.add('active');
+
+        // Load section-specific data
+        if (item.dataset.section === 'backups') loadBackups();
+        if (item.dataset.section === 'activity') loadActivity();
+        if (item.dataset.section === 'performance') loadPerformance();
+        if (item.dataset.section === 'about') loadAbout();
+      });
+    });
+
+    // Toggle handlers
+    function setupToggle(id, settingKey) {
+      const toggle = document.getElementById(id);
+      toggle.addEventListener('click', async () => {
+        toggle.classList.toggle('active');
+        settings[settingKey] = toggle.classList.contains('active');
+        await api.saveSettings(settings);
+      });
+    }
+
+    setupToggle('toggle-tray', 'minimizeToTray');
+    setupToggle('toggle-notifications', 'notifications');
+    setupToggle('toggle-autoupdate', 'autoUpdate');
+    setupToggle('toggle-sandbox', 'sandboxMode');
+    setupToggle('toggle-backup', 'backupEnabled');
+    setupToggle('toggle-logging', 'loggingEnabled');
+
+    // Load settings
+    async function loadSettings() {
+      settings = await api.getSettings();
+      
+      // Apply settings to UI
+      document.getElementById('theme-select').value = settings.theme;
+      document.getElementById('hotkey-input').value = settings.globalHotkey;
+      
+      // Set toggles
+      if (settings.minimizeToTray) document.getElementById('toggle-tray').classList.add('active');
+      if (settings.notifications) document.getElementById('toggle-notifications').classList.add('active');
+      if (settings.autoUpdate) document.getElementById('toggle-autoupdate').classList.add('active');
+      if (settings.sandboxMode) document.getElementById('toggle-sandbox').classList.add('active');
+      if (settings.backupEnabled) document.getElementById('toggle-backup').classList.add('active');
+      if (settings.loggingEnabled) document.getElementById('toggle-logging').classList.add('active');
+    }
+
+    // Theme change
+    document.getElementById('theme-select').addEventListener('change', async (e) => {
+      settings.theme = e.target.value;
+      await api.saveSettings(settings);
+      await api.setThemeSource(settings.theme);
+    });
+
+    // Credential handlers
+    document.getElementById('btn-save-anthropic').addEventListener('click', async () => {
+      const key = document.getElementById('input-anthropic').value;
+      if (key) {
+        await api.saveCredential('anthropic-api-key', key);
+        document.getElementById('input-anthropic').value = '';
+        alert('API key saved securely!');
+      }
+    });
+
+    document.getElementById('btn-delete-anthropic').addEventListener('click', async () => {
+      await api.deleteCredential('anthropic-api-key');
+      alert('API key deleted!');
+    });
+
+    document.getElementById('btn-save-openai').addEventListener('click', async () => {
+      const key = document.getElementById('input-openai').value;
+      if (key) {
+        await api.saveCredential('openai-api-key', key);
+        document.getElementById('input-openai').value = '';
+        alert('API key saved securely!');
+      }
+    });
+
+    document.getElementById('btn-delete-openai').addEventListener('click', async () => {
+      await api.deleteCredential('openai-api-key');
+      alert('API key deleted!');
+    });
+
+    // Load backups
+    async function loadBackups() {
+      const backups = await api.listBackups();
+      const list = document.getElementById('backup-list');
+      
+      if (backups.length === 0) {
+        list.innerHTML = '<div style="color: #888; padding: 10px;">No backups found</div>';
+        return;
+      }
+      
+      list.innerHTML = backups.slice(0, 10).map(b => `
+        <div class="backup-item">
+          <span class="backup-name">${b}</span>
+          <button class="btn btn-small btn-secondary" onclick="restoreBackup('${b}')">Restore</button>
+        </div>
+      `).join('');
+    }
+
+    // Load activity
+    async function loadActivity() {
+      const logs = await api.getActivityLog(20);
+      const container = document.getElementById('activity-log');
+      
+      if (logs.length === 0) {
+        container.innerHTML = '<div style="color: #888;">No activity recorded</div>';
+        return;
+      }
+      
+      container.innerHTML = logs.map(log => `
+        <div class="log-entry">
+          <div class="log-time">${new Date(log.timestamp).toLocaleString()}</div>
+          <div><span class="log-action">${log.action}</span></div>
+        </div>
+      `).join('');
+    }
+
+    // Load performance
+    async function loadPerformance() {
+      const metrics = await api.getPerformanceMetrics();
+      
+      document.getElementById('mem-used').textContent = Math.round(metrics.memory.rss / 1024 / 1024);
+      document.getElementById('mem-heap').textContent = Math.round(metrics.memory.heapUsed / 1024 / 1024);
+      
+      const serverList = document.getElementById('server-list');
+      if (metrics.servers.length === 0) {
+        serverList.innerHTML = '<div style="color: #888; padding: 10px;">No active servers</div>';
+      } else {
+        serverList.innerHTML = metrics.servers.map(s => `
+          <div class="backup-item">
+            <span>${s.folder} (Port ${s.port})</span>
+            <span class="status status-success">Running</span>
+          </div>
+        `).join('');
+      }
+    }
+
+    // Load about
+    async function loadAbout() {
+      const version = await api.getCliVersion();
+      document.getElementById('cli-version').textContent = version || 'Not installed';
+    }
+
+    // Refresh performance
+    document.getElementById('btn-refresh-perf').addEventListener('click', loadPerformance);
+
+    // Check for updates
+    document.getElementById('btn-check-update').addEventListener('click', () => {
+      api.showNotification('Update Check', 'Checking for updates...');
+    });
+
+    // Initialize
+    loadSettings();
+  </script>
+</body>
+</html>

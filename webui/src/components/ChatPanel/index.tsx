@@ -9,7 +9,7 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import {
   Bot, User, Terminal,
   ChevronDown, FileCode, Sparkles, Hash,
-  Layout, Shield, ShieldCheck, Search, Zap, Check, AlertCircle,
+  Layout, Shield, ShieldCheck, Zap, Check, AlertCircle,
   ArrowUp, Plus, Paperclip, X, Loader2,
   FileText, Play, Eye, Wrench
 } from 'lucide-react';
@@ -36,16 +36,9 @@ const MODES: { id: AgentMode; name: string; icon: any; desc: string; color: stri
   { id: 'agent', name: 'Agent', icon: <Bot size={16} />, desc: 'Autonomous coding assistant', color: 'text-emerald-400' },
   { id: 'plan', name: 'Plan', icon: <Layout size={16} />, desc: 'Interactive planning with web research', color: 'text-orange-400' },
   { id: 'tester', name: 'Tester', icon: <Terminal size={16} />, desc: 'Testing and QA specialist', color: 'text-pink-400' },
-  { id: 'debugger', name: 'Debugger', icon: <AlertCircle size={16} />, desc: 'Bug investigation expert', color: 'text-amber-400' },
   { id: 'security', name: 'Security', icon: <Shield size={16} />, desc: 'Security analysis', color: 'text-red-400' },
   { id: 'pentest', name: 'Pentest', icon: <ShieldCheck size={16} />, desc: 'Penetration testing - run app and probe for vulnerabilities', color: 'text-rose-500' },
   { id: 'review', name: 'Reviewer', icon: <Check size={16} />, desc: 'Code review specialist', color: 'text-purple-400' },
-  { id: 'architect', name: 'Architect', icon: <Layout size={16} />, desc: 'System design expert', color: 'text-violet-400' },
-  { id: 'engineer', name: 'Engineer', icon: <Terminal size={16} />, desc: 'Implementation focused', color: 'text-green-400' },
-  { id: 'seo', name: 'SEO', icon: <Search size={16} />, desc: 'SEO optimization', color: 'text-sky-400' },
-  { id: 'product', name: 'Product', icon: <Sparkles size={16} />, desc: 'Product strategy', color: 'text-orange-400' },
-  { id: 'data', name: 'Data', icon: <Hash size={16} />, desc: 'Data analysis', color: 'text-teal-400' },
-  { id: 'researcher', name: 'Researcher', icon: <Search size={16} />, desc: 'Deep research mode', color: 'text-rose-400' },
 ];
 
 interface ChatPanelProps {

@@ -1,6 +1,6 @@
 {
   "name": "xibecode-desktop",
-  "version": "0.5.1",
+  "version": "0.5.9",
   "description": "XibeCode Desktop - AI Coding Assistant",
   "homepage": "https://github.com/iotserver24/xibecode",
   "repository": {
@@ -10,11 +10,6 @@
   "main": "dist/main.js",
   "author": "Anish Kumar (R3AP3R editz) <https://github.com/iotserver24>",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/iotserver24/xibecode#readme",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/iotserver24/xibecode"
-  },
   "bugs": {
     "url": "https://github.com/iotserver24/xibecode/issues"
   },
@@ -24,12 +19,80 @@
     "build:win": "npm run build:ts && electron-builder --win",
     "build:mac": "npm run build:ts && electron-builder --mac",
     "dev": "tsc && electron .",
-    "start": "electron ."
+    "start": "electron .",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "electron-log": "^5.0.0",
+    "electron-updater": "^6.3.0",
+    "keytar": "^7.9.0"
   },
   "devDependencies": {
     "electron": "^33.0.0",
     "electron-builder": "^25.0.0",
     "typescript": "^5.3.0",
     "@types/node": "^20.10.0"
+  },
+  "build": {
+    "appId": "com.xibeai.xibecode",
+    "productName": "XibeCode",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "src/**/*",
+      "assets/**/*",
+      "node_modules/**/*"
+    ],
+    "protocols": [
+      {
+        "name": "XibeCode Protocol",
+        "schemes": ["xibecode"]
+      }
+    ],
+    "fileAssociations": [
+      {
+        "ext": "xibecode",
+        "name": "XibeCode Project",
+        "description": "XibeCode project file",
+        "icon": "assets/icon.png",
+        "role": "Editor"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64", "arm64"]
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "deb",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "rpm",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "AppImage",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "category": "Development"
+    }
   }
 }

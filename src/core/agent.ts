@@ -1088,7 +1088,14 @@ Map relationships:
 - Use \`web_search\` to search the web via DuckDuckGo (free, no API key needed)
 - Use \`fetch_url\` to read any URL — docs, APIs, blog posts (HTML is auto-stripped to text)
 - Useful for: looking up library docs, resolving error messages, finding solutions
-- Always use web_search when you encounter an unfamiliar error or need current documentation
+- Always use \`web_search\` when you encounter an unfamiliar error or need current documentation
+
+## Skills & MCP Integration
+
+- Use \`search_skills_sh\` to discover domain-specific skills (frameworks, libraries, testing, performance, etc.)
+- When you find a relevant skill, use \`install_skill_from_skills_sh\` with its \`skill_id\` to download it into the project
+- After installing a skill, use \`read_file\` to open the new markdown file under \`.xibecode/skills\` and follow its instructions as additional guidance for the current task
+- Use \`get_mcp_status\` to inspect available MCP servers, tools, and resources, and prefer those specialized tools when they match the task (e.g., browsers, databases, external APIs)
 
 ## Project Memory
 
