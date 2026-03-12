@@ -3,6 +3,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { runCommand } from './commands/run.js';
+import { runPrCommand } from './commands/run-pr.js';
 import { chatCommand } from './commands/chat.js';
 import { configCommand } from './commands/config.js';
 import { mcpCommand } from './commands/mcp.js';
@@ -39,6 +40,24 @@ program
   .option('--changed-only', 'Focus only on git-changed files', false)
   .option('--non-interactive', 'Run in non-interactive mode (for background tasks)', false)
   .action(runCommand);
+
+// Run task + auto branch + PR
+program
+  .command('run-pr')
+  .description('Run an autonomous coding task, then create a branch and open a GitHub PR automatically')
+  .argument('[prompt]', 'Task for the AI to accomplish')
+  .option('-f, --file <path>', 'Read prompt from file')
+  .option('-m, --model <model>', 'AI model to use')
+  .option('-b, --base-url <url>', 'Custom API base URL')
+  .option('-k, --api-key <key>', 'API key (overrides config)')
+  .option('--provider <provider>', 'Model API format: anthropic or openai')
+  .option('-d, --max-iterations <number>', 'Maximum iterations (0 = unlimited, default 150)', '150')
+  .option('-v, --verbose', 'Show detailed logs', false)
+  .option('--branch <name>', 'Override branch name (default: auto-generated xibecode/<slug>-<timestamp>)')
+  .option('--title <title>', 'Override PR title (default: derived from prompt)')
+  .option('--draft', 'Open PR as draft', false)
+  .option('--skip-tests', 'Skip test verification before creating PR', false)
+  .action(runPrCommand);
 
 // Interactive chat
 program
