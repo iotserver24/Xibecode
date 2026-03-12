@@ -8,6 +8,7 @@ interface ConfigOptions {
   setKey?: string;
   setUrl?: string;
   setModel?: string;
+  setProvider?: string;
   show?: boolean;
   reset?: boolean;
   listMcpServers?: boolean;
@@ -39,6 +40,29 @@ export async function configCommand(options: ConfigOptions) {
   if (options.setModel) {
     config.set('model', options.setModel);
     ui.success(`Default model set to: ${options.setModel}`);
+    return;
+  }
+
+  if (options.setProvider) {
+    const provider = options.setProvider.toLowerCase();
+    const allowed = ['anthropic', 'openai', 'deepseek', 'zai', 'kimi', 'grok', 'openrouter', 'google', 'auto'];
+
+    if (!allowed.includes(provider)) {
+      ui.error(
+        `Invalid provider "${options.setProvider}". Valid values: ${allowed.join(
+          ', ',
+        )}`,
+      );
+      process.exit(1);
+    }
+
+    if (provider === 'auto') {
+      config.delete('provider');
+      ui.success('Provider reset to auto-detect.');
+    } else {
+      config.set('provider', provider as any);
+      ui.success(`Provider set to: ${provider}`);
+    }
     return;
   }
 
