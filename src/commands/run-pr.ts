@@ -203,7 +203,7 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
   const config = new ConfigManager();
   const cwd = process.cwd();
 
-  ui.header('0.6.2');
+  ui.header('0.6.3');
 
   // ── Pre-flight checks ────────────────────────────────────────────────────
   try {
@@ -252,6 +252,16 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
   const parsedIterations = parseInt(options.maxIterations);
   const maxIterations = parsedIterations > 0 ? parsedIterations : 150;
   const testCommandOverride = config.get('testCommandOverride');
+
+  // Diagnostic — always print resolved config so misconfiguration is obvious
+  const maskedKey = apiKey
+    ? apiKey.slice(0, 8) + '...' + apiKey.slice(-4)
+    : 'NOT SET';
+  console.log(chalk.dim('  provider  ') + chalk.cyan(provider ?? 'auto-detect'));
+  console.log(chalk.dim('  model     ') + chalk.cyan(model));
+  console.log(chalk.dim('  base url  ') + chalk.cyan(baseUrl ?? 'provider default'));
+  console.log(chalk.dim('  api key   ') + chalk.cyan(maskedKey));
+  console.log('');
 
   // ── Connect MCP servers ───────────────────────────────────────────────────
   const mcpClientManager = new MCPClientManager();
