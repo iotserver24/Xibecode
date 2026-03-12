@@ -214,6 +214,56 @@ Options:
 - `--dry-run`
 - `--changed-only`
 
+### `xibecode run-pr`
+
+Autonomous coding **with automatic branch + GitHub PR creation**. The command:
+
+1. Runs the full agent task (same as `run`)
+2. Executes your project's test suite for verification
+3. Creates a new branch (`xibecode/<slug>-<timestamp>` by default)
+4. Commits + pushes the branch to `origin`
+5. Opens a PR against the remote default branch via the GitHub CLI (`gh`)
+6. Prints the PR URL and exits
+
+**Prerequisites:**
+
+- [`gh` (GitHub CLI)](https://cli.github.com/) must be installed and authenticated:
+
+  ```bash
+  gh auth login
+  ```
+
+**Usage:**
+
+```bash
+xibecode run-pr "Fix the TypeScript errors in src/core/agent.ts"
+xibecode run-pr "Add input validation" --verbose
+xibecode run-pr "Refactor utils" --branch feat/refactor-utils --draft
+xibecode run-pr --file task.txt --skip-tests
+```
+
+Options:
+
+- `-f, --file <path>` prompt from file
+- `-m, --model <model>` model override
+- `-b, --base-url <url>` custom API URL
+- `-k, --api-key <key>` API key override
+- `--provider <provider>` `anthropic` or `openai`
+- `-d, --max-iterations <number>` default `150` (`0` = unlimited)
+- `-v, --verbose`
+- `--branch <name>` override generated branch name
+- `--title <title>` override PR title
+- `--draft` open PR as draft
+- `--skip-tests` skip test verification before creating PR
+
+**Example output:**
+
+```
+  ✅ Pull Request created successfully!
+
+  PR URL: https://github.com/your-org/your-repo/pull/42
+```
+
 ### `xibecode chat`
 
 Interactive terminal chat + tool use.
