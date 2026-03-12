@@ -117,6 +117,7 @@ program
   .option('--set-key <key>', 'Set API key')
   .option('--set-url <url>', 'Set custom base URL')
   .option('--set-model <model>', 'Set default model')
+   .option('--set-provider <provider>', 'Set default provider/API format (anthropic, openai, deepseek, zai, kimi, grok, openrouter, google, auto)')
   .option('--show', 'Show current configuration')
   .option('--reset', 'Reset all configuration')
   .option('--list-mcp-servers', 'List configured MCP servers')
