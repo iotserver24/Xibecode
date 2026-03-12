@@ -29,7 +29,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   const ui = new EnhancedUI(options.verbose);
   const config = new ConfigManager();
 
-  ui.header('0.6.2');
+  ui.header('0.6.3');
 
   // Get API key
   const apiKey = options.apiKey || config.getApiKey();
@@ -68,6 +68,16 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   const provider = (options.provider as 'anthropic' | 'openai' | undefined) || config.get('provider');
   const parsedIterations = parseInt(options.maxIterations);
   const maxIterations = parsedIterations > 0 ? parsedIterations : 150;
+
+  // Diagnostic — always print resolved config so misconfiguration is obvious
+  const maskedKey = apiKey
+    ? apiKey.slice(0, 8) + '...' + apiKey.slice(-4)
+    : 'NOT SET';
+  console.log(chalk.dim('  provider  ') + chalk.cyan(provider ?? 'auto-detect'));
+  console.log(chalk.dim('  model     ') + chalk.cyan(model));
+  console.log(chalk.dim('  base url  ') + chalk.cyan(baseUrl ?? 'provider default'));
+  console.log(chalk.dim('  api key   ') + chalk.cyan(maskedKey));
+  console.log('');
 
   // Get dry-run setting
   const dryRun = options.dryRun ?? config.get('enableDryRunByDefault') ?? false;
