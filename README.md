@@ -299,17 +299,10 @@ Type `/` in the input to open the command palette:
 | `/mode agent` | 🤖 | Autonomous coding (default) |
 | `/mode plan` | 📝 | Interactive planning with web research |
 | `/mode tester` | 🧪 | Testing and QA |
-| `/mode debugger` | 🐛 | Bug investigation |
 | `/mode security` | 🔒 | Security analysis |
 | `/mode pentest` | 🔓 | Penetration testing - run app and probe for vulnerabilities |
 | `/mode review` | 👀 | Code review |
 | `/mode team_leader` | 👑 | Coordinate team |
-| `/mode architect` | 🏛️ | System design |
-| `/mode engineer` | 🛠️ | Implementation |
-| `/mode seo` | 🌐 | SEO optimization |
-| `/mode product` | 🔥 | Product strategy |
-| `/mode data` | 📊 | Data analysis |
-| `/mode researcher` | 📚 | Deep research |
 
 ### File References (`@`)
 

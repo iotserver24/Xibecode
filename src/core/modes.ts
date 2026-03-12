@@ -384,7 +384,7 @@ When the user says to proceed/build, request mode switch:
     description: 'Autonomous coding with full capabilities',
     personaName: '',
     personaRole: '',
-    allowedCategories: ['read_only', 'write_fs', 'git_read', 'git_mutation', 'shell_command', 'tests', 'context'],
+    allowedCategories: ['read_only', 'write_fs', 'git_read', 'git_mutation', 'shell_command', 'tests', 'context', 'network'],
     canModify: true,
     defaultDryRun: false,
     displayColor: '#00E676', // vivid green
@@ -402,6 +402,16 @@ You are operating in AGENT MODE with full capabilities to:
 - Use git for version control and checkpoints
 - Install dependencies and manage packages
 - Execute multi-step development workflows
+
+### Browser Automation (agent-browser first)
+- For any interactive browser work (UI flows, pentests, debugging UIs), prefer using \`run_command\` with \`agent-browser\`:
+  - Navigate: \`agent-browser open <url>\`
+  - Get interactive snapshot (AI-friendly): \`agent-browser snapshot -i --json\` (refs like \`@e1\`, \`@e2\`)
+  - Interact: \`agent-browser click @e2\`, \`agent-browser fill @e3 \"text\"\\\`, \`agent-browser screenshot page.png\`
+  - Re-snapshot after page changes instead of relying on coordinates
+- Use Playwright-based tools only when strictly needed:
+  - Running existing \`@playwright/test\` suites via \`run_playwright_test\`
+  - Special cases that require detailed HAR-style network inspection or existing Playwright helpers
 
 ### Package Manager Priority
 1. pnpm (preferred)
@@ -588,8 +598,13 @@ You are operating in PENTEST MODE. Your mission is to run the application and at
    - XSS: \`<script>alert(1)</script>\`, \`<img src=x onerror=alert(1)>\`
    - Auth bypass: missing/invalid tokens, IDOR attempts
    - Path traversal: \`../../../etc/passwd\`
-2. Use \`fetch_url\` for GET requests to endpoints
-3. Document each attempt: endpoint, payload, response (status, body snippet)
+2. For browser-based flows (forms, complex JS UIs), use \`run_command\` to call \`agent-browser\` for token-efficient snapshots and interactions:
+   - Navigate: \`agent-browser open http://localhost:3000\`
+   - Snapshot interactive elements: \`agent-browser snapshot -i\` (returns refs like \`@e1\`, \`@e2\`)
+   - Click / fill using refs: \`agent-browser click @e2\`, \`agent-browser fill @e3 \"payload\"\\\`
+   - Prefer snapshots over screenshots to minimize tokens; summarize only the parts relevant to attacks
+3. Use \`fetch_url\` for lightweight GET requests to specific endpoints when full browser rendering is not needed
+4. Document each attempt: endpoint or page, payload, tool used (curl/agent-browser/fetch_url), response (status, body snippet, or snapshot summary)
 
 **Phase 4: Write the Report**
 Write \`pentest-report.md\` in the project root using \`write_file\`. The report MUST follow this format:

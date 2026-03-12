@@ -29,7 +29,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   const ui = new EnhancedUI(options.verbose);
   const config = new ConfigManager();
 
-  ui.header('0.2.7');
+  ui.header('0.5.9');
 
   // Get API key
   const apiKey = options.apiKey || config.getApiKey();
@@ -292,6 +292,11 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
     // Cleanup: disconnect from all MCP servers
     if (serverNames.length > 0) {
       await mcpClientManager.disconnectAll();
+    }
+
+    // Ensure CLI exits cleanly after run completes so `xibecode run "..."` doesn't hang.
+    if (!options.nonInteractive) {
+      process.exit(0);
     }
   }
 }
