@@ -8,6 +8,8 @@ import { MCPClientManager } from '../core/mcp-client.js';
 import { EnhancedUI } from '../ui/enhanced-tui.js';
 import { ConfigManager } from '../utils/config.js';
 import { NeuralMemory } from '../core/memory.js';
+import { SessionMemory } from '../core/session-memory.js';
+import { pruneContext } from '../core/context-pruner.js';
 import { SkillManager } from '../core/skills.js';
 import chalk from 'chalk';
 
@@ -21,6 +23,9 @@ interface RunPrOptions {
   provider?: string;
   maxIterations: string;
   verbose: boolean;
+  costMode?: string;
+  planFirst?: boolean;
+  mindsetAdaptive?: boolean;
   branch?: string;
   title?: string;
   draft?: boolean;
@@ -246,17 +251,23 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
   }
 
   // ── Config ───────────────────────────────────────────────────────────────
-  const model = options.model || config.getModel();
+  const costMode = (options.costMode || config.getCostMode()) as 'normal' | 'economy';
+  const useEconomy = costMode === 'economy';
+  const model = options.model || config.getModel(useEconomy);
   const baseUrl = options.baseUrl || config.getBaseUrl();
   const provider = (options.provider as 'anthropic' | 'openai' | undefined) || config.get('provider');
-  const parsedIterations = parseInt(options.maxIterations);
-  const maxIterations = parsedIterations > 0 ? parsedIterations : 150;
+  let parsedIterations = parseInt(options.maxIterations);
+  if (parsedIterations <= 0) parsedIterations = 150;
+  const maxIterations = useEconomy
+    ? Math.min(parsedIterations, config.getEconomyMaxIterations())
+    : parsedIterations;
   const testCommandOverride = config.get('testCommandOverride');
 
   // Diagnostic — always print resolved config so misconfiguration is obvious
   const maskedKey = apiKey
     ? apiKey.slice(0, 8) + '...' + apiKey.slice(-4)
     : 'NOT SET';
+  console.log(chalk.dim('  cost mode ') + chalk.cyan(useEconomy ? 'economy' : 'normal'));
   console.log(chalk.dim('  provider  ') + chalk.cyan(provider ?? 'auto-detect'));
   console.log(chalk.dim('  model     ') + chalk.cyan(model));
   console.log(chalk.dim('  base url  ') + chalk.cyan(baseUrl ?? 'provider default'));
@@ -307,6 +318,14 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
     memory,
     skillManager,
   });
+  const sessionMemory = new SessionMemory(cwd);
+  await sessionMemory.loadPreviousLearnings().catch(() => {});
+
+  const maxContextFiles = config.getMaxContextFiles();
+  const contextHintFiles = maxContextFiles > 0
+    ? await pruneContext(cwd, finalPrompt, { maxFiles: maxContextFiles, usePkgStyleContext: config.getUsePkgStyleContext() }).catch(() => [])
+    : [];
+
   const agent = new EnhancedAgent(
     {
       apiKey,
@@ -317,6 +336,12 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
       mode: 'agent',
       provider: provider as any,
       customProviderFormat: config.get('customProviderFormat'),
+      planFirst: options.planFirst ?? false,
+      mindsetAdaptive: options.mindsetAdaptive ?? false,
+      sessionMemory,
+      contextHintFiles,
+      planningModel: config.getPlanningModel(),
+      executionModel: config.getExecutionModel(),
     },
     provider as any
   );
@@ -370,62 +395,120 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
     }
   });
 
-  // ── Run the agent ─────────────────────────────────────────────────────────
+  // ── Self-correction loop: run agent, then verify; on test failure retry up to 2 times ──
+  const maxSelfCorrectRetries = 2;
+  let attempt = 0;
+  let testPassed = false;
+  let lastTestError = '';
+  let stats = { iterations: 0, filesChanged: 0, toolCalls: 0, changedFiles: [] as string[] };
+  let currentAgent = agent;
+
   try {
-    await agent.run(finalPrompt, toolExecutor.getTools(), toolExecutor);
+    while (attempt <= maxSelfCorrectRetries) {
+      const isRetry = attempt > 0;
+      const prompt = isRetry
+        ? `[Self-correction] The previous run's test suite failed. Fix the failures and ensure tests pass.\n\nTest output:\n${lastTestError.slice(0, 2000)}\n\nOriginal task: ${finalPrompt}`
+        : finalPrompt;
 
-    const stats = agent.getStats();
-    const duration = Date.now() - startTime;
+      if (isRetry) {
+        sessionMemory.recordLearning(`Tests failed (attempt ${attempt}): ${lastTestError.slice(0, 200)}`);
+        const retryContextHintFiles = maxContextFiles > 0
+          ? await pruneContext(cwd, 'fix failing tests ' + finalPrompt, { maxFiles: maxContextFiles, usePkgStyleContext: config.getUsePkgStyleContext() }).catch(() => [])
+          : [];
+        currentAgent = new EnhancedAgent(
+          {
+            apiKey,
+            baseUrl,
+            model,
+            maxIterations,
+            verbose: options.verbose,
+            mode: 'agent',
+            provider: provider as any,
+            customProviderFormat: config.get('customProviderFormat'),
+            planFirst: false,
+            mindsetAdaptive: options.mindsetAdaptive ?? false,
+            sessionMemory,
+            contextHintFiles: retryContextHintFiles,
+            planningModel: config.getPlanningModel(),
+            executionModel: config.getExecutionModel(),
+          },
+          provider as any
+        );
+        (currentAgent as any).memory = memory;
+        ui.warning(`Self-correction retry ${attempt}/${maxSelfCorrectRetries} — re-running agent with test failure context.`);
+      }
 
-    ui.completionSummary({
-      iterations: stats.iterations,
-      duration,
-      filesChanged: stats.filesChanged,
-      toolCalls: stats.toolCalls,
-    });
+      await currentAgent.run(prompt, toolExecutor.getTools(), toolExecutor);
+      await sessionMemory.persist();
 
-    if (stats.changedFiles.length > 0) {
-      console.log(chalk.white('  📝 Files modified:\n'));
-      stats.changedFiles.forEach(file => {
-        console.log(chalk.gray('    • ') + chalk.white(file));
+      stats = currentAgent.getStats();
+      const duration = Date.now() - startTime;
+
+      ui.completionSummary({
+        iterations: stats.iterations,
+        duration,
+        filesChanged: stats.filesChanged,
+        toolCalls: stats.toolCalls,
       });
-      console.log('');
-    }
 
-    // ── Check for actual git changes ─────────────────────────────────────
-    const changedFiles = await getChangedFiles(cwd);
-    if (changedFiles.length === 0) {
-      ui.warning('No git changes detected after the agent run. Skipping branch/PR creation.');
-      process.exit(0);
-    }
+      if (stats.changedFiles.length > 0) {
+        console.log(chalk.white('  📝 Files modified:\n'));
+        stats.changedFiles.forEach((file: string) => {
+          console.log(chalk.gray('    • ') + chalk.white(file));
+        });
+        console.log('');
+      }
 
-    // ── Run tests / verification ─────────────────────────────────────────
-    if (!options.skipTests) {
+      // ── Check for actual git changes ─────────────────────────────────────
+      const changedFiles = await getChangedFiles(cwd);
+      if (changedFiles.length === 0 && !isRetry) {
+        ui.warning('No git changes detected after the agent run. Skipping branch/PR creation.');
+        process.exit(0);
+      }
+      if (changedFiles.length === 0 && isRetry) {
+        ui.warning('No git changes on retry. Aborting.');
+        process.exit(1);
+      }
+
+      // ── Run tests / verification ─────────────────────────────────────────
+      if (options.skipTests) {
+        testPassed = true;
+        break;
+      }
       const testCmd = testCommandOverride || await detectTestCommand(cwd);
-      if (testCmd) {
-        console.log(chalk.cyan(`\n  Running verification: ${testCmd}\n`));
-        try {
-          const { stdout: testOut, stderr: testErr } = await execAsync(testCmd, {
-            cwd,
-            timeout: 300_000,
-          });
-          if (options.verbose) {
-            if (testOut) console.log(chalk.dim(testOut));
-            if (testErr) console.log(chalk.dim(testErr));
-          }
-          ui.info('Verification passed.');
-        } catch (err: any) {
-          ui.error(`Verification failed — tests did not pass. Aborting PR creation.\n  ${err.message}`);
-          if (options.verbose && err.stdout) console.log(chalk.dim(err.stdout));
-          if (options.verbose && err.stderr) console.log(chalk.dim(err.stderr));
+      if (!testCmd) {
+        ui.info('No test command detected, skipping verification.');
+        testPassed = true;
+        break;
+      }
+      console.log(chalk.cyan(`\n  Running verification: ${testCmd}\n`));
+      try {
+        const { stdout: testOut, stderr: testErr } = await execAsync(testCmd, {
+          cwd,
+          timeout: 300_000,
+        });
+        if (options.verbose) {
+          if (testOut) console.log(chalk.dim(testOut));
+          if (testErr) console.log(chalk.dim(testErr));
+        }
+        ui.info('Verification passed.');
+        testPassed = true;
+        break;
+      } catch (err: any) {
+        lastTestError = [err.stdout, err.stderr].filter(Boolean).join('\n') || err.message;
+        if (options.verbose && err.stdout) console.log(chalk.dim(err.stdout));
+        if (options.verbose && err.stderr) console.log(chalk.dim(err.stderr));
+        attempt++;
+        if (attempt > maxSelfCorrectRetries) {
+          ui.error(`Verification failed after ${maxSelfCorrectRetries} retry(ies). Aborting PR creation.\n  ${err.message}`);
           process.exit(1);
         }
-      } else {
-        ui.info('No test command detected, skipping verification.');
+        ui.warning(`Verification failed. Starting self-correction retry ${attempt}/${maxSelfCorrectRetries}...`);
       }
-    } else {
-      ui.info('Test verification skipped (--skip-tests).');
     }
+
+    const changedFiles = await getChangedFiles(cwd);
+    const duration = Date.now() - startTime;
 
     // ── Detect base branch ───────────────────────────────────────────────
     const baseBranch = await detectDefaultBase(cwd);

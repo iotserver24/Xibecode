@@ -123,6 +123,20 @@ export interface XibeCodeConfig {
   defaultEditor?: string;
   statusBarEnabled?: boolean;
   headerMinimal?: boolean;
+  // Cost-saving / economy mode
+  costMode?: 'normal' | 'economy';
+  economyModel?: string;
+  economyMaxTokens?: number;
+  economyMaxIterations?: number;
+  tokenCapPerSession?: number;
+  /** Max files to suggest from context pruning (0 = disable). Default 40. */
+  maxContextFiles?: number;
+  /** Model for strategic/planning tier (multi-model routing). */
+  planningModel?: string;
+  /** Model for tactical/operational tier (multi-model routing). */
+  executionModel?: string;
+  /** When true, augment context pruning with PKG-style code graph (AST). */
+  usePkgStyleContext?: boolean;
 }
 
 export class ConfigManager {
@@ -153,6 +167,11 @@ export class ConfigManager {
         compactThreshold: 50000,
         statusBarEnabled: true,
         headerMinimal: false,
+        costMode: 'normal',
+        economyMaxTokens: 4096,
+        economyMaxIterations: 50,
+        maxContextFiles: 40,
+        usePkgStyleContext: false,
       },
     });
   }
@@ -264,10 +283,53 @@ export class ConfigManager {
   }
 
   /**
-   * Get model from config or environment
+   * Get model from config or environment.
+   * In economy mode, returns economyModel if set, otherwise default.
    */
-  getModel(): string {
+  getModel(economy?: boolean): string {
+    const useEconomy = economy ?? (this.getCostMode() === 'economy');
+    if (useEconomy && this.get('economyModel')) {
+      return this.get('economyModel')!;
+    }
     return this.get('model') || process.env.XIBECODE_MODEL || 'claude-sonnet-4-5-20250929';
+  }
+
+  getCostMode(): 'normal' | 'economy' {
+    return this.get('costMode') || 'normal';
+  }
+
+  getEconomyModel(): string | undefined {
+    return this.get('economyModel');
+  }
+
+  getEconomyMaxTokens(): number {
+    return this.get('economyMaxTokens') ?? 4096;
+  }
+
+  getEconomyMaxIterations(): number {
+    return this.get('economyMaxIterations') ?? 50;
+  }
+
+  getTokenCapPerSession(): number | undefined {
+    return this.get('tokenCapPerSession');
+  }
+
+  /** Max files to suggest from context pruning; 0 means disabled. */
+  getMaxContextFiles(): number {
+    const v = this.get('maxContextFiles');
+    return v !== undefined && v !== null ? Number(v) : 40;
+  }
+
+  getPlanningModel(): string | undefined {
+    return this.get('planningModel');
+  }
+
+  getExecutionModel(): string | undefined {
+    return this.get('executionModel');
+  }
+
+  getUsePkgStyleContext(): boolean {
+    return this.get('usePkgStyleContext') ?? false;
   }
 
   /**
@@ -391,6 +453,8 @@ export class ConfigManager {
       'Theme': config.theme || 'default',
       'Show Details': (config.showDetails ?? config.defaultVerbose ?? false).toString(),
       'Show Thinking': (config.showThinking ?? true).toString(),
+      'Cost Mode': config.costMode || 'normal',
+      'Economy Model': config.economyModel || 'Not set',
       'Config Path': this.getConfigPath(),
     };
   }
