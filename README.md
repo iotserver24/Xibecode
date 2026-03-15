@@ -146,6 +146,8 @@ npm link
 - Node.js 18+
 - API key from Anthropic or OpenAI
 
+**Platforms:** CLI and WebUI run on Linux (x64, ARM64), macOS (Intel, Apple Silicon), and Windows. For servers, Docker, or Raspberry Pi, use headless runs: `xibecode run` / `xibecode run-pr` with env-based config (no TUI). See [DOCS.md](DOCS.md#platforms-and-devices) for the full device matrix.
+
 ## Quick Start
 
 ```bash
@@ -211,6 +213,7 @@ Options:
 - `--provider <provider>` `anthropic` or `openai`
 - `-d, --max-iterations <number>` default `150` (`0` = unlimited)
 - `-v, --verbose`
+- `--cost-mode <mode>` `normal` or `economy` (use cheaper model and lower iteration caps to save API cost)
 - `--dry-run`
 - `--changed-only`
 
@@ -251,6 +254,7 @@ Options:
 - `--provider <provider>` `anthropic` or `openai`
 - `-d, --max-iterations <number>` default `150` (`0` = unlimited)
 - `-v, --verbose`
+- `--cost-mode <mode>` `normal` or `economy` (save API cost)
 - `--branch <name>` override generated branch name
 - `--title <title>` override PR title
 - `--draft` open PR as draft
@@ -274,6 +278,7 @@ Options:
 - `-b, --base-url <url>`
 - `-k, --api-key <key>`
 - `--provider <provider>`
+- `--cost-mode <mode>` `normal` or `economy`
 - `--theme <theme>`
 - `--session <id>`
 
@@ -281,7 +286,9 @@ Options:
 
 Manage saved config:
 
-- `--set-key`, `--set-url`, `--set-model`
+- `--set-key`, `--set-url`, `--set-model`, `--set-provider`
+- `--set-cost-mode <mode>` set default cost mode: `normal` or `economy`
+- `--set-economy-model <model>` model to use when cost mode is `economy`
 - `--show`, `--reset`
 - MCP helpers: `--list-mcp-servers`, `--add-mcp-server`, `--remove-mcp-server`
 
@@ -379,7 +386,7 @@ Click the ⚙️ Settings button to configure:
 - **Markdown Rendering** - Code blocks, bold, italic, lists, links
 - **Tool Execution** - Shows each tool call with status (running/done/failed)
 - **Thinking Indicator** - Spinner while AI is processing
-- **Responsive Design** - Works on mobile and desktop
+- **Responsive Design** - Mobile-friendly layout and touch-friendly controls; works on phones, tablets, and desktop
 - **Real-time Streaming** - See responses as they're generated
 
 ## AI Test Generation

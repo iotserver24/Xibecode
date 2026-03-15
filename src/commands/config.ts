@@ -9,6 +9,8 @@ interface ConfigOptions {
   setUrl?: string;
   setModel?: string;
   setProvider?: string;
+  setCostMode?: string;
+  setEconomyModel?: string;
   show?: boolean;
   reset?: boolean;
   listMcpServers?: boolean;
@@ -63,6 +65,23 @@ export async function configCommand(options: ConfigOptions) {
       config.set('provider', provider as any);
       ui.success(`Provider set to: ${provider}`);
     }
+    return;
+  }
+
+  if (options.setCostMode) {
+    const mode = options.setCostMode.toLowerCase();
+    if (mode !== 'normal' && mode !== 'economy') {
+      ui.error(`Invalid cost mode "${options.setCostMode}". Use: normal or economy`);
+      process.exit(1);
+    }
+    config.set('costMode', mode as 'normal' | 'economy');
+    ui.success(`Cost mode set to: ${mode}`);
+    return;
+  }
+
+  if (options.setEconomyModel) {
+    config.set('economyModel', options.setEconomyModel);
+    ui.success(`Economy model set to: ${options.setEconomyModel}`);
     return;
   }
 
