@@ -955,6 +955,7 @@ const TOOL_CATEGORIES: Record<string, ToolCategory> = {
 
   // Shell and test tools
   'run_command': 'shell_command',
+  'synthesize_tool': 'shell_command',
   'run_tests': 'tests',
   'get_test_status': 'tests',
 

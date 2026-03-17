@@ -21,7 +21,8 @@ Version: **0.6.1**
 7. [Memory System](#memory-system)
 8. [Provider Recipes](#provider-recipes)
 9. [Sandbox / CI Usage](#sandbox--ci-usage)
-10. [Tips & Tricks](#tips--tricks)
+10. [Platforms and devices](#platforms-and-devices)
+11. [Tips & Tricks](#tips--tricks)
 
 ---
 
@@ -92,6 +93,18 @@ Verify config:
 xibecode config --show
 ```
 
+### Cost-saving (economy) mode
+
+Reduce API cost by using a cheaper/smaller model and lower iteration and token caps:
+
+```bash
+xibecode config --set-cost-mode economy
+xibecode config --set-economy-model claude-haiku-4-5-20251015
+```
+
+- **Economy mode**: When enabled, `run`, `run-pr`, and `chat` use the economy model (if set) and cap max iterations at the economy limit (default 50). Use for high-volume or non-critical runs.
+- **Per-command override**: `xibecode run --cost-mode economy "task"` or `xibecode run-pr --cost-mode normal "task"` to override config for one run.
+
 ---
 
 ## Commands Reference
@@ -119,6 +132,9 @@ xibecode run "Preview only" --dry-run
 | `--provider <provider>` | `anthropic` or `openai` |
 | `-d, --max-iterations <n>` | Max agent iterations (default: `150`, `0` = unlimited) |
 | `-v, --verbose` | Show detailed tool call logs |
+| `--cost-mode <mode>` | `normal` or `economy` (cheaper model, lower iteration cap) |
+| `--plan-first` | Force a strategic plan (one-shot, no tools) before execution (AX-lite) |
+| `--mindset-adaptive` | Enable CoM-style reasoning mindsets (convergent/divergent/algorithmic) |
 | `--dry-run` | Preview changes without writing |
 | `--changed-only` | Focus only on git-changed files |
 | `--non-interactive` | Suppress auto-exit (for programmatic embedding) |
@@ -169,6 +185,9 @@ prompt
 | `--provider <provider>` | `anthropic` or `openai` |
 | `-d, --max-iterations <n>` | Max iterations (default: `150`) |
 | `-v, --verbose` | Show detailed logs including git operations |
+| `--cost-mode <mode>` | `normal` or `economy` (cheaper model, lower caps) |
+| `--plan-first` | Force a strategic plan before execution (AX-lite) |
+| `--mindset-adaptive` | Enable CoM-style reasoning mindsets |
 | `--branch <name>` | Override auto-generated branch name |
 | `--title <title>` | Override PR title |
 | `--draft` | Open PR as draft |
@@ -389,6 +408,22 @@ Or add directly to `.xibecode/memory.md`:
 - Run `pnpm test` to execute the test suite
 ```
 
+### Session memory (this run)
+
+Within a single `run` or `run-pr`, the agent keeps **session memory**: tool attempts, failures, and learnings. A compact summary is injected into the system prompt so the agent avoids repeating the same mistakes. Session data is persisted under `.xibecode/sessions/` and recent learnings can be loaded into the next run.
+
+### Context pruning
+
+Before each run, the CLI scores project files by relevance to the task (keyword match). The top N file paths are suggested to the agent so it can prioritize `get_context` and `read_file`. This reduces noise and token use on large repos.
+
+- **Config**: `maxContextFiles` (default `40`). Set to `0` to disable (edit config file or use `config.set('maxContextFiles', 0)`).
+
+### Multi-model routing
+
+You can use a different model for strategic (planning) vs tactical/operational (execution) steps. Set `planningModel` and/or `executionModel` in config. When `--plan-first` is used, the strategic plan uses `planningModel` if set; the rest of the run uses `executionModel` if set, otherwise the default `model`.
+- **Behavior**: Keyword-based scoring; extensions include `.ts`, `.tsx`, `.js`, `.py`, `.go`, `.md`, etc. `node_modules`, `.git`, `dist` are ignored.
+- **PKG-style (optional)**: Set `usePkgStyleContext: true` in config to augment with AST/code-graph relevance (TypeScript/JavaScript). Helps on large codebases.
+
 ---
 
 ## Provider Recipes
@@ -487,6 +522,28 @@ xibecode run "your task"
     xibecode config --set-model "claude-3-7-sonnet-20250219"
     xibecode run-pr "Fix all TypeScript type errors" --skip-tests
 ```
+
+### Agent-triggered execution and safety
+
+Agent-triggered shell commands (`run_command`) run with the **same user and privileges** as the XibeCode process. There is no sudo or elevation. For untrusted code or third-party repos, run XibeCode inside a **container or sandbox** (e.g. Docker, E2B, or a disposable VM).
+
+- **Path and URL validation**: File paths used by tools are resolved under the working directory; paths that escape it (e.g. `../etc/passwd`) are rejected. The `fetch_url` tool only allows `http`/`https` URLs and blocks local/private addresses by default to reduce SSRF risk.
+- **Blocked commands**: The built-in safety layer blocks obviously dangerous commands (e.g. `rm -rf /`, fork bombs). See `SECURITY.md` and `src/utils/safety.ts` for details.
+
+---
+
+## Platforms and devices
+
+XibeCode is built to run across common platforms and device types.
+
+| Surface | Platforms | Notes |
+|--------|------------|--------|
+| **CLI** | Linux (x64, ARM64), macOS (Intel, Apple Silicon), Windows (x64, ARM64) | Node.js 18+. ARM64 includes Raspberry Pi and ARM servers. |
+| **WebUI** | Any browser | Responsive, mobile-friendly layout; touch-friendly. Optional PWA/installable. |
+| **Desktop (Electron)** | Windows (x64/ARM64), macOS (Intel/Apple Silicon), Linux (x64/ARM64) | Download from [Releases](https://github.com/iotserver24/xibecode/releases). AppImage/deb for arm64 on Linux. |
+| **Headless / embedded** | Servers, Docker, Raspberry Pi | Use `xibecode run` or `xibecode run-pr` with env-based config (e.g. `ANTHROPIC_API_KEY`, `xibecode config`). No TUI required; suitable for CI, cron, or an agent daemon. |
+
+CI runs on Linux x64 and ARM64 (where available) to validate the CLI. For headless usage, set your API key and endpoint via environment or config, then run tasks non-interactively.
 
 ---
 

@@ -24,6 +24,7 @@ interface ChatOptions {
   baseUrl?: string;
   apiKey?: string;
   provider?: string;
+  costMode?: string;
   theme?: string;
   session?: string;
   noWebui?: boolean;
@@ -72,7 +73,8 @@ export async function chatCommand(options: ChatOptions) {
     process.exit(1);
   }
 
-  const model = options.model || config.getModel();
+  const useEconomy = (options.costMode || config.getCostMode()) === 'economy';
+  const model = options.model || config.getModel(useEconomy);
   const baseUrl = options.baseUrl || config.getBaseUrl();
   let currentProvider: ProviderType | undefined =
     (options.provider as ProviderType | undefined) || config.get('provider');
