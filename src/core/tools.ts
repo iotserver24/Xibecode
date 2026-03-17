@@ -8,7 +8,7 @@ import { AgentMode, MODE_CONFIG, isToolAllowed, isValidMode } from './modes.js';
 import { FileEditor } from './editor.js';
 import { GitUtils } from '../utils/git.js';
 import { TestRunnerDetector } from '../utils/testRunner.js';
-import { SafetyChecker } from '../utils/safety.js';
+import { SafetyChecker, sanitizePath, sanitizeUrl } from '../utils/safety.js';
 import { PluginManager } from './plugins.js';
 import { MCPClientManager } from './mcp-client.js';
 import { NeuralMemory } from './memory.js';
@@ -115,6 +115,8 @@ export class CodingToolExecutor implements ToolExecutor {
   private platform: string;
   private dryRun: boolean;
   private testCommandOverride?: string;
+  /** Session-scoped tools synthesized by the agent (meta-agent). Execution is sandboxed via run_command. */
+  private dynamicTools = new Map<string, { description: string; script: string }>();
 
   /**
    * Creates a new CodingToolExecutor instance
@@ -343,6 +345,10 @@ export class CodingToolExecutor implements ToolExecutor {
       }
     }
 
+    try {
+    if (this.dynamicTools.has(toolName)) {
+      return this.runDynamicTool(toolName, p);
+    }
     switch (toolName) {
       case 'read_file': {
         if (!p.path || typeof p.path !== 'string') {
@@ -788,8 +794,29 @@ export class CodingToolExecutor implements ToolExecutor {
         };
       }
 
+      case 'synthesize_tool': {
+        const name = typeof p.name === 'string' ? p.name.trim() : '';
+        const description = typeof p.description === 'string' ? p.description.trim() : '';
+        const script = typeof p.script === 'string' ? p.script.trim() : '';
+        if (!name || !script) {
+          return { error: true, success: false, message: 'Missing required parameters: name (string), script (string). description is optional.' };
+        }
+        if (!/^[a-z][a-z0-9_]*$/.test(name)) {
+          return { error: true, success: false, message: 'Tool name must be lowercase letters, numbers, underscores only (e.g. my_helper).' };
+        }
+        const reserved = new Set(['read_file', 'write_file', 'run_command', 'synthesize_tool', 'get_context']);
+        if (reserved.has(name)) {
+          return { error: true, success: false, message: `Cannot override built-in tool: ${name}` };
+        }
+        this.dynamicTools.set(name, { description: description || name, script });
+        return { success: true, message: `Tool "${name}" registered. You can call it with the same name. Execution is sandboxed.` };
+      }
+
       default:
-        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, take_screenshot, get_console_logs, run_visual_test, check_accessibility, measure_performance, test_responsive, capture_network, run_playwright_test, search_skills_sh, install_skill_from_skills_sh, preview_app, delegate_subtask` };
+        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, synthesize_tool, take_screenshot, get_console_logs, run_visual_test, check_accessibility, measure_performance, test_responsive, capture_network, run_playwright_test, search_skills_sh, install_skill_from_skills_sh, preview_app, delegate_subtask` };
+    }
+    } catch (err: any) {
+      return { error: true, success: false, message: err?.message ?? String(err) };
     }
   }
 
@@ -1435,6 +1462,19 @@ export class CodingToolExecutor implements ToolExecutor {
         }
       },
       {
+        name: 'synthesize_tool',
+        description: 'Register a new session-scoped tool (meta-agent). Use when you need a reusable script for repeated operations or after repeated failures. The script runs in the same sandbox as run_command. Name must be lowercase with underscores (e.g. my_helper).',
+        input_schema: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Tool name (lowercase, letters/numbers/underscores only)' },
+            description: { type: 'string', description: 'Short description of what the tool does' },
+            script: { type: 'string', description: 'Shell command or script to run when the tool is invoked (e.g. "grep -r pattern src/")' }
+          },
+          required: ['name', 'script']
+        }
+      },
+      {
         name: 'take_screenshot',
         description: 'Take a screenshot of a web page. Useful for verifying UI appearance or capturing the state of a web app.',
         input_schema: {
@@ -1677,7 +1717,12 @@ export class CodingToolExecutor implements ToolExecutor {
 
     // Merge plugin tools
     const pluginTools = this.pluginManager.getPluginTools();
-    return [...coreTools, ...mcpTools, ...pluginTools];
+    const dynamicToolDefs: Tool[] = Array.from(this.dynamicTools.entries()).map(([name, def]) => ({
+      name,
+      description: `[Session tool] ${def.description}`,
+      input_schema: { type: 'object' as const, properties: {} },
+    }));
+    return [...coreTools, ...dynamicToolDefs, ...mcpTools, ...pluginTools];
   }
 
   /**
@@ -1689,7 +1734,9 @@ export class CodingToolExecutor implements ToolExecutor {
    * @internal
    */
   private resolvePath(filePath: string): string {
-    return path.resolve(this.workingDir, filePath);
+    const result = sanitizePath(this.workingDir, filePath);
+    if (!result.ok) throw new Error(result.message);
+    return result.path;
   }
 
   /**
@@ -2021,6 +2068,12 @@ export class CodingToolExecutor implements ToolExecutor {
    * @risk-level High
    * @since 0.1.0
    */
+  private async runDynamicTool(toolName: string, _input: any): Promise<any> {
+    const def = this.dynamicTools.get(toolName);
+    if (!def) return { error: true, success: false, message: `Dynamic tool "${toolName}" not found` };
+    return this.runCommand(def.script, this.workingDir, undefined, 60);
+  }
+
   private async runCommand(command: string, cwd?: string, input?: string, timeout?: number): Promise<any> {
     const workDir = cwd ? this.resolvePath(cwd) : this.workingDir;
     const timeoutMs = (timeout || 120) * 1000;
@@ -2790,8 +2843,12 @@ export class CodingToolExecutor implements ToolExecutor {
 
   // ── fetch_url: read any URL as text ────────────────────────
   private async fetchUrl(url: string, maxLength: number = 20000): Promise<any> {
+    const urlResult = sanitizeUrl(url.trim());
+    if (!urlResult.ok) {
+      return { error: true, success: false, message: urlResult.message };
+    }
     try {
-      const response = await fetch(url, {
+      const response = await fetch(urlResult.url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Accept': 'text/html,application/xhtml+xml,text/plain,application/json',
@@ -2837,7 +2894,7 @@ export class CodingToolExecutor implements ToolExecutor {
 
       return {
         success: true,
-        url,
+        url: urlResult.url,
         contentType: contentType.split(';')[0],
         length: text.length,
         truncated,

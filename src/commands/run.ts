@@ -8,6 +8,8 @@ import { ConfigManager } from '../utils/config.js';
 import { PlanMode } from '../core/planMode.js';
 import { TodoManager } from '../utils/todoManager.js';
 import { NeuralMemory } from '../core/memory.js';
+import { SessionMemory } from '../core/session-memory.js';
+import { pruneContext } from '../core/context-pruner.js';
 import { SkillManager } from '../core/skills.js';
 import chalk from 'chalk';
 
@@ -20,6 +22,9 @@ interface RunOptions {
   provider?: string;
   maxIterations: string;
   verbose: boolean;
+  costMode?: string;
+  planFirst?: boolean;
+  mindsetAdaptive?: boolean;
   dryRun?: boolean;
   changedOnly?: boolean;
   nonInteractive?: boolean;
@@ -62,17 +67,23 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
     process.exit(1);
   }
 
-  // Get model and base URL
-  const model = options.model || config.getModel();
+  // Cost mode: economy uses cheaper model and lower caps
+  const costMode = (options.costMode || config.getCostMode()) as 'normal' | 'economy';
+  const useEconomy = costMode === 'economy';
+  const model = options.model || config.getModel(useEconomy);
   const baseUrl = options.baseUrl || config.getBaseUrl();
   const provider = (options.provider as 'anthropic' | 'openai' | undefined) || config.get('provider');
-  const parsedIterations = parseInt(options.maxIterations);
-  const maxIterations = parsedIterations > 0 ? parsedIterations : 150;
+  let parsedIterations = parseInt(options.maxIterations);
+  if (parsedIterations <= 0) parsedIterations = 150;
+  const maxIterations = useEconomy
+    ? Math.min(parsedIterations, config.getEconomyMaxIterations())
+    : parsedIterations;
 
   // Diagnostic — always print resolved config so misconfiguration is obvious
   const maskedKey = apiKey
     ? apiKey.slice(0, 8) + '...' + apiKey.slice(-4)
     : 'NOT SET';
+  console.log(chalk.dim('  cost mode ') + chalk.cyan(useEconomy ? 'economy' : 'normal'));
   console.log(chalk.dim('  provider  ') + chalk.cyan(provider ?? 'auto-detect'));
   console.log(chalk.dim('  model     ') + chalk.cyan(model));
   console.log(chalk.dim('  base url  ') + chalk.cyan(baseUrl ?? 'provider default'));
@@ -172,6 +183,14 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
     memory,
     skillManager,
   });
+  const sessionMemory = new SessionMemory(process.cwd());
+  await sessionMemory.loadPreviousLearnings().catch(() => {});
+
+  const maxContextFiles = config.getMaxContextFiles();
+  const contextHintFiles = maxContextFiles > 0
+    ? await pruneContext(process.cwd(), effectivePrompt, { maxFiles: maxContextFiles, usePkgStyleContext: config.getUsePkgStyleContext() }).catch(() => [])
+    : [];
+
   const agent = new EnhancedAgent(
     {
       apiKey,
@@ -182,6 +201,12 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
       mode: (options.mode as any) || 'agent',
       provider: provider as any,
       customProviderFormat: config.get('customProviderFormat'),
+      planFirst: options.planFirst ?? false,
+      mindsetAdaptive: options.mindsetAdaptive ?? false,
+      sessionMemory,
+      contextHintFiles,
+      planningModel: config.getPlanningModel(),
+      executionModel: config.getExecutionModel(),
     },
     provider as any);
   // Inject memory into agent (we'll need to update Agent to accept it or just let it use its own? Better to share same instance)
@@ -258,6 +283,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   // Run the agent
   try {
     await agent.run(effectivePrompt, toolExecutor.getTools(), toolExecutor);
+    await sessionMemory.persist();
 
     const stats = agent.getStats();
     const duration = Date.now() - startTime;

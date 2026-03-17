@@ -8,11 +8,19 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-
+    runs-on: ${{ matrix.runner }}
     strategy:
+      fail-fast: false
       matrix:
-        node-version: [18.x, 20.x, 22.x]
+        include:
+          - runner: ubuntu-latest
+            node-version: 18.x
+          - runner: ubuntu-latest
+            node-version: 20.x
+          - runner: ubuntu-latest
+            node-version: 22.x
+          - runner: ubuntu-24.04-arm
+            node-version: 20.x
 
     steps:
       - name: Checkout repository
@@ -38,6 +46,9 @@ jobs:
       - name: Run unit tests
         run: pnpm test
         continue-on-error: true
+
+      - name: Security audit
+        run: pnpm audit --audit-level=high
 
   lint:
     runs-on: ubuntu-latest

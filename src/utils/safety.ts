@@ -2,7 +2,45 @@
  * Safety utilities for classifying and managing risky operations
  */
 
+import * as path from 'path';
+
 export type RiskLevel = 'low' | 'medium' | 'high';
+
+/**
+ * Resolve a file path against a working directory and ensure it stays inside it (no path traversal).
+ * Use for all user-provided paths before file operations.
+ */
+export function sanitizePath(workingDir: string, filePath: string): { ok: true; path: string } | { ok: false; message: string } {
+  const normalized = path.normalize(filePath).replace(/^(\.\.(\/|\\))+/, '');
+  const resolved = path.resolve(workingDir, normalized);
+  const relative = path.relative(workingDir, resolved);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    return { ok: false, message: 'Path escapes working directory and is not allowed' };
+  }
+  return { ok: true, path: resolved };
+}
+
+/**
+ * Validate URL for fetch_url to reduce SSRF risk: only http/https, no localhost or private IPs by default.
+ */
+export function sanitizeUrl(url: string, allowLocalhost = false): { ok: true; url: string } | { ok: false; message: string } {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return { ok: false, message: 'Invalid URL' };
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return { ok: false, message: 'Only http and https URLs are allowed' };
+  }
+  if (!allowLocalhost) {
+    const host = (parsed.hostname || '').toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.') || host.startsWith('10.') || host.endsWith('.local')) {
+      return { ok: false, message: 'Local or private URLs are not allowed' };
+    }
+  }
+  return { ok: true, url: parsed.toString() };
+}
 
 export interface RiskAssessment {
   level: RiskLevel;

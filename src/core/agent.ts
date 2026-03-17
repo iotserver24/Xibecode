@@ -5,7 +5,14 @@ import * as fsSync from 'fs';
 import { EventEmitter } from 'events';
 import { AgentMode, MODE_CONFIG, ModeState, createModeState, transitionMode, ModeOrchestrator, parseModeRequest, stripModeRequests, parseTaskComplete, stripTaskComplete, ModeTransitionPolicy } from './modes.js';
 import { NeuralMemory } from './memory.js';
+import { SessionMemory } from './session-memory.js';
 import { PROVIDER_CONFIGS, ProviderType } from '../utils/config.js';
+
+/** Reasoning tier for hierarchical (AX-lite) behavior: strategic = plan only, tactical = per-step decisions, operational = tool use. */
+export type ReasoningTier = 'strategic' | 'tactical' | 'operational';
+
+/** CoM-style reasoning mindset: influences system-prompt fragment for this turn. */
+export type ReasoningMindset = 'convergent' | 'divergent' | 'algorithmic';
 
 export interface AgentConfig {
   apiKey: string;
@@ -16,6 +23,18 @@ export interface AgentConfig {
   mode?: AgentMode;
   provider?: ProviderType;
   customProviderFormat?: 'openai' | 'anthropic';
+  /** When true, force a strategic plan (one-shot, no tools) before tactical/operational execution. */
+  planFirst?: boolean;
+  /** Optional session memory for this run (attempts, failures, learnings). */
+  sessionMemory?: SessionMemory;
+  /** Optional list of file paths suggested as relevant to the task (context pruning). */
+  contextHintFiles?: string[];
+  /** Model for strategic tier (multi-model routing). */
+  planningModel?: string;
+  /** Model for tactical/operational tier (multi-model routing). */
+  executionModel?: string;
+  /** Enable mindset-adaptive reasoning (CoM-style: convergent/divergent/algorithmic). */
+  mindsetAdaptive?: boolean;
 }
 
 export interface AgentEvent {
@@ -147,7 +166,7 @@ export class EnhancedAgent extends EventEmitter {
   private messages: MessageParam[] = [];
   private loopDetector = new LoopDetector();
   private thinkFilter = new ThinkTagFilter();
-  private config: Required<AgentConfig> & { customProviderFormat: 'openai' | 'anthropic' };
+  private config: Required<Omit<AgentConfig, 'sessionMemory' | 'contextHintFiles' | 'planningModel' | 'executionModel' | 'mindsetAdaptive'>> & { customProviderFormat: 'openai' | 'anthropic'; sessionMemory?: SessionMemory | null; contextHintFiles: string[]; planningModel?: string; executionModel?: string; mindsetAdaptive?: boolean };
   private iterationCount = 0;
   private toolCallCount = 0;
   private filesChanged: Set<string> = new Set();
@@ -161,6 +180,14 @@ export class EnhancedAgent extends EventEmitter {
   private activeSkill: { name: string; instructions: string } | null = null;
   private memory: NeuralMemory;
   private injectedMessages: string[] = [];
+  /** Current reasoning tier (AX-lite): strategic = plan, tactical = step decisions, operational = tools. */
+  private currentTier: ReasoningTier = 'tactical';
+  /** When plan-first was used, the initial strategic plan text (for context). */
+  private strategicPlanText: string = '';
+  private sessionMemory: SessionMemory | null = null;
+  private contextHintFiles: string[] = [];
+  private mindsetAdaptive: boolean = false;
+  private currentMindset: ReasoningMindset = 'convergent';
 
   public injectMessage(message: string): void {
     this.injectedMessages.push(message);
@@ -200,7 +227,14 @@ export class EnhancedAgent extends EventEmitter {
       mode: config.mode ?? 'agent',
       provider: config.provider ?? this.detectProvider(config.model),
       customProviderFormat: config.customProviderFormat ?? 'openai',
+      planFirst: config.planFirst ?? false,
+      sessionMemory: config.sessionMemory,
+      contextHintFiles: config.contextHintFiles ?? [],
+      planningModel: config.planningModel,
+      executionModel: config.executionModel,
+      mindsetAdaptive: config.mindsetAdaptive ?? false,
     };
+    this.mindsetAdaptive = this.config.mindsetAdaptive ?? false;
 
     // Initialize mode state and orchestrator
     this.modeState = createModeState(this.config.mode);
@@ -212,6 +246,8 @@ export class EnhancedAgent extends EventEmitter {
     this.provider = providerOverride ?? config.provider ?? this.detectProvider(this.config.model);
 
     // Load project memory if it exists
+    this.sessionMemory = config.sessionMemory ?? null;
+    this.contextHintFiles = config.contextHintFiles ?? [];
     this.memory = new NeuralMemory();
     this.memory.init().catch(console.error);
 
@@ -235,6 +271,13 @@ export class EnhancedAgent extends EventEmitter {
     if (m.startsWith('llama') || m.startsWith('mixtral')) return 'groq';
     if (m.includes('/')) return 'openrouter';
     return 'openai';
+  }
+
+  /** Multi-model routing: use planning model for strategic tier, execution model for tactical/operational when set. */
+  private getModelForTier(): string {
+    if (this.currentTier === 'strategic' && this.config.planningModel) return this.config.planningModel;
+    if ((this.currentTier === 'tactical' || this.currentTier === 'operational') && this.config.executionModel) return this.config.executionModel;
+    return this.config.model;
   }
 
   emit(event: AgentEvent['type'], data: any): boolean {
@@ -268,6 +311,41 @@ export class EnhancedAgent extends EventEmitter {
     }
 
     this.emit('thinking', { message: 'Starting agent...' });
+
+    // ─── Plan-first (AX-lite strategic tier): one-shot plan before execution ───
+    if (this.config.planFirst) {
+      this.currentTier = 'strategic';
+      this.emit('thinking', { message: 'Strategic planning (plan-first mode)...' });
+      try {
+        const planResult = await this.callModel([]);
+        const planContent = planResult.message?.content;
+        let planText = '';
+        if (Array.isArray(planContent)) {
+          for (const block of planContent) {
+            if (block.type === 'text' && typeof block.text === 'string') {
+              planText += block.text;
+            }
+          }
+        } else if (typeof planContent === 'string') {
+          planText = planContent;
+        }
+        planText = planText.trim() || 'Proceed step by step.';
+        this.strategicPlanText = planText;
+        this.messages.push({
+          role: 'assistant',
+          content: planResult.message?.content ?? planText,
+        });
+        this.messages.push({
+          role: 'user',
+          content: `[Strategic plan you created]\n\n${planText}\n\nNow execute this plan step by step. Use the available tools to implement each part.`,
+        });
+        this.currentTier = 'tactical';
+        this.emit('thinking', { message: 'Strategic plan complete; starting execution.' });
+      } catch (err: any) {
+        this.emit('warning', { message: `Plan-first planning failed: ${err?.message ?? err}. Continuing without plan.` });
+        this.currentTier = 'tactical';
+      }
+    }
 
     while (this.iterationCount < this.config.maxIterations) {
       this.iterationCount++;
@@ -349,6 +427,15 @@ export class EnhancedAgent extends EventEmitter {
 
         // Check for mode change requests in text blocks
         for (const block of textBlocks) {
+          if (this.mindsetAdaptive) {
+            const mindsetMatch = block.text.match(/\[\[SET_MINDSET:\s*(\w+)\]\]/i);
+            if (mindsetMatch) {
+              const m = mindsetMatch[1].toLowerCase();
+              if (m === 'convergent' || m === 'divergent' || m === 'algorithmic') {
+                this.currentMindset = m as ReasoningMindset;
+              }
+            }
+          }
           const modeRequest = parseModeRequest(block.text);
           if (modeRequest) {
             this.modeState = this.modeOrchestrator.requestModeChange(
@@ -478,11 +565,16 @@ export class EnhancedAgent extends EventEmitter {
               if (typeof input?.path === 'string') this.filesChanged.add(input.path);
             }
 
+            const success = !result.error && result.success !== false;
             this.emit('tool_result', {
               name: toolUse.name,
               result,
-              success: !result.error && result.success !== false,
+              success,
             });
+            if (this.sessionMemory) {
+              const msg = typeof result === 'object' && result?.message != null ? String(result.message) : undefined;
+              this.sessionMemory.recordAttempt(toolUse.name, success, msg);
+            }
 
             toolResults.push({
               type: 'tool_result' as const,
@@ -566,7 +658,7 @@ export class EnhancedAgent extends EventEmitter {
     }
 
     const params: any = {
-      model: this.config.model,
+      model: this.getModelForTier(),
       max_tokens: 8192,
       messages: this.messages,
       system: this.getSystemPrompt(),
@@ -740,7 +832,7 @@ export class EnhancedAgent extends EventEmitter {
     const openAiMessages = this.buildOpenAIMessages();
 
     const baseBody: any = {
-      model: this.config.model,
+      model: this.getModelForTier(),
       messages: openAiMessages,
       max_tokens: 16000,
     };
@@ -928,6 +1020,16 @@ export class EnhancedAgent extends EventEmitter {
 
 
   private getSystemPrompt(): string {
+    // AX-lite strategic tier: plan only, no tools
+    if (this.currentTier === 'strategic') {
+      return `You are XibeCode in STRATEGIC PLANNING mode. Given the user's task below, output a concise high-level plan only:
+- Main steps in order (numbered or bullet list)
+- Key files or areas of the codebase if you can infer them
+- Dependencies between steps if any
+
+Do not use any tools. Do not write code. Output only the plan text.`;
+    }
+
     const platform = process.platform;
     const platformNote = platform === 'win32'
       ? 'You are running on Windows. Use PowerShell commands and Windows path conventions.'
@@ -1327,6 +1429,9 @@ When you complete the task, provide a comprehensive summary including:
 - Potential improvements or follow-up tasks
 - Test results and validation performed
 
+${this.sessionMemory ? this.sessionMemory.getSummary() : ''}
+${this.mindsetAdaptive ? `\n## Current reasoning mindset: ${this.currentMindset.toUpperCase()}\n${this.currentMindset === 'convergent' ? 'Focus on one solution; narrow options and commit. Use [[SET_MINDSET: divergent]] to explore alternatives, or [[SET_MINDSET: algorithmic]] for step-by-step.' : this.currentMindset === 'divergent' ? 'Explore alternatives; brainstorm. Use [[SET_MINDSET: convergent]] to narrow, or [[SET_MINDSET: algorithmic]] for step-by-step.' : 'Reason step-by-step; formal. Use [[SET_MINDSET: convergent]] to commit, or [[SET_MINDSET: divergent]] to explore.'}\n` : ''}
+${this.contextHintFiles.length > 0 ? `\n## Suggested relevant files for this task\nPrioritize these when using get_context or read_file:\n${this.contextHintFiles.slice(0, 50).map(f => `- ${f}`).join('\n')}\n` : ''}
 ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
   }
 
