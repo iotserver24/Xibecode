@@ -175,6 +175,13 @@ prompt
   → exit 0
 ```
 
+The created PR description includes:
+
+- Task summary
+- Changes (rationale) per file (diff-based). In `--cost-mode economy`, explanation is budgeted and may fall back to file + `+/-` counts.
+- Run stats (iterations, tool calls, and token/cost metrics when available)
+- Verification (test command + pass/fail + duration) and any self-correction retries
+
 | Flag | Description |
 |------|-------------|
 | `[prompt]` | Task to accomplish |

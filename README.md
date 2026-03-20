@@ -228,6 +228,8 @@ Autonomous coding **with automatic branch + GitHub PR creation**. The command:
 5. Opens a PR against the remote default branch via the GitHub CLI (`gh`)
 6. Prints the PR URL and exits
 
+The PR description now includes task summary, per-file changes rationale (diff-based), run stats (iterations/tool calls and token/cost when available), and verification results (test command + pass/fail + duration, including any self-correction retries). In `--cost-mode economy`, explanation is budgeted and may fall back to file + `+/-` counts.
+
 **Prerequisites:**
 
 - [`gh` (GitHub CLI)](https://cli.github.com/) must be installed and authenticated:

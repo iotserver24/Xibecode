@@ -1,17 +1,19 @@
 import * as fs from 'fs/promises';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import { EnhancedAgent } from '../core/agent.js';
 import { CodingToolExecutor } from '../core/tools.js';
 import { PluginManager } from '../core/plugins.js';
 import { MCPClientManager } from '../core/mcp-client.js';
 import { EnhancedUI } from '../ui/enhanced-tui.js';
-import { ConfigManager } from '../utils/config.js';
+import { ConfigManager, PROVIDER_CONFIGS } from '../utils/config.js';
 import { NeuralMemory } from '../core/memory.js';
 import { SessionMemory } from '../core/session-memory.js';
 import { pruneContext } from '../core/context-pruner.js';
 import { SkillManager } from '../core/skills.js';
 import chalk from 'chalk';
+import fetch from 'node-fetch';
+import Anthropic from '@anthropic-ai/sdk';
 
 const execAsync = promisify(exec);
 
@@ -37,6 +39,49 @@ interface RunPrOptions {
 async function exec$(cmd: string, cwd: string): Promise<string> {
   const { stdout } = await execAsync(cmd, { cwd, timeout: 60_000 });
   return stdout.trim();
+}
+
+async function spawnCapture(
+  cmd: string,
+  args: string[],
+  cwd: string,
+  timeoutMs: number = 120_000,
+  allowedExitCodes: number[] = [0]
+): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, {
+      cwd,
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      reject(new Error(`${cmd} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (d) => (stdout += d));
+    child.stderr.on('data', (d) => (stderr += d));
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      const combined = (stdout + stderr).trim();
+      if (code !== null && code !== undefined && !allowedExitCodes.includes(code)) {
+        reject(new Error(`${cmd} exited with code ${code}: ${combined}`));
+      } else {
+        resolve(combined);
+      }
+    });
+  });
 }
 
 async function assertGitRepo(cwd: string): Promise<void> {
@@ -184,13 +229,21 @@ async function createBranchAndPR(opts: {
   await exec$(`git push -u origin "${branch}"`, cwd);
 
   // Build gh pr create args
-  const escapedTitle = prTitle.replace(/"/g, '\\"');
-  const escapedBody = prBody.replace(/"/g, '\\"');
-  const draftFlag = draft ? '--draft' : '';
-  const ghCmd = `gh pr create --base "${baseBranch}" --head "${branch}" --title "${escapedTitle}" --body "${escapedBody}" ${draftFlag}`.trim();
-
   log('Creating PR...');
-  const prOutput = await exec$(ghCmd, cwd);
+  const ghArgs = [
+    'pr',
+    'create',
+    '--base',
+    baseBranch,
+    '--head',
+    branch,
+    '--title',
+    prTitle,
+    '--body',
+    prBody,
+    ...(draft ? ['--draft'] : []),
+  ];
+  const prOutput = await spawnCapture('gh', ghArgs, cwd, 120_000);
 
   // gh pr create prints the URL as its last line
   const lines = prOutput.split('\n').filter(Boolean);
@@ -400,6 +453,21 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
   let attempt = 0;
   let testPassed = false;
   let lastTestError = '';
+  let verification: {
+    skipped: boolean;
+    testCommand: string | null;
+    passed: boolean;
+    durationMs: number;
+    summary: string;
+    runs: number;
+  } = {
+    skipped: false,
+    testCommand: null,
+    passed: false,
+    durationMs: 0,
+    summary: '',
+    runs: 0,
+  };
   let stats = { iterations: 0, filesChanged: 0, toolCalls: 0, changedFiles: [] as string[] };
   let currentAgent = agent;
 
@@ -473,29 +541,43 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
       // ── Run tests / verification ─────────────────────────────────────────
       if (options.skipTests) {
         testPassed = true;
+        verification.skipped = true;
+        verification.passed = true;
         break;
       }
       const testCmd = testCommandOverride || await detectTestCommand(cwd);
       if (!testCmd) {
         ui.info('No test command detected, skipping verification.');
         testPassed = true;
+        verification.skipped = true;
+        verification.passed = true;
         break;
       }
+      verification.testCommand = testCmd;
+      verification.runs++;
       console.log(chalk.cyan(`\n  Running verification: ${testCmd}\n`));
       try {
+        const verificationStart = Date.now();
         const { stdout: testOut, stderr: testErr } = await execAsync(testCmd, {
           cwd,
           timeout: 300_000,
         });
+        const verificationDurationMs = Date.now() - verificationStart;
         if (options.verbose) {
           if (testOut) console.log(chalk.dim(testOut));
           if (testErr) console.log(chalk.dim(testErr));
         }
         ui.info('Verification passed.');
         testPassed = true;
+        verification.passed = true;
+        verification.durationMs = verificationDurationMs;
+        verification.summary = 'Tests passed.';
         break;
       } catch (err: any) {
         lastTestError = [err.stdout, err.stderr].filter(Boolean).join('\n') || err.message;
+        const errFirstLine = String(lastTestError).split('\n').find(Boolean) || lastTestError;
+        verification.passed = false;
+        verification.summary = `Tests failed: ${errFirstLine.slice(0, 240)}`;
         if (options.verbose && err.stdout) console.log(chalk.dim(err.stdout));
         if (options.verbose && err.stderr) console.log(chalk.dim(err.stderr));
         attempt++;
@@ -510,14 +592,34 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
     const changedFiles = await getChangedFiles(cwd);
     const duration = Date.now() - startTime;
 
-    // ── Detect base branch ───────────────────────────────────────────────
     const baseBranch = await detectDefaultBase(cwd);
     ui.info(`Base branch: ${baseBranch}`);
+
+    // Diff + per-file rationale (optional in economy mode)
+    const diffByFile = await getDiffForChangedFiles(cwd, baseBranch, changedFiles, useEconomy).catch(() => ({} as Record<string, string>));
+    const changesRationaleMarkdown = await explainDiffsWithModel({
+      prompt: finalPrompt,
+      diffByFile,
+      fileOrder: changedFiles,
+      cwd,
+      apiKey,
+      baseUrl,
+      provider: provider as any,
+      model,
+      useEconomy,
+      baseBranch,
+    }).catch(() => '');
 
     // ── Build branch, commit, PR metadata ────────────────────────────────
     const branch = buildBranchName(finalPrompt, options.branch);
     const prTitle = options.title || buildPrTitle(finalPrompt, stats);
-    const prBody = buildPrBody(finalPrompt, stats, changedFiles, duration);
+    const selfCorrectionRetriesUsed = options.skipTests ? 0 : attempt;
+    const prBody = buildPrBody(finalPrompt, stats, changedFiles, duration, {
+      verification,
+      selfCorrectionRetriesUsed,
+      maxSelfCorrectRetries,
+      changesRationaleMarkdown,
+    });
     const commitMessage = prTitle;
 
     console.log('');
@@ -593,32 +695,342 @@ function buildPrTitle(prompt: string, stats: { iterations: number; toolCalls: nu
 
 function buildPrBody(
   prompt: string,
-  stats: { iterations: number; toolCalls: number; filesChanged: number },
+  stats: any,
   changedFiles: string[],
-  durationMs: number
+  durationMs: number,
+  opts: {
+    verification: {
+      skipped: boolean;
+      testCommand: string | null;
+      passed: boolean;
+      durationMs: number;
+      summary: string;
+      runs: number;
+    };
+    selfCorrectionRetriesUsed: number;
+    maxSelfCorrectRetries: number;
+    changesRationaleMarkdown: string;
+  }
 ): string {
   const seconds = (durationMs / 1000).toFixed(1);
   const fileList = changedFiles.map(f => `- \`${f}\``).join('\n');
+
+  const inputTokens = stats?.inputTokens;
+  const outputTokens = stats?.outputTokens;
+  const totalTokens = stats?.totalTokens;
+  const costLabel = stats?.costLabel;
+
+  const verificationLines = [
+    `- Skipped: ${opts.verification.skipped ? 'yes' : 'no'}`,
+    `- Test command: \`${opts.verification.testCommand ?? 'none'}\``,
+    `- Result: ${opts.verification.passed ? '✅ Passed' : '❌ Failed'}`,
+    `- Duration: ${opts.verification.durationMs ? `${(opts.verification.durationMs / 1000).toFixed(1)}s` : 'n/a'}`,
+    `- Runs: ${opts.verification.runs}`,
+  ];
+
+  const selfCorrectionLines = [
+    `- Retries used: ${opts.selfCorrectionRetriesUsed}/${opts.maxSelfCorrectRetries}`,
+    opts.verification.summary ? `- Last verification summary: ${opts.verification.summary}` : '',
+  ].filter(Boolean);
+
+  const rationale = opts.changesRationaleMarkdown?.trim()
+    ? opts.changesRationaleMarkdown.trim()
+    : `- ${changedFiles.length ? 'Updated files:' : 'No files changed.'}\n${fileList || ''}`;
 
   return [
     '## Summary',
     '',
     `> Task: ${prompt.trim()}`,
     '',
-    '## Changes',
+    '## Changes (rationale)',
     '',
-    fileList || '_No files detected_',
+    rationale,
     '',
     '## Run stats',
     '',
     `| Metric | Value |`,
     `|--------|-------|`,
-    `| Iterations | ${stats.iterations} |`,
-    `| Tool calls | ${stats.toolCalls} |`,
-    `| Files changed | ${stats.filesChanged} |`,
+    `| Iterations | ${stats?.iterations ?? 0} |`,
+    `| Tool calls | ${stats?.toolCalls ?? 0} |`,
+    `| Files changed | ${stats?.filesChanged ?? stats?.changedFiles?.length ?? 0} |`,
     `| Duration | ${seconds}s |`,
+    `| Input tokens | ${inputTokens ?? 'n/a'} |`,
+    `| Output tokens | ${outputTokens ?? 'n/a'} |`,
+    `| Total tokens | ${totalTokens ?? 'n/a'} |`,
+    `| Cost | ${costLabel ?? 'n/a'} |`,
+    '',
+    '## Verification',
+    '',
+    ...verificationLines,
+    '',
+    '## Self-correction',
+    '',
+    ...selfCorrectionLines,
     '',
     '---',
     '_Generated automatically by [XibeCode](https://github.com/iotserver24/xibecode) `run-pr`_',
   ].join('\n');
+}
+
+function redactSecrets(input: string): string {
+  if (!input) return input;
+
+  // Mask API keys/tokens; this is best-effort and intended to prevent obvious leakage.
+  return input
+    // Anthropic/OpenAI/others style keys
+    .replace(/\b(sk-[A-Za-z0-9]{8,})\b/g, '[REDACTED_API_KEY]')
+    .replace(/\b(AAIza|AIza)\w{10,}\b/g, '[REDACTED_GOOGLE_KEY]')
+    // Common env var formats
+    .replace(/\b(OPENAI_API_KEY|ANTHROPIC_API_KEY|OPENROUTER_API_KEY|GH_TOKEN|XIBECODE_API_KEY)\s*=\s*['"]?[^'"\n\r]+['"]?/gi, '$1=[REDACTED]')
+    // Bearer tokens
+    .replace(/\bBearer\s+[A-Za-z0-9\-_\.]{20,}\b/g, 'Bearer [REDACTED]')
+    // Private key blocks
+    .replace(/-----BEGIN [A-Z0-9 _-]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 _-]*PRIVATE KEY-----/g, '[REDACTED_PEM]')
+    // Long hex / hashes
+    .replace(/\b[0-9a-f]{32,}\b/gi, '[REDACTED_HEX]');
+}
+
+async function getDiffForChangedFiles(
+  cwd: string,
+  baseBranch: string,
+  changedFiles: string[],
+  useEconomy: boolean
+): Promise<Record<string, string>> {
+  const perFileMaxChars = useEconomy ? 1800 : 3500;
+  const totalMaxChars = useEconomy ? 18_000 : 45_000;
+
+  const diffFiles = changedFiles.slice(0, 200);
+  if (diffFiles.length === 0) return {};
+
+  const args = [
+    'diff',
+    '-U3',
+    '--no-color',
+    `origin/${baseBranch}...HEAD`,
+    '--',
+    ...diffFiles,
+  ];
+
+  const diffText = await spawnCapture('git', args, cwd, 60_000, [0, 1]).catch(() => '');
+  if (!diffText) {
+    return Object.fromEntries(diffFiles.map((f) => [f, '']));
+  }
+
+  const diffByFile: Record<string, string> = {};
+  const parts = diffText.split(/^diff --git /m);
+
+  for (const part of parts) {
+    // Skip preamble (before first "diff --git")
+    if (!part.trim()) continue;
+
+    const headerMatch = part.match(/^a\/(.+?) b\/(.+?)\n/);
+    if (!headerMatch) continue;
+
+    const filePath = headerMatch[2];
+    const fullBlock = `diff --git ${part}`.trim();
+    const excerpt = fullBlock.slice(0, perFileMaxChars);
+
+    diffByFile[filePath] = excerpt;
+  }
+
+  // Ensure all changed files exist in the map (use empty string when no diff block found).
+  const ordered: Record<string, string> = {};
+  let totalChars = 0;
+  for (const f of diffFiles) {
+    const excerpt = diffByFile[f] ?? '';
+    if (excerpt && totalChars < totalMaxChars) {
+      const remaining = totalMaxChars - totalChars;
+      const clipped = excerpt.slice(0, remaining);
+      ordered[f] = clipped;
+      totalChars += clipped.length;
+    } else {
+      ordered[f] = '';
+    }
+  }
+
+  return ordered;
+}
+
+async function getNumstatForChangedFiles(
+  cwd: string,
+  baseBranch: string,
+  changedFiles: string[],
+  useEconomy: boolean
+): Promise<Record<string, { ins: number | null; del: number | null }>> {
+  const diffFiles = changedFiles.slice(0, useEconomy ? 120 : 260);
+  if (diffFiles.length === 0) return {};
+
+  const args = [
+    'diff',
+    '--numstat',
+    `origin/${baseBranch}...HEAD`,
+    '--',
+    ...diffFiles,
+  ];
+
+  const out = await spawnCapture('git', args, cwd, 60_000, [0, 1]).catch(() => '');
+  const result: Record<string, { ins: number | null; del: number | null }> = {};
+  for (const line of out.split('\n').filter(Boolean)) {
+    const cols = line.split('\t');
+    if (cols.length < 3) continue;
+    const insRaw = cols[0];
+    const delRaw = cols[1];
+    const file = cols.slice(2).join('\t').trim();
+    const ins = insRaw === '-' ? null : Number(insRaw);
+    const del = delRaw === '-' ? null : Number(delRaw);
+    if (file) result[file] = { ins, del };
+  }
+  return result;
+}
+
+async function explainDiffsWithModel(opts: {
+  prompt: string;
+  diffByFile: Record<string, string>;
+  fileOrder: string[];
+  cwd: string;
+  apiKey: string;
+  baseUrl: string | undefined;
+  provider: string;
+  model: string;
+  useEconomy: boolean;
+  baseBranch: string;
+}): Promise<string> {
+  const {
+    prompt,
+    diffByFile,
+    fileOrder,
+    cwd,
+    apiKey,
+    baseUrl,
+    provider,
+    model,
+    useEconomy,
+    baseBranch,
+  } = opts;
+
+  const providerKey = provider as keyof typeof PROVIDER_CONFIGS;
+  const format = PROVIDER_CONFIGS[providerKey]?.format ?? 'openai';
+  if (!baseUrl) throw new Error('Missing baseUrl for LLM explainer.');
+
+  const maxFilesForLLM = useEconomy ? 6 : 10;
+  const maxTokens = useEconomy ? 650 : 1150;
+  const maxFilesForBudgetFallback = maxFilesForLLM;
+
+  const entries = fileOrder
+    .map((f) => ({ file: f, diff: diffByFile[f] ?? '' }))
+    .filter((e) => e.diff && e.diff.trim().length > 0);
+
+  if (entries.length === 0) return '';
+
+  // If too many files, fall back to numstat counts to keep PR generation cheap.
+  if (entries.length > maxFilesForBudgetFallback) {
+    const numstats = await getNumstatForChangedFiles(cwd, baseBranch, fileOrder, useEconomy).catch(
+      () => ({} as Record<string, { ins: number | null; del: number | null }>),
+    );
+    const limited = fileOrder.slice(0, useEconomy ? 120 : 260);
+    const lines = limited.map((f) => {
+      const s = numstats[f];
+      if (!s) return `- \`${f}\``;
+      const ins = s.ins === null ? 'n/a' : s.ins;
+      const del = s.del === null ? 'n/a' : s.del;
+      return `- \`${f}\`: +${ins} -${del}`;
+    });
+    return [
+      `> Rationale omitted (too many files to summarize in ${useEconomy ? 'economy' : 'normal'} mode).`,
+      ...lines,
+    ].join('\n');
+  }
+
+  // Build prompt budget by total excerpt size.
+  const totalExcerptChars = entries.reduce((acc, e) => acc + e.diff.length, 0);
+  const maxExcerptChars = useEconomy ? 18_000 : 40_000;
+  if (totalExcerptChars > maxExcerptChars) {
+    const numstats = await getNumstatForChangedFiles(cwd, baseBranch, fileOrder, useEconomy).catch(
+      () => ({} as Record<string, { ins: number | null; del: number | null }>),
+    );
+    const limited = fileOrder.slice(0, useEconomy ? 120 : 260);
+    const lines = limited.map((f) => {
+      const s = numstats[f];
+      if (!s) return `- \`${f}\``;
+      const ins = s.ins === null ? 'n/a' : s.ins;
+      const del = s.del === null ? 'n/a' : s.del;
+      return `- \`${f}\`: +${ins} -${del}`;
+    });
+    return [
+      `> Rationale omitted (diff budget exceeded in ${useEconomy ? 'economy' : 'normal'} mode).`,
+      ...lines,
+    ].join('\n');
+  }
+
+  const redactedFilesText = entries
+    .slice(0, maxFilesForLLM)
+    .map((e) => {
+      const redacted = redactSecrets(e.diff);
+      return `File: \`${e.file}\`\n\`\`\`\n${redacted}\n\`\`\``;
+    })
+    .join('\n\n');
+
+  const systemPrompt =
+    'You write PR descriptions. Produce concise per-file rationale based strictly on the diff excerpts. Avoid speculation. Do not include secrets.';
+  const userPrompt = [
+    `Task: ${prompt.trim()}`,
+    '',
+    'Diff excerpts (redacted):',
+    redactedFilesText,
+    '',
+    'Write markdown with this format:',
+    '- For each file: start with a heading `### path/to/file`',
+    '- Under it: 2-4 bullets:',
+    '  - What changed (grounded in the excerpt)',
+    '  - Why it was needed for the task',
+    '  - Any risk/verification notes if evident',
+  ].join('\n');
+
+  if (format === 'anthropic') {
+    const client = new Anthropic({ apiKey, baseURL: baseUrl });
+    const message = await client.messages.create({
+      model,
+      max_tokens: maxTokens,
+      temperature: 0.2,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
+    });
+
+    const content = message.content as any[];
+    const text = Array.isArray(content)
+      ? content.map((b) => (b?.type === 'text' ? b.text : '')).join('')
+      : String((message as any)?.content ?? '');
+    return text.trim();
+  }
+
+  // OpenAI-compatible path
+  const endpoint = baseUrl.endsWith('/v1')
+    ? `${baseUrl}/chat/completions`
+    : `${baseUrl}/chat/completions`;
+
+  const resp = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      max_tokens: maxTokens,
+      temperature: 0.2,
+    }),
+  });
+
+  if (!resp.ok) {
+    const t = await resp.text().catch(() => '');
+    throw new Error(`LLM explainer failed: HTTP ${resp.status} ${resp.statusText}. ${t}`.trim());
+  }
+
+  const data: any = await resp.json();
+  const text = data?.choices?.[0]?.message?.content ?? '';
+  return String(text).trim();
 }
