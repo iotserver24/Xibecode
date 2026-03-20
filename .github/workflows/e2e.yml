@@ -25,21 +25,46 @@ jobs:
         with:
           node-version: 20.x
           cache: 'pnpm'
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            webui/pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build project
+      - name: Build project (CLI + server)
+        run: pnpm run build
+
+      - name: Install WebUI dependencies
+        working-directory: webui
+        run: pnpm install --frozen-lockfile
+
+      - name: Build WebUI frontend
+        working-directory: webui
         run: pnpm run build
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
+      - name: Start WebUI server
+        run: |
+          pnpm start -- ui --port 3847 --host localhost > /tmp/xibecode-webui.log 2>&1 &
+          echo "Waiting for WebUI to become healthy..."
+          for i in {1..30}; do
+            if curl -fsS http://localhost:3847/api/health >/dev/null; then
+              echo "WebUI is up."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "WebUI failed to start in time. Last logs:"
+          tail -n 200 /tmp/xibecode-webui.log || true
+          exit 1
+
       - name: Run E2E tests
-        run: pnpm run test:e2e --project=chromium
+        run: pnpm run test:e2e -- e2e/webui.spec.ts --project=chromium
         env:
           CI: true
-          SKIP_WEBUI_TESTS: true
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v7
@@ -55,49 +80,4 @@ jobs:
         with:
           name: test-screenshots
           path: test-results/
-          retention-days: 7
-
-  e2e-docs:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 20.x
-          cache: 'pnpm'
-
-      - name: Install site dependencies
-        working-directory: site
-        run: pnpm install --frozen-lockfile
-
-      - name: Build documentation site
-        working-directory: site
-        run: pnpm run build
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
-
-      - name: Start docs server and run E2E tests
-        working-directory: site
-        run: |
-          pnpm run start &
-          sleep 10
-          pnpm run test:e2e || true
-
-      - name: Upload docs E2E report
-        uses: actions/upload-artifact@v7
-        if: failure()
-        with:
-          name: docs-playwright-report
-          path: site/playwright-report/
           retention-days: 7
