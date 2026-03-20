@@ -37,6 +37,10 @@ export async function chatCommand(options: ChatOptions) {
   const ui = new EnhancedUI(false, themeName);
   ui.setShowDetails(config.getShowDetails());
   ui.setShowThinking(config.getShowThinking());
+  // Condensed mode is a chat UX toggle to drastically reduce tool/diff spam.
+  // Kept OFF by default to avoid changing existing behavior unexpectedly.
+  let condensedUI = false;
+  ui.setCondensedUI(condensedUI);
 
   const sessionManager = new SessionManager(config.getSessionDirectory());
   const contextManager = new ContextManager(process.cwd());
@@ -314,7 +318,18 @@ export async function chatCommand(options: ChatOptions) {
 
             // Diff preview: show colorized diff when available
             if (r?.diff && (event.data.name === 'edit_file' || event.data.name === 'edit_lines' || event.data.name === 'verified_edit')) {
-              ui.showDiff(r.diff, r.path || r.message || '');
+              const diffKey = r.path || '';
+              if (diffKey) lastDiffByPath.set(diffKey, r.diff);
+
+              // Cap how many diff previews we print per assistant turn to reduce spam.
+              const maxDiffPreviews = condensedUI ? 2 : 4;
+              if (diffPreviewCount < maxDiffPreviews) {
+                ui.showDiff(r.diff, r.path || r.message || '', {
+                  maxHunks: condensedUI ? 2 : 4,
+                  maxLines: condensedUI ? 35 : 70,
+                });
+                diffPreviewCount++;
+              }
             }
           }
           break;
@@ -347,6 +362,9 @@ export async function chatCommand(options: ChatOptions) {
   }
 
   let hasResponse = false;
+  // Used by the /diff command to show the latest assistant-turn diffs.
+  let lastDiffByPath = new Map<string, string>();
+  let diffPreviewCount = 0;
   setupAgentHandlers();
 
   // ── Session bootstrap ──────────────────────────────────
@@ -534,9 +552,11 @@ export async function chatCommand(options: ChatOptions) {
     console.log('  ' + chalk.hex('#00D4FF')('/export') + chalk.hex('#6B6B7B')('      export this session to Markdown'));
     console.log('  ' + chalk.hex('#00D4FF')('/plan') + chalk.hex('#6B6B7B')('        create or update todo.md from a high-level goal'));
     console.log('  ' + chalk.hex('#00D4FF')('/compact') + chalk.hex('#6B6B7B')('     compact long conversation history'));
+    console.log('  ' + chalk.hex('#00D4FF')('/diff <path>') + chalk.hex('#6B6B7B')('   show stored diff from last edit (by path)'));
     console.log('  ' + chalk.hex('#00D4FF')('/details') + chalk.hex('#6B6B7B')('     toggle verbose tool details'));
     console.log('  ' + chalk.hex('#00D4FF')('/thinking') + chalk.hex('#6B6B7B')('    toggle thinking spinner'));
     console.log('  ' + chalk.hex('#00D4FF')('/themes') + chalk.hex('#6B6B7B')('      choose a color theme'));
+    console.log('  ' + chalk.hex('#00D4FF')('/ui condensed') + chalk.hex('#6B6B7B')(' toggle condensed UI (less spam)'));
     console.log('  ' + chalk.hex('#00D4FF')('@path') + chalk.hex('#6B6B7B')('        list files/folders under path (or cwd if just "@")'));
     console.log('  ' + chalk.hex('#00D4FF')('/undo') + chalk.hex('#6B6B7B')('        undo last AI turn (restore previous conversation state)'));
     console.log('  ' + chalk.hex('#00D4FF')('/redo') + chalk.hex('#6B6B7B')('        redo undone turn'));
@@ -824,6 +844,12 @@ export async function chatCommand(options: ChatOptions) {
         handleSigint();
         return;
       }
+      if (key.ctrl && key.name === 'k') {
+        condensedUI = !condensedUI;
+        ui.setCondensedUI(condensedUI);
+        ui.success(`Condensed UI ${condensedUI ? 'enabled' : 'disabled'} (Ctrl+K)`);
+        return;
+      }
       if (key.name === 'tab') {
         const idx = allModes.indexOf(currentMode);
         const next = allModes[(idx + 1) % allModes.length];
@@ -917,6 +943,48 @@ export async function chatCommand(options: ChatOptions) {
 
     if (lowerMessage === '/help') {
       showSlashHelp();
+      continue;
+    }
+
+    if (lowerMessage === '/diff' || lowerMessage.startsWith('/diff ')) {
+      const requested = trimmed.slice('/diff'.length).trim();
+      if (!requested) {
+        ui.warning('Usage: /diff <filePath>');
+        continue;
+      }
+
+      // Try exact match first, then fall back to suffix (common for relative paths).
+      let diff: string | undefined = lastDiffByPath.get(requested);
+      let fileLabel = requested;
+
+      if (!diff) {
+        let foundKey: string | undefined;
+        for (const key of lastDiffByPath.keys()) {
+          if (key === requested || key.endsWith(requested) || requested.endsWith(key)) {
+            foundKey = key;
+            break;
+          }
+        }
+        if (foundKey) {
+          diff = lastDiffByPath.get(foundKey);
+          fileLabel = foundKey;
+        }
+      }
+
+      if (!diff) {
+        const keys = [...lastDiffByPath.keys()].slice(0, 8);
+        if (keys.length === 0) {
+          ui.warning('No diff stored for this turn yet. Try editing a file first.');
+        } else {
+          ui.warning(`No stored diff for "${requested}". Available: ${keys.join(', ')}`);
+        }
+        continue;
+      }
+
+      ui.showDiff(diff, fileLabel, {
+        maxHunks: condensedUI ? 10 : 16,
+        maxLines: condensedUI ? 220 : 340,
+      });
       continue;
     }
 
@@ -1427,6 +1495,13 @@ export async function chatCommand(options: ChatOptions) {
       continue;
     }
 
+    if (lowerMessage === '/ui condensed') {
+      condensedUI = !condensedUI;
+      ui.setCondensedUI(condensedUI);
+      ui.success(`Condensed UI ${condensedUI ? 'enabled' : 'disabled'}`);
+      continue;
+    }
+
     if (lowerMessage === 'tools on') {
       enableTools = true;
       ui.success('Tools enabled');
@@ -1493,6 +1568,9 @@ export async function chatCommand(options: ChatOptions) {
       }
 
       isAgentRunning = true;
+      // Reset per-assistant-run diff viewer state.
+      lastDiffByPath.clear();
+      diffPreviewCount = 0;
       // agent.run() resets its iteration/tool counters but KEEPS
       // the conversation history (this.messages), so the AI has
       // full context of everything discussed in this session.

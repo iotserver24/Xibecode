@@ -20,6 +20,7 @@ export class EnhancedUI {
   private verbose: boolean;
   private showDetails: boolean;
   private showThinking: boolean;
+  private condensedUI: boolean;
   private themeName: ThemeName;
   private T: ThemeTokens;
   private startTime: number = 0;
@@ -31,8 +32,19 @@ export class EnhancedUI {
     this.verbose = verbose;
     this.showDetails = verbose;
     this.showThinking = true;
+    // Keep current behavior by default; chat can toggle this at runtime.
+    this.condensedUI = false;
     this.themeName = themeName;
     this.T = getTheme(themeName);
+  }
+
+  setCondensedUI(condensed: boolean) {
+    this.condensedUI = condensed;
+    if (condensed) this.stopSpinner();
+  }
+
+  getCondensedUI(): boolean {
+    return this.condensedUI;
   }
 
   setTheme(themeName: ThemeName) {
@@ -292,6 +304,12 @@ export class EnhancedUI {
 
   // ─── Tool call ────────────────────────────────────────
   toolCall(toolName: string, input: any, _index?: number) {
+    if (this.condensedUI) {
+      // Even in condensed mode, stop the spinner so it doesn't keep spinning
+      // while tools run.
+      this.stopSpinner();
+      return;
+    }
     this.stopSpinner();
     this.toolCount++;
 
@@ -313,6 +331,12 @@ export class EnhancedUI {
 
   // ─── Tool result ──────────────────────────────────────
   toolResult(toolName: string, result: any, success: boolean = true) {
+    if (this.condensedUI && success) {
+      // Tools already ran; in condensed mode we suppress success spam but
+      // keep UI cleanup consistent.
+      this.stopSpinner();
+      return;
+    }
     const icon = success ? this.T.success('✔') : this.T.error('✘');
     const summary = this.summarizeResult(toolName, result);
     const summaryStr = summary ? '  ' + this.T.dim(summary) : '';
@@ -343,10 +367,43 @@ export class EnhancedUI {
   }
 
   // ─── Diff ─────────────────────────────────────────────
-  showDiff(diff: string, file: string) {
-    console.log('    ' + this.T.bold(`changes: ${file}`));
-    const lines = diff.split('\n').slice(0, 40);
-    lines.forEach(line => {
+  showDiff(
+    diff: string,
+    file: string,
+    opts?: { maxLines?: number; maxHunks?: number }
+  ) {
+    const rawLines = diff.split('\n');
+
+    // Simple summary from the diff excerpt.
+    const insertions = rawLines.filter(l => l.startsWith('+') && !l.startsWith('+++')).length;
+    const deletions = rawLines.filter(l => l.startsWith('-') && !l.startsWith('---')).length;
+    const hunks = rawLines.filter(l => l.startsWith('@@')).length;
+
+    const maxHunks = opts?.maxHunks ?? (this.condensedUI ? 2 : 4);
+    const maxLines = opts?.maxLines ?? (this.condensedUI ? 35 : 70);
+
+    console.log('    ' + this.T.bold(`changes: ${file}`) + this.T.dim(`  (+${insertions} -${deletions})  hunks:${hunks}`));
+
+    let hunksRendered = 0;
+    let renderedLines = 0;
+    let truncated = false;
+
+    for (const line of rawLines) {
+      // Stop once we rendered enough hunks/lines; keep output readable.
+      if (hunksRendered >= maxHunks || renderedLines >= maxLines) {
+        truncated = true;
+        break;
+      }
+
+      if (line.startsWith('@@')) hunksRendered++;
+
+      // Skip noisy diff headers; still keep context and change markers.
+      if (line.startsWith('diff --git') || line.startsWith('index ') || line === '\\ No newline at end of file') {
+        continue;
+      }
+
+      renderedLines++;
+
       if (line.startsWith('+') && !line.startsWith('+++')) {
         console.log('    ' + this.T.success(line));
       } else if (line.startsWith('-') && !line.startsWith('---')) {
@@ -356,7 +413,11 @@ export class EnhancedUI {
       } else {
         console.log('    ' + this.T.dim(line));
       }
-    });
+    }
+
+    if (truncated) {
+      console.log('    ' + this.T.dim(`... truncated (showing first ${renderedLines} lines)`));
+    }
   }
 
   // ─── File change ──────────────────────────────────────
