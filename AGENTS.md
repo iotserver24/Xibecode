@@ -12,6 +12,7 @@
 - Always pass `--access public` when publishing to npm (`pnpm publish --access public`).
 - Prefer non-interactive flags on all CLI commands (e.g. `--yes`, `-y`, `GIT_EDITOR=true`) so commands never hang waiting for input.
 - When explaining code, respond in plain language without emojis unless explicitly requested.
+- For `xibecode run-pr`, the PR description should include detailed per-file change rationale plus verification details (test command + pass/fail + duration) and any self-correction retries; not just iteration/tool-count stats.
 - For commit messages, use the conventional commits style (`feat:`, `fix:`, `chore:`, etc.).
 
 ## Learned Workspace Facts
@@ -28,3 +29,4 @@
 - `pnpm publish --access public` is required because the package is unscoped but published to npm public registry.
 - All agent modes are defined in `src/core/modes.ts` under `MODE_CONFIG`; each has `allowedCategories` controlling tool access.
 - `run-pr` command (`src/commands/run-pr.ts`) requires `gh` CLI installed and authenticated (`gh auth login`) before use.
+- `xibecode run-pr` runs the agent, performs test verification (unless `--skip-tests`) with up to 2 self-correction retries on failures, and the resulting PR triggers CI security checks including `pnpm audit --audit-level=high`.

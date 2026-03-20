@@ -5,7 +5,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { glob } from 'fast-glob';
+import fg from 'fast-glob';
 
 const DEFAULT_MAX_FILES = 40;
 const DEFAULT_EXTENSIONS = ['*.ts', '*.tsx', '*.js', '*.jsx', '*.mjs', '*.cjs', '*.py', '*.go', '*.rs', '*.java', '*.md', '*.json'];
@@ -77,7 +77,7 @@ export async function pruneContext(
   const patterns = extensions.map(ext => `**/${ext}`);
   const ignore = IGNORE_DIRS.map(d => `**/${d}/**`);
   const files = words.size > 0
-    ? await glob(patterns, { cwd: workingDir, absolute: false, ignore, onlyFiles: true })
+    ? await fg(patterns, { cwd: workingDir, absolute: false, ignore, onlyFiles: true })
     : [];
 
   const scored: { path: string; score: number }[] = [];
