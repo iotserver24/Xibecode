@@ -1031,7 +1031,7 @@ function createTray(): void {
 
   // Create a simple 16x16 icon from the existing icon
   const iconPath = path.join(__dirname, '../assets/icon.png');
-  let trayIcon: NativeImage;
+  let trayIcon: Electron.NativeImage;
   
   try {
     trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
