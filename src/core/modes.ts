@@ -940,6 +940,7 @@ const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   // Write tools
   'write_file': 'write_fs',
   'edit_file': 'write_fs',
+  'verified_edit': 'write_fs',
   'edit_lines': 'write_fs',
   'insert_at_line': 'write_fs',
   'delete_file': 'write_fs',
