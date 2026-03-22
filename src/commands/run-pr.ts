@@ -261,7 +261,7 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
   const config = new ConfigManager();
   const cwd = process.cwd();
 
-  ui.header('0.7.4');
+  ui.header('0.7.5');
 
   // ── Pre-flight checks ────────────────────────────────────────────────────
   try {
@@ -302,6 +302,11 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
     console.log(chalk.cyan('    xibecode run-pr --file prompt.txt\n'));
     process.exit(1);
   }
+
+  const runPrCwdBanner =
+    `Repository root (cwd): ${cwd}\n` +
+    `All file paths for read_file, edit_file, verified_edit, write_file, and list_directory must be relative to this directory (not /workspace, /app, or other guessed roots). For run_command, omit cwd or use "." so commands run in the project root.\n\n`;
+  const taskPromptForAgent = runPrCwdBanner + finalPrompt;
 
   // ── Config ───────────────────────────────────────────────────────────────
   const costMode = (options.costMode || config.getCostMode()) as 'normal' | 'economy';
@@ -345,7 +350,7 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
   }
 
   // ── Start session display ─────────────────────────────────────────────────
-  ui.startSession(finalPrompt, { model, maxIterations, dryRun: false });
+  ui.startSession(taskPromptForAgent, { model, maxIterations, dryRun: false });
 
   // ── Load plugins + memory + skills ───────────────────────────────────────
   const pluginManager = new PluginManager();
@@ -395,6 +400,7 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
       contextHintFiles,
       planningModel: config.getPlanningModel(),
       executionModel: config.getExecutionModel(),
+      strictTextOnlyCompletion: true,
     },
     provider as any
   );
@@ -475,8 +481,8 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
     while (attempt <= maxSelfCorrectRetries) {
       const isRetry = attempt > 0;
       const prompt = isRetry
-        ? `[Self-correction] The previous run's test suite failed. Fix the failures and ensure tests pass.\n\nTest output:\n${lastTestError.slice(0, 2000)}\n\nOriginal task: ${finalPrompt}`
-        : finalPrompt;
+        ? `${runPrCwdBanner}[Self-correction] The previous run's test suite failed. Fix the failures and ensure tests pass.\n\nTest output:\n${lastTestError.slice(0, 2000)}\n\nOriginal task: ${finalPrompt}`
+        : taskPromptForAgent;
 
       if (isRetry) {
         sessionMemory.recordLearning(`Tests failed (attempt ${attempt}): ${lastTestError.slice(0, 200)}`);
@@ -499,6 +505,7 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
             contextHintFiles: retryContextHintFiles,
             planningModel: config.getPlanningModel(),
             executionModel: config.getExecutionModel(),
+            strictTextOnlyCompletion: true,
           },
           provider as any
         );

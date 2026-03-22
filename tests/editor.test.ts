@@ -103,6 +103,22 @@ function farewell(name) {
       expect(fs.mkdir).toHaveBeenCalledWith('/test/working/dir/.xibecode_backups', { recursive: true });
       expect(fs.writeFile).toHaveBeenCalled();
     });
+
+    it('should reject absolute paths outside working directory (e.g. hallucinated /workspace)', async () => {
+      const edit: SearchReplaceEdit = { search: 'a', replace: 'b' };
+      const result = await fileEditor.smartEdit('/workspace/package.json', edit);
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/repository root|Path escapes|not allowed/i);
+      expect(fs.readFile).not.toHaveBeenCalled();
+    });
+
+    it('should reject absolute paths outside working directory', async () => {
+      const edit: SearchReplaceEdit = { search: 'a', replace: 'b' };
+      const result = await fileEditor.smartEdit('/tmp/outside-working-dir.txt', edit);
+      expect(result.success).toBe(false);
+      expect(result.message).toMatch(/repository root|Path escapes|not allowed/i);
+      expect(fs.readFile).not.toHaveBeenCalled();
+    });
   });
 
   describe('editLineRange', () => {

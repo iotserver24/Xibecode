@@ -35,6 +35,11 @@ export interface AgentConfig {
   executionModel?: string;
   /** Enable mindset-adaptive reasoning (CoM-style: convergent/divergent/algorithmic). */
   mindsetAdaptive?: boolean;
+  /**
+   * When true (e.g. `run-pr`), if the assistant ends a turn with text but no tool calls,
+   * require `[[TASK_COMPLETE | summary=...]]` in the text or inject a continuation nudge instead of exiting.
+   */
+  strictTextOnlyCompletion?: boolean;
 }
 
 export interface AgentEvent {
@@ -166,7 +171,7 @@ export class EnhancedAgent extends EventEmitter {
   private messages: MessageParam[] = [];
   private loopDetector = new LoopDetector();
   private thinkFilter = new ThinkTagFilter();
-  private config: Required<Omit<AgentConfig, 'sessionMemory' | 'contextHintFiles' | 'planningModel' | 'executionModel' | 'mindsetAdaptive'>> & { customProviderFormat: 'openai' | 'anthropic'; sessionMemory?: SessionMemory | null; contextHintFiles: string[]; planningModel?: string; executionModel?: string; mindsetAdaptive?: boolean };
+  private config: Required<Omit<AgentConfig, 'sessionMemory' | 'contextHintFiles' | 'planningModel' | 'executionModel' | 'mindsetAdaptive' | 'strictTextOnlyCompletion'>> & { customProviderFormat: 'openai' | 'anthropic'; sessionMemory?: SessionMemory | null; contextHintFiles: string[]; planningModel?: string; executionModel?: string; mindsetAdaptive?: boolean; strictTextOnlyCompletion: boolean };
   private iterationCount = 0;
   private toolCallCount = 0;
   private filesChanged: Set<string> = new Set();
@@ -233,6 +238,7 @@ export class EnhancedAgent extends EventEmitter {
       planningModel: config.planningModel,
       executionModel: config.executionModel,
       mindsetAdaptive: config.mindsetAdaptive ?? false,
+      strictTextOnlyCompletion: config.strictTextOnlyCompletion ?? false,
     };
     this.mindsetAdaptive = this.config.mindsetAdaptive ?? false;
 
@@ -513,8 +519,26 @@ export class EnhancedAgent extends EventEmitter {
           }
         }
 
-        // If no tools, we're done
+        // If no tools, we're done (unless run-pr-style strict completion requires TASK_COMPLETE)
         if (toolUseBlocks.length === 0) {
+          if (
+            this.config.strictTextOnlyCompletion &&
+            this.iterationCount < this.config.maxIterations
+          ) {
+            const hasTaskComplete = textBlocks.some((b) => parseTaskComplete(b.text) != null);
+            if (!hasTaskComplete) {
+              this.emit('warning', {
+                message:
+                  'Assistant returned no tool calls without [[TASK_COMPLETE | summary=...]]; nudging to continue.',
+              });
+              this.messages.push({
+                role: 'user',
+                content:
+                  '[SYSTEM] You ended this turn without tool calls and without [[TASK_COMPLETE | summary=...]]. Continue using tools until the task is fully done (all files edited, checks run), or emit [[TASK_COMPLETE | summary=<brief summary>]] only when finished.',
+              });
+              continue;
+            }
+          }
           this.emit('complete', {
             iterations: this.iterationCount,
             toolCalls: this.toolCallCount,
@@ -576,10 +600,13 @@ export class EnhancedAgent extends EventEmitter {
               this.sessionMemory.recordAttempt(toolUse.name, success, msg);
             }
 
+            const payload =
+              typeof result === 'string' ? result : JSON.stringify(result, null, 2);
             toolResults.push({
               type: 'tool_result' as const,
               tool_use_id: toolUse.id,
-              content: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
+              content: payload,
+              ...(success ? {} : { is_error: true as const }),
             });
           } catch (error: any) {
             this.emit('error', {
@@ -760,10 +787,15 @@ export class EnhancedAgent extends EventEmitter {
           const toolResults = arr.filter((b: any) => b.type === 'tool_result');
           if (toolResults.length > 0) {
             for (const tr of toolResults) {
+              const raw =
+                typeof (tr as any).content === 'string'
+                  ? (tr as any).content
+                  : JSON.stringify((tr as any).content);
+              const failed = (tr as any).is_error === true;
               out.push({
                 role: 'tool',
                 tool_call_id: (tr as any).tool_use_id,
-                content: typeof (tr as any).content === 'string' ? (tr as any).content : JSON.stringify((tr as any).content),
+                content: failed ? `Tool failed: ${raw}` : raw,
               });
             }
           } else {
@@ -1042,6 +1074,12 @@ Do not use any tools. Do not write code. Output only the plan text.`;
 ${platformNote}
 
 Working directory: ${process.cwd()}
+
+## Repository root and paths
+
+- The canonical project root is the **Working directory** above. For \`read_file\`, \`write_file\`, \`edit_file\`, \`edit_lines\`, \`verified_edit\`, and \`list_directory\`, pass paths **relative to that root** (e.g. \`src/index.ts\`, \`package.json\`).
+- Do **not** assume the repo lives at \`/workspace\`, \`/app\`, \`/project\`, or similar unless that path is literally the printed working directory.
+- For \`run_command\`, omit \`cwd\` or set it to \`.\` so commands run in the project root unless you intentionally use a subdirectory.
 
 ## Core Principles
 

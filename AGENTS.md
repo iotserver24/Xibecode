@@ -17,16 +17,15 @@
 
 ## Learned Workspace Facts
 
-- Project: **XibeCode** — an autonomous AI coding CLI tool (`xibecode`), published as an npm package at `xibecode`.
-- Repo path: `/home/r3ap3reditz/codes/xibecode`; GitHub: `https://github.com/iotserver24/Xibecode`
+- Project: **XibeCode** — an autonomous AI coding CLI tool (`xibecode`), published as an npm package at `xibecode`; repo path `/home/r3ap3reditz/codes/xibecode`; GitHub: `https://github.com/iotserver24/Xibecode`
 - Primary package manager: **pnpm** with `pnpm-lock.yaml` at root; webui has its own `webui/pnpm-lock.yaml`.
 - Build commands: `pnpm run build` (TypeScript → `dist/`) and `pnpm run build:webui` (Vite → `webui-dist/`).
 - Version string lives in three places: `package.json`, `electron/package.json`, and the `ui.header(...)` call in `src/commands/run.ts` (and `src/commands/run-pr.ts`).
-- Agent mode `agent` must include `'network'` in `allowedCategories` in `src/core/modes.ts` to allow `fetch_url`, `web_search`, and skills-sh tools.
+- Agent modes are defined in `src/core/modes.ts` under `MODE_CONFIG`; each has `allowedCategories` controlling tool access. Agent mode `agent` must include `'network'` in `allowedCategories` so `fetch_url`, `web_search`, and skills-sh tools work.
 - `xibecode run` must call `process.exit(0)` in the `finally` block (unless `--non-interactive`) to avoid hanging after task completion.
 - Electron desktop app lives in `electron/` with its own `package.json`; it is a separate build from the CLI.
 - The `site/` and `site/app/donate/` directories are excluded from git and added to `.cursorignore`.
-- `pnpm publish --access public` is required because the package is unscoped but published to npm public registry.
-- All agent modes are defined in `src/core/modes.ts` under `MODE_CONFIG`; each has `allowedCategories` controlling tool access.
+- `pnpm install --frozen-lockfile` in CI (and locally) requires the root `pnpm-lock.yaml` and any nested lockfiles used in workflows (e.g. under `webui/` and `electron/`) to match their `package.json` files; after dependency changes, run `pnpm install`, commit updated lockfiles, then push.
+- Embedded or sandboxed agent runs should treat the repository root as the working directory for file tools and relative paths; do not assume the checkout lives at `/workspace`, `/app`, or `/project`.
 - `run-pr` command (`src/commands/run-pr.ts`) requires `gh` CLI installed and authenticated (`gh auth login`) before use.
 - `xibecode run-pr` runs the agent, performs test verification (unless `--skip-tests`) with up to 2 self-correction retries on failures, and the resulting PR triggers CI security checks including `pnpm audit --audit-level=high`.

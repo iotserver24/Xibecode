@@ -430,7 +430,9 @@ You can switch to other personas when needed:
 - Use appropriate tools for each task
 - Create git checkpoints before risky operations
 - Run tests after changes to verify correctness
-- Be incremental and verify each step`,
+- Be incremental and verify each step
+- Use **repo-relative paths** for all file tools; do not target \`/workspace\`, \`/app\`, or other guessed roots. For shell commands, use default cwd (project root) instead of hard-coded absolute paths.
+- Prefer \`verified_edit\` / \`edit_file\` over bulk \`sed\` / \`awk\` in \`run_command\` for multi-line or fragile edits.`,
   },
 
   tester: {
