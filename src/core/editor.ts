@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as diff from 'diff';
+import { sanitizePath } from '../utils/safety.js';
 
 export interface EditResult {
   success: boolean;
@@ -38,11 +39,30 @@ export class FileEditor {
   }
 
   /**
+   * Resolve filePath under workingDir (same rules as read_file / write_file).
+   * Rejects absolute paths outside the working directory (e.g. hallucinated /workspace/...).
+   */
+  private resolveSafePath(filePath: string): { ok: true; fullPath: string } | { ok: false; message: string } {
+    const r = sanitizePath(this.workingDir, filePath);
+    if (!r.ok) {
+      return {
+        ok: false,
+        message: `${r.message} Use paths relative to the repository root (e.g. package.json, src/foo.ts), not absolute paths like /workspace or /app.`,
+      };
+    }
+    return { ok: true, fullPath: r.path };
+  }
+
+  /**
    * Smart edit - searches for unique section and replaces it
    * This is the most reliable way to edit files
    */
   async smartEdit(filePath: string, edit: SearchReplaceEdit): Promise<EditResult> {
-    const fullPath = path.resolve(this.workingDir, filePath);
+    const resolved = this.resolveSafePath(filePath);
+    if (!resolved.ok) {
+      return { success: false, message: resolved.message };
+    }
+    const fullPath = resolved.fullPath;
 
     try {
       const content = await fs.readFile(fullPath, 'utf-8');
@@ -98,7 +118,11 @@ export class FileEditor {
    * Edit specific line range - good for large files
    */
   async editLineRange(filePath: string, edit: LineRangeEdit): Promise<EditResult> {
-    const fullPath = path.resolve(this.workingDir, filePath);
+    const resolved = this.resolveSafePath(filePath);
+    if (!resolved.ok) {
+      return { success: false, message: resolved.message };
+    }
+    const fullPath = resolved.fullPath;
 
     try {
       const content = await fs.readFile(fullPath, 'utf-8');
@@ -149,7 +173,11 @@ export class FileEditor {
    * If the old content doesn't match, returns the actual content so the AI can self-correct.
    */
   async verifiedEdit(filePath: string, edit: VerifiedEdit): Promise<EditResult & { actual_content?: string }> {
-    const fullPath = path.resolve(this.workingDir, filePath);
+    const resolved = this.resolveSafePath(filePath);
+    if (!resolved.ok) {
+      return { success: false, message: resolved.message };
+    }
+    const fullPath = resolved.fullPath;
 
     try {
       const content = await fs.readFile(fullPath, 'utf-8');
@@ -222,7 +250,11 @@ export class FileEditor {
    * Insert content at specific line
    */
   async insertAtLine(filePath: string, line: number, content: string): Promise<EditResult> {
-    const fullPath = path.resolve(this.workingDir, filePath);
+    const resolved = this.resolveSafePath(filePath);
+    if (!resolved.ok) {
+      return { success: false, message: resolved.message };
+    }
+    const fullPath = resolved.fullPath;
 
     try {
       const originalContent = await fs.readFile(fullPath, 'utf-8');
@@ -262,7 +294,11 @@ export class FileEditor {
    * Apply unified diff patch
    */
   async applyPatch(filePath: string, patch: string): Promise<EditResult> {
-    const fullPath = path.resolve(this.workingDir, filePath);
+    const resolved = this.resolveSafePath(filePath);
+    if (!resolved.ok) {
+      return { success: false, message: resolved.message };
+    }
+    const fullPath = resolved.fullPath;
 
     try {
       const content = await fs.readFile(fullPath, 'utf-8');
@@ -308,6 +344,11 @@ export class FileEditor {
    * Revert file to backup
    */
   async revertToBackup(filePath: string, backupIndex: number = 0): Promise<EditResult> {
+    const resolved = this.resolveSafePath(filePath);
+    if (!resolved.ok) {
+      return { success: false, message: resolved.message };
+    }
+
     const backups = await this.listBackups(filePath);
 
     if (backups.length === 0) {
@@ -325,7 +366,7 @@ export class FileEditor {
     }
 
     const backupPath = backups[backupIndex];
-    const fullPath = path.resolve(this.workingDir, filePath);
+    const fullPath = resolved.fullPath;
 
     try {
       const backupContent = await fs.readFile(backupPath, 'utf-8');
@@ -403,7 +444,11 @@ export class FileEditor {
     size?: number;
     preview?: string;
   }> {
-    const fullPath = path.resolve(this.workingDir, filePath);
+    const resolved = this.resolveSafePath(filePath);
+    if (!resolved.ok) {
+      return { exists: false };
+    }
+    const fullPath = resolved.fullPath;
 
     try {
       const stats = await fs.stat(fullPath);

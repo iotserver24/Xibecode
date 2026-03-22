@@ -29,25 +29,11 @@ vi.mock('fs/promises', () => ({
   rm: vi.fn(),
 }));
 
-// Mock path module
-vi.mock('path', () => ({
-  resolve: vi.fn((...args) => args.join('/')),
-  dirname: vi.fn((p) => p.split('/').slice(0, -1).join('/')),
-  join: vi.fn((...args) => args.join('/')),
-  parse: vi.fn((p) => {
-    const parts = p.split('/');
-    return {
-      dir: parts.slice(0, -1).join('/'),
-      base: parts[parts.length - 1],
-      ext: parts[parts.length - 1].includes('.') ? '.' + parts[parts.length - 1].split('.').pop() : '',
-      name: parts[parts.length - 1].replace(/\.[^/.]+$/, ''),
-    };
-  }),
-  extname: vi.fn((p) => {
-    const match = p.match(/\.[^/.]+$/);
-    return match ? match[0] : '';
-  }),
-}));
+// Use real path (normalize/resolve/relative/isAbsolute) for sanitizePath and FileEditor; path-sensitive tests rely on Node semantics.
+vi.mock('path', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('path')>();
+  return { ...actual };
+});
 
 // Mock other dependencies
 vi.mock('fast-glob', () => ({
