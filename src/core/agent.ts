@@ -40,6 +40,8 @@ export interface AgentConfig {
    * require `[[TASK_COMPLETE | summary=...]]` in the text or inject a continuation nudge instead of exiting.
    */
   strictTextOnlyCompletion?: boolean;
+  /** Markdown from `SkillManager.formatBuiltInSkillsForSystemPrompt()` — bundled default skills. */
+  defaultSkillsPrompt?: string;
 }
 
 export interface AgentEvent {
@@ -171,7 +173,7 @@ export class EnhancedAgent extends EventEmitter {
   private messages: MessageParam[] = [];
   private loopDetector = new LoopDetector();
   private thinkFilter = new ThinkTagFilter();
-  private config: Required<Omit<AgentConfig, 'sessionMemory' | 'contextHintFiles' | 'planningModel' | 'executionModel' | 'mindsetAdaptive' | 'strictTextOnlyCompletion'>> & { customProviderFormat: 'openai' | 'anthropic'; sessionMemory?: SessionMemory | null; contextHintFiles: string[]; planningModel?: string; executionModel?: string; mindsetAdaptive?: boolean; strictTextOnlyCompletion: boolean };
+  private config: Required<Omit<AgentConfig, 'sessionMemory' | 'contextHintFiles' | 'planningModel' | 'executionModel' | 'mindsetAdaptive' | 'strictTextOnlyCompletion' | 'defaultSkillsPrompt'>> & { customProviderFormat: 'openai' | 'anthropic'; sessionMemory?: SessionMemory | null; contextHintFiles: string[]; planningModel?: string; executionModel?: string; mindsetAdaptive?: boolean; strictTextOnlyCompletion: boolean };
   private iterationCount = 0;
   private toolCallCount = 0;
   private filesChanged: Set<string> = new Set();
@@ -183,6 +185,7 @@ export class EnhancedAgent extends EventEmitter {
   private totalOutputTokens: number = 0;
   private sessionCost: number = 0;
   private activeSkill: { name: string; instructions: string } | null = null;
+  private defaultSkillsPrompt: string = '';
   private memory: NeuralMemory;
   private injectedMessages: string[] = [];
   /** Current reasoning tier (AX-lite): strategic = plan, tactical = step decisions, operational = tools. */
@@ -240,6 +243,7 @@ export class EnhancedAgent extends EventEmitter {
       mindsetAdaptive: config.mindsetAdaptive ?? false,
       strictTextOnlyCompletion: config.strictTextOnlyCompletion ?? false,
     };
+    this.defaultSkillsPrompt = config.defaultSkillsPrompt ?? '';
     this.mindsetAdaptive = this.config.mindsetAdaptive ?? false;
 
     // Initialize mode state and orchestrator
@@ -1081,6 +1085,7 @@ Working directory: ${process.cwd()}
 - Do **not** assume the repo lives at \`/workspace\`, \`/app\`, \`/project\`, or similar unless that path is literally the printed working directory.
 - For \`run_command\`, omit \`cwd\` or set it to \`.\` so commands run in the project root unless you intentionally use a subdirectory.
 
+${this.defaultSkillsPrompt ? `${this.defaultSkillsPrompt}\n\n` : ''}
 ## Core Principles
 
 1. **Read Before Edit**: ALWAYS read files with read_file before modifying them
@@ -1232,7 +1237,8 @@ Map relationships:
 
 ## Skills & MCP Integration
 
-- Use \`search_skills_sh\` to discover domain-specific skills (frameworks, libraries, testing, performance, etc.)
+- **Bundled defaults**: ${this.defaultSkillsPrompt ? 'The **Default bundled skills** section (above) lists skills **chosen for this run** from your task wording and repo `package.json` when available — follow the relevant subsections.' : 'No bundled skill block was loaded for this run; use skills.sh or `.xibecode/skills` for extra guidance.'}
+- Use \`search_skills_sh\` to discover extra domain-specific skills (frameworks, libraries, testing, performance, etc.)
 - When you find a relevant skill, use \`install_skill_from_skills_sh\` with its \`skill_id\` to download it into the project
 - After installing a skill, use \`read_file\` to open the new markdown file under \`.xibecode/skills\` and follow its instructions as additional guidance for the current task
 - Use \`get_mcp_status\` to inspect available MCP servers, tools, and resources, and prefer those specialized tools when they match the task (e.g., browsers, databases, external APIs)

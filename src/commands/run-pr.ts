@@ -261,7 +261,7 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
   const config = new ConfigManager();
   const cwd = process.cwd();
 
-  ui.header('0.7.5');
+  ui.header('0.7.6');
 
   // ── Pre-flight checks ────────────────────────────────────────────────────
   try {
@@ -366,6 +366,7 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
   await memory.init().catch(() => {});
   const skillManager = new SkillManager(cwd, apiKey, baseUrl, model, provider);
   await skillManager.loadSkills();
+  const defaultSkillsPrompt = await skillManager.buildDefaultSkillsPromptForTask(finalPrompt, cwd);
 
   // ── Build tool executor + agent ───────────────────────────────────────────
   const toolExecutor = new CodingToolExecutor(cwd, {
@@ -401,6 +402,7 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
       planningModel: config.getPlanningModel(),
       executionModel: config.getExecutionModel(),
       strictTextOnlyCompletion: true,
+      defaultSkillsPrompt,
     },
     provider as any
   );
@@ -506,6 +508,7 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
             planningModel: config.getPlanningModel(),
             executionModel: config.getExecutionModel(),
             strictTextOnlyCompletion: true,
+            defaultSkillsPrompt,
           },
           provider as any
         );

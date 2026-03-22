@@ -17,7 +17,8 @@ import * as fsSync from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn, ChildProcess } from 'child_process';
-import { ConfigManager, PROVIDER_CONFIGS } from '../utils/config.js';
+import { ConfigManager, PROVIDER_CONFIGS, type ProviderType } from '../utils/config.js';
+import { SkillManager } from '../core/skills.js';
 import { EnhancedAgent } from '../core/agent.js';
 import { CodingToolExecutor } from '../core/tools.js';
 import { GitUtils } from '../utils/git.js';
@@ -44,6 +45,8 @@ export interface AgentSession {
   status: 'idle' | 'running' | 'error';
   createdAt: Date;
   lastActivity: Date;
+  /** Cached from SkillManager after first load (bundled default skills prompt). */
+  builtInSkillsPrompt?: string;
 }
 
 /**
@@ -1191,6 +1194,17 @@ else:
 
       // Create agent if not exists
       if (!session.agent) {
+        if (!session.builtInSkillsPrompt) {
+          const sm = new SkillManager(
+            this.workingDir,
+            apiKey,
+            this.configManager.getBaseUrl(),
+            this.configManager.getModel(),
+            this.configManager.get('provider') as ProviderType | undefined
+          );
+          await sm.loadSkills();
+          session.builtInSkillsPrompt = await sm.buildDefaultSkillsPromptForTask(message, this.workingDir);
+        }
         session.agent = new EnhancedAgent({
           apiKey,
           baseUrl: this.configManager.getBaseUrl(),
@@ -1198,6 +1212,7 @@ else:
           maxIterations: this.configManager.get('maxIterations') || 50,
           provider: this.configManager.get('provider'),
           customProviderFormat: this.configManager.get('customProviderFormat'),
+          defaultSkillsPrompt: session.builtInSkillsPrompt,
         }, this.configManager.get('provider'));
       }
 

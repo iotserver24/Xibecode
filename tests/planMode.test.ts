@@ -2,11 +2,22 @@ import { describe, it, expect, vi } from 'vitest';
 import { PlanMode } from '../src/core/planMode.js';
 import * as fs from 'fs/promises';
 
+vi.mock('../src/core/agent.js', () => ({
+  EnhancedAgent: class {
+    on() { }
+    async run() { }
+  },
+}));
+
 vi.mock('fs/promises');
 
 describe('PlanMode', () => {
   const rootDir = '/project';
-  const planMode = new PlanMode(rootDir);
+  const minimalConfig = {
+    apiKey: 'test-api-key',
+    model: 'claude-sonnet-4-5-20250929',
+  };
+  const planMode = new PlanMode(rootDir, minimalConfig as any, 'anthropic');
 
   it('classifies short single-step tasks as small', () => {
     const small = 'Rename function foo to bar in src/index.ts';

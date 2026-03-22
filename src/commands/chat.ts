@@ -85,6 +85,7 @@ export async function chatCommand(options: ChatOptions) {
 
   skillManager = new SkillManager(process.cwd(), apiKey, baseUrl, model, currentProvider);
   await skillManager.loadSkills();
+  const defaultSkillsPrompt = await skillManager.buildDefaultSkillsPromptForTask('', process.cwd());
 
   // Initialize MCP client manager.
   // Connections are established on-demand (for example when the user runs /mcp),
@@ -126,6 +127,7 @@ export async function chatCommand(options: ChatOptions) {
       verbose: false,
       provider: currentProvider,
       customProviderFormat: config.get('customProviderFormat'),
+      defaultSkillsPrompt,
     },
     currentProvider
   );
@@ -665,6 +667,7 @@ export async function chatCommand(options: ChatOptions) {
         verbose: false,
         provider: currentProvider || config.get('provider'),
         customProviderFormat: config.get('customProviderFormat'),
+        defaultSkillsPrompt,
       },
       currentProvider || config.get('provider')
     );
@@ -1078,6 +1081,7 @@ export async function chatCommand(options: ChatOptions) {
           model,
           maxIterations: 150,
           verbose: false,
+          defaultSkillsPrompt,
         },
         currentProvider
       );
@@ -1120,6 +1124,7 @@ export async function chatCommand(options: ChatOptions) {
           model,
           maxIterations: 150,
           verbose: false,
+          defaultSkillsPrompt,
         },
         currentProvider
       );

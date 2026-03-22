@@ -93,6 +93,8 @@ vi.mock('dotenv', () => ({
 }));
 
 vi.mock('os', () => ({
+  platform: vi.fn(() => 'linux'),
+  homedir: vi.fn(() => '/home/user'),
   default: {
     platform: vi.fn(() => 'linux'),
     homedir: vi.fn(() => '/home/user'),

@@ -34,7 +34,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   const ui = new EnhancedUI(options.verbose);
   const config = new ConfigManager();
 
-  ui.header('0.7.5');
+  ui.header('0.7.6');
 
   // Get API key
   const apiKey = options.apiKey || config.getApiKey();
@@ -174,6 +174,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
 
   const skillManager = new SkillManager(process.cwd(), apiKey, baseUrl, model, provider);
   await skillManager.loadSkills();
+  const defaultSkillsPrompt = await skillManager.buildDefaultSkillsPromptForTask(effectivePrompt, process.cwd());
 
   const toolExecutor = new CodingToolExecutor(process.cwd(), {
     dryRun,
@@ -207,6 +208,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
       contextHintFiles,
       planningModel: config.getPlanningModel(),
       executionModel: config.getExecutionModel(),
+      defaultSkillsPrompt,
     },
     provider as any);
   // Inject memory into agent (we'll need to update Agent to accept it or just let it use its own? Better to share same instance)

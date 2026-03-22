@@ -68,9 +68,13 @@ export class PlanMode {
     // Initialize the Architect Agent
     // We give it a restricted set of tools: Read access + Write access ONLY to plan/todo files
     // For now, we'll give it the standard executor but instruct it carefully.
+    const skillManager = new SkillManager(this.rootDir, this.config.apiKey, this.config.baseUrl, this.config.model, this.provider);
+    await skillManager.loadSkills();
+    const defaultSkillsPrompt = await skillManager.buildDefaultSkillsPromptForTask(description, this.rootDir);
+
     const toolExecutor = new CodingToolExecutor(this.rootDir, {
       dryRun: false, // We want it to actually write the plan files
-      skillManager: new SkillManager(this.rootDir, this.config.apiKey, this.config.baseUrl, this.config.model, this.provider)
+      skillManager,
     });
 
     // Filter tools to ensure safety during planning (read-only + specific writes)
@@ -82,7 +86,8 @@ export class PlanMode {
         ...this.config,
         maxIterations: 10,
         provider: this.provider,
-        customProviderFormat: (this.config as any).customProviderFormat
+        customProviderFormat: (this.config as any).customProviderFormat,
+        defaultSkillsPrompt,
       },
       this.provider
     );
