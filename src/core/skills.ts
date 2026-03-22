@@ -6,6 +6,12 @@ import { crawlDocs, generateSkillFromDocs, type AISynthesisConfig } from './docs
 import { MarketplaceClient, type MarketplaceSkillResult } from './marketplace-client.js';
 import { SkillsShClient, type SkillsShResult } from './skills-sh-client.js';
 import { ProviderType } from '../utils/config.js';
+import {
+    extractDepTokens,
+    selectRelevantBuiltInSkills,
+    formatSelectionSummary,
+    type SkillSelectionOptions,
+} from './skill-selection.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -19,6 +25,8 @@ export interface Skill {
 
 export class SkillManager {
     private skills: Map<string, Skill> = new Map();
+    /** Skills loaded from the shipped `skills/` directory (for system-prompt injection). */
+    private builtInSkills: Skill[] = [];
     private builtInSkillsDir: string;
     private userSkillsDir: string;
     private marketplace: MarketplaceClient;
@@ -41,6 +49,7 @@ export class SkillManager {
     }
 
     async loadSkills(): Promise<void> {
+        this.builtInSkills = [];
         // Load built-in skills
         await this.loadSkillsFromDirectory(this.builtInSkillsDir, 'built-in');
 
@@ -64,6 +73,9 @@ export class SkillManager {
                 const skill = this.parseSkillFile(content, file);
                 if (skill) {
                     this.skills.set(skill.name, skill);
+                    if (source === 'built-in') {
+                        this.builtInSkills.push(skill);
+                    }
                 }
             }
         } catch (error) {
@@ -113,6 +125,59 @@ export class SkillManager {
 
     listSkills(): Skill[] {
         return Array.from(this.skills.values());
+    }
+
+    /**
+     * Build the bundled-skills block for the system prompt by **selecting** skills that match
+     * the task text and `package.json` dependencies (plus a small always-on core set).
+     */
+    async buildDefaultSkillsPromptForTask(
+        taskPrompt: string,
+        cwd: string,
+        options?: SkillSelectionOptions
+    ): Promise<string> {
+        if (this.builtInSkills.length === 0) return '';
+
+        let depTokens = new Set<string>();
+        try {
+            const raw = await fs.readFile(path.join(cwd, 'package.json'), 'utf-8');
+            depTokens = extractDepTokens(JSON.parse(raw));
+        } catch {
+            /* no package.json */
+        }
+
+        const selected = selectRelevantBuiltInSkills(this.builtInSkills, taskPrompt, depTokens, options);
+        const summary = formatSelectionSummary(selected, this.builtInSkills.length);
+        return this.formatSelectedBuiltInSkillsForPrompt(selected, summary);
+    }
+
+    /**
+     * @deprecated Prefer `buildDefaultSkillsPromptForTask` so selection scales with many bundled skills.
+     * Formats every loaded built-in skill (no dependency-aware selection).
+     */
+    formatBuiltInSkillsForSystemPrompt(): string {
+        if (this.builtInSkills.length === 0) return '';
+        return this.formatSelectedBuiltInSkillsForPrompt(
+            this.builtInSkills,
+            formatSelectionSummary(this.builtInSkills, this.builtInSkills.length)
+        );
+    }
+
+    private formatSelectedBuiltInSkillsForPrompt(selected: Skill[], selectionSummary: string): string {
+        if (selected.length === 0) return '';
+        const maxTotal = 28_000;
+        const intro =
+            selectionSummary +
+            '\n\nApply the subsections below when they fit the work. For more domain skills, use `search_skills_sh` or add files under `.xibecode/skills`.\n\n';
+        const sorted = [...selected].sort((a, b) => a.name.localeCompare(b.name));
+        const parts = sorted.map((s) => `### ${s.name}\n*${s.description}*\n\n${s.instructions}`);
+        let body = `## Default bundled skills\n\n${intro}` + parts.join('\n\n---\n\n');
+        if (body.length > maxTotal) {
+            body =
+                body.slice(0, maxTotal) +
+                '\n\n[Bundled skills truncated for length; follow the skill titles above and general best practices.]';
+        }
+        return body;
     }
 
     searchSkills(query: string): Skill[] {
