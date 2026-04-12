@@ -36,7 +36,7 @@ XibeCode is a CLI agent that can read and edit code, run commands, and iterate o
 ### CI and release workflow hardening
 
 - **GitHub Actions reliability fixes** for TypeScript + dependency install paths.
-- **Playwright browser download skip** in non-E2E installs for faster/stabler CI.
+- **No bundled Playwright** — browser automation is via optional `agent-browser` / MCP; npm install does not pull browser binaries.
 - **Type declarations for `marked-terminal`** included in source to prevent clean-CI type failures.
 
 ## Screenshots
@@ -416,29 +416,9 @@ describe('calculateTotal', () => {
 });
 ```
 
-## Browser Testing (Playwright)
+## Browser testing (no bundled browser)
 
-XibeCode includes comprehensive browser automation and testing capabilities:
-
-- **Screenshots** - Capture webpage screenshots
-- **Console Logs** - Collect browser console output
-- **Visual Regression** - Compare screenshots against baselines
-- **Accessibility Audits** - Check WCAG compliance
-- **Performance Metrics** - Measure Core Web Vitals (FCP, LCP, CLS, TTI)
-- **Responsive Testing** - Test across multiple viewports
-- **Network Monitoring** - Capture all network requests
-- **E2E Tests** - Execute Playwright test files
-
-```bash
-# Example: Test performance
-xibecode run "Measure the performance of http://localhost:3000"
-
-# Example: Check accessibility
-xibecode run "Run an accessibility audit on the homepage"
-
-# Example: Visual regression test
-xibecode run "Take a screenshot and compare against baseline"
-```
+XibeCode does **not** ship Playwright or download Chromium. Legacy tool names (`take_screenshot`, `preview_app`, etc.) return a short message pointing you to **`run_command` + [`agent-browser`](https://github.com/vercel-labs/agent-browser)** (already a dependency) or your **browser MCP**. For Playwright E2E, add `@playwright/test` to the **target project** and run it with `run_command` (for example `pnpm exec playwright test`).
 
 ## Configuration
 
