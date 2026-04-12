@@ -1,11 +1,11 @@
 # XibeCode Documentation
 
-> **Version:** 0.9.0
+> **Version:** 0.9.1
 > **Last Updated:** April 12, 2026
 
 Welcome to the XibeCode documentation! This directory contains comprehensive documentation for developers, contributors, and users.
 
-## What's New in v0.9.0
+## What's New in v0.9.1
 
 - **Core anti-hallucination hardening**:
   - evidence-aware completion gating
