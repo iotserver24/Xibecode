@@ -28,4 +28,14 @@ describe('PermissionManager', () => {
     expect(decision.allowed).toBe(false);
     expect(decision.requiresApproval).toBe(false);
   });
+
+  it('requires explicit approval for unknown category tools', () => {
+    const manager = new PermissionManager('agent');
+    const denied = manager.evaluateToolExecution({}, 'custom_dynamic_tool');
+    expect(denied.allowed).toBe(false);
+    expect(denied.requiresApproval).toBe(true);
+
+    const approved = manager.evaluateToolExecution({ confirm: true }, 'custom_dynamic_tool');
+    expect(approved.allowed).toBe(true);
+  });
 });

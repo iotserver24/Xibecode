@@ -972,8 +972,101 @@ const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   'update_memory': 'write_fs', // Allows writing to project memory
 };
 
+function inferToolCategory(toolName: string): ToolCategory | undefined {
+  const normalized = toolName.toLowerCase();
+  const dynamicName = normalized.includes('::')
+    ? normalized.split('::').pop() || normalized
+    : normalized;
+
+  // Git operations
+  if (dynamicName.startsWith('git_') || dynamicName.includes('checkpoint')) {
+    if (
+      dynamicName.includes('status') ||
+      dynamicName.includes('diff') ||
+      dynamicName.includes('changed') ||
+      dynamicName.includes('show')
+    ) {
+      return 'git_read';
+    }
+    return 'git_mutation';
+  }
+
+  // Test operations
+  if (
+    dynamicName.startsWith('run_tests') ||
+    dynamicName.startsWith('test_') ||
+    dynamicName.startsWith('get_test_')
+  ) {
+    return 'tests';
+  }
+
+  // Shell execution and package/install style tools
+  if (
+    dynamicName.startsWith('run_command') ||
+    dynamicName.startsWith('execute_') ||
+    dynamicName.startsWith('spawn_') ||
+    dynamicName.includes('shell') ||
+    dynamicName.includes('command') ||
+    dynamicName.includes('install') ||
+    dynamicName.startsWith('synthesize_')
+  ) {
+    return 'shell_command';
+  }
+
+  // Mutating filesystem tools
+  if (
+    dynamicName.startsWith('write_') ||
+    dynamicName.startsWith('edit_') ||
+    dynamicName.startsWith('delete_') ||
+    dynamicName.startsWith('move_') ||
+    dynamicName.startsWith('create_') ||
+    dynamicName.startsWith('insert_') ||
+    dynamicName.startsWith('revert_') ||
+    dynamicName.startsWith('update_memory') ||
+    dynamicName.startsWith('remember_')
+  ) {
+    return 'write_fs';
+  }
+
+  // Search/context discovery
+  if (
+    dynamicName.includes('context') ||
+    dynamicName.includes('grep') ||
+    dynamicName.includes('search')
+  ) {
+    return 'context';
+  }
+
+  // Read-only filesystem access
+  if (
+    dynamicName.startsWith('read_') ||
+    dynamicName.startsWith('list_') ||
+    dynamicName.startsWith('get_')
+  ) {
+    return 'read_only';
+  }
+
+  // Network/external lookup
+  if (
+    dynamicName.includes('web') ||
+    dynamicName.includes('fetch') ||
+    dynamicName.includes('http') ||
+    dynamicName.includes('url') ||
+    dynamicName.includes('mcp')
+  ) {
+    return 'network';
+  }
+
+  // Conservative fallback for MCP-style dynamic tools.
+  if (normalized.includes('::')) {
+    return 'network';
+  }
+
+  return undefined;
+}
+
 export function getToolCategory(toolName: string): ToolCategory | undefined {
-  return TOOL_CATEGORIES[toolName];
+  return TOOL_CATEGORIES[toolName] ?? inferToolCategory(toolName);
 }
 
 /**
@@ -1005,7 +1098,7 @@ export function getToolCategory(toolName: string): ToolCategory | undefined {
  * @since 0.1.0
  */
 export function isToolAllowed(mode: AgentMode, toolName: string): { allowed: boolean; reason?: string } {
-  const category = TOOL_CATEGORIES[toolName];
+  const category = getToolCategory(toolName);
   if (!category) {
     return { allowed: false, reason: `Unknown tool: ${toolName}` };
   }
@@ -1360,10 +1453,24 @@ export function stripModeRequests(text: string): string {
  * Parse task completion from text (looks for [[TASK_COMPLETE | summary=...]] tags)
  */
 export function parseTaskComplete(text: string): { summary: string } | null {
-  const pattern = /\[\[TASK_COMPLETE\s*\|\s*summary=([^\]]+)\]\]/i;
-  const match = text.match(pattern);
+  const match = text.match(/\[\[TASK_COMPLETE([^\]]*)\]\]/i);
   if (!match) return null;
-  return { summary: match[1].trim() };
+  const raw = match[1] ?? '';
+  const fields = raw
+    .split('|')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const kv = new Map<string, string>();
+  for (const field of fields) {
+    const eq = field.indexOf('=');
+    if (eq === -1) continue;
+    const key = field.slice(0, eq).trim().toLowerCase();
+    const value = field.slice(eq + 1).trim();
+    if (key) kv.set(key, value);
+  }
+  const summary = kv.get('summary');
+  if (!summary) return null;
+  return { summary };
 }
 
 /**

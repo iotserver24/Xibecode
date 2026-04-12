@@ -47,6 +47,12 @@ export interface AgentConfig {
   strictTextOnlyCompletion?: boolean;
   /** Markdown from `SkillManager.formatBuiltInSkillsForSystemPrompt()` — bundled default skills. */
   defaultSkillsPrompt?: string;
+  /** Completion verification profile: off, balanced, or strict. */
+  completionEvidenceMode?: 'off' | 'balanced' | 'strict';
+  /** Post-edit verification profile for mutating tools. */
+  postEditVerification?: 'off' | 'balanced' | 'strict';
+  /** Minimum neural-memory score required before recall is injected. */
+  memoryRecallMinScore?: number;
 }
 
 export interface AgentEvent {
@@ -55,18 +61,19 @@ export interface AgentEvent {
 }
 
 export class LoopDetector {
-  private history: Array<{ tool: string; input: string; timestamp: number }> = [];
+  private history: Array<{ tool: string; signature: string; coarse: string; timestamp: number }> = [];
   private readonly maxRepeats = 3;
   private readonly timeWindow = 10000;
 
   check(toolName: string, toolInput: any): { allowed: boolean; reason?: string } {
-    const signature = JSON.stringify({ tool: toolName, input: toolInput });
+    const signature = this.makeSignature(toolName, toolInput);
+    const coarse = this.makeCoarseSignature(toolName, toolInput);
     const now = Date.now();
 
-    this.history.push({ tool: toolName, input: signature, timestamp: now });
+    this.history.push({ tool: toolName, signature, coarse, timestamp: now });
     this.history = this.history.filter(h => now - h.timestamp < this.timeWindow);
 
-    const recentDuplicates = this.history.filter(h => h.input === signature);
+    const recentDuplicates = this.history.filter(h => h.signature === signature);
     if (recentDuplicates.length >= this.maxRepeats) {
       return {
         allowed: false,
@@ -75,7 +82,21 @@ export class LoopDetector {
     }
 
     const sameTool = this.history.filter(h => h.tool === toolName);
+    const sameCoarse = this.history.filter(h => h.coarse === coarse);
+    if (sameCoarse.length >= this.maxRepeats + 2) {
+      return {
+        allowed: false,
+        reason: `Loop detected: repeated ${toolName} attempts with near-identical input patterns`,
+      };
+    }
     if (sameTool.length >= this.maxRepeats * 2) {
+      const uniquePatterns = new Set(sameTool.map(h => h.coarse)).size;
+      if (uniquePatterns <= 2) {
+        return {
+          allowed: false,
+          reason: `Loop detected: ${toolName} repeated ${sameTool.length} times with low-variation inputs`,
+        };
+      }
       return {
         allowed: true,
         reason: `Warning: ${toolName} called ${sameTool.length} times recently`,
@@ -87,6 +108,37 @@ export class LoopDetector {
 
   reset() {
     this.history = [];
+  }
+
+  private makeSignature(toolName: string, input: unknown): string {
+    return JSON.stringify({
+      tool: toolName,
+      input: this.canonicalize(input),
+    });
+  }
+
+  private makeCoarseSignature(toolName: string, input: unknown): string {
+    const canonical = this.canonicalize(input);
+    if (!canonical || typeof canonical !== 'object' || Array.isArray(canonical)) {
+      return `${toolName}:primitive`;
+    }
+    const keys = Object.keys(canonical as Record<string, unknown>).sort();
+    return `${toolName}:${keys.join(',')}`;
+  }
+
+  private canonicalize(value: unknown): unknown {
+    if (Array.isArray(value)) {
+      return value.map((item) => this.canonicalize(item));
+    }
+    if (value && typeof value === 'object') {
+      const inObj = value as Record<string, unknown>;
+      const out: Record<string, unknown> = {};
+      for (const key of Object.keys(inObj).sort()) {
+        out[key] = this.canonicalize(inObj[key]);
+      }
+      return out;
+    }
+    return value;
   }
 }
 
@@ -178,7 +230,7 @@ export class EnhancedAgent extends EventEmitter {
   private messages: MessageParam[] = [];
   private loopDetector = new LoopDetector();
   private thinkFilter = new ThinkTagFilter();
-  private config: Required<Omit<AgentConfig, 'sessionMemory' | 'contextHintFiles' | 'planningModel' | 'executionModel' | 'mindsetAdaptive' | 'strictTextOnlyCompletion' | 'defaultSkillsPrompt' | 'requestFormat'>> & { customProviderFormat: 'openai' | 'anthropic'; requestFormat: 'auto' | 'openai' | 'anthropic'; sessionMemory?: SessionMemory | null; contextHintFiles: string[]; planningModel?: string; executionModel?: string; mindsetAdaptive?: boolean; strictTextOnlyCompletion: boolean };
+  private config: Required<Omit<AgentConfig, 'sessionMemory' | 'contextHintFiles' | 'planningModel' | 'executionModel' | 'mindsetAdaptive' | 'strictTextOnlyCompletion' | 'defaultSkillsPrompt' | 'requestFormat' | 'completionEvidenceMode' | 'postEditVerification' | 'memoryRecallMinScore'>> & { customProviderFormat: 'openai' | 'anthropic'; requestFormat: 'auto' | 'openai' | 'anthropic'; sessionMemory?: SessionMemory | null; contextHintFiles: string[]; planningModel?: string; executionModel?: string; mindsetAdaptive?: boolean; strictTextOnlyCompletion: boolean; completionEvidenceMode: 'off' | 'balanced' | 'strict'; postEditVerification: 'off' | 'balanced' | 'strict'; memoryRecallMinScore: number };
   private iterationCount = 0;
   private toolCallCount = 0;
   private filesChanged: Set<string> = new Set();
@@ -203,6 +255,7 @@ export class EnhancedAgent extends EventEmitter {
   private currentMindset: ReasoningMindset = 'convergent';
   private permissionManager: PermissionManager;
   private toolOrchestrator: ToolOrchestrator;
+  private evidenceTrail: Array<{ kind: string; detail: string; ts: number }> = [];
 
   public injectMessage(message: string): void {
     this.injectedMessages.push(message);
@@ -214,6 +267,108 @@ export class EnhancedAgent extends EventEmitter {
 
   public clearInjectedMessages(): void {
     this.injectedMessages = [];
+  }
+
+  private recordEvidence(kind: string, detail: string): void {
+    this.evidenceTrail.push({ kind, detail, ts: Date.now() });
+    if (this.evidenceTrail.length > 80) {
+      this.evidenceTrail = this.evidenceTrail.slice(-80);
+    }
+  }
+
+  private estimateMessageTokens(message: MessageParam): number {
+    const text = (() => {
+      if (typeof message.content === 'string') return message.content;
+      if (!Array.isArray(message.content)) return '';
+      return message.content
+        .map((block: any) => {
+          if (block?.type === 'text') return String(block.text || '');
+          if (block?.type === 'tool_use') {
+            const input = block.input ? JSON.stringify(block.input) : '{}';
+            return `[tool_use:${String(block.name || 'unknown')}] ${input}`;
+          }
+          if (block?.type === 'tool_result') {
+            return `[tool_result:${String(block.tool_use_id || 'unknown')}] ${String(block.content || '')}`;
+          }
+          return String(block?.content ?? '');
+        })
+        .join('\n');
+    })();
+    // Rough estimate for modern tokenizers across mixed text/code.
+    return Math.ceil(text.length / 4);
+  }
+
+  private estimateConversationTokens(): number {
+    return this.messages.reduce((sum, message) => sum + this.estimateMessageTokens(message), 0);
+  }
+
+  private hasRecentGroundedEvidence(windowMs = 5 * 60 * 1000): boolean {
+    const threshold = Date.now() - windowMs;
+    return this.evidenceTrail.some((entry) => entry.ts >= threshold);
+  }
+
+  private shouldEnforceCompletionEvidence(): boolean {
+    if (this.config.completionEvidenceMode === 'off') return false;
+    // Allow single-turn informational answers without tools.
+    if (this.toolCallCount === 0 && this.filesChanged.size === 0 && this.iterationCount <= 1) {
+      return false;
+    }
+    return true;
+  }
+
+  private async postEditVerify(
+    toolExecutor: any,
+    toolUse: ToolUseBlock,
+    result: any,
+  ): Promise<{ ok: boolean; message: string }> {
+    if (this.config.postEditVerification === 'off') {
+      return { ok: true, message: 'disabled' };
+    }
+    if (!['write_file', 'edit_file', 'edit_lines', 'verified_edit'].includes(toolUse.name)) {
+      return { ok: true, message: 'not-applicable' };
+    }
+    const input = (toolUse.input ?? {}) as Record<string, unknown>;
+    const path =
+      (typeof result?.path === 'string' && result.path) ||
+      (typeof input.path === 'string' && input.path) ||
+      '';
+    if (!path) {
+      const strict = this.config.postEditVerification === 'strict';
+      return {
+        ok: !strict,
+        message: strict ? 'post-edit verification failed: missing path' : 'post-edit verification skipped: missing path',
+      };
+    }
+
+    const readArgs: Record<string, unknown> = { path };
+    if (typeof input.start_line === 'number' && typeof input.end_line === 'number') {
+      readArgs.start_line = input.start_line;
+      readArgs.end_line = input.end_line;
+    }
+
+    const check = await toolExecutor.execute('read_file', readArgs);
+    if (check?.error || check?.success === false) {
+      return {
+        ok: false,
+        message: `post-edit verification failed: could not read ${path}`,
+      };
+    }
+
+    if (typeof input.new_content === 'string' && input.new_content.trim().length > 0) {
+      const observed = typeof check?.content === 'string' ? check.content : '';
+      const expected = input.new_content.trim();
+      const normalize = (v: string) => v.replace(/\s+/g, ' ').trim();
+      const expectedNeedle = normalize(expected).slice(0, 180);
+      if (expectedNeedle && !normalize(observed).includes(expectedNeedle)) {
+        return {
+          ok: this.config.postEditVerification !== 'strict',
+          message: `post-edit verification warning: updated content was not confidently observed in ${path}`,
+        };
+      }
+    }
+
+    this.recordEvidence('post_edit_verify', path);
+    return { ok: true, message: `verified ${path}` };
   }
 
   // Pricing per 1M tokens (input/output) — Claude models
@@ -250,6 +405,9 @@ export class EnhancedAgent extends EventEmitter {
       executionModel: config.executionModel,
       mindsetAdaptive: config.mindsetAdaptive ?? false,
       strictTextOnlyCompletion: config.strictTextOnlyCompletion ?? false,
+      completionEvidenceMode: config.completionEvidenceMode ?? 'balanced',
+      postEditVerification: config.postEditVerification ?? 'balanced',
+      memoryRecallMinScore: config.memoryRecallMinScore ?? 2,
     };
     this.defaultSkillsPrompt = config.defaultSkillsPrompt ?? '';
     this.mindsetAdaptive = this.config.mindsetAdaptive ?? false;
@@ -309,6 +467,7 @@ export class EnhancedAgent extends EventEmitter {
     this.iterationCount = 0;
     this.toolCallCount = 0;
     this.loopDetector.reset();
+    this.evidenceTrail = [];
 
     this.messages.push({
       role: 'user',
@@ -317,12 +476,15 @@ export class EnhancedAgent extends EventEmitter {
 
     // ─── Neural Memory Recall ───
     try {
-      const memories = await this.memory.retrieve(initialPrompt);
+      const memories = await this.memory.retrieve(initialPrompt, 5, this.config.memoryRecallMinScore);
       if (memories.length > 0) {
         const memoryContext = memories.map(m => `- [${new Date(m.timestamp).toISOString().split('T')[0]}] ${m.trigger} -> ${m.action} (${m.outcome})`).join('\n');
         this.messages.push({
           role: 'user',
-          content: `\n\n[Neural Memory Recall]\nI found some relevant past experiences that might help:\n${memoryContext}\n\nUser Prompt: ${initialPrompt}`
+          content:
+            `\n\n[Neural Memory Recall — UNVERIFIED HINTS]\n` +
+            `These are recall hints, not guaranteed facts. Verify with read_file / grep_code / tests before relying on them.\n` +
+            `${memoryContext}\n\nUser Prompt: ${initialPrompt}`
         });
         this.emit('thinking', { message: `Recalled ${memories.length} relevant memories` });
       }
@@ -429,13 +591,32 @@ export class EnhancedAgent extends EventEmitter {
           }
         }
 
-        // Auto-compact: if conversation exceeds 80 messages, compact older ones
-        if (this.messages.length > 80) {
-          const compacted = compactConversation(this.messages, 16);
+        // Auto-compact by estimated token budget (OpenClaude-style), not raw message count.
+        const compactionThreshold = 120_000;
+        const compactionTarget = 90_000;
+        let estimatedTokens = this.estimateConversationTokens();
+        if (estimatedTokens > compactionThreshold) {
+          const beforeCount = this.messages.length;
+          const compacted = compactConversation(this.messages, 24);
           this.messages = compacted.messages;
+          estimatedTokens = this.estimateConversationTokens();
           this.emit('warning', {
-            message: compacted.summaryNotice || 'Auto-compacted conversation to save context',
+            message:
+              `${compacted.summaryNotice || 'Auto-compacted conversation to save context'} ` +
+              `(estimated tokens: ${estimatedTokens})`,
           });
+
+          // If still above target, compact once more with tighter window.
+          if (estimatedTokens > compactionTarget && this.messages.length < beforeCount) {
+            const compactedAgain = compactConversation(this.messages, 16);
+            this.messages = compactedAgain.messages;
+            estimatedTokens = this.estimateConversationTokens();
+            this.emit('warning', {
+              message:
+                `${compactedAgain.summaryNotice || 'Second compaction pass applied'} ` +
+                `(estimated tokens: ${estimatedTokens})`,
+            });
+          }
         }
 
         // Process response
@@ -540,11 +721,31 @@ export class EnhancedAgent extends EventEmitter {
 
         // If no tools, we're done (unless run-pr-style strict completion requires TASK_COMPLETE)
         if (toolUseBlocks.length === 0) {
+          const hasTaskComplete = textBlocks.some((b) => parseTaskComplete(b.text) != null);
+          const hasEvidence = this.hasRecentGroundedEvidence();
+          if (this.shouldEnforceCompletionEvidence()) {
+            const needsTaskComplete =
+              this.config.completionEvidenceMode === 'strict' || this.toolCallCount > 0;
+            if ((needsTaskComplete && !hasTaskComplete) || !hasEvidence) {
+              const reason = !hasEvidence
+                ? 'no recent grounded evidence'
+                : 'missing [[TASK_COMPLETE | summary=...]]';
+              this.emit('warning', {
+                message: `Completion evidence gate blocked finalize: ${reason}.`,
+              });
+              this.messages.push({
+                role: 'user',
+                content:
+                  '[SYSTEM] Completion gate: before finishing, provide grounded evidence from tool results/tests and then emit ' +
+                  '[[TASK_COMPLETE | summary=<brief summary> | evidence=<paths/tests/tool proof>]]. Continue working until this is satisfied.',
+              });
+              continue;
+            }
+          }
           if (
             this.config.strictTextOnlyCompletion &&
             this.iterationCount < this.config.maxIterations
           ) {
-            const hasTaskComplete = textBlocks.some((b) => parseTaskComplete(b.text) != null);
             if (!hasTaskComplete) {
               this.emit('warning', {
                 message:
@@ -649,21 +850,41 @@ export class EnhancedAgent extends EventEmitter {
       input: toolUse.input,
       index: index + 1,
     });
+    this.recordEvidence('tool_call', toolUse.name);
 
     try {
-      const result = await toolExecutor.execute(toolUse.name, toolUse.input);
+      let result = await toolExecutor.execute(toolUse.name, toolUse.input);
 
       if (['write_file', 'edit_file', 'edit_lines', 'verified_edit'].includes(toolUse.name)) {
         const input = toolUse.input as { path?: string };
         if (typeof input?.path === 'string') this.filesChanged.add(input.path);
       }
 
-      const success = !result.error && result.success !== false;
+      const verification = await this.postEditVerify(toolExecutor, toolUse, result);
+      if (!verification.ok) {
+        const currentMessage =
+          typeof result?.message === 'string' && result.message
+            ? `${result.message}; ${verification.message}`
+            : verification.message;
+        if (result && typeof result === 'object') {
+          result = { ...result, message: currentMessage, success: false, error: true, postVerify: verification.message };
+        } else {
+          result = { success: false, error: true, message: currentMessage, result };
+        }
+      } else if (result && typeof result === 'object') {
+        result = { ...result, postVerify: verification.message };
+      }
+
+      const success = !result?.error && result?.success !== false;
       this.emit('tool_result', {
         name: toolUse.name,
         result,
         success,
       });
+      this.recordEvidence(
+        success ? 'tool_result_ok' : 'tool_result_error',
+        `${toolUse.name}:${success ? 'ok' : 'error'}`,
+      );
       if (this.sessionMemory) {
         const msg = typeof result === 'object' && result?.message != null ? String(result.message) : undefined;
         this.sessionMemory.recordAttempt(toolUse.name, success, msg);
@@ -1507,6 +1728,7 @@ When you complete the task, provide a comprehensive summary including:
 - Any trade-offs or design decisions made
 - Potential improvements or follow-up tasks
 - Test results and validation performed
+- If you used tools, finish with [[TASK_COMPLETE | summary=<brief summary> | evidence=<tool/test proof>]] only when work is actually complete.
 
 ${this.sessionMemory ? this.sessionMemory.getSummary() : ''}
 ${this.mindsetAdaptive ? `\n## Current reasoning mindset: ${this.currentMindset.toUpperCase()}\n${this.currentMindset === 'convergent' ? 'Focus on one solution; narrow options and commit. Use [[SET_MINDSET: divergent]] to explore alternatives, or [[SET_MINDSET: algorithmic]] for step-by-step.' : this.currentMindset === 'divergent' ? 'Explore alternatives; brainstorm. Use [[SET_MINDSET: convergent]] to narrow, or [[SET_MINDSET: algorithmic]] for step-by-step.' : 'Reason step-by-step; formal. Use [[SET_MINDSET: convergent]] to commit, or [[SET_MINDSET: divergent]] to explore.'}\n` : ''}

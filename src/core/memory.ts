@@ -75,7 +75,7 @@ export class NeuralMemory {
      * Retrieve relevant memories based on a query string (context or error message).
      * Currently uses keyword matching. Future: Vector search.
      */
-    async retrieve(query: string, limit: number = 5): Promise<MemoryItem[]> {
+    async retrieve(query: string, limit: number = 5, minScore: number = 1): Promise<MemoryItem[]> {
         await this.init();
 
         const queryLower = query.toLowerCase();
@@ -103,7 +103,7 @@ export class NeuralMemory {
 
         // Filter zero scores and sort
         const results = scored
-            .filter(r => r.score > 0)
+            .filter(r => r.score >= minScore)
             .sort((a, b) => b.score - a.score)
             .slice(0, limit)
             .map(r => r.item);

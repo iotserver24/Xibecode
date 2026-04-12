@@ -244,6 +244,9 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
       contextHintFiles,
       planningModel: config.getPlanningModel(),
       executionModel: config.getExecutionModel(),
+      completionEvidenceMode: 'balanced',
+      postEditVerification: 'balanced',
+      memoryRecallMinScore: 2,
       defaultSkillsPrompt,
     },
     provider as any);

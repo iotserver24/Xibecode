@@ -152,7 +152,8 @@ function XibeCodeChatApp(props: {
   ]);
 
   const pushLine = useCallback((line: UiLine) => {
-    setLines((prev: UiLine[]) => [...prev.slice(-120), line]);
+    // Keep a much larger in-memory transcript so context doesn't vanish quickly.
+    setLines((prev: UiLine[]) => [...prev.slice(-5000), line]);
   }, []);
 
   const ensureModelsLoaded = useCallback(async (): Promise<string[]> => {
