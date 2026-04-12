@@ -9,6 +9,7 @@ import { MCPClientManager } from '../core/mcp-client.js';
 import { SkillManager } from '../core/skills.js';
 import { renderAndRun } from '../interactiveHelpers.js';
 import { AssistantMarkdown } from '../components/AssistantMarkdown.js';
+import { formatToolArgs, formatToolOutcome } from '../utils/tool-display.js';
 
 export type ChatOptions = {
   model?: string;
@@ -19,7 +20,7 @@ export type ChatOptions = {
   noWebui?: boolean;
 };
 
-type UiLineType = 'user' | 'assistant' | 'tool' | 'info' | 'error';
+type UiLineType = 'user' | 'assistant' | 'tool' | 'tool_out' | 'info' | 'error';
 type UiLine = { type: UiLineType; text: string };
 const APP_VERSION = '0.7.6';
 const HERO_LOGO = [
@@ -74,6 +75,8 @@ function lineColorKey(type: UiLineType): TuiThemeColorKey {
       return 'text';
     case 'tool':
       return 'professionalBlue';
+    case 'tool_out':
+      return 'subtle';
     case 'error':
       return 'error';
     case 'info':
@@ -90,6 +93,8 @@ function prefixForType(type: UiLineType): string {
       return 'XibeCode';
     case 'tool':
       return 'Tool';
+    case 'tool_out':
+      return 'Result';
     case 'error':
       return 'Error';
     case 'info':
@@ -106,6 +111,8 @@ function prefixColorKey(type: UiLineType): TuiThemeColorKey {
       return 'briefLabelClaude';
     case 'tool':
       return 'suggestion';
+    case 'tool_out':
+      return 'inactive';
     case 'error':
       return 'error';
     case 'info':
@@ -722,9 +729,26 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
             text: (event.data?.message as string) || 'Thinking…',
           });
           break;
-        case 'tool_call':
-          onLine({ type: 'tool', text: String(event.data?.name ?? '') });
+        case 'tool_call': {
+          const name = String(event.data?.name ?? 'tool');
+          const input = event.data?.input;
+          const args = formatToolArgs(name, input);
+          onLine({
+            type: 'tool',
+            text: args ? `${name} — ${args}` : name,
+          });
           break;
+        }
+        case 'tool_result': {
+          const name = String(event.data?.name ?? 'tool');
+          const result = event.data?.result;
+          const success = event.data?.success !== false;
+          onLine({
+            type: 'tool_out',
+            text: `${name}: ${formatToolOutcome(name, result, success)}`,
+          });
+          break;
+        }
         case 'stream_text':
           streamedBuffer += (event.data?.text as string) || '';
           break;
