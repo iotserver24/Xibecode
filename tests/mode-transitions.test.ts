@@ -54,6 +54,9 @@ describe('dynamic tool categorization', () => {
     const parsed = parseTaskComplete(
       'done [[TASK_COMPLETE | summary=Implemented feature | evidence=read_file:src/a.ts]]',
     );
-    expect(parsed).toEqual({ summary: 'Implemented feature' });
+    expect(parsed).toEqual({
+      summary: 'Implemented feature',
+      evidence: 'read_file:src/a.ts',
+    });
   });
 });

@@ -1452,7 +1452,9 @@ export function stripModeRequests(text: string): string {
 /**
  * Parse task completion from text (looks for [[TASK_COMPLETE | summary=...]] tags)
  */
-export function parseTaskComplete(text: string): { summary: string } | null {
+export function parseTaskComplete(
+  text: string,
+): { summary: string; evidence?: string } | null {
   const match = text.match(/\[\[TASK_COMPLETE([^\]]*)\]\]/i);
   if (!match) return null;
   const raw = match[1] ?? '';
@@ -1470,7 +1472,10 @@ export function parseTaskComplete(text: string): { summary: string } | null {
   }
   const summary = kv.get('summary');
   if (!summary) return null;
-  return { summary };
+  const evidence = kv.get('evidence');
+  return evidence !== undefined
+    ? { summary, evidence }
+    : { summary };
 }
 
 /**

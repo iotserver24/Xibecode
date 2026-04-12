@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import TextInput from 'ink-text-input';
 import { Box, Text, createRoot, useApp, useInput } from '../ink.js';
 import type { TuiThemeColorKey } from '../utils/tui-theme.js';
@@ -11,6 +11,7 @@ import { AgentMode, MODE_CONFIG } from '../core/modes.js';
 import { renderAndRun } from '../interactiveHelpers.js';
 import { AssistantMarkdown } from '../components/AssistantMarkdown.js';
 import { formatToolArgs, formatToolOutcome } from '../utils/tool-display.js';
+import { SPINNER_VERBS } from '../constants/spinnerVerbs.js';
 
 export type ChatOptions = {
   model?: string;
@@ -38,6 +39,12 @@ const HERO_LOGO = [
   '╚██████╗╚██████╔╝██████╔╝███████╗',
   ' ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝',
 ];
+/** Terminal-friendly spinner frames (Braille) — cycles while the agent is busy */
+const WORK_SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const;
+
+/** How fast to advance OpenClaude-style spinner verbs (ms) */
+const WORK_VERB_ROTATE_MS = 2400;
+
 const QUICK_HELP = ['/help', '/mode', '/format', '/model', '/clear', '/exit'];
 const CHAT_COMMANDS: Array<{ name: string; description: string }> = [
   { name: '/help', description: 'Show available shortcuts and usage hints' },
@@ -151,12 +158,38 @@ function XibeCodeChatApp(props: {
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [selectedModelIndex, setSelectedModelIndex] = useState(0);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
+  const [workSpinnerFrame, setWorkSpinnerFrame] = useState(0);
+  const [workVerbIndex, setWorkVerbIndex] = useState(0);
   const [lines, setLines] = useState<UiLine[]>([
     {
       type: 'info',
       text: 'XibeCode interactive session. Type /exit to quit, /clear to reset the transcript.',
     },
   ]);
+
+  useEffect(() => {
+    if (!isRunning) {
+      setWorkSpinnerFrame(0);
+      return;
+    }
+    const id = setInterval(() => {
+      setWorkSpinnerFrame((f) => (f + 1) % WORK_SPINNER_FRAMES.length);
+    }, 90);
+    return () => clearInterval(id);
+  }, [isRunning]);
+
+  useEffect(() => {
+    if (!isRunning) return;
+    setWorkVerbIndex(Math.floor(Math.random() * SPINNER_VERBS.length));
+  }, [isRunning]);
+
+  useEffect(() => {
+    if (!isRunning) return;
+    const id = setInterval(() => {
+      setWorkVerbIndex((v) => (v + 1) % SPINNER_VERBS.length);
+    }, WORK_VERB_ROTATE_MS);
+    return () => clearInterval(id);
+  }, [isRunning]);
 
   const pushLine = useCallback((line: UiLine) => {
     // Keep a much larger in-memory transcript so context doesn't vanish quickly.
@@ -502,11 +535,30 @@ function XibeCodeChatApp(props: {
     setSelectedCommandIndex(0);
   }, [input]);
 
-  const status = useMemo(
-    () =>
-      `model: ${activeModel} | format: ${wireFormat} | mode: ${activeMode} | provider: ${props.provider || 'auto'} | ${isRunning ? 'running' : 'idle'}`,
-    [activeModel, activeMode, props.provider, isRunning, wireFormat],
+  const workVerbPhrase = useMemo(
+    () => SPINNER_VERBS[workVerbIndex % SPINNER_VERBS.length],
+    [workVerbIndex],
   );
+
+  const status = useMemo(() => {
+    if (!isRunning) {
+      return `model: ${activeModel} | format: ${wireFormat} | mode: ${activeMode} | provider: ${props.provider || 'auto'} | idle`;
+    }
+    const shortVerb =
+      workVerbPhrase.length > 32
+        ? `${workVerbPhrase.slice(0, 30)}…`
+        : workVerbPhrase;
+    const tail = `working ${WORK_SPINNER_FRAMES[workSpinnerFrame]} · ${shortVerb}`;
+    return `model: ${activeModel} | format: ${wireFormat} | mode: ${activeMode} | provider: ${props.provider || 'auto'} | ${tail}`;
+  }, [
+    activeModel,
+    activeMode,
+    props.provider,
+    isRunning,
+    wireFormat,
+    workSpinnerFrame,
+    workVerbPhrase,
+  ]);
   const showWelcome = lines.length <= 1;
   const providerName = props.provider ? props.provider.toUpperCase() : 'AUTO';
   const divider = '─'.repeat(98);
@@ -612,6 +664,24 @@ function XibeCodeChatApp(props: {
         )}
       </Box>
       <Text color="subtle">{divider}</Text>
+      {isRunning && (
+        <Box
+          marginTop={1}
+          paddingX={1}
+          borderStyle="round"
+          borderColor="claudeBlue_FOR_SYSTEM_SPINNER"
+          flexDirection="column"
+        >
+          <Text wrap="wrap">
+            <Text bold color="claudeBlue_FOR_SYSTEM_SPINNER">
+              {WORK_SPINNER_FRAMES[workSpinnerFrame]}{' '}
+            </Text>
+            <Text bold color="briefLabelClaude">
+              {workVerbPhrase}
+            </Text>
+          </Text>
+        </Box>
+      )}
       <Box marginTop={1} borderStyle="round" borderColor="claude" paddingX={1}>
         <Text color="claude">{'> '}</Text>
         <TextInput

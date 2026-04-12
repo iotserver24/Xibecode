@@ -1,0 +1,4 @@
+{
+  "summary": "Improved TUI rendering of assistant messages that include [[TASK_COMPLETE | summary=... | evidence=...]]: `parseTaskComplete` in `modes.ts` now returns optional `evidence`; `AssistantMarkdown` strips the raw tag from markdown (with mode-request stripping), renders the prose as before, then shows a green rounded \"Task complete\" box with wrapped summary and a dim \"Evidence:\" line when evidence is present and not `none`. Vitest `mode-transitions` and `tsc` pass.",
+  "current_status": "Chat assistant output should read as prose plus a compact completion footer instead of a long wrapped bracket line."
+}
