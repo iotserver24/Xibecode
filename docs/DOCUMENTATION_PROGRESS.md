@@ -4,6 +4,24 @@
 > **Status:** Phase 1 & 2 (Partial) Completed
 > **Overall Progress:** 38% (8/21 tasks completed)
 
+## Update for v0.9.0 (April 2026)
+
+Recent platform-level features now reflected in docs and release notes:
+
+- **Agent reliability / anti-hallucination**:
+  - evidence-aware completion gating
+  - post-edit verification and stronger loop resistance
+  - safer neural-memory recall behavior
+- **Conversation durability**:
+  - token-aware context compaction for long sessions
+  - grounded facts ledger + conversation summary retention
+- **Terminal UX improvements**:
+  - richer tool call/result rendering in chat transcript
+  - improved assistant markdown display in TUI
+- **CI workflow hardening**:
+  - clean-runner TypeScript type stability
+  - reduced install overhead for non-E2E workflows
+
 ## Executive Summary
 
 This report tracks the progress of the comprehensive documentation initiative for XibeCode v0.3.5, which aims to improve documentation coverage from ~0.7% to 90%+ for public APIs.
