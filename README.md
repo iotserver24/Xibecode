@@ -418,7 +418,11 @@ describe('calculateTotal', () => {
 
 ## Browser testing (no bundled browser)
 
-XibeCode does **not** ship Playwright or download Chromium. Legacy tool names (`take_screenshot`, `preview_app`, etc.) return a short message pointing you to **`run_command` + [`agent-browser`](https://github.com/vercel-labs/agent-browser)** (already a dependency) or your **browser MCP**. For Playwright E2E, add `@playwright/test` to the **target project** and run it with `run_command` (for example `pnpm exec playwright test`).
+XibeCode does **not** ship Playwright or download Chromium. Legacy tool names (`take_screenshot`, `preview_app`, etc.) return a short message pointing you to **`run_command` + [`agent-browser`](https://github.com/vercel-labs/agent-browser)** (install separately if you want it), your **browser MCP**, or **`fetch_url`**. For Playwright E2E, add `@playwright/test` to the **target project** and run it with `run_command` (for example `pnpm exec playwright test`).
+
+**Termux / Android:** Upstream `agent-browser` does not publish an `android-arm64` release binary, so a global `npm i -g xibecode` stays lean and skips that download. Install **`xibecode@latest`** (spell it `latest`, not `latwst`). For browser flows on Termux, rely on MCP, `fetch_url`, or tooling in your project.
+
+**Optional CLI (desktop Linux/macOS/Windows):** `npm i -g agent-browser` when you need snapshot/click automation via `run_command`.
 
 ## Configuration
 

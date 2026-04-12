@@ -24,9 +24,6 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.3.6)
-      agent-browser:
-        specifier: ^0.20.0
-        version: 0.20.14
       chalk:
         specifier: ^4.1.2
         version: 4.1.2
@@ -788,10 +785,6 @@ packages:
   acorn@8.16.0:
     resolution: {integrity: sha512-UVJyE9MttOsBQIDKw1skb9nAwQuR5wuGD3+82K6JgJlm/Y+KI92oNsMNGZCYdDsVtRHSak0pcV5Dno5+4jh9sw==}
     engines: {node: '>=0.4.0'}
-    hasBin: true
-
-  agent-browser@0.20.14:
-    resolution: {integrity: sha512-Z/6uCtDJXsKpr7XkY+ljHbz7QGjorFDQR54v30AMPgs0ocTWT9noId2k3Lwj0XHCZIVpbri3PE7XGOmmJSv6Rg==}
     hasBin: true
 
   ajv-formats@3.0.1:
@@ -2641,8 +2634,6 @@ snapshots:
       acorn: 8.16.0
 
   acorn@8.16.0: {}
-
-  agent-browser@0.20.14: {}
 
   ajv-formats@3.0.1(ajv@8.17.1):
     optionalDependencies:
