@@ -1,4 +1,0 @@
-{
-  "summary": "Completed a full v0.9.0 release flow for the main XibeCode repo: bumped package and runtime-visible versions, refreshed README and docs content for latest reliability/features, built both core and webui, committed and pushed to GitHub main, and published xibecode@0.9.0 to npm with public access. Also updated the separate site repository docs pages for v0.9.0 features, built the site successfully, rebased on remote main due push rejection, and pushed site docs updates.",
-  "current_status": "Main repo release is shipped at v0.9.0 (GitHub + npm). Site docs are updated and pushed in the separate site repository; only a pre-existing local unstaged file in site/.cursor/hooks/state/continual-learning.json remains outside commits."
-}

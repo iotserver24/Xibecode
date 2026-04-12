@@ -1,4 +1,0 @@
-{
-  "summary": "Implemented a hard-switch to an Ink-based Claude-style chat TUI by replacing the previous `chat` command internals with a dedicated new UI runtime and wiring it to the existing agent/tool backend. Added `src/ui/claude-style-chat.ts` with an interactive transcript pane, status bar, input box, slash commands (`/exit`, `/clear`), streaming/tool event rendering, and agent execution loop; then replaced `src/commands/chat.ts` with a thin wrapper that launches this Ink UI directly. Verified the changes compile and pass targeted chat UI tests.",
-  "current_status": "Chat/TUI now runs through an Ink-first Claude-style interface path; project builds successfully (`pnpm run build`) and chat UI state test passes."
-}

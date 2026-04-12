@@ -1,4 +1,0 @@
-{
-  "summary": "Ran continual-learning for xibecode: processed seven on-disk transcript jsonl files (new vs stale index), removed obsolete index keys, refreshed continual-learning-index.json with current mtimes. Updated AGENTS.md by merging the direct-edit plus post-edit explanation preference into one bullet, adding an Ink/OpenClaude-aligned TUI styling preference, extending the Electron workspace bullet with the xibecode chat Ink entrypoints, and documenting that openclaude/ is gitignored reference material alongside site paths.",
-  "current_status": "AGENTS.md and transcript index are aligned with current transcripts; no secrets added. Preferences and workspace facts remain at twelve bullets per section."
-}
