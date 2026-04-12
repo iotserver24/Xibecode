@@ -10,58 +10,34 @@ AI-powered autonomous coding assistant for your terminal, browser, and desktop.
 
 XibeCode is a CLI agent that can read and edit code, run commands, and iterate on tasks from your terminal using LLMs. It includes a **WebUI** for a browser-based experience, a **Desktop App** (Electron) for native IDE-like usage, **AI-powered test generation**, and **multi-model support** for both Anthropic and OpenAI models.
 
-## What's New in v0.5.7
+## What's New in v0.9.0
 
-### 🚀 Native Gemini Support
+### Reliability and anti-hallucination upgrades
 
-XibeCode now supports Google Gemini natively via their OpenAI-compatible endpoint.
+- **Evidence-aware completion gate**: the agent now requires grounded signals before declaring a task complete.
+- **Post-edit verification**: write/edit operations are validated with read-back checks to reduce silent bad edits.
+- **Improved loop resistance**: canonicalized loop detection blocks repeated or low-variation command/tool loops.
+- **Safer memory recall**: recalled memories are labeled as unverified hints and filtered by minimum relevance score.
+- **Grounded context compaction**: old context now keeps a **Grounded Facts Ledger** + conversation summary instead of blind truncation.
 
-- **New Models**: Gemini 3 Deep Think, Gemini 3 Flash Preview, Gemini 2.5 Pro.
-- **Direct Integration**: Use your Google API Key without proxies.
+### Better chat UX and tool transparency
 
-### 🔒 Settings Security & UI
+- **Large transcript retention** in terminal chat (much less history loss during long sessions).
+- **Token-aware auto compaction** around large context budgets (near 120k token estimate) instead of fixed message-count trimming.
+- **Richer tool rendering** in chat: tool call arguments and result summaries are shown for better observability.
+- **Improved Markdown rendering** for assistant output in the TUI.
 
-- **Eye Toggle**: Added visibility toggle for API keys in Settings.
-- **Improved Masking**: Better feedback for existing keys.
-- **Native Providers**: Added native Google option in the provider dropdown.
+### Model and provider improvements
 
-### ⚡ Comprehensive Model Update (2025-2026)
+- **`/model` picker refresh** with provider/base-url-aware model loading.
+- **`/format` command** to switch request wire format (`auto`, `anthropic`, `openai`) and persist it.
+- Continued support for Anthropic, OpenAI-compatible providers, Gemini, and custom endpoints.
 
-Verified support for the latest flagships from OpenAI (GPT-5.2), Anthropic (Claude 4.6), Zhipu AI (GLM-5), and more.
+### CI and release workflow hardening
 
-### ✨ Feature Improvements
-
-- **Enhanced Custom Providers**: Explicit "API Format" selection for custom endpoints.
-- **UI Fixes**: Improved "Apply Custom Model" button feedback and settings persistence.
-- **Performance**: Optimized model list loading and configuration handling.
-
-### v0.5.4
-
-- **Context Chips** - Terminal context (full buffer or selections) is now added as "chips" to the chat instead of raw text, keeping the interface clean while giving the AI full context.
-- **Interactive Plan Mode** - Plan mode now asks clarifying questions, searches the web, and generates detailed `implementations.md` with checkboxes. Click "Build" to auto-execute the plan.
-- **Chat History** - Full conversation persistence with per-project storage. Resume any previous chat from the History panel.
-- **Environment Variables Editor** - Visual `.env` file editor with auto-detection, secret masking, and live editing.
-- **Media File Preview** - Images, videos, and audio files render as proper previews instead of binary in the editor.
-- **Thinking Animation** - Loading spinner and "Thinking..." indicator shown while the AI processes your request.
-- **Improved Tool Rendering** - Tool calls display with descriptive icons, status badges, and live progress indicators.
-- **Session Info Bar** - Status bar shows model, mode, session name, tools status, and theme.
-- **XibeCode ASCII Banner** - Beautiful gradient ASCII art branding in the chat welcome screen.
-- **Donate Button** - Support XibeCode development via the activity bar.
-- **Smart Auto-Scroll** - Chat no longer force-scrolls when you're reading earlier messages.
-
-### Previous (v0.4.x)
-
-- **v0.dev-inspired UI** - Modern split-panel layout with resizable chat and code areas
-- **Multi-Terminal Support** - Create/manage multiple terminal tabs with + and X buttons
-- **Monaco Code Editor** - Full syntax highlighting and IntelliSense in the browser
-- **Settings Modal** - Configure AI provider, display, dev settings, and MCP servers
-- **MCP JSON Editor** - Edit mcp-servers.json directly with Monaco syntax highlighting
-- **Git History Graph** - Visual commit timeline with branch/tag indicators
-- **Custom Model Support** - Add any model (Claude, GPT, DeepSeek, etc.) via WebUI or CLI
-- **Real PTY Terminal** - Fully interactive shell with colors, tab-completion, and all terminal features
-- **File Tree Explorer** - Browse and open files with recursive directory tree
-- **Current Model Display** - Status bar shows active AI model
-- **Drag-to-Resize Panels** - Adjustable chat/code split layout
+- **GitHub Actions reliability fixes** for TypeScript + dependency install paths.
+- **Playwright browser download skip** in non-E2E installs for faster/stabler CI.
+- **Type declarations for `marked-terminal`** included in source to prevent clean-CI type failures.
 
 ## Screenshots
 

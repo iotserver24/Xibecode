@@ -1,19 +1,26 @@
 # XibeCode Documentation
 
-> **Version:** 0.5.4
-> **Last Updated:** February 16, 2026
+> **Version:** 0.9.0
+> **Last Updated:** April 12, 2026
 
 Welcome to the XibeCode documentation! This directory contains comprehensive documentation for developers, contributors, and users.
 
-## 🆕 What's New in v0.5.0
+## What's New in v0.9.0
 
-- **Desktop App** - Native Electron app for Windows, macOS, and Linux ([Download](https://github.com/iotserver24/xibecode/releases))
-- **Interactive Plan Mode** - AI asks questions, searches the web, generates `implementations.md`, then builds on command
-- **Chat History** - Persistent conversations with per-project storage
-- **Environment Variables Editor** - Visual `.env` editor with live editing
-- **Media File Preview** - Images, videos, audio preview in the editor
-- **Thinking Animation** - Loading spinner while AI processes
-- **Improved Tool Rendering** - Icons, status badges, progress indicators
+- **Core anti-hallucination hardening**:
+  - evidence-aware completion gating
+  - post-edit verification and stronger loop resistance
+  - safer memory recall behavior
+- **Long-session context reliability**:
+  - token-budget auto-compaction around large contexts
+  - preserved grounded facts + conversation summaries during compaction
+- **Terminal chat upgrades**:
+  - richer tool call/result details in transcript
+  - improved assistant Markdown rendering
+  - expanded local transcript retention
+- **Workflow improvements**:
+  - CI reliability fixes for TypeScript typing on clean runners
+  - non-E2E installs skip Playwright browser download for faster pipelines
 
 ## 📚 Documentation Structure
 
@@ -160,7 +167,7 @@ Generate API docs from JSDoc comments:
 
 ```bash
 # Install TypeDoc (if not already installed)
-npm install --save-dev typedoc typedoc-plugin-markdown --legacy-peer-deps
+pnpm add -D typedoc typedoc-plugin-markdown --legacy-peer-deps
 
 # Generate documentation
 npm run docs:generate
@@ -269,6 +276,6 @@ This documentation is part of XibeCode and is licensed under [Apache-2.0](../LIC
 
 ---
 
-**Documentation Version**: 1.0
-**Last Updated**: February 14, 2026
+**Documentation Version**: 1.1
+**Last Updated**: April 12, 2026
 **Maintained By**: XibeCode Team

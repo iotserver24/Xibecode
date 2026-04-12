@@ -22,7 +22,7 @@ export type ChatOptions = {
 
 type UiLineType = 'user' | 'assistant' | 'tool' | 'tool_out' | 'info' | 'error';
 type UiLine = { type: UiLineType; text: string };
-const APP_VERSION = '0.7.6';
+const APP_VERSION = '0.9.0';
 const HERO_LOGO = [
   '██╗  ██╗██╗██████╗ ███████╗',
   '╚██╗██╔╝██║██╔══██╗██╔════╝',
