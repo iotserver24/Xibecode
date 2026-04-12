@@ -19,14 +19,14 @@ importers:
   .:
     dependencies:
       '@anthropic-ai/sdk':
-        specifier: ^0.78.0
-        version: 0.78.0(zod@4.3.6)
+        specifier: ^0.88.0
+        version: 0.88.0(zod@4.3.6)
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.3.6)
       agent-browser:
-        specifier: ^0.20.0
-        version: 0.20.14
+        specifier: ^0.25.3
+        version: 0.25.3
       chalk:
         specifier: ^4.1.2
         version: 4.1.2
@@ -47,13 +47,13 @@ importers:
         version: 3.3.3
       ink:
         specifier: ^6.7.0
-        version: 6.8.0(@types/react@19.2.13)(react@19.2.4)
+        version: 6.8.0(@types/react@19.2.14)(react@19.2.5)
       ink-select-input:
         specifier: ^6.2.0
-        version: 6.2.0(ink@6.8.0(@types/react@19.2.13)(react@19.2.4))(react@19.2.4)
+        version: 6.2.0(ink@6.8.0(@types/react@19.2.14)(react@19.2.5))(react@19.2.5)
       ink-text-input:
         specifier: ^6.0.0
-        version: 6.0.0(ink@6.8.0(@types/react@19.2.13)(react@19.2.4))(react@19.2.4)
+        version: 6.0.0(ink@6.8.0(@types/react@19.2.14)(react@19.2.5))(react@19.2.5)
       inquirer:
         specifier: ^13.4.1
         version: 13.4.1(@types/node@20.19.33)
@@ -74,7 +74,7 @@ importers:
         version: 5.4.1
       react:
         specifier: ^19.2.4
-        version: 19.2.4
+        version: 19.2.5
       strip-ansi:
         specifier: ^7.1.0
         version: 7.2.0
@@ -86,7 +86,7 @@ importers:
         version: 5.9.3
       ws:
         specifier: ^8.16.0
-        version: 8.19.0
+        version: 8.20.0
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -102,7 +102,7 @@ importers:
         version: 20.19.33
       '@types/react':
         specifier: ^19.2.13
-        version: 19.2.13
+        version: 19.2.14
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
@@ -122,8 +122,8 @@ packages:
     resolution: {integrity: sha512-3NX/MpTdroi0aKz134A6RC2Gb2iXVECN4QaAXnvCIxxIm3C3AVB1mkUe8NaaiyvOpDfsrqWhYtj+Q6a62RrTsw==}
     engines: {node: '>=18'}
 
-  '@anthropic-ai/sdk@0.78.0':
-    resolution: {integrity: sha512-PzQhR715td/m1UaaN5hHXjYB8Gl2lF9UVhrrGrZeysiF6Rb74Wc9GCB8hzLdzmQtBd1qe89F9OptgB9Za1Ib5w==}
+  '@anthropic-ai/sdk@0.88.0':
+    resolution: {integrity: sha512-QQOtB5U9ZBJQj6y1ICmDZl14LWa4JCiJRoihI+0yuZ4OjbONrakP0yLwPv4DJFb3VYCtQM31bTOpCBMs2zghPw==}
     hasBin: true
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
@@ -131,8 +131,8 @@ packages:
       zod:
         optional: true
 
-  '@babel/runtime@7.28.6':
-    resolution: {integrity: sha512-05WQkdpL9COIMz4LjTxGpPNCdlpyimKppYNoJ5Di5EUObifl8t4tuLuUBBZEpoLYOmfvIWrsp9fCl0HoPRVTdA==}
+  '@babel/runtime@7.29.2':
+    resolution: {integrity: sha512-JiDShH45zKHWyGe4ZNVRrCjBz8Nh9TMmZG1kh4QTK8hCBTWBi8Da+i7s1fJw7/lYpM4ccepSNfqzZ/QvABBi5g==}
     engines: {node: '>=6.9.0'}
 
   '@colors/colors@1.5.0':
@@ -753,8 +753,8 @@ packages:
   '@types/node@20.19.33':
     resolution: {integrity: sha512-Rs1bVAIdBs5gbTIKza/tgpMuG1k3U/UMJLWecIMxNdJFDMzcM5LOiLVRYh3PilWEYDIeUDv7bpiHPLPsbydGcw==}
 
-  '@types/react@19.2.13':
-    resolution: {integrity: sha512-KkiJeU6VbYbUOp5ITMIc7kBfqlYkKA5KhEHVrGMmUUMt7NeaZg65ojdPk+FtNrBAOXNVM5QM72jnADjM+XVRAQ==}
+  '@types/react@19.2.14':
+    resolution: {integrity: sha512-ilcTH/UniCkMdtexkoCN0bI7pMcJDvmQFPvuPvmEaYA/NSfFTAgdUSLAoVjaRJm7+6PvcM+q1zYOwS4wTYMF9w==}
 
   '@types/through@0.0.33':
     resolution: {integrity: sha512-HsJ+z3QuETzP3cswwtzt2vEIiHBk/dCcHGhbmG5X3ecnwFD/lPrMpliGXxSCg03L9AhrdwA4Oz/qfspkDW+xGQ==}
@@ -790,8 +790,8 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  agent-browser@0.20.14:
-    resolution: {integrity: sha512-Z/6uCtDJXsKpr7XkY+ljHbz7QGjorFDQR54v30AMPgs0ocTWT9noId2k3Lwj0XHCZIVpbri3PE7XGOmmJSv6Rg==}
+  agent-browser@0.25.3:
+    resolution: {integrity: sha512-9qdD8Fe22fXHB9nEfWzZ31/16EjeHBbXXue44SoJt+8LpyZS07dV/aQR2B2LevLL8eCneJBOhqvEBP2lP0NwJw==}
     hasBin: true
 
   ajv-formats@3.0.1:
@@ -1738,8 +1738,8 @@ packages:
     peerDependencies:
       react: ^19.2.0
 
-  react@19.2.4:
-    resolution: {integrity: sha512-9nfp2hYpCwOjAN+8TZFGhtWEwgvWHXqESH8qT89AT/lWklpLON22Lc8pEtnpsZz7VmawabSU0gCjnj8aC0euHQ==}
+  react@19.2.5:
+    resolution: {integrity: sha512-llUJLzz1zTUBrskt2pwZgLq59AemifIftw4aB7JxOqf1HY2FDaGDxgwpAPVzHU1kdWabH7FauP4i1oEeer2WCA==}
     engines: {node: '>=0.10.0'}
 
   readable-stream@3.6.2:
@@ -2119,8 +2119,8 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
-  ws@8.19.0:
-    resolution: {integrity: sha512-blAT2mjOEIi0ZzruJfIhb3nps74PRWTCz1IjglWEEpQl5XS/UNama6u2/rjFkDDouqr4L67ry+1aGIALViWjDg==}
+  ws@8.20.0:
+    resolution: {integrity: sha512-sAt8BhgNbzCtgGbt2OxmpuryO63ZoDk/sqaB/znQm94T4fCEsy/yV+7CdC1kJhOU9lboAEU7R3kquuycDoibVA==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -2169,13 +2169,13 @@ snapshots:
       ansi-styles: 6.2.3
       is-fullwidth-code-point: 5.1.0
 
-  '@anthropic-ai/sdk@0.78.0(zod@4.3.6)':
+  '@anthropic-ai/sdk@0.88.0(zod@4.3.6)':
     dependencies:
       json-schema-to-ts: 3.1.1
     optionalDependencies:
       zod: 4.3.6
 
-  '@babel/runtime@7.28.6': {}
+  '@babel/runtime@7.29.2': {}
 
   '@colors/colors@1.5.0':
     optional: true
@@ -2590,7 +2590,7 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  '@types/react@19.2.13':
+  '@types/react@19.2.14':
     dependencies:
       csstype: 3.2.3
 
@@ -2642,7 +2642,7 @@ snapshots:
 
   acorn@8.16.0: {}
 
-  agent-browser@0.20.14: {}
+  agent-browser@0.25.3: {}
 
   ajv-formats@3.0.1(ajv@8.17.1):
     optionalDependencies:
@@ -3198,21 +3198,21 @@ snapshots:
 
   inherits@2.0.4: {}
 
-  ink-select-input@6.2.0(ink@6.8.0(@types/react@19.2.13)(react@19.2.4))(react@19.2.4):
+  ink-select-input@6.2.0(ink@6.8.0(@types/react@19.2.14)(react@19.2.5))(react@19.2.5):
     dependencies:
       figures: 6.1.0
-      ink: 6.8.0(@types/react@19.2.13)(react@19.2.4)
-      react: 19.2.4
+      ink: 6.8.0(@types/react@19.2.14)(react@19.2.5)
+      react: 19.2.5
       to-rotated: 1.0.0
 
-  ink-text-input@6.0.0(ink@6.8.0(@types/react@19.2.13)(react@19.2.4))(react@19.2.4):
+  ink-text-input@6.0.0(ink@6.8.0(@types/react@19.2.14)(react@19.2.5))(react@19.2.5):
     dependencies:
       chalk: 5.6.2
-      ink: 6.8.0(@types/react@19.2.13)(react@19.2.4)
-      react: 19.2.4
+      ink: 6.8.0(@types/react@19.2.14)(react@19.2.5)
+      react: 19.2.5
       type-fest: 4.41.0
 
-  ink@6.8.0(@types/react@19.2.13)(react@19.2.4):
+  ink@6.8.0(@types/react@19.2.14)(react@19.2.5):
     dependencies:
       '@alcalzone/ansi-tokenize': 0.2.5
       ansi-escapes: 7.3.0
@@ -3227,8 +3227,8 @@ snapshots:
       indent-string: 5.0.0
       is-in-ci: 2.0.0
       patch-console: 2.0.0
-      react: 19.2.4
-      react-reconciler: 0.33.0(react@19.2.4)
+      react: 19.2.5
+      react-reconciler: 0.33.0(react@19.2.5)
       scheduler: 0.27.0
       signal-exit: 3.0.7
       slice-ansi: 8.0.0
@@ -3238,10 +3238,10 @@ snapshots:
       type-fest: 5.4.4
       widest-line: 6.0.0
       wrap-ansi: 9.0.2
-      ws: 8.19.0
+      ws: 8.20.0
       yoga-layout: 3.2.1
     optionalDependencies:
-      '@types/react': 19.2.13
+      '@types/react': 19.2.14
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -3310,7 +3310,7 @@ snapshots:
 
   json-schema-to-ts@3.1.1:
     dependencies:
-      '@babel/runtime': 7.28.6
+      '@babel/runtime': 7.29.2
       ts-algebra: 2.0.0
 
   json-schema-traverse@1.0.0: {}
@@ -3586,12 +3586,12 @@ snapshots:
 
   react-is@18.3.1: {}
 
-  react-reconciler@0.33.0(react@19.2.4):
+  react-reconciler@0.33.0(react@19.2.5):
     dependencies:
-      react: 19.2.4
+      react: 19.2.5
       scheduler: 0.27.0
 
-  react@19.2.4: {}
+  react@19.2.5: {}
 
   readable-stream@3.6.2:
     dependencies:
@@ -3990,7 +3990,7 @@ snapshots:
 
   wrappy@1.0.2: {}
 
-  ws@8.19.0: {}
+  ws@8.20.0: {}
 
   wsl-utils@0.1.0:
     dependencies:
