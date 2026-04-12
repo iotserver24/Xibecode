@@ -785,8 +785,7 @@ function XibeCodeChatApp(props: {
           <Text color="subtle">↑/↓ navigate • Enter apply • Esc close</Text>
         </Box>
       )}
-      <Box marginTop={1} justifyContent="space-between">
-        <Text color="inactive">? for shortcuts</Text>
+      <Box marginTop={1} justifyContent="flex-end">
         <Text color="inactive">Ctrl+k to generate command</Text>
       </Box>
     </Box>
