@@ -1,1 +1,0 @@
-{"summary":"Added visible working state in terminal chat: animated Braille spinner on the status line while the agent runs, plus a bordered row above the input (XibeCode is working) with cycling spinner so users see activity before stream/tool lines appear.","current_status":"claude-style-chat.tsx updated; tsc clean."}

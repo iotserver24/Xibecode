@@ -1,4 +1,0 @@
-{
-  "summary": "Confirmed the OpenClaude-aligned spinner verb feature: `src/constants/spinnerVerbs.ts` mirrors the reference list; `claude-style-chat.tsx` rotates verbs every 2.4s while `isRunning`, shows Braille + full phrase in the bordered working strip, and includes truncated verb in the top status line. `pnpm exec tsc --noEmit` passes. Removed the extra dim hint line (“Phrases match OpenClaude…”) so only the cycling verbs appear in the working box.",
-  "current_status": "Spinner verb UX is complete and type-clean; optional follow-up is narrow-terminal tuning of status truncation vs. working box only."
-}

@@ -1,4 +1,0 @@
-{
-  "summary": "Fixed Termux/global-install crash ERR_MODULE_NOT_FOUND for typescript by moving typescript from devDependencies to dependencies in package.json, since dist/core/pattern-miner.js imports typescript at runtime. Ran pnpm install, build, and tests successfully.",
-  "current_status": "xibecode will install typescript alongside the CLI on npm global installs; user should reinstall or upgrade after the next published version. Lockfile updated implicitly by pnpm install."
-}

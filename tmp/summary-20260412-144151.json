@@ -1,4 +1,0 @@
-{
-  "summary": "Fixed the GitHub Actions release workflow permission issue by adding explicit workflow permissions (`contents: write`) in `.github/workflows/release.yml`, which is required for `softprops/action-gh-release` to update/upload assets to an existing release without the 'Resource not accessible by integration' error.",
-  "current_status": "Repository now has one pending change in `.github/workflows/release.yml` with explicit release-write permissions. Once committed and pushed, the release workflow should be able to attach/update release assets successfully."
-}
