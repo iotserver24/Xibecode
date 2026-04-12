@@ -15,7 +15,7 @@
     "dev": "node scripts/dev.mjs",
     "start": "node dist/index.js",
     "prepare": "pnpm run build",
-    "test": "vitest",
+    "test": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
@@ -25,7 +25,9 @@
     "docs:generate": "typedoc --options typedoc.json",
     "docs:watch": "typedoc --options typedoc.json --watch",
     "docs:serve": "npx http-server ./docs/api-generated -p 8080 -o",
-    "postinstall": "npx playwright install chromium || echo \"Playwright install failed, skipping optional step...\""
+    "playwright:install": "pnpm exec playwright install chromium",
+    "playwright:install:all": "pnpm exec playwright install",
+    "postinstall": "echo \"Skipping Playwright browser auto-install. Run: pnpm run playwright:install\""
   },
   "keywords": [
     "cli",
@@ -83,8 +85,8 @@
     "@types/ws": "^8.5.10",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3",
-    "vite": "^8.0.8",
-    "vitest": "^4.1.4"
+    "vite": "^5.4.21",
+    "vitest": "^1.6.1"
   },
   "engines": {
     "node": ">=18.0.0"
