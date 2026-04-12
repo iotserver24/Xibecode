@@ -55,6 +55,7 @@ playwright/.cache/
 .xibecode_backups/
 
 # Temp
+tmp/
 *.tmp
 *.temp
 .cache/

@@ -1,4 +1,0 @@
-{
-  "summary": "Implemented interactive mode selection in terminal chat so `/mode` + Enter opens a picker and users can choose a mode with arrow keys and Enter. Wired mode switching to update both agent runtime mode and tool executor permission mode, preserved selected mode across model changes, and updated status/help command surfaces accordingly.",
-  "current_status": "Mode switching UX now supports list-based selection in chat and is fully functional. Build and tests pass with no lint errors after the change."
-}

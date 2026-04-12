@@ -1,4 +1,0 @@
-{
-  "summary": "Ran the continual-learning update flow via the agents-memory-updater subagent using incremental transcript processing against the continual-learning index. The updater refreshed transcript mtimes and pruned stale index state while finding no high-signal recurring updates for AGENTS.md.",
-  "current_status": "AGENTS.md remains unchanged; continual-learning index has been refreshed to current transcript mtimes and includes only existing transcripts."
-}
