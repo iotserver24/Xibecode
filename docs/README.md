@@ -20,7 +20,7 @@ Welcome to the XibeCode documentation! This directory contains comprehensive doc
   - expanded local transcript retention
 - **Workflow improvements**:
   - CI reliability fixes for TypeScript typing on clean runners
-  - non-E2E installs skip Playwright browser download for faster pipelines
+  - CLI package does not bundle Playwright or browser binaries
 
 ## 📚 Documentation Structure
 

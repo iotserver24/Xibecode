@@ -16,18 +16,11 @@
     "start": "node dist/index.js",
     "prepare": "pnpm run build",
     "test": "vitest run",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
-    "test:e2e:headed": "playwright test --headed",
-    "test:e2e:report": "playwright show-report",
     "ui": "pnpm exec tsc && node dist/index.js ui --open",
     "ui:dev": "node scripts/dev.mjs ui",
     "docs:generate": "typedoc --options typedoc.json",
     "docs:watch": "typedoc --options typedoc.json --watch",
-    "docs:serve": "npx http-server ./docs/api-generated -p 8080 -o",
-    "playwright:install": "pnpm exec playwright install chromium",
-    "playwright:install:all": "pnpm exec playwright install",
-    "postinstall": "echo \"Skipping Playwright browser auto-install. Run: pnpm run playwright:install\""
+    "docs:serve": "npx http-server ./docs/api-generated -p 8080 -o"
   },
   "keywords": [
     "cli",
@@ -69,7 +62,6 @@
     "node-fetch": "^3.3.2",
     "open": "^10.0.0",
     "ora": "^5.4.1",
-    "playwright": "^1.41.2",
     "react": "^19.2.4",
     "strip-ansi": "^7.1.0",
     "ts-morph": "^27.0.2",
@@ -78,7 +70,6 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@playwright/test": "^1.41.2",
     "@types/diff": "^5.0.8",
     "@types/inquirer": "^9.0.9",
     "@types/node": "^20.10.0",

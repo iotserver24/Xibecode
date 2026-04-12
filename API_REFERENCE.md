@@ -708,7 +708,6 @@ For detailed API documentation, see:
 - **[Plugins API](./docs/api/plugins.md)** - Plugin system API
 - **[MCP API](./docs/api/mcp.md)** - MCP integration API
 - **[Safety API](./docs/api/safety.md)** - SafetyChecker API
-- **[Browser API](./docs/api/browser.md)** - BrowserManager API
 
 ---
 

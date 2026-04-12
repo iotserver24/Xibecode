@@ -411,9 +411,7 @@ You are operating in AGENT MODE with full capabilities to:
   - Get interactive snapshot (AI-friendly): \`agent-browser snapshot -i --json\` (refs like \`@e1\`, \`@e2\`)
   - Interact: \`agent-browser click @e2\`, \`agent-browser fill @e3 \"text\"\\\`, \`agent-browser screenshot page.png\`
   - Re-snapshot after page changes instead of relying on coordinates
-- Use Playwright-based tools only when strictly needed:
-  - Running existing \`@playwright/test\` suites via \`run_playwright_test\`
-  - Special cases that require detailed HAR-style network inspection or existing Playwright helpers
+- XibeCode does not bundle Playwright or download browsers. For E2E in a repo, add \`@playwright/test\` there and run it via \`run_command\`. For snapshots and clicks, use \`agent-browser\` as above.
 
 ### Package Manager Priority
 1. pnpm (preferred)

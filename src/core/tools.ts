@@ -12,11 +12,9 @@ import { SafetyChecker, sanitizePath, sanitizeUrl } from '../utils/safety.js';
 import { PluginManager } from './plugins.js';
 import { MCPClientManager } from './mcp-client.js';
 import { NeuralMemory } from './memory.js';
-import { BrowserManager } from '../tools/browser.js';
 import * as os from 'os';
 import { SkillManager } from './skills.js';
 import { TestGenerator, generateTestsForFile, writeTestFile } from '../tools/test-generator.js';
-import { VisualFeedbackProvider } from './visual-feedback.js';
 import { PatternMiner } from './pattern-miner.js';
 import { BackgroundAgentManager } from './background-agent.js';
 import { CodeGraph } from './code-graph.js';
@@ -25,6 +23,10 @@ import { SwarmOrchestrator } from './swarm.js';
 import { PermissionManager, type ApprovalScope, type PermissionMode } from './permissions.js';
 
 const execAsync = promisify(exec);
+
+/** Returned by former Playwright-backed browser tools; XibeCode does not bundle browsers. */
+export const NO_EMBEDDED_BROWSER_MESSAGE =
+  'XibeCode does not bundle Playwright or download Chromium. Use run_command with agent-browser (e.g. agent-browser open <url>, agent-browser screenshot out.png) or your environment browser MCP. For Playwright E2E in a repo, add @playwright/test there and run it via run_command.';
 
 /**
  * Interface for tool executors
@@ -61,7 +63,7 @@ export interface ToolExecutor {
  * - Context Operations: code search, file finding, context discovery
  * - Test Operations: run tests, get results
  * - Memory Operations: update neural memory
- * - Browser Operations: web automation with Playwright
+ * - Browser guidance: use run_command + agent-browser (no bundled browser)
  *
  * Features:
  * - Mode-based tool permissions
@@ -105,8 +107,6 @@ export class CodingToolExecutor implements ToolExecutor {
   private pluginManager: PluginManager;
   private mcpClientManager?: MCPClientManager;
   private memory?: NeuralMemory;
-  private browserManager: BrowserManager;
-  private visualFeedback: VisualFeedbackProvider;
   private skillManager: SkillManager;
   private patternMiner: PatternMiner;
   private backgroundAgent: BackgroundAgentManager;
@@ -172,8 +172,6 @@ export class CodingToolExecutor implements ToolExecutor {
     this.pluginManager = options?.pluginManager || new PluginManager();
     this.mcpClientManager = options?.mcpClientManager;
     this.memory = options?.memory;
-    this.browserManager = new BrowserManager();
-    this.visualFeedback = new VisualFeedbackProvider(workingDir);
     this.patternMiner = new PatternMiner(workingDir);
     this.backgroundAgent = new BackgroundAgentManager(workingDir);
     this.codeGraph = new CodeGraph(workingDir);
@@ -622,53 +620,15 @@ export class CodingToolExecutor implements ToolExecutor {
         return { success: true, message: 'Lesson learned and saved to neural memory.' };
       }
 
-      case 'take_screenshot': {
-        if (!p.url || typeof p.url !== 'string') return { error: true, success: false, message: 'Missing url' };
-        if (!p.path || typeof p.path !== 'string') return { error: true, success: false, message: 'Missing path' };
-        return this.browserManager.takeScreenshot(p.url, p.path, p.fullPage !== false);
-      }
-
-      case 'get_console_logs': {
-        if (!p.url || typeof p.url !== 'string') return { error: true, success: false, message: 'Missing url' };
-        return this.browserManager.getConsoleLogs(p.url);
-      }
-
-      case 'run_visual_test': {
-        if (!p.url || typeof p.url !== 'string') return { error: true, success: false, message: 'Missing url' };
-        if (!p.baseline_path || typeof p.baseline_path !== 'string') return { error: true, success: false, message: 'Missing baseline_path' };
-        const outputDir = p.output_dir || '.playwright-baselines';
-        return this.browserManager.runVisualTest(p.url, this.resolvePath(p.baseline_path), this.resolvePath(outputDir));
-      }
-
-      case 'check_accessibility': {
-        if (!p.url || typeof p.url !== 'string') return { error: true, success: false, message: 'Missing url' };
-        return this.browserManager.checkAccessibility(p.url);
-      }
-
-      case 'measure_performance': {
-        if (!p.url || typeof p.url !== 'string') return { error: true, success: false, message: 'Missing url' };
-        return this.browserManager.measurePerformance(p.url);
-      }
-
-      case 'test_responsive': {
-        if (!p.url || typeof p.url !== 'string') return { error: true, success: false, message: 'Missing url' };
-        const outputDir = p.output_dir || '.responsive-screenshots';
-        return this.browserManager.testResponsive(p.url, this.resolvePath(outputDir), p.viewports);
-      }
-
-      case 'capture_network': {
-        if (!p.url || typeof p.url !== 'string') return { error: true, success: false, message: 'Missing url' };
-        return this.browserManager.captureNetworkRequests(p.url);
-      }
-
-      case 'run_playwright_test': {
-        if (!p.test_path || typeof p.test_path !== 'string') return { error: true, success: false, message: 'Missing test_path' };
-        return this.browserManager.runPlaywrightTest(this.resolvePath(p.test_path), {
-          headed: p.headed,
-          browser: p.browser,
-          timeout: p.timeout,
-        });
-      }
+      case 'take_screenshot':
+      case 'get_console_logs':
+      case 'run_visual_test':
+      case 'check_accessibility':
+      case 'measure_performance':
+      case 'test_responsive':
+      case 'capture_network':
+      case 'preview_app':
+        return { error: true, success: false, message: NO_EMBEDDED_BROWSER_MESSAGE };
 
       case 'search_skills_sh': {
         if (!p.query || typeof p.query !== 'string') {
@@ -696,13 +656,6 @@ export class CodingToolExecutor implements ToolExecutor {
           includeMocks: p.include_mocks,
           maxTestsPerFunction: p.max_tests_per_function,
         }, p.write_file);
-      }
-
-      case 'preview_app': {
-        if (!p.url || typeof p.url !== 'string') {
-          return { error: true, success: false, message: 'Missing required parameter: url (string)' };
-        }
-        return this.visualFeedback.capture(p.url, { fullPage: p.full_page });
       }
 
       case 'mine_project_patterns': {
@@ -905,7 +858,7 @@ export class CodingToolExecutor implements ToolExecutor {
       }
 
       default:
-        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, synthesize_tool, take_screenshot, get_console_logs, run_visual_test, check_accessibility, measure_performance, test_responsive, capture_network, run_playwright_test, search_skills_sh, install_skill_from_skills_sh, preview_app, delegate_subtask, run_swarm` };
+        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, synthesize_tool, take_screenshot, get_console_logs, run_visual_test, check_accessibility, measure_performance, test_responsive, capture_network, search_skills_sh, install_skill_from_skills_sh, preview_app, delegate_subtask, run_swarm` };
     }
     } catch (err: any) {
       return { error: true, success: false, message: err?.message ?? String(err) };
@@ -1117,7 +1070,8 @@ export class CodingToolExecutor implements ToolExecutor {
       },
       {
         name: 'preview_app',
-        description: 'Capture a visual preview of a web application. Returns a screenshot path and a simplified semantic representation of the DOM. Useful for validating UI changes and layouts.',
+        description:
+          'Disabled: no bundled browser. Returns guidance to use run_command with agent-browser or a browser MCP. Previously captured a screenshot and simplified DOM summary.',
         input_schema: {
           type: 'object',
           properties: {
@@ -1604,7 +1558,8 @@ export class CodingToolExecutor implements ToolExecutor {
       },
       {
         name: 'take_screenshot',
-        description: 'Take a screenshot of a web page. Useful for verifying UI appearance or capturing the state of a web app.',
+        description:
+          'Disabled: no bundled browser. Returns guidance; use run_command with agent-browser screenshot or a browser MCP for captures.',
         input_schema: {
           type: 'object',
           properties: {
@@ -1617,7 +1572,8 @@ export class CodingToolExecutor implements ToolExecutor {
       },
       {
         name: 'get_console_logs',
-        description: 'Get browser console logs (and errors) from a URL. Useful for debugging frontend issues.',
+        description:
+          'Disabled: no bundled browser. Returns guidance; use agent-browser or host browser tooling for console capture.',
         input_schema: {
           type: 'object',
           properties: {
@@ -1628,20 +1584,22 @@ export class CodingToolExecutor implements ToolExecutor {
       },
       {
         name: 'run_visual_test',
-        description: 'Run visual regression testing by comparing screenshots. Creates baseline on first run, then compares subsequent screenshots against it. Perfect for catching unintended UI changes.',
+        description:
+          'Disabled: no bundled browser. Returns guidance; use external visual regression or agent-browser workflows in the target project.',
         input_schema: {
           type: 'object',
           properties: {
             url: { type: 'string', description: 'URL to test (e.g., http://localhost:3000)' },
             baseline_path: { type: 'string', description: 'Path to baseline screenshot file (e.g., baselines/homepage.png)' },
-            output_dir: { type: 'string', description: 'Directory for test output (default: .playwright-baselines)' }
+            output_dir: { type: 'string', description: 'Directory for test output (unused; tool disabled)' }
           },
           required: ['url', 'baseline_path']
         }
       },
       {
         name: 'check_accessibility',
-        description: 'Run accessibility audit on a webpage. Checks for missing alt text, form labels, heading hierarchy, color contrast, and other WCAG issues. Returns errors, warnings, and notices.',
+        description:
+          'Disabled: no bundled browser. Returns guidance; use Lighthouse, axe, or agent-browser in the environment.',
         input_schema: {
           type: 'object',
           properties: {
@@ -1652,7 +1610,8 @@ export class CodingToolExecutor implements ToolExecutor {
       },
       {
         name: 'measure_performance',
-        description: 'Measure Core Web Vitals and performance metrics: First Contentful Paint (FCP), Largest Contentful Paint (LCP), Cumulative Layout Shift (CLS), Time to Interactive (TTI), and DOM Content Loaded. Essential for UX and SEO.',
+        description:
+          'Disabled: no bundled browser. Returns guidance; use Lighthouse or browser DevTools via your workflow.',
         input_schema: {
           type: 'object',
           properties: {
@@ -1663,7 +1622,8 @@ export class CodingToolExecutor implements ToolExecutor {
       },
       {
         name: 'test_responsive',
-        description: 'Test a page across multiple viewport sizes (mobile, tablet, desktop). Takes screenshots at each breakpoint and reports any JavaScript errors. Perfect for responsive design testing.',
+        description:
+          'Disabled: no bundled browser. Returns guidance; use agent-browser or project E2E tooling for viewport checks.',
         input_schema: {
           type: 'object',
           properties: {
@@ -1687,27 +1647,14 @@ export class CodingToolExecutor implements ToolExecutor {
       },
       {
         name: 'capture_network',
-        description: 'Capture all network requests made during page load. Shows URLs, methods, status codes, resource types, and timing. Useful for debugging API calls, detecting failed requests, and performance analysis.',
+        description:
+          'Disabled: no bundled browser. Returns guidance; use browser DevTools HAR, agent-browser, or MCP browser network logs.',
         input_schema: {
           type: 'object',
           properties: {
             url: { type: 'string', description: 'URL to load and monitor (e.g., http://localhost:3000)' }
           },
           required: ['url']
-        }
-      },
-      {
-        name: 'run_playwright_test',
-        description: 'Execute a Playwright test file. Runs the test and returns pass/fail results with output. Great for running E2E tests, integration tests, and component tests.',
-        input_schema: {
-          type: 'object',
-          properties: {
-            test_path: { type: 'string', description: 'Path to the Playwright test file (e.g., tests/homepage.spec.ts)' },
-            headed: { type: 'boolean', description: 'Run with visible browser window (default: false)' },
-            browser: { type: 'string', enum: ['chromium', 'firefox', 'webkit'], description: 'Browser to use (default: chromium)' },
-            timeout: { type: 'number', description: 'Test timeout in milliseconds (default: 120000)' }
-          },
-          required: ['test_path']
         }
       },
       {
