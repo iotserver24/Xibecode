@@ -1,6 +1,6 @@
 {
   "name": "xibecode",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "AI-powered autonomous coding assistant with WebUI, AI test generation, multi-model support, and plugin system",
   "main": "dist/index.js",
   "type": "module",
