@@ -4,7 +4,7 @@ import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
 import { ContextManager } from './context.js';
-import { AgentMode, MODE_CONFIG, isToolAllowed, isValidMode } from './modes.js';
+import { AgentMode, MODE_CONFIG, getToolCategory, isToolAllowed, isValidMode } from './modes.js';
 import { FileEditor } from './editor.js';
 import { GitUtils } from '../utils/git.js';
 import { TestRunnerDetector } from '../utils/testRunner.js';
@@ -22,6 +22,7 @@ import { BackgroundAgentManager } from './background-agent.js';
 import { CodeGraph } from './code-graph.js';
 import { ConflictSolver } from './conflict-solver.js';
 import { SwarmOrchestrator } from './swarm.js';
+import { PermissionManager, type ApprovalScope, type PermissionMode } from './permissions.js';
 
 const execAsync = promisify(exec);
 
@@ -115,6 +116,7 @@ export class CodingToolExecutor implements ToolExecutor {
   private platform: string;
   private dryRun: boolean;
   private testCommandOverride?: string;
+  private permissionManager: PermissionManager;
   /** Session-scoped tools synthesized by the agent (meta-agent). Execution is sandboxed via run_command. */
   private dynamicTools = new Map<string, { description: string; script: string }>();
 
@@ -158,6 +160,7 @@ export class CodingToolExecutor implements ToolExecutor {
       mcpClientManager?: MCPClientManager;
       memory?: NeuralMemory;
       skillManager?: SkillManager; // Optional for compatibility, but recommended
+      permissionManager?: PermissionManager;
     }
   ) {
     this.workingDir = workingDir;
@@ -181,6 +184,7 @@ export class CodingToolExecutor implements ToolExecutor {
     this.platform = os.platform();
     this.dryRun = options?.dryRun || false;
     this.testCommandOverride = options?.testCommandOverride;
+    this.permissionManager = options?.permissionManager ?? new PermissionManager(this.currentMode);
   }
 
   private currentMode: AgentMode = 'agent';
@@ -209,6 +213,15 @@ export class CodingToolExecutor implements ToolExecutor {
     this.currentMode = mode;
     const config = MODE_CONFIG[mode];
     this.dryRun = config.defaultDryRun;
+    this.permissionManager.setMode(mode);
+  }
+
+  setPermissionMode(permissionMode: PermissionMode) {
+    this.permissionManager.setPermissionMode(permissionMode);
+  }
+
+  getPermissionContext() {
+    return this.permissionManager.getContext();
   }
 
   /**
@@ -273,6 +286,7 @@ export class CodingToolExecutor implements ToolExecutor {
    */
   async execute(toolName: string, input: any): Promise<any> {
     const p = this.parseInput(input);
+    const category = getToolCategory(toolName);
 
     // Check tool permissions
     // Special exception: Allow writing implementations.md in plan mode
@@ -299,6 +313,30 @@ export class CodingToolExecutor implements ToolExecutor {
         message: `PERMISSION DENIED: ${permission.reason}. Please delegate this task to the appropriate agent using [[REQUEST_MODE: <mode> | reason=...]].`,
         blocked: true
       };
+    }
+
+    const permissionDecision = this.permissionManager.evaluateToolExecution(p, toolName, category);
+    if (!permissionDecision.allowed) {
+      return {
+        error: true,
+        success: false,
+        message: permissionDecision.reason ?? 'Permission denied by runtime permission manager',
+        blocked: true,
+        requiresApproval: permissionDecision.requiresApproval,
+      };
+    }
+
+    if (
+      category &&
+      (p.confirm === true || p.approved === true) &&
+      (p.approval_scope === 'session' || p.approval_scope === 'directory')
+    ) {
+      this.permissionManager.grantToolApproval(
+        toolName,
+        category,
+        p.approval_scope as ApprovalScope,
+        typeof p.path === 'string' ? p.path : undefined,
+      );
     }
 
     // Check if it's an MCP tool (format: serverName::toolName)

@@ -7,6 +7,9 @@ import { AgentMode, MODE_CONFIG, ModeState, createModeState, transitionMode, Mod
 import { NeuralMemory } from './memory.js';
 import { SessionMemory } from './session-memory.js';
 import { PROVIDER_CONFIGS, ProviderType } from '../utils/config.js';
+import { PermissionManager } from './permissions.js';
+import { ToolOrchestrator, type ToolExecutionUpdate } from './tool-orchestrator.js';
+import { compactConversation } from './context-compactor.js';
 
 /** Reasoning tier for hierarchical (AX-lite) behavior: strategic = plan only, tactical = per-step decisions, operational = tool use. */
 export type ReasoningTier = 'strategic' | 'tactical' | 'operational';
@@ -23,6 +26,8 @@ export interface AgentConfig {
   mode?: AgentMode;
   provider?: ProviderType;
   customProviderFormat?: 'openai' | 'anthropic';
+  /** When set, overrides provider default for Anthropic Messages vs OpenAI chat completions. */
+  requestFormat?: 'auto' | 'openai' | 'anthropic';
   /** When true, force a strategic plan (one-shot, no tools) before tactical/operational execution. */
   planFirst?: boolean;
   /** Optional session memory for this run (attempts, failures, learnings). */
@@ -173,7 +178,7 @@ export class EnhancedAgent extends EventEmitter {
   private messages: MessageParam[] = [];
   private loopDetector = new LoopDetector();
   private thinkFilter = new ThinkTagFilter();
-  private config: Required<Omit<AgentConfig, 'sessionMemory' | 'contextHintFiles' | 'planningModel' | 'executionModel' | 'mindsetAdaptive' | 'strictTextOnlyCompletion' | 'defaultSkillsPrompt'>> & { customProviderFormat: 'openai' | 'anthropic'; sessionMemory?: SessionMemory | null; contextHintFiles: string[]; planningModel?: string; executionModel?: string; mindsetAdaptive?: boolean; strictTextOnlyCompletion: boolean };
+  private config: Required<Omit<AgentConfig, 'sessionMemory' | 'contextHintFiles' | 'planningModel' | 'executionModel' | 'mindsetAdaptive' | 'strictTextOnlyCompletion' | 'defaultSkillsPrompt' | 'requestFormat'>> & { customProviderFormat: 'openai' | 'anthropic'; requestFormat: 'auto' | 'openai' | 'anthropic'; sessionMemory?: SessionMemory | null; contextHintFiles: string[]; planningModel?: string; executionModel?: string; mindsetAdaptive?: boolean; strictTextOnlyCompletion: boolean };
   private iterationCount = 0;
   private toolCallCount = 0;
   private filesChanged: Set<string> = new Set();
@@ -196,6 +201,8 @@ export class EnhancedAgent extends EventEmitter {
   private contextHintFiles: string[] = [];
   private mindsetAdaptive: boolean = false;
   private currentMindset: ReasoningMindset = 'convergent';
+  private permissionManager: PermissionManager;
+  private toolOrchestrator: ToolOrchestrator;
 
   public injectMessage(message: string): void {
     this.injectedMessages.push(message);
@@ -235,6 +242,7 @@ export class EnhancedAgent extends EventEmitter {
       mode: config.mode ?? 'agent',
       provider: config.provider ?? this.detectProvider(config.model),
       customProviderFormat: config.customProviderFormat ?? 'openai',
+      requestFormat: config.requestFormat ?? 'auto',
       planFirst: config.planFirst ?? false,
       sessionMemory: config.sessionMemory,
       contextHintFiles: config.contextHintFiles ?? [],
@@ -248,8 +256,10 @@ export class EnhancedAgent extends EventEmitter {
 
     // Initialize mode state and orchestrator
     this.modeState = createModeState(this.config.mode);
+    this.permissionManager = new PermissionManager(this.config.mode);
+    this.toolOrchestrator = new ToolOrchestrator();
     this.modeOrchestrator = new ModeOrchestrator({
-      autoApprovalPolicy: 'always', // Allow AI to switch modes autonomously
+      autoApprovalPolicy: 'prompt-only',
       allowAutoEscalation: true,
     });
     // Prefer explicit provider override from config, otherwise auto-detect
@@ -421,13 +431,11 @@ export class EnhancedAgent extends EventEmitter {
 
         // Auto-compact: if conversation exceeds 80 messages, compact older ones
         if (this.messages.length > 80) {
-          const preserved = this.messages.slice(-12);
-          const compactNotice: MessageParam = {
-            role: 'assistant' as const,
-            content: 'Earlier conversation was auto-compacted to save context window space. Recent messages are preserved.',
-          };
-          this.messages = [compactNotice, ...preserved];
-          this.emit('warning', { message: 'Auto-compacted conversation to save context (kept last 12 messages)' });
+          const compacted = compactConversation(this.messages, 16);
+          this.messages = compacted.messages;
+          this.emit('warning', {
+            message: compacted.summaryNotice || 'Auto-compacted conversation to save context',
+          });
         }
 
         // Process response
@@ -457,11 +465,17 @@ export class EnhancedAgent extends EventEmitter {
 
             // Evaluate the request
             const evaluation = this.modeOrchestrator.evaluateModeChangeRequest(this.modeState);
+            const permissionEvaluation = this.permissionManager.evaluateModeTransition(
+              this.modeState.current,
+              modeRequest.mode,
+            );
+            const approvedByPermission = permissionEvaluation.approved;
 
-            if (evaluation.approved) {
+            if (evaluation.approved && approvedByPermission) {
               // Auto-approved - switch immediately
               const oldMode = this.modeState.current;
               this.modeState = transitionMode(this.modeState, modeRequest.mode, modeRequest.reason);
+              this.permissionManager.setMode(modeRequest.mode);
 
               // Update tool executor mode
               if (toolExecutor.setMode) {
@@ -481,7 +495,7 @@ export class EnhancedAgent extends EventEmitter {
                 to: modeRequest.mode,
                 reason: modeRequest.reason,
                 requiresConfirmation: evaluation.requiresConfirmation,
-                message: evaluation.reason,
+                message: permissionEvaluation.reason ?? evaluation.reason,
               });
             }
           }
@@ -491,6 +505,7 @@ export class EnhancedAgent extends EventEmitter {
           if (taskComplete) {
             // Switch back to team_leader mode
             this.modeState = transitionMode(this.modeState, 'team_leader', 'Task completed: ' + taskComplete.summary);
+            this.permissionManager.setMode('team_leader');
             this.emit('mode_changed', {
               from: this.modeState.previous,
               to: 'team_leader',
@@ -554,77 +569,21 @@ export class EnhancedAgent extends EventEmitter {
         // Execute tools
         const toolResults = [];
 
-        for (let i = 0; i < toolUseBlocks.length; i++) {
-          const toolUse = toolUseBlocks[i];
-          this.toolCallCount++;
-
-          // Loop detection
-          const loopCheck = this.loopDetector.check(toolUse.name, toolUse.input);
-
-          if (!loopCheck.allowed) {
-            this.emit('warning', { message: loopCheck.reason });
-            toolResults.push({
-              type: 'tool_result' as const,
-              tool_use_id: toolUse.id,
-              content: `Error: ${loopCheck.reason}. Try a different approach.`,
-              is_error: true,
-            });
-            continue;
-          }
-
-          if (loopCheck.reason) {
-            this.emit('warning', { message: loopCheck.reason });
-          }
-
-          // Emit tool call
-          this.emit('tool_call', {
-            name: toolUse.name,
-            input: toolUse.input,
-            index: i + 1,
+        const updates = await this.toolOrchestrator.executeBatches(
+          toolUseBlocks,
+          async (toolUse, i) => this.executeSingleToolUse(toolExecutor, toolUse, i),
+        );
+        for (const update of updates) {
+          const payload =
+            typeof update.result === 'string'
+              ? update.result
+              : JSON.stringify(update.result, null, 2);
+          toolResults.push({
+            type: 'tool_result' as const,
+            tool_use_id: update.toolUse.id,
+            content: payload,
+            ...(update.success ? {} : { is_error: true as const }),
           });
-
-          // Execute
-          try {
-            const result = await toolExecutor.execute(toolUse.name, toolUse.input);
-
-            // Track file changes
-            if (['write_file', 'edit_file', 'edit_lines', 'verified_edit'].includes(toolUse.name)) {
-              const input = toolUse.input as { path?: string };
-              if (typeof input?.path === 'string') this.filesChanged.add(input.path);
-            }
-
-            const success = !result.error && result.success !== false;
-            this.emit('tool_result', {
-              name: toolUse.name,
-              result,
-              success,
-            });
-            if (this.sessionMemory) {
-              const msg = typeof result === 'object' && result?.message != null ? String(result.message) : undefined;
-              this.sessionMemory.recordAttempt(toolUse.name, success, msg);
-            }
-
-            const payload =
-              typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-            toolResults.push({
-              type: 'tool_result' as const,
-              tool_use_id: toolUse.id,
-              content: payload,
-              ...(success ? {} : { is_error: true as const }),
-            });
-          } catch (error: any) {
-            this.emit('error', {
-              tool: toolUse.name,
-              error: error.message,
-            });
-
-            toolResults.push({
-              type: 'tool_result' as const,
-              tool_use_id: toolUse.id,
-              content: `Error: ${error.message}`,
-              is_error: true,
-            });
-          }
         }
 
         // Add injected messages if any exist
@@ -663,17 +622,90 @@ export class EnhancedAgent extends EventEmitter {
   /**
    * Call the model with streaming (fallback to non-streaming).
    */
+  private async executeSingleToolUse(
+    toolExecutor: any,
+    toolUse: ToolUseBlock,
+    index: number,
+  ): Promise<ToolExecutionUpdate> {
+    this.toolCallCount++;
+
+    const loopCheck = this.loopDetector.check(toolUse.name, toolUse.input);
+    if (!loopCheck.allowed) {
+      this.emit('warning', { message: loopCheck.reason });
+      return {
+        toolUse,
+        index,
+        result: `Error: ${loopCheck.reason}. Try a different approach.`,
+        success: false,
+      };
+    }
+
+    if (loopCheck.reason) {
+      this.emit('warning', { message: loopCheck.reason });
+    }
+
+    this.emit('tool_call', {
+      name: toolUse.name,
+      input: toolUse.input,
+      index: index + 1,
+    });
+
+    try {
+      const result = await toolExecutor.execute(toolUse.name, toolUse.input);
+
+      if (['write_file', 'edit_file', 'edit_lines', 'verified_edit'].includes(toolUse.name)) {
+        const input = toolUse.input as { path?: string };
+        if (typeof input?.path === 'string') this.filesChanged.add(input.path);
+      }
+
+      const success = !result.error && result.success !== false;
+      this.emit('tool_result', {
+        name: toolUse.name,
+        result,
+        success,
+      });
+      if (this.sessionMemory) {
+        const msg = typeof result === 'object' && result?.message != null ? String(result.message) : undefined;
+        this.sessionMemory.recordAttempt(toolUse.name, success, msg);
+      }
+
+      return {
+        toolUse,
+        index,
+        result,
+        success,
+      };
+    } catch (error: any) {
+      this.emit('error', {
+        tool: toolUse.name,
+        error: error.message,
+      });
+      return {
+        toolUse,
+        index,
+        result: `Error: ${error.message}`,
+        success: false,
+      };
+    }
+  }
+
+  /**
+   * Call the model with streaming (fallback to non-streaming).
+   */
   private async callModel(tools: Tool[]): Promise<{ message: any; streamed: boolean; persona?: { name: string; color: string } }> {
     // Route to provider-specific implementation
     // Check if the provider uses the Anthropic format or OpenAI format
-    // Check if the provider uses the Anthropic format or OpenAI format
     let isAnthropicFormat = false;
-    if (this.provider !== 'custom') {
-      isAnthropicFormat = PROVIDER_CONFIGS[this.provider as keyof typeof PROVIDER_CONFIGS]?.format === 'anthropic';
-    }
-
-    // If custom provider, check specific format config
-    if (this.provider === 'custom') {
+    const rf = this.config.requestFormat ?? 'auto';
+    if (rf === 'openai') {
+      isAnthropicFormat = false;
+    } else if (rf === 'anthropic') {
+      isAnthropicFormat = true;
+    } else if (this.provider !== 'custom') {
+      isAnthropicFormat =
+        PROVIDER_CONFIGS[this.provider as keyof typeof PROVIDER_CONFIGS]?.format ===
+        'anthropic';
+    } else {
       isAnthropicFormat = this.config.customProviderFormat === 'anthropic';
     }
 
@@ -842,6 +874,23 @@ export class EnhancedAgent extends EventEmitter {
    * Uses streaming (SSE) when available, with a non-streaming fallback.
    * Supports tools: sends them when provided and normalizes tool_calls in the response to Anthropic-style content blocks.
    */
+  /**
+   * OpenAI-compatible chat completions URL. Only appends `/chat/completions` to the
+   * configured base — do not inject an extra `/v1` segment (base URL must already
+   * include any API version prefix the user expects).
+   */
+  private buildOpenAIChatCompletionsUrl(): string {
+    let base = this.config.baseUrl;
+    if (!base && this.provider && this.provider !== 'custom' && PROVIDER_CONFIGS[this.provider as keyof typeof PROVIDER_CONFIGS]) {
+      base = PROVIDER_CONFIGS[this.provider as keyof typeof PROVIDER_CONFIGS].baseUrl;
+    }
+    base = (base || 'https://api.openai.com/v1').replace(/\/+$/, '');
+    if (/\/chat\/completions$/i.test(base)) {
+      return base;
+    }
+    return `${base}/chat/completions`;
+  }
+
   private async callOpenAI(tools: Tool[]): Promise<{ message: any; streamed: boolean; persona?: { name: string; color: string } }> {
     if (!this.config.apiKey) {
       // Try to get from specifics if generic is missing, though ConfigManager should have handled this
@@ -849,21 +898,7 @@ export class EnhancedAgent extends EventEmitter {
       // throw new Error('API key is required for OpenAI-compatible provider');
     }
 
-    // Determine Base URL: Config -> Provider Default -> OpenAI Default
-    let base = this.config.baseUrl;
-    if (!base && this.provider && this.provider !== 'custom' && PROVIDER_CONFIGS[this.provider as keyof typeof PROVIDER_CONFIGS]) {
-      base = PROVIDER_CONFIGS[this.provider as keyof typeof PROVIDER_CONFIGS].baseUrl;
-    }
-    base = (base || 'https://api.openai.com').replace(/\/+$/, '');
-
-    let url: string;
-    // Special handling for some providers that strictly follow /v1 or not
-    if (base.endsWith('/v1') || base.endsWith('/v4')) {
-      // Z.ai ends in /v4, others /v1. If already included, just append chat/completions
-      url = `${base}/chat/completions`;
-    } else {
-      url = `${base}/v1/chat/completions`;
-    }
+    const url = this.buildOpenAIChatCompletionsUrl();
 
     const openAiMessages = this.buildOpenAIMessages();
 

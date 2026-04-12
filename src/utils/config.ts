@@ -53,7 +53,7 @@ export const PROVIDER_CONFIGS = {
     name: 'xAI (Grok)'
   },
   deepseek: {
-    baseUrl: 'https://api.deepseek.com',
+    baseUrl: 'https://api.deepseek.com/v1',
     defaultModel: 'deepseek-chat',
     format: 'openai',
     envKey: 'DEEPSEEK_API_KEY',
@@ -114,6 +114,11 @@ export interface XibeCodeConfig {
   provider?: ProviderType;
   customModels?: { id: string; provider: ProviderType }[];
   customProviderFormat?: 'openai' | 'anthropic';
+  /**
+   * Wire protocol for model calls: follow provider default (auto), or force
+   * Anthropic Messages API vs OpenAI Chat Completions.
+   */
+  requestFormat?: 'auto' | 'openai' | 'anthropic';
   // UI / UX
   theme?: string;
   sessionDirectory?: string;

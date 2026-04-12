@@ -1,5 +1,6 @@
 import { BackgroundAgentManager } from './background-agent.js';
 import { AgentMode } from './modes.js';
+import { getWorkerBlockedTools } from './agent-tool-policies.js';
 
 export interface SubtaskResult {
     success: boolean;
@@ -32,6 +33,7 @@ IMPORTANT INSTRUCTIONS:
 2. Focus ONLY on this task.
 3. When finished, you MUST output the following tag:
 [[TASK_COMPLETE | summary=Task finished successfully]]
+4. Never call restricted coordinator tools: ${getWorkerBlockedTools().join(', ')}.
 `;
 
         try {

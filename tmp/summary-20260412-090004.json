@@ -1,0 +1,4 @@
+{
+  "summary": "Implemented slash-command discovery in the chat UI so typing `/` now opens a commands panel showing all available built-in chat commands with descriptions. Added keyboard navigation (up/down), Tab autocomplete, and smart submit resolution so partial slash input selects the highlighted command when Enter is pressed. This directly addresses the request for command visibility when entering slash mode.",
+  "current_status": "Chat TUI now includes OpenClaude-like shell + boxed chat area and interactive slash command list behavior; build passes cleanly with no lints in the edited file."
+}

@@ -1,0 +1,4 @@
+{
+  "summary": "Aligned the chat TUI with the OpenClaude/XibeCode prompt: added `src/ink.ts` (ThemeProvider-wrapped render + `createRoot` shim), `getBaseRenderOptions` in `src/utils/renderOptions.ts`, blue-first palette in `src/utils/tui-theme.ts`, and themed `Box`/`Text` under `src/components/design-system/`. Replaced the old chalk + raw Ink `claude-style-chat.ts` with JSX `claude-style-chat.tsx` using those primitives, XibeCode copy, and piped-stdin-safe render options via the ink facade merge. Added `@types/react`, enabled `jsx` in `tsconfig.json`, and installed dev deps with pnpm; `pnpm run build` and `pnpm test run` pass.",
+  "current_status": "XibeCode chat uses an OpenClaude-style themed Ink layer (npm Ink 6, not vendored `openclaude/src/ink` subtree). Full REPL parity (slash local-jsx, session bridge, etc.) is still future work; this change focuses on theming, stdin TTY override, and branded TUI layout."
+}

@@ -11,6 +11,8 @@ import { NeuralMemory } from '../core/memory.js';
 import { SessionMemory } from '../core/session-memory.js';
 import { pruneContext } from '../core/context-pruner.js';
 import { SkillManager } from '../core/skills.js';
+import { PlanSessionManager } from '../core/plan-session.js';
+import { SessionBridge } from '../core/session-bridge.js';
 import chalk from 'chalk';
 
 interface RunOptions {
@@ -110,13 +112,46 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   const isLarge = planMode.isLargeTask(finalPrompt);
   let effectivePrompt = finalPrompt;
   let activeTodoId: string | undefined;
+  let activePlanSessionId: string | undefined;
+  const planSessionManager = new PlanSessionManager(process.cwd());
 
   if (isLarge) {
     const plan = await planMode.buildPlan(finalPrompt);
+    activePlanSessionId = plan.planSessionId;
     const todoManager = new TodoManager(process.cwd());
     const next = todoManager.getNextPending(plan.doc);
 
     ui.info(`Created/updated todo.md with ${plan.tasks.length} task(s).`);
+    if (plan.artifactPath) {
+      ui.info(`Persisted plan artifact: ${plan.artifactPath}`);
+      SessionBridge.onPlanState('awaiting_approval', plan.planSessionId);
+    }
+
+    let approved = true;
+    if (plan.requiresApproval && plan.planSessionId) {
+      activePlanSessionId = plan.planSessionId;
+      if (process.stdout.isTTY && !options.nonInteractive) {
+        const inquirer = (await import('inquirer')).default;
+        const answer = await inquirer.prompt([{
+          type: 'confirm',
+          name: 'approved',
+          message: 'A plan has been generated. Approve and continue with implementation now?',
+          default: true,
+        }]);
+        approved = Boolean(answer.approved);
+      }
+
+      if (approved) {
+        await planSessionManager.updateStatus(plan.planSessionId, 'approved');
+        SessionBridge.onPlanState('approved', plan.planSessionId);
+      } else {
+        await planSessionManager.updateStatus(plan.planSessionId, 'rejected');
+        SessionBridge.onPlanState('rejected', plan.planSessionId);
+        ui.warning('Plan was not approved. Exiting without implementation.');
+        return;
+      }
+    }
+
     if (next) {
       activeTodoId = next.id;
       ui.info(`Focusing on TODO [id:${next.id}]: ${next.title}`);
@@ -202,6 +237,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
       mode: (options.mode as any) || 'agent',
       provider: provider as any,
       customProviderFormat: config.get('customProviderFormat'),
+      requestFormat: config.get('requestFormat') ?? 'auto',
       planFirst: options.planFirst ?? false,
       mindsetAdaptive: options.mindsetAdaptive ?? false,
       sessionMemory,
@@ -284,6 +320,10 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
 
   // Run the agent
   try {
+    if (activePlanSessionId) {
+      await planSessionManager.updateStatus(activePlanSessionId, 'executing');
+      SessionBridge.onPlanState('executing', activePlanSessionId);
+    }
     await agent.run(effectivePrompt, toolExecutor.getTools(), toolExecutor);
     await sessionMemory.persist();
 
@@ -294,6 +334,11 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
     if (activeTodoId) {
       const todoManager = new TodoManager(process.cwd());
       await todoManager.updateStatus(activeTodoId, 'done');
+    }
+
+    if (activePlanSessionId) {
+      await planSessionManager.updateStatus(activePlanSessionId, 'completed');
+      SessionBridge.onPlanState('completed', activePlanSessionId);
     }
 
     ui.completionSummary({

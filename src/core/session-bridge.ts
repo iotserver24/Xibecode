@@ -10,7 +10,7 @@ import { EventEmitter } from 'events';
 export interface BridgeMessage {
   type: 'user_message' | 'assistant_message' | 'stream_start' | 'stream_text' | 'stream_end' |
         'tool_call' | 'tool_result' | 'thinking' | 'error' | 'session_sync' |
-        'plan_questions' | 'plan_ready' | 'pentest_ready';
+        'plan_questions' | 'plan_ready' | 'pentest_ready' | 'plan_state' | 'permission_state' | 'task_status';
   data: any;
   source: 'tui' | 'webui';
   timestamp: number;
@@ -21,6 +21,9 @@ export interface SessionState {
   sessionId: string;
   model: string;
   mode: string;
+  permissionMode?: string;
+  planStatus?: string;
+  taskStatuses?: Array<{ id: string; label: string; status: string; updatedAt: string }>;
   isProcessing: boolean;
 }
 
@@ -34,6 +37,9 @@ class SessionBridgeClass extends EventEmitter {
     sessionId: '',
     model: '',
     mode: 'agent',
+    permissionMode: 'default',
+    planStatus: undefined,
+    taskStatuses: [],
     isProcessing: false,
   };
   private webSocketClients: Set<any> = new Set();
@@ -267,6 +273,52 @@ class SessionBridgeClass extends EventEmitter {
     };
     this.broadcastToWebUI(message);
     this.emit('plan_ready', planContent, planPath);
+  }
+
+  onPlanState(status: string, sessionId?: string): void {
+    this.state.planStatus = status;
+    const message: BridgeMessage = {
+      type: 'plan_state',
+      data: { status, sessionId },
+      source: 'tui',
+      timestamp: Date.now(),
+    };
+    this.broadcastToWebUI(message);
+    this.emit('plan_state', status, sessionId);
+  }
+
+  onPermissionState(permissionMode: string): void {
+    this.state.permissionMode = permissionMode;
+    const message: BridgeMessage = {
+      type: 'permission_state',
+      data: { permissionMode },
+      source: 'tui',
+      timestamp: Date.now(),
+    };
+    this.broadcastToWebUI(message);
+    this.emit('permission_state', permissionMode);
+  }
+
+  onTaskStatus(id: string, label: string, status: string): void {
+    const taskStatuses = this.state.taskStatuses ?? [];
+    const updatedAt = new Date().toISOString();
+    const existingIndex = taskStatuses.findIndex((task) => task.id === id);
+    const next = { id, label, status, updatedAt };
+    if (existingIndex >= 0) {
+      taskStatuses[existingIndex] = next;
+    } else {
+      taskStatuses.unshift(next);
+    }
+    this.state.taskStatuses = taskStatuses.slice(0, 30);
+
+    const message: BridgeMessage = {
+      type: 'task_status',
+      data: next,
+      source: 'tui',
+      timestamp: Date.now(),
+    };
+    this.broadcastToWebUI(message);
+    this.emit('task_status', next);
   }
 
   /**

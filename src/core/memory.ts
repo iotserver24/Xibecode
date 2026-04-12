@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
 import { createHash } from 'crypto';
+import { MemoryPromotions } from './memory-promotions.js';
 
 export interface MemoryItem {
     id: string;
@@ -22,10 +23,12 @@ export class NeuralMemory {
     private memoryFile: string;
     private memory: MemoryStore = { items: [], lastUpdated: 0 };
     private initialized: boolean = false;
+  private promotions: MemoryPromotions;
 
     constructor(private workingDir: string = process.cwd()) {
         const xibeDir = path.join(workingDir, '.xibecode');
         this.memoryFile = path.join(xibeDir, 'memory.json');
+    this.promotions = new MemoryPromotions(workingDir);
     }
 
     async init(): Promise<void> {
@@ -105,7 +108,27 @@ export class NeuralMemory {
             .slice(0, limit)
             .map(r => r.item);
 
-        return results;
+        // Include promoted durable memories as high-priority context hints.
+        const promoted = await this.promotions.list();
+        const promotedMatches = promoted
+            .filter(entry => {
+                const content = `${entry.key} ${entry.value}`.toLowerCase();
+                return keywords.some((word) => content.includes(word)) || content.includes(queryLower);
+            })
+            .slice(0, Math.max(1, Math.min(3, limit)))
+            .map((entry) => ({
+                id: `promoted-${entry.key}`,
+                timestamp: Date.parse(entry.promotedAt),
+                trigger: entry.key,
+                action: 'promoted_memory',
+                outcome: entry.value,
+                tags: ['promoted'],
+            }));
+
+        const merged = [...promotedMatches, ...results]
+            .slice(0, limit);
+
+        return merged;
     }
 
     async getAll(): Promise<MemoryItem[]> {
@@ -119,5 +142,9 @@ export class NeuralMemory {
         } catch (error) {
             console.error('Failed to save memory:', error);
         }
+    }
+
+    async promoteMemory(key: string, value: string): Promise<void> {
+        await this.promotions.promote(key, value, 'manual');
     }
 }

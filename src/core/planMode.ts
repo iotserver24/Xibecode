@@ -6,11 +6,16 @@ import { ProviderType } from '../utils/config.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import chalk from 'chalk';
+import { PlanSessionManager } from './plan-session.js';
+import { persistPlanArtifact } from './plan-artifacts.js';
 
 export interface PlanResult {
   doc: TodoDocument;
   tasks: TodoItem[];
   isLarge: boolean;
+  planSessionId?: string;
+  artifactPath?: string;
+  requiresApproval?: boolean;
 }
 
 /**
@@ -64,6 +69,10 @@ export class PlanMode {
    */
   async buildPlan(description: string): Promise<PlanResult> {
     console.log(chalk.cyan('\n🧠 AI Architect is analyzing the request...'));
+    const planSessionManager = new PlanSessionManager(this.rootDir);
+    const planSession = await planSessionManager.create(description, {
+      source: 'PlanMode.buildPlan',
+    });
 
     // Initialize the Architect Agent
     // We give it a restricted set of tools: Read access + Write access ONLY to plan/todo files
@@ -136,13 +145,31 @@ Perform these steps now.
     // If doc is empty, fallback to heuristic (means Agent failed to write todo.md)
     if (doc.pending.length === 0 && doc.inProgress.length === 0 && doc.done.length === 0) {
       console.log(chalk.yellow('  (Architect did not create tasks, falling back to heuristic)'));
-      return this.fallbackBuildPlan(description);
+      const fallback = await this.fallbackBuildPlan(description);
+      const fallbackPlanContent = this.buildFallbackPlanContent(fallback.tasks);
+      const persisted = await persistPlanArtifact(this.rootDir, planSession.id, description, fallbackPlanContent);
+      await planSessionManager.attachArtifact(planSession.id, persisted.artifactPath);
+      await planSessionManager.updateStatus(planSession.id, 'awaiting_approval');
+      return {
+        ...fallback,
+        planSessionId: planSession.id,
+        artifactPath: persisted.artifactPath,
+        requiresApproval: true,
+      };
     }
+
+    const generatedPlanText = await this.loadGeneratedPlanText();
+    const persisted = await persistPlanArtifact(this.rootDir, planSession.id, description, generatedPlanText);
+    await planSessionManager.attachArtifact(planSession.id, persisted.artifactPath);
+    await planSessionManager.updateStatus(planSession.id, 'awaiting_approval');
 
     return {
       doc,
       tasks: doc.pending, // This might not be exactly "new" tasks, but "pending" ones
       isLarge: true,
+      planSessionId: planSession.id,
+      artifactPath: persisted.artifactPath,
+      requiresApproval: true,
     };
   }
 
@@ -172,6 +199,32 @@ Perform these steps now.
       tasks,
       isLarge: this.isLargeTask(description),
     };
+  }
+
+  private async loadGeneratedPlanText(): Promise<string> {
+    const candidates = ['implementation_plan.md', 'implementations.md'];
+    for (const candidate of candidates) {
+      const candidatePath = path.join(this.rootDir, candidate);
+      try {
+        const content = await fs.readFile(candidatePath, 'utf8');
+        if (content.trim().length > 0) return content;
+      } catch {
+        // Ignore missing file candidates.
+      }
+    }
+    return 'Plan file was not generated; refer to todo.md for actionable tasks.';
+  }
+
+  private buildFallbackPlanContent(tasks: TodoItem[]): string {
+    if (tasks.length === 0) {
+      return 'No tasks were generated.';
+    }
+    return [
+      '## Fallback plan generated from todo tasks',
+      '',
+      ...tasks.map((task) => `- [ ] ${task.title} (${task.id})`),
+      '',
+    ].join('\n');
   }
 
   private extractCandidateTasks(description: string): string[] {

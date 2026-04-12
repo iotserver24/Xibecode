@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
+import { recoverConversation } from './conversation-recovery.js';
 
 export interface SessionStats {
   iterations: number;
@@ -15,6 +16,7 @@ export interface SessionMetadata {
   title: string;
   model: string;
   cwd: string;
+  parentSessionId?: string;
   created: string;
   updated: string;
 }
@@ -59,6 +61,7 @@ export class SessionManager {
     title?: string;
     model: string;
     cwd?: string;
+    parentSessionId?: string;
   }): Promise<ChatSession> {
     await this.ensureDir();
 
@@ -70,6 +73,7 @@ export class SessionManager {
       title: options.title?.trim() || 'Untitled Session',
       model: options.model,
       cwd: options.cwd || process.cwd(),
+      parentSessionId: options.parentSessionId,
       created: now,
       updated: now,
       messages: [],
@@ -86,7 +90,7 @@ export class SessionManager {
     try {
       const raw = await fs.readFile(this.getSessionPath(id), 'utf-8');
       const data = JSON.parse(raw) as ChatSession;
-      return data;
+      return recoverConversation(data).session;
     } catch {
       return null;
     }
