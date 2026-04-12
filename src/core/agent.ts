@@ -1,7 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { MessageParam, Tool, ToolUseBlock, TextBlock, ContentBlock } from '@anthropic-ai/sdk/resources/messages';
 import fetch from 'node-fetch';
-import * as fsSync from 'fs';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import { EventEmitter } from 'events';
 import { AgentMode, MODE_CONFIG, ModeState, createModeState, transitionMode, ModeOrchestrator, parseModeRequest, stripModeRequests, parseTaskComplete, stripTaskComplete, ModeTransitionPolicy } from './modes.js';
 import { NeuralMemory } from './memory.js';
@@ -10,6 +11,11 @@ import { PROVIDER_CONFIGS, ProviderType } from '../utils/config.js';
 import { PermissionManager } from './permissions.js';
 import { ToolOrchestrator, type ToolExecutionUpdate } from './tool-orchestrator.js';
 import { compactConversation } from './context-compactor.js';
+import {
+  autoLoadProjectMemories,
+  formatMemoriesForContext,
+  isAutoMemoryLoadEnabled,
+} from '../utils/auto-memory.js';
 
 /** Reasoning tier for hierarchical (AX-lite) behavior: strategic = plan only, tactical = per-step decisions, operational = tool use. */
 export type ReasoningTier = 'strategic' | 'tactical' | 'operational';
@@ -237,7 +243,8 @@ export class EnhancedAgent extends EventEmitter {
   private modeState: ModeState;
   private modeOrchestrator: ModeOrchestrator;
   private provider: ProviderType;
-  private projectMemory: string = '';
+  /** Ranked markdown memories (user + project + .xibecode/memories); injected in getSystemPrompt */
+  private autoMemoryMarkdownSection: string = '';
   private totalInputTokens: number = 0;
   private totalOutputTokens: number = 0;
   private sessionCost: number = 0;
@@ -429,12 +436,6 @@ export class EnhancedAgent extends EventEmitter {
     this.memory = new NeuralMemory();
     this.memory.init().catch(console.error);
 
-    try {
-      const memoryPath = require('path').join(process.cwd(), '.xibecode', 'memory.md');
-      if (fsSync.existsSync(memoryPath)) {
-        this.projectMemory = fsSync.readFileSync(memoryPath, 'utf-8').trim();
-      }
-    } catch { /* no memory file */ }
   }
 
   detectProvider(model: string): ProviderType {
@@ -468,6 +469,26 @@ export class EnhancedAgent extends EventEmitter {
     this.toolCallCount = 0;
     this.loopDetector.reset();
     this.evidenceTrail = [];
+
+    this.autoMemoryMarkdownSection = '';
+    if (isAutoMemoryLoadEnabled()) {
+      try {
+        const ranked = await autoLoadProjectMemories(process.cwd(), initialPrompt, []);
+        this.autoMemoryMarkdownSection = formatMemoriesForContext(ranked);
+      } catch {
+        /* non-fatal */
+      }
+    }
+    if (!this.autoMemoryMarkdownSection.trim()) {
+      const fallbackMd = join(process.cwd(), '.xibecode', 'memory.md');
+      if (existsSync(fallbackMd)) {
+        try {
+          this.autoMemoryMarkdownSection = `\n\n## Project Memory\n\n${readFileSync(fallbackMd, 'utf-8').trim()}`;
+        } catch {
+          /* ignore */
+        }
+      }
+    }
 
     this.messages.push({
       role: 'user',
@@ -1351,13 +1372,11 @@ ${this.defaultSkillsPrompt ? `${this.defaultSkillsPrompt}\n\n` : ''}
 5. **Error Recovery**: If something fails, analyze the error and try a different approach
 6. **Search First**: Use grep_code to find code patterns, usages, and references before making changes
 7. **Web Research**: Use web_search and fetch_url when you need documentation, error solutions, or up-to-date info
-8. **Remember Important Things**: Use update_memory to save project knowledge for future sessions${this.projectMemory ? `
+8. **Remember Important Things**: Use update_memory to save project knowledge for future sessions${this.autoMemoryMarkdownSection ? `
 
-## Project Memory
+The following markdown memories were selected for this session (keyword-ranked; verify critical facts):
 
-The following knowledge was saved from previous sessions:
-
-${this.projectMemory}` : ''}
+${this.autoMemoryMarkdownSection}` : ''}
 
 ${this.activeSkill ? `## Active Skill: ${this.activeSkill.name}
 
