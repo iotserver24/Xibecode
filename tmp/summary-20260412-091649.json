@@ -1,4 +1,0 @@
-{
-  "summary": "Added persisted `requestFormat` config (`auto` | `openai` | `anthropic`) and a `/format` chat slash command that updates it and rebuilds the live agent. `EnhancedAgent.callModel` now honors this override before provider defaults. OpenAI-path URLs no longer inject an extra `/v1` segment: `buildOpenAIChatCompletionsUrl()` only appends `/chat/completions` to the normalized base (defaults like `https://api.openai.com/v1` already include the version). DeepSeek default base was updated to `https://api.deepseek.com/v1`. Wired `requestFormat` through `run`, `run-pr`, and WebUI agent creation for consistency.",
-  "current_status": "Users can force OpenAI chat completions vs Anthropic Messages via `/format` or config; OpenAI chat URL construction matches the requested pattern. Build and full vitest suite pass."
-}

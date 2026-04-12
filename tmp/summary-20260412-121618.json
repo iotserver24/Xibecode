@@ -1,4 +1,0 @@
-{
-  "summary": "Scanned markdown files for old version-specific docs and removed one clearly obsolete file: 0.6.0-features.md. Kept core docs (README, CHANGELOG, docs/) intact since they remain active references rather than throwaway version snapshots.",
-  "current_status": "Main repo now has one pending deletion (0.6.0-features.md) plus the auto-generated tmp summary file untracked. Site repo remains unchanged except for a pre-existing local change in .cursor/hooks/state/continual-learning.json."
-}

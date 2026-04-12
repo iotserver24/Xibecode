@@ -1,4 +1,0 @@
-{
-  "summary": "Fixed assistant output in the chat TUI so replies render as Markdown instead of raw plain text: added `src/components/AssistantMarkdown.tsx` wrapping the existing `ink-markdown` dependency (marked + marked-terminal → Ink `Text` with ANSI), and updated `claude-style-chat.tsx` so `assistant` transcript lines use that component under the XibeCode label while other line types stay themed plain text. Passed `reflowText` and terminal-derived `width` for readable wrapping. `pnpm run build` and `pnpm test run` both pass.",
-  "current_status": "Chat TUI now shows formatted assistant Markdown using the already-shipped ink-markdown stack; no new npm deps required. Optional future upgrade is a fuller OpenClaude-style Ansi/Markdown pipeline if richer tables or OSC-8 links are needed."
-}
