@@ -241,6 +241,10 @@ export class CodingToolExecutor implements ToolExecutor {
     return {};
   }
 
+  private resolveToolCategory(toolName: string): ReturnType<typeof getToolCategory> {
+    return getToolCategory(toolName);
+  }
+
   /**
    * Execute a tool with given input
    *
@@ -286,7 +290,7 @@ export class CodingToolExecutor implements ToolExecutor {
    */
   async execute(toolName: string, input: any): Promise<any> {
     const p = this.parseInput(input);
-    const category = getToolCategory(toolName);
+    const category = this.resolveToolCategory(toolName);
 
     // Check tool permissions
     // Special exception: Allow writing implementations.md in plan mode

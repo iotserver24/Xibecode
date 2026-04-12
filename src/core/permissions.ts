@@ -99,8 +99,19 @@ export class PermissionManager {
 
   evaluateToolExecution(input: Record<string, any>, toolName: string, category?: string): ToolPermissionDecision {
     if (!category) {
-      // Unknown category (for plugin/MCP/dynamic tools): allow and defer to tool-level checks.
-      return { allowed: true, requiresApproval: false };
+      if (this.context.permissionMode === 'dontAsk') {
+        return { allowed: true, requiresApproval: false };
+      }
+      if (input.confirm === true || input.approved === true) {
+        return { allowed: true, requiresApproval: false };
+      }
+      return {
+        allowed: false,
+        requiresApproval: true,
+        reason:
+          `Tool '${toolName}' has an unknown risk category and requires explicit approval. ` +
+          `Re-run with { "confirm": true } to approve once.`,
+      };
     }
 
     if (this.context.permissionMode === 'dontAsk') {

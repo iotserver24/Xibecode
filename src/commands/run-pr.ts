@@ -403,6 +403,9 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
       planningModel: config.getPlanningModel(),
       executionModel: config.getExecutionModel(),
       strictTextOnlyCompletion: true,
+      completionEvidenceMode: 'strict',
+      postEditVerification: 'strict',
+      memoryRecallMinScore: 2,
       defaultSkillsPrompt,
     },
     provider as any
@@ -510,6 +513,9 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
             planningModel: config.getPlanningModel(),
             executionModel: config.getExecutionModel(),
             strictTextOnlyCompletion: true,
+            completionEvidenceMode: 'strict',
+            postEditVerification: 'strict',
+            memoryRecallMinScore: 2,
             defaultSkillsPrompt,
           },
           provider as any
