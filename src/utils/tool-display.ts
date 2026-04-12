@@ -4,6 +4,8 @@
 
 const MAX_ARG = 200;
 const MAX_ERR = 240;
+/** Max characters of each worker log preview in run_swarm TUI lines */
+const RUN_SWARM_PREVIEW = 320;
 
 function truncate(s: string, max: number): string {
   const t = s.trim();
@@ -106,7 +108,30 @@ export function formatToolArgs(toolName: string, rawInput: unknown): string {
     case 'revert_to_git_checkpoint':
       return truncate(typeof p.checkpoint_id === 'string' ? p.checkpoint_id : '', MAX_ARG);
     case 'delegate_subtask':
-      return truncate(typeof p.prompt === 'string' ? p.prompt : '', MAX_ARG);
+      return truncate(
+        typeof p.task === 'string' ? p.task : typeof p.prompt === 'string' ? p.prompt : '',
+        MAX_ARG,
+      );
+    case 'run_swarm': {
+      const st = p.subtasks;
+      if (!Array.isArray(st) || st.length === 0) return '';
+      const modes = st.map((item: unknown) => {
+        const o = asRecord(item);
+        return o && typeof o.worker_type === 'string' ? o.worker_type : '?';
+      });
+      const modeStr = modes.join('+');
+      const snippets = st
+        .slice(0, 2)
+        .map((item: unknown) => {
+          const o = asRecord(item);
+          const t = o && typeof o.task === 'string' ? o.task : '';
+          return truncate(t.replace(/\s+/g, ' ').trim(), 72);
+        })
+        .filter((s: string) => s.length > 0);
+      const more = st.length > 2 ? ` (+${st.length - 2} more)` : '';
+      const hint = snippets.length ? ` — ${snippets.join(' │ ')}${more}` : '';
+      return truncate(`${st.length} workers [${modeStr}]${hint}`, MAX_ARG);
+    }
     default: {
       try {
         const json = JSON.stringify(p);
@@ -122,6 +147,33 @@ function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M tok`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k tok`;
   return `${n} tok`;
+}
+
+/**
+ * One line per finished swarm worker (for TUI transcript after run_swarm).
+ * Log text is whitespace-collapsed and truncated for readability.
+ */
+export function formatRunSwarmDetailLines(rawResult: unknown): string[] {
+  const r = asRecord(rawResult);
+  if (!r || !Array.isArray(r.results)) return [];
+  const lines: string[] = [];
+  const results = r.results as unknown[];
+  for (let i = 0; i < results.length; i++) {
+    const row = asRecord(results[i]);
+    if (!row) {
+      lines.push(`  [${i + 1}] ?`);
+      continue;
+    }
+    const w = typeof row.worker_type === 'string' ? row.worker_type : '?';
+    const st = typeof row.status === 'string' ? row.status : '?';
+    const ok = row.success === true ? 'ok' : 'fail';
+    const tid = typeof row.taskId === 'string' && row.taskId ? row.taskId : '';
+    let body = typeof row.result === 'string' ? row.result : '';
+    body = truncate(body.replace(/\s+/g, ' ').trim(), RUN_SWARM_PREVIEW);
+    const idPart = tid ? ` id=${tid}` : '';
+    lines.push(`  [${i + 1}] ${w}${idPart} · ${st} · ${ok}${body ? ` — ${body}` : ''}`);
+  }
+  return lines;
 }
 
 /** Short outcome after a tool finishes (second line in TUI). */
@@ -207,6 +259,13 @@ export function formatToolOutcome(toolName: string, rawResult: unknown, success:
     case 'create_directory':
     case 'revert_file':
       return 'ok';
+    case 'delegate_subtask':
+      return typeof r.status === 'string' ? r.status : 'done';
+    case 'run_swarm': {
+      const results = Array.isArray(r.results) ? r.results : [];
+      const nOk = results.filter((x) => asRecord(x)?.success === true).length;
+      return `${nOk}/${results.length} worker(s) ok`;
+    }
     default:
       return 'ok';
   }

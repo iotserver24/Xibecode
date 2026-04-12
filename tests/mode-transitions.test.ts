@@ -60,3 +60,21 @@ describe('dynamic tool categorization', () => {
     });
   });
 });
+
+describe('swarm tool category', () => {
+  it('maps delegate_subtask and run_swarm to swarm', () => {
+    expect(getToolCategory('delegate_subtask')).toBe('swarm');
+    expect(getToolCategory('run_swarm')).toBe('swarm');
+  });
+
+  it('allows coordinator modes to use swarm tools', () => {
+    expect(isToolAllowed('team_leader', 'run_swarm').allowed).toBe(true);
+    expect(isToolAllowed('team_leader', 'delegate_subtask').allowed).toBe(true);
+    expect(isToolAllowed('agent', 'run_swarm').allowed).toBe(true);
+    expect(isToolAllowed('engineer', 'run_swarm').allowed).toBe(true);
+  });
+
+  it('does not allow read-only plan mode to run swarm', () => {
+    expect(isToolAllowed('plan', 'run_swarm').allowed).toBe(false);
+  });
+});

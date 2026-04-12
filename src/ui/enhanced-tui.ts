@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import ora, { Ora } from 'ora';
+import { formatRunSwarmDetailLines, formatToolOutcome } from '../utils/tool-display.js';
 import { getTheme, type ThemeName, type ThemeTokens } from './themes.js';
 
 import { createRequire } from 'module';
@@ -343,6 +344,12 @@ export class EnhancedUI {
     const elapsed = this.getElapsed();
 
     console.log('    ' + this.T.border('╰─') + ' ' + icon + summaryStr + this.T.muted('  ' + elapsed));
+
+    if (success && toolName === 'run_swarm' && result && typeof result === 'object') {
+      for (const line of formatRunSwarmDetailLines(result)) {
+        console.log('    ' + this.T.border('│') + '  ' + this.T.dim(line));
+      }
+    }
 
     if (!success && result) {
       const msg = typeof result === 'string' ? result : (result.message || JSON.stringify(result));
@@ -707,6 +714,12 @@ export class EnhancedUI {
         return 'saved';
       case 'verified_edit':
         return result.linesChanged ? `${result.linesChanged} lines changed` : 'edited';
+      case 'run_swarm':
+        return formatToolOutcome(
+          'run_swarm',
+          result,
+          !result.error && result.success !== false,
+        );
       default:
         return 'ok';
     }

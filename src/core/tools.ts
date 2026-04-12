@@ -836,6 +836,56 @@ export class CodingToolExecutor implements ToolExecutor {
         };
       }
 
+      case 'run_swarm': {
+        const subtasks = p.subtasks;
+        if (!Array.isArray(subtasks) || subtasks.length === 0) {
+          return { error: true, success: false, message: 'run_swarm requires a non-empty subtasks array' };
+        }
+        const normalized: { mode: AgentMode; task: string }[] = [];
+        for (let i = 0; i < subtasks.length; i++) {
+          const st = subtasks[i] as Record<string, unknown>;
+          if (!st || typeof st !== 'object') {
+            return { error: true, success: false, message: `Invalid subtasks[${i}]: expected object` };
+          }
+          const task = st.task;
+          const worker_type = st.worker_type;
+          if (typeof task !== 'string' || !task.trim()) {
+            return { error: true, success: false, message: `subtasks[${i}].task must be a non-empty string` };
+          }
+          if (typeof worker_type !== 'string' || !isValidMode(worker_type)) {
+            return {
+              error: true,
+              success: false,
+              message: `subtasks[${i}].worker_type must be a valid AgentMode (got ${String(worker_type)})`,
+            };
+          }
+          normalized.push({ mode: worker_type as AgentMode, task: task.trim() });
+        }
+
+        const timeoutMs =
+          typeof p.timeout_ms === 'number' && Number.isFinite(p.timeout_ms) && p.timeout_ms > 0
+            ? Math.floor(p.timeout_ms)
+            : undefined;
+        const maxConcurrent =
+          typeof p.max_parallel === 'number' && Number.isFinite(p.max_parallel) && p.max_parallel > 0
+            ? Math.floor(p.max_parallel)
+            : undefined;
+
+        const results = await this.swarmOrchestrator.delegateSubtasksParallel(normalized, {
+          timeoutMs,
+          maxConcurrent,
+        });
+        const success = results.every((r) => r.success);
+        return {
+          success,
+          parallel: true,
+          results,
+          message: success
+            ? 'All swarm subtasks finished successfully.'
+            : 'One or more swarm subtasks failed, timed out, or were killed.',
+        };
+      }
+
       case 'synthesize_tool': {
         const name = typeof p.name === 'string' ? p.name.trim() : '';
         const description = typeof p.description === 'string' ? p.description.trim() : '';
@@ -855,7 +905,7 @@ export class CodingToolExecutor implements ToolExecutor {
       }
 
       default:
-        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, synthesize_tool, take_screenshot, get_console_logs, run_visual_test, check_accessibility, measure_performance, test_responsive, capture_network, run_playwright_test, search_skills_sh, install_skill_from_skills_sh, preview_app, delegate_subtask` };
+        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, synthesize_tool, take_screenshot, get_console_logs, run_visual_test, check_accessibility, measure_performance, test_responsive, capture_network, run_playwright_test, search_skills_sh, install_skill_from_skills_sh, preview_app, delegate_subtask, run_swarm` };
     }
     } catch (err: any) {
       return { error: true, success: false, message: err?.message ?? String(err) };
@@ -1439,6 +1489,42 @@ export class CodingToolExecutor implements ToolExecutor {
             }
           },
           required: ['task', 'worker_type']
+        }
+      },
+      {
+        name: 'run_swarm',
+        description:
+          'Run multiple specialized sub-agents in parallel (separate background processes) to save wall-clock time. Each entry has worker_type + task. Cap concurrent workers with max_parallel (default 6). Risk: workers editing the same files can conflict—split work by disjoint paths or use delegate_subtask serially when unsure.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            subtasks: {
+              type: 'array',
+              description: 'One object per worker; each runs as an isolated sub-agent.',
+              items: {
+                type: 'object',
+                properties: {
+                  task: { type: 'string', description: 'Task for this worker only.' },
+                  worker_type: {
+                    type: 'string',
+                    description: 'Agent mode for this worker',
+                    enum: ['plan', 'agent', 'tester', 'debugger', 'security', 'review', 'team_leader', 'seo', 'product', 'architect', 'engineer', 'data', 'researcher']
+                  }
+                },
+                required: ['task', 'worker_type']
+              },
+              minItems: 1
+            },
+            timeout_ms: {
+              type: 'number',
+              description: 'Optional per-subtask timeout in ms (same as delegate_subtask; default five minutes).'
+            },
+            max_parallel: {
+              type: 'number',
+              description: 'Max concurrent background agents (default 6). Lower on small machines; raise only if subtasks are independent.'
+            }
+          },
+          required: ['subtasks']
         }
       },
       {
