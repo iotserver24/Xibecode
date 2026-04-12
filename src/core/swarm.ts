@@ -7,6 +7,34 @@ export interface SubtaskResult {
     result: string;
     taskId: string;
     status: 'completed' | 'failed' | 'timeout' | 'killed';
+    /** Set when returned from parallel swarm runs */
+    worker_type?: AgentMode;
+}
+
+/** Default cap on concurrent background agent processes (overridable via `run_swarm` max_parallel). */
+export const DEFAULT_SWARM_MAX_PARALLEL = 6;
+
+async function runWithConcurrency<T, R>(
+    items: readonly T[],
+    maxConcurrent: number,
+    fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+    if (items.length === 0) return [];
+    const limit = Math.max(1, Math.floor(maxConcurrent));
+    const results: R[] = new Array(items.length);
+    let nextIndex = 0;
+
+    async function worker(): Promise<void> {
+        while (true) {
+            const i = nextIndex++;
+            if (i >= items.length) return;
+            results[i] = await fn(items[i], i);
+        }
+    }
+
+    const poolSize = Math.min(limit, items.length);
+    await Promise.all(Array.from({ length: poolSize }, () => worker()));
+    return results;
 }
 
 export class SwarmOrchestrator {
@@ -93,5 +121,21 @@ IMPORTANT INSTRUCTIONS:
             taskId,
             status: 'timeout'
         };
+    }
+
+    /**
+     * Run multiple delegated subtasks with bounded concurrency (parallel when there are multiple workers).
+     * Each subtask is an isolated background `xibecode run` process; overlapping writes to the same files can conflict.
+     */
+    async delegateSubtasksParallel(
+        subtasks: { mode: AgentMode; task: string }[],
+        options?: { timeoutMs?: number; maxConcurrent?: number },
+    ): Promise<SubtaskResult[]> {
+        const timeoutMs = options?.timeoutMs ?? 60000 * 5;
+        const maxConcurrent = options?.maxConcurrent ?? DEFAULT_SWARM_MAX_PARALLEL;
+        return runWithConcurrency(subtasks, maxConcurrent, async (s) => {
+            const r = await this.delegateSubtask(s.mode, s.task, timeoutMs);
+            return { ...r, worker_type: s.mode };
+        });
     }
 }

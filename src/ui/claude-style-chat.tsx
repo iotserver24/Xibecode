@@ -10,7 +10,7 @@ import { SkillManager } from '../core/skills.js';
 import { AgentMode, MODE_CONFIG } from '../core/modes.js';
 import { renderAndRun } from '../interactiveHelpers.js';
 import { AssistantMarkdown } from '../components/AssistantMarkdown.js';
-import { formatToolArgs, formatToolOutcome } from '../utils/tool-display.js';
+import { formatToolArgs, formatToolOutcome, formatRunSwarmDetailLines } from '../utils/tool-display.js';
 import { SPINNER_VERBS } from '../constants/spinnerVerbs.js';
 
 export type ChatOptions = {
@@ -956,10 +956,20 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
           const name = String(event.data?.name ?? 'tool');
           const result = event.data?.result;
           const success = event.data?.success !== false;
-          onLine({
-            type: 'tool_out',
-            text: `${name}: ${formatToolOutcome(name, result, success)}`,
-          });
+          if (name === 'run_swarm') {
+            onLine({
+              type: 'tool_out',
+              text: `${name}: ${formatToolOutcome(name, result, success)}`,
+            });
+            for (const line of formatRunSwarmDetailLines(result)) {
+              onLine({ type: 'tool_out', text: line });
+            }
+          } else {
+            onLine({
+              type: 'tool_out',
+              text: `${name}: ${formatToolOutcome(name, result, success)}`,
+            });
+          }
           break;
         }
         case 'stream_text':

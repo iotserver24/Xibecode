@@ -77,6 +77,7 @@ export type AgentMode =
  * - `tests` - Run tests and get results
  * - `network` - Web search, HTTP requests
  * - `context` - Code search, context discovery
+ * - `swarm` - Subagent delegation (`delegate_subtask`, `run_swarm`)
  *
  * @example
  * ```typescript
@@ -98,7 +99,8 @@ export type ToolCategory =
   | 'shell_command'  // Execute commands
   | 'tests'          // Run tests
   | 'network'        // Web/HTTP operations
-  | 'context';       // Code search
+  | 'context'        // Code search
+  | 'swarm';         // Subagent delegation
 
 /**
  * Mode capabilities and configuration
@@ -384,7 +386,7 @@ When the user says to proceed/build, request mode switch:
     description: 'Autonomous coding with full capabilities',
     personaName: '',
     personaRole: '',
-    allowedCategories: ['read_only', 'write_fs', 'git_read', 'git_mutation', 'shell_command', 'tests', 'context', 'network'],
+    allowedCategories: ['read_only', 'write_fs', 'git_read', 'git_mutation', 'shell_command', 'tests', 'context', 'network', 'swarm'],
     canModify: true,
     defaultDryRun: false,
     displayColor: '#00E676', // vivid green
@@ -703,7 +705,7 @@ After review, you can request implementation of improvements:
     description: 'Team coordination and task delegation',
     personaName: 'Arya',
     personaRole: 'the Team Leader',
-    allowedCategories: ['read_only', 'git_read', 'context', 'write_fs'], // Versatile, but mainly coordinates
+    allowedCategories: ['read_only', 'git_read', 'context', 'write_fs', 'swarm'], // Versatile, but mainly coordinates
     canModify: true, // Needs to be able to create plan docs etc.
     defaultDryRun: false,
     displayColor: '#FFD600', // Gold / Yellow
@@ -737,6 +739,11 @@ You are operating in TEAM LEADER MODE. Your role is to orchestrate the entire pr
 - If the user wants system design -> Delegate to **Anna** (architect).
 - If the user wants web research/SEO -> Delegate to **Siri** (seo).
 - If the user wants deep research -> Delegate to **Sanvi** (researcher).
+
+### Parallel work (save wall-clock time)
+- When several subtasks are **independent** (different files, different concerns), use the **run_swarm** tool with a **subtasks** array (each entry: **worker_type** + **task**) to run multiple specialist workers **in parallel** instead of switching modes one after another.
+- **Conflict risk**: each worker is a separate process; if two subtasks edit the **same files**, results can clash. Split work by **disjoint paths** or use a single **delegate_subtask** / mode switch when tasks overlap.
+- Optional **max_parallel** caps concurrent workers (default 6); lower it on small machines.
 
 ### Example
 User: "Build a NextJS app with auth"
@@ -849,7 +856,7 @@ Create a solid, scalable technical foundation for the project.
     description: 'Code implementation and building',
     personaName: 'Alex',
     personaRole: 'the Engineer',
-    allowedCategories: ['read_only', 'write_fs', 'git_read', 'git_mutation', 'shell_command', 'tests', 'context', 'network'],
+    allowedCategories: ['read_only', 'write_fs', 'git_read', 'git_mutation', 'shell_command', 'tests', 'context', 'network', 'swarm'],
     canModify: true,
     defaultDryRun: false,
     displayColor: '#00E676', // Green (Same as Blaze, effectively the "Builder" of the team)
@@ -970,6 +977,10 @@ const TOOL_CATEGORIES: Record<string, ToolCategory> = {
 
   // Memory tools
   'update_memory': 'write_fs', // Allows writing to project memory
+
+  // Subagent / parallel delegation
+  'delegate_subtask': 'swarm',
+  'run_swarm': 'swarm',
 };
 
 function inferToolCategory(toolName: string): ToolCategory | undefined {

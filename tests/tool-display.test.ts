@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { formatToolArgs, formatToolOutcome } from '../src/utils/tool-display.js';
+import {
+  formatRunSwarmDetailLines,
+  formatToolArgs,
+  formatToolOutcome,
+} from '../src/utils/tool-display.js';
 
 describe('formatToolArgs', () => {
   it('formats read_file with optional line range', () => {
@@ -24,6 +28,18 @@ describe('formatToolArgs', () => {
   it('parses JSON string input', () => {
     expect(formatToolArgs('list_directory', JSON.stringify({ path: 'src' }))).toBe('src');
   });
+
+  it('formats run_swarm with worker modes and task hints', () => {
+    const s = formatToolArgs('run_swarm', {
+      subtasks: [
+        { worker_type: 'plan', task: 'Summarize swarm.ts' },
+        { worker_type: 'plan', task: 'Summarize modes.ts' },
+      ],
+    });
+    expect(s).toContain('2 workers');
+    expect(s).toContain('plan+plan');
+    expect(s).toContain('swarm.ts');
+  });
 });
 
 describe('formatToolOutcome', () => {
@@ -45,5 +61,33 @@ describe('formatToolOutcome', () => {
     expect(formatToolOutcome('get_context', { totalFiles: 2, estimatedTokens: 3500 }, true)).toMatch(
       /2 file\(s\) in context/,
     );
+  });
+
+  it('expands run_swarm into per-worker lines', () => {
+    const lines = formatRunSwarmDetailLines({
+      success: true,
+      parallel: true,
+      results: [
+        {
+          success: true,
+          worker_type: 'plan',
+          taskId: 'abc12345',
+          status: 'completed',
+          result: 'Done reading.',
+        },
+        {
+          success: false,
+          worker_type: 'engineer',
+          taskId: 'def67890',
+          status: 'failed',
+          result: 'oops',
+        },
+      ],
+    });
+    expect(lines[0]).toContain('[1]');
+    expect(lines[0]).toContain('plan');
+    expect(lines[0]).toContain('id=abc12345');
+    expect(lines[1]).toContain('engineer');
+    expect(lines[1]).toContain('fail');
   });
 });
