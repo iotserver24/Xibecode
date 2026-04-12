@@ -4,7 +4,7 @@
 > **Status:** Phase 1 & 2 (Partial) Completed
 > **Overall Progress:** 38% (8/21 tasks completed)
 
-## Update for v0.9.0 (April 2026)
+## Update for v0.9.1 (April 2026)
 
 Recent platform-level features now reflected in docs and release notes:
 
