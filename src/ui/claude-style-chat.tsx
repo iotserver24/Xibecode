@@ -7,6 +7,7 @@ import { EnhancedAgent } from '../core/agent.js';
 import { CodingToolExecutor } from '../core/tools.js';
 import { MCPClientManager } from '../core/mcp-client.js';
 import { SkillManager } from '../core/skills.js';
+import { AgentMode, MODE_CONFIG } from '../core/modes.js';
 import { renderAndRun } from '../interactiveHelpers.js';
 import { AssistantMarkdown } from '../components/AssistantMarkdown.js';
 import { formatToolArgs, formatToolOutcome } from '../utils/tool-display.js';
@@ -37,9 +38,10 @@ const HERO_LOGO = [
   '╚██████╗╚██████╔╝██████╔╝███████╗',
   ' ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝',
 ];
-const QUICK_HELP = ['/help', '/format', '/model', '/clear', '/exit'];
+const QUICK_HELP = ['/help', '/mode', '/format', '/model', '/clear', '/exit'];
 const CHAT_COMMANDS: Array<{ name: string; description: string }> = [
   { name: '/help', description: 'Show available shortcuts and usage hints' },
+  { name: '/mode', description: 'Switch agent mode from an interactive picker' },
   { name: '/clear', description: 'Clear the current chat transcript' },
   { name: '/format', description: 'Switch wire format: auto | anthropic | openai' },
   { name: '/model', description: 'Fetch and switch available models for this provider' },
@@ -123,15 +125,17 @@ function prefixColorKey(type: UiLineType): TuiThemeColorKey {
 
 function XibeCodeChatApp(props: {
   model: string;
-  mode: string;
+  initialMode: AgentMode;
   provider?: ProviderType;
   baseUrl?: string;
   defaultModel: string;
+  modeOptions: Array<{ id: AgentMode; label: string; description: string }>;
   initialRequestFormat: RequestWireFormat;
   customProviderFormat?: 'openai' | 'anthropic';
   runPrompt: (prompt: string, onLine: (line: UiLine) => void) => Promise<void>;
   loadModels: () => Promise<string[]>;
   onModelChange: (nextModel: string) => Promise<void>;
+  onModeChange: (nextMode: AgentMode) => Promise<void>;
   onWireFormatChange: (format: RequestWireFormat) => void;
 }) {
   const { exit } = useApp();
@@ -139,6 +143,9 @@ function XibeCodeChatApp(props: {
   const [isRunning, setIsRunning] = useState(false);
   const [wireFormat, setWireFormat] = useState<RequestWireFormat>(props.initialRequestFormat);
   const [activeModel, setActiveModel] = useState(props.model);
+  const [activeMode, setActiveMode] = useState<AgentMode>(props.initialMode);
+  const [modePickerOpen, setModePickerOpen] = useState(false);
+  const [selectedModeIndex, setSelectedModeIndex] = useState(0);
   const [isModelListLoading, setIsModelListLoading] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
@@ -183,6 +190,24 @@ function XibeCodeChatApp(props: {
       });
     },
     [props, pushLine],
+  );
+
+  const applyMode = useCallback(
+    async (nextMode: AgentMode) => {
+      if (!nextMode || nextMode === activeMode) {
+        setModePickerOpen(false);
+        return;
+      }
+      await props.onModeChange(nextMode);
+      setActiveMode(nextMode);
+      setModePickerOpen(false);
+      setInput('');
+      pushLine({
+        type: 'info',
+        text: `Mode switched to ${nextMode}`,
+      });
+    },
+    [activeMode, props, pushLine],
   );
 
   const onSubmit = useCallback(
@@ -297,6 +322,37 @@ function XibeCodeChatApp(props: {
         return;
       }
 
+      if (resolvedInput === '/mode' || resolvedInput.startsWith('/mode ')) {
+        const modeArg = resolvedInput.replace('/mode', '').trim().toLowerCase();
+        if (!modeArg) {
+          setModePickerOpen(true);
+          const defaultIndex = props.modeOptions.findIndex((m) => m.id === activeMode);
+          setSelectedModeIndex(defaultIndex >= 0 ? defaultIndex : 0);
+          pushLine({
+            type: 'info',
+            text: `Select a mode with ↑/↓ and Enter, or type /mode <id>. Current: ${activeMode}.`,
+          });
+          return;
+        }
+
+        const selectedMode = props.modeOptions.find((mode) => mode.id === modeArg);
+        if (!selectedMode) {
+          pushLine({
+            type: 'error',
+            text: `Unknown mode "${modeArg}". Use /mode and pick from the list.`,
+          });
+          return;
+        }
+
+        try {
+          await applyMode(selectedMode.id);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : 'Failed to switch mode';
+          pushLine({ type: 'error', text: message });
+        }
+        return;
+      }
+
       pushLine({ type: 'user', text: resolvedInput });
       setIsRunning(true);
       try {
@@ -316,7 +372,9 @@ function XibeCodeChatApp(props: {
       props,
       pushLine,
       selectedCommandIndex,
+      activeMode,
       wireFormat,
+      applyMode,
     ],
   );
 
@@ -325,8 +383,17 @@ function XibeCodeChatApp(props: {
   const modelFilter = input.startsWith('/model')
     ? input.replace('/model', '').trim().toLowerCase()
     : '';
+  const modeFilter = input.startsWith('/mode')
+    ? input.replace('/mode', '').trim().toLowerCase()
+    : '';
   const filteredModels = availableModels.filter((modelName) =>
     modelName.toLowerCase().includes(modelFilter),
+  );
+  const filteredModeOptions = props.modeOptions.filter(
+    (mode) =>
+      mode.id.toLowerCase().includes(modeFilter) ||
+      mode.label.toLowerCase().includes(modeFilter) ||
+      mode.description.toLowerCase().includes(modeFilter),
   );
   const filteredCommands = CHAT_COMMANDS.filter((command) =>
     command.name.toLowerCase().startsWith(normalizedInput || '/'),
@@ -336,6 +403,36 @@ function XibeCodeChatApp(props: {
     if (key.ctrl && inputKey === 'c') {
       exit();
       return;
+    }
+
+    if (
+      modePickerOpen &&
+      !isRunning &&
+      (filteredModeOptions.length > 0 || key.escape)
+    ) {
+      if (key.escape) {
+        setModePickerOpen(false);
+        return;
+      }
+      if (key.upArrow) {
+        setSelectedModeIndex((prev) =>
+          prev === 0 ? filteredModeOptions.length - 1 : prev - 1,
+        );
+        return;
+      }
+      if (key.downArrow) {
+        setSelectedModeIndex((prev) =>
+          prev >= filteredModeOptions.length - 1 ? 0 : prev + 1,
+        );
+        return;
+      }
+      if (key.return) {
+        const selectedMode = filteredModeOptions[selectedModeIndex];
+        if (selectedMode) {
+          void applyMode(selectedMode.id);
+        }
+        return;
+      }
     }
 
     if (
@@ -391,7 +488,11 @@ function XibeCodeChatApp(props: {
       if (selected) {
         setInput(
           selected.name +
-            (selected.name === '/model' || selected.name === '/format' ? ' ' : ''),
+            (selected.name === '/model' ||
+            selected.name === '/format' ||
+            selected.name === '/mode'
+              ? ' '
+              : ''),
         );
       }
     }
@@ -403,8 +504,8 @@ function XibeCodeChatApp(props: {
 
   const status = useMemo(
     () =>
-      `model: ${activeModel} | format: ${wireFormat} | mode: ${props.mode} | provider: ${props.provider || 'auto'} | ${isRunning ? 'running' : 'idle'}`,
-    [activeModel, props.mode, props.provider, isRunning, wireFormat],
+      `model: ${activeModel} | format: ${wireFormat} | mode: ${activeMode} | provider: ${props.provider || 'auto'} | ${isRunning ? 'running' : 'idle'}`,
+    [activeModel, activeMode, props.provider, isRunning, wireFormat],
   );
   const showWelcome = lines.length <= 1;
   const providerName = props.provider ? props.provider.toUpperCase() : 'AUTO';
@@ -583,6 +684,37 @@ function XibeCodeChatApp(props: {
           <Text color="subtle">↑/↓ navigate • Enter apply • Esc close</Text>
         </Box>
       )}
+      {modePickerOpen && (
+        <Box
+          marginTop={1}
+          borderStyle="round"
+          borderColor="suggestion"
+          flexDirection="column"
+          paddingX={1}
+        >
+          <Text bold color="suggestion">
+            Select mode
+          </Text>
+          {filteredModeOptions.length === 0 ? (
+            <Text color="inactive">No modes matched current filter.</Text>
+          ) : (
+            filteredModeOptions.map((mode, index) => (
+              <React.Fragment key={mode.id}>
+                <Text>
+                  <Text color={index === selectedModeIndex ? 'claude' : 'inactive'}>
+                    {index === selectedModeIndex ? '▸ ' : '  '}
+                  </Text>
+                  <Text color={index === selectedModeIndex ? 'claude' : 'text'}>
+                    {mode.id}
+                  </Text>
+                  <Text color="inactive"> — {mode.description}</Text>
+                </Text>
+              </React.Fragment>
+            ))
+          )}
+          <Text color="subtle">↑/↓ navigate • Enter apply • Esc close</Text>
+        </Box>
+      )}
       <Box marginTop={1} justifyContent="space-between">
         <Text color="inactive">? for shortcuts</Text>
         <Text color="inactive">Ctrl+k to generate command</Text>
@@ -629,6 +761,8 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     );
   let activeAgent = createAgentForModel(model);
   let activeModel = model;
+  let activeMode: AgentMode = activeAgent.getMode();
+  toolExecutor.setMode(activeMode);
 
   const onModelChange = async (nextModel: string): Promise<void> => {
     if (nextModel === activeModel) return;
@@ -636,6 +770,14 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     activeModel = nextModel;
     config.set('model', nextModel);
     activeAgent = createAgentForModel(nextModel);
+    activeAgent.setModeFromUser(activeMode, 'Preserve user-selected mode after model switch');
+    toolExecutor.setMode(activeMode);
+  };
+
+  const onModeChange = async (nextMode: AgentMode): Promise<void> => {
+    activeMode = nextMode;
+    activeAgent.setModeFromUser(nextMode, 'User selected /mode in chat');
+    toolExecutor.setMode(nextMode);
   };
 
   const onWireFormatChange = (next: RequestWireFormat): void => {
@@ -777,22 +919,32 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     });
 
     await activeAgent.run(prompt, toolExecutor.getTools(), toolExecutor);
+    activeMode = activeAgent.getMode();
+    toolExecutor.setMode(activeMode);
   };
+
+  const modeOptions = (Object.keys(MODE_CONFIG) as AgentMode[]).map((id) => ({
+    id,
+    label: MODE_CONFIG[id].name,
+    description: MODE_CONFIG[id].description,
+  }));
 
   const root = createRoot({ exitOnCtrlC: true });
   await renderAndRun(
     root,
     <XibeCodeChatApp
       model={model}
-      mode={activeAgent.getMode()}
+      initialMode={activeMode}
       provider={provider}
       baseUrl={baseUrl}
       defaultModel={model}
+      modeOptions={modeOptions}
       initialRequestFormat={wireFormat}
       customProviderFormat={customProviderFormat}
       runPrompt={runPrompt}
       loadModels={loadModels}
       onModelChange={onModelChange}
+      onModeChange={onModeChange}
       onWireFormatChange={onWireFormatChange}
     />,
   );

@@ -1775,6 +1775,7 @@ ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
   setModeFromUser(mode: AgentMode, reason: string) {
     const oldMode = this.modeState.current;
     this.modeState = transitionMode(this.modeState, mode, reason);
+    this.permissionManager.setMode(mode);
     this.emit('mode_changed', {
       from: oldMode,
       to: mode,
