@@ -972,6 +972,10 @@ const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   'update_memory': 'write_fs', // Allows writing to project memory
 };
 
+export function getToolCategory(toolName: string): ToolCategory | undefined {
+  return TOOL_CATEGORIES[toolName];
+}
+
 /**
  * Check if a tool is allowed in the given mode
  *
@@ -1199,7 +1203,7 @@ export class ModeOrchestrator {
 
   constructor(policy?: ModeTransitionPolicy) {
     this.policy = policy || {
-      autoApprovalPolicy: 'always',
+      autoApprovalPolicy: 'prompt-only',
       allowAutoEscalation: true,
     };
   }

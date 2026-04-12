@@ -1,0 +1,4 @@
+{
+  "summary": "Adjusted the chat TUI layout to visually match the OpenClaude screenshot more closely: replaced the plain boxed transcript shell with a hero-first terminal landing block (large blue XibeCode ASCII logo, tagline, provider/model/endpoint card, cloud readiness row, version line), followed by divider lines, transcript stream, prompt row, and footer shortcut hints. Added `/help` handling in-chat for quick command hints, while preserving existing agent event streaming and themed color tokens. Rebuilt and re-ran tests to ensure the new UI structure compiles and does not regress behavior.",
+  "current_status": "Chat now uses OpenClaude-like layout structure and branding shell, with themed Ink primitives and root lifecycle already in place; remaining gap is deeper behavior parity (full command palette/local-jsx runtime and exact interaction microstates), but current visual direction is much closer to the target."
+}

@@ -1,0 +1,4 @@
+{
+  "summary": "Implemented a working `/model` slash command in the chat TUI that fetches model IDs from the active provider endpoint using the current API key and base URL, then allows in-session model switching. The command supports `/model` (open/load picker), `/model <id>` (direct switch), and `/model default` (revert), with keyboard navigation and selection in a model picker panel (up/down/enter/esc). Under the hood, model changes now recreate the active agent with the new model and persist it to config, while keeping the existing chat session UI active.",
+  "current_status": "Slash command UX now includes `/model` with live endpoint-backed model discovery and model switching, plus the prior `/help`/`/clear`/`/exit` commands. Build/tests/lints are all passing after the change."
+}

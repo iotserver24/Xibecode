@@ -90,6 +90,9 @@ importers:
       '@types/node':
         specifier: ^20.10.0
         version: 20.19.33
+      '@types/react':
+        specifier: ^19.2.13
+        version: 19.2.13
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
@@ -2303,7 +2306,6 @@ snapshots:
   '@types/react@19.2.13':
     dependencies:
       csstype: 3.2.3
-    optional: true
 
   '@types/through@0.0.33':
     dependencies:
@@ -2589,8 +2591,7 @@ snapshots:
       shebang-command: 2.0.0
       which: 2.0.2
 
-  csstype@3.2.3:
-    optional: true
+  csstype@3.2.3: {}
 
   data-uri-to-buffer@4.0.1: {}
 

@@ -1,0 +1,4 @@
+{
+  "summary": "Responded to the UI feedback by restoring explicit chat framing: the transcript stream is now inside a rounded bordered chat panel and the input row is also boxed again, while retaining the newer OpenClaude-inspired hero/header section. The transcript window height now scales between welcome and ongoing chat states so the panel remains readable and visually balanced.",
+  "current_status": "TUI now has both the OpenClaude-style top shell and a concrete chat box/input box structure; visual matching is much closer, with remaining work mainly fine-tuning spacing/line weight and exact proportions."
+}

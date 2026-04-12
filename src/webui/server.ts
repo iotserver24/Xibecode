@@ -1212,6 +1212,7 @@ else:
           maxIterations: this.configManager.get('maxIterations') || 50,
           provider: this.configManager.get('provider'),
           customProviderFormat: this.configManager.get('customProviderFormat'),
+          requestFormat: this.configManager.get('requestFormat') ?? 'auto',
           defaultSkillsPrompt: session.builtInSkillsPrompt,
         }, this.configManager.get('provider'));
       }

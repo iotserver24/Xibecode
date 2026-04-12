@@ -3,6 +3,7 @@ import * as path from 'path';
 import { spawn } from 'child_process';
 import { createHash } from 'crypto';
 import { fileURLToPath } from 'url';
+import { SessionBridge } from './session-bridge.js';
 
 export interface BackgroundTask {
     id: string;
@@ -79,6 +80,7 @@ export class BackgroundAgentManager {
                 logPath
             };
             await this.saveTask(task);
+            SessionBridge.onTaskStatus(task.id, `Background task ${task.id}`, 'running');
             return taskId;
         } else {
             throw new Error('Failed to spawn background process');
@@ -101,6 +103,7 @@ export class BackgroundAgentManager {
                         if (!this.isProcessRunning(task.pid)) {
                             task.status = 'completed'; // Or unknown/failed, but assume done for now
                             await this.saveTask(task);
+                            SessionBridge.onTaskStatus(task.id, `Background task ${task.id}`, 'completed');
                         }
                     }
                     tasks.push(task);
@@ -130,6 +133,7 @@ export class BackgroundAgentManager {
                 process.kill(task.pid);
                 task.status = 'killed';
                 await this.saveTask(task);
+                SessionBridge.onTaskStatus(task.id, `Background task ${task.id}`, 'killed');
                 return true;
             } catch (e) {
                 return false;
