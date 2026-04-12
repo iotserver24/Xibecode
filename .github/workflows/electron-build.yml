@@ -29,6 +29,8 @@ jobs:
       - name: Install dependencies
         working-directory: electron
         run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       - name: Build TypeScript
         working-directory: electron
         run: pnpm run build:ts
@@ -71,6 +73,8 @@ jobs:
       - name: Install dependencies
         working-directory: electron
         run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       - name: Build TypeScript
         working-directory: electron
         run: pnpm run build:ts
@@ -109,6 +113,8 @@ jobs:
       - name: Install dependencies
         working-directory: electron
         run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       - name: Build TypeScript
         working-directory: electron
         run: pnpm run build:ts

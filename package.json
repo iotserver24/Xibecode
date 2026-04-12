@@ -11,10 +11,10 @@
   "scripts": {
     "build": "tsc",
     "build:webui": "cd webui && pnpm install && pnpm build",
-    "build:all": "npm run build && npm run build:webui",
+    "build:all": "pnpm run build && pnpm run build:webui",
     "dev": "node scripts/dev.mjs",
     "start": "node dist/index.js",
-    "prepare": "npm run build",
+    "prepare": "pnpm run build",
     "test": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
