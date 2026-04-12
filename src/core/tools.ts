@@ -26,7 +26,7 @@ const execAsync = promisify(exec);
 
 /** Returned by former Playwright-backed browser tools; XibeCode does not bundle browsers. */
 export const NO_EMBEDDED_BROWSER_MESSAGE =
-  'XibeCode does not bundle Playwright or download Chromium. Use run_command with agent-browser (e.g. agent-browser open <url>, agent-browser screenshot out.png) or your environment browser MCP. For Playwright E2E in a repo, add @playwright/test there and run it via run_command.';
+  'XibeCode does not bundle Playwright, Chromium, or agent-browser. Install agent-browser globally on supported OS/arch if you want it, or use your environment browser MCP / fetch_url. For Playwright E2E in a repo, add @playwright/test there and run it via run_command.';
 
 /**
  * Interface for tool executors

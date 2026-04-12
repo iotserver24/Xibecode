@@ -29,4 +29,4 @@
 - Embedded or sandboxed agent runs should treat the repository root as the working directory for file tools and relative paths; do not assume the checkout lives at `/workspace`, `/app`, or `/project`.
 - `run-pr` command (`src/commands/run-pr.ts`) requires `gh` CLI installed and authenticated (`gh auth login`) before use.
 - `xibecode run-pr` runs the agent, performs test verification (unless `--skip-tests`) with up to 2 self-correction retries on failures, and the resulting PR triggers CI security checks including `pnpm audit --audit-level=high`.
-- **Playwright is not a dependency** of the CLI: no Chromium download on install. Browser-oriented agent tools are stubbed with guidance to use `run_command` + `agent-browser` or a host browser MCP; Playwright E2E belongs in the consumer repo if needed.
+- **Playwright is not a dependency** of the CLI: no Chromium download on install. **`agent-browser` is not bundled** (optional global install on supported platforms); browser-oriented agent tools are stubbed with guidance to use `run_command` + `agent-browser`, MCP, or `fetch_url`. Playwright E2E belongs in the consumer repo if needed.
