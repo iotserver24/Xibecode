@@ -7,6 +7,7 @@ import { runPrCommand } from './commands/run-pr.js';
 import { chatCommand } from './commands/chat.js';
 import { configCommand } from './commands/config.js';
 import { mcpCommand } from './commands/mcp.js';
+import { diagnosticsCommand } from './commands/diagnostics.js';
 import { startWebUI } from './webui/server.js';
 import dotenv from 'dotenv';
 import { createRequire } from 'module';
@@ -133,6 +134,16 @@ program
   .option('--add-mcp-server <name>', 'Add an MCP server (interactive)')
   .option('--remove-mcp-server <name>', 'Remove an MCP server')
   .action(configCommand);
+
+// Diagnostics bundle for bug reports
+program
+  .command('diagnostics')
+  .description('Generate a diagnostics bundle for bug reports (secrets are redacted)')
+  .option('-o, --output <path>', 'Output file path (default: tmp/xibecode-diagnostics-<timestamp>.md)')
+  .option('--include-diff', 'Include full unified git diff (redacted, may be truncated)', false)
+  .option('--diff-target <ref>', 'Diff target ref (default: HEAD)', 'HEAD')
+  .option('-v, --verbose', 'Show detailed logs', false)
+  .action(diagnosticsCommand);
 
 // MCP Server Management
 const mcpCmd = program
