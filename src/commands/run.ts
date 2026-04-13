@@ -350,6 +350,10 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
       duration,
       filesChanged: stats.filesChanged,
       toolCalls: stats.toolCalls,
+      inputTokens: stats.inputTokens,
+      outputTokens: stats.outputTokens,
+      totalTokens: stats.totalTokens,
+      costLabel: stats.costLabel,
     });
 
     if (stats.changedFiles.length > 0) {

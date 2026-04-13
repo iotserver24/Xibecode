@@ -481,7 +481,17 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
     summary: '',
     runs: 0,
   };
-  let stats = { iterations: 0, filesChanged: 0, toolCalls: 0, changedFiles: [] as string[] };
+  let stats: ReturnType<EnhancedAgent['getStats']> = {
+    iterations: 0,
+    filesChanged: 0,
+    toolCalls: 0,
+    changedFiles: [],
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    cost: 0,
+    costLabel: undefined,
+  };
   let currentAgent = agent;
 
   try {
@@ -536,6 +546,10 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
         duration,
         filesChanged: stats.filesChanged,
         toolCalls: stats.toolCalls,
+        inputTokens: stats.inputTokens,
+        outputTokens: stats.outputTokens,
+        totalTokens: stats.totalTokens,
+        costLabel: stats.costLabel,
       });
 
       if (stats.changedFiles.length > 0) {

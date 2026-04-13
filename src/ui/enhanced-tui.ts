@@ -576,9 +576,18 @@ export class EnhancedUI {
     duration: number;
     filesChanged: number;
     toolCalls: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+    costLabel?: string;
   }) {
     this.stopSpinner();
     const elapsed = this.formatDuration(stats.duration);
+    const tokensLabel =
+      stats.totalTokens !== undefined
+        ? `${stats.inputTokens ?? 0} in / ${stats.outputTokens ?? 0} out / ${stats.totalTokens} total`
+        : undefined;
+    const costLabel = stats.costLabel ? `cost ${stats.costLabel}` : undefined;
 
     console.log('  ' + this.T.border('╭' + '─'.repeat(W) + '╮'));
     console.log('  ' + this.T.border('│') + pad('  ' + chalk.greenBright.bold('✔ Task Complete'), W) + this.T.border('│'));
@@ -589,6 +598,10 @@ export class EnhancedUI {
       this.T.dim('  ·  files ') + this.T.text(String(stats.filesChanged)) +
       this.T.dim('  ·  ') + this.T.text(elapsed), W
     ) + this.T.border('│'));
+    if (tokensLabel || costLabel) {
+      const right = [tokensLabel ? `tokens ${tokensLabel}` : '', costLabel || ''].filter(Boolean).join('  ·  ');
+      console.log('  ' + this.T.border('│') + pad('  ' + this.T.dim(right), W) + this.T.border('│'));
+    }
     console.log('  ' + this.T.border('│') + '                                                              ' + this.T.border('│'));
     console.log('  ' + this.T.border('╰' + '─'.repeat(W) + '╯'));
   }
