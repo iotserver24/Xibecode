@@ -179,7 +179,8 @@ export class PermissionManager {
 
   private getDefaultPermissionMode(mode: AgentMode): PermissionMode {
     if (mode === 'plan') return 'plan';
-    if (mode === 'agent' || mode === 'engineer') return 'default';
+    if (mode === 'agent') return 'acceptEdits';
+    if (mode === 'engineer') return 'default';
     if (!MODE_CONFIG[mode].canModify) return 'plan';
     return 'default';
   }
