@@ -189,15 +189,16 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   const serverNames = Object.keys(mcpServers);
   if (serverNames.length > 0) {
     ui.info(`Connecting to ${serverNames.length} MCP server(s)...`);
-    for (const serverName of serverNames) {
-      const serverConfig = mcpServers[serverName];
-      try {
-        await mcpClientManager.connect(serverName, serverConfig);
-        const tools = mcpClientManager.getAvailableTools().filter(t => t.serverName === serverName);
-        ui.info(`  ✓ Connected to ${serverName} (${tools.length} tool(s))`);
-      } catch (error: any) {
-        ui.warning(`  ✗ Failed to connect to ${serverName}: ${error.message}`);
-      }
+    const result = await mcpClientManager.connectAll(mcpServers, { retries: 1, backoffMs: 750 });
+    for (const name of result.connected) {
+      const tools = mcpClientManager.getAvailableTools().filter((t) => t.serverName === name);
+      ui.info(`  ✓ Connected to ${name} (${tools.length} tool(s))`);
+    }
+    for (const name of result.skippedNeedsAuth) {
+      ui.warning(`  ! ${name} needs auth (skipping for now)`);
+    }
+    for (const f of result.failed) {
+      ui.warning(`  ✗ Failed to connect to ${f.name}: ${f.error}`);
     }
   }
 

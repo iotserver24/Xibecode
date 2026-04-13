@@ -22,6 +22,16 @@ export interface MCPPrompt extends Prompt {
   serverName: string;
 }
 
+export type MCPServerStateType = 'disabled' | 'connecting' | 'connected' | 'needs-auth' | 'error';
+
+export interface MCPServerState {
+  name: string;
+  state: MCPServerStateType;
+  lastError?: string;
+  needsAuthUntil?: number;
+  updatedAt: number;
+}
+
 /**
  * Manages connections to MCP servers and provides unified access to their capabilities
  */
@@ -31,16 +41,34 @@ export class MCPClientManager {
   private tools: Map<string, MCPTool> = new Map();
   private resources: Map<string, MCPResource> = new Map();
   private prompts: Map<string, MCPPrompt> = new Map();
+  private serverStates: Map<string, MCPServerState> = new Map();
+
+  private setState(serverName: string, patch: Partial<MCPServerState>): void {
+    const current = this.serverStates.get(serverName);
+    this.serverStates.set(serverName, {
+      name: serverName,
+      state: current?.state || 'connecting',
+      ...current,
+      ...patch,
+      updatedAt: Date.now(),
+    });
+  }
 
   /**
    * Connect to an MCP server
    */
   async connect(serverName: string, serverConfig: MCPServerConfig): Promise<void> {
+    const state = this.serverStates.get(serverName);
+    if (state?.state === 'needs-auth' && state.needsAuthUntil && Date.now() < state.needsAuthUntil) {
+      throw new Error(`Skipping connection (needs-auth cached until ${new Date(state.needsAuthUntil).toISOString()})`);
+    }
+
     if (this.clients.has(serverName)) {
       throw new Error(`Already connected to MCP server: ${serverName}`);
     }
 
     try {
+      this.setState(serverName, { state: 'connecting', lastError: undefined });
       const client = new Client({
         name: 'xibecode',
         version: '1.0.0',
@@ -66,14 +94,67 @@ export class MCPClientManager {
 
       // Discover and cache capabilities
       await this.discoverCapabilities(serverName);
+      this.setState(serverName, { state: 'connected', lastError: undefined, needsAuthUntil: undefined });
 
     } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      // Heuristic: treat auth-ish failures as needs-auth so we don't reconnect-loop.
+      if (/(401|unauthorized|forbidden|needs[- ]auth)/i.test(msg)) {
+        this.setState(serverName, {
+          state: 'needs-auth',
+          lastError: msg,
+          needsAuthUntil: Date.now() + 15 * 60 * 1000,
+        });
+      } else {
+        this.setState(serverName, { state: 'error', lastError: msg });
+      }
       throw new Error(
         `Failed to connect to MCP server ${serverName}: ${
-          error instanceof Error ? error.message : String(error)
+          msg
         }`
       );
     }
+  }
+
+  /**
+   * Connect to all MCP servers with simple retry/backoff.
+   */
+  async connectAll(
+    servers: Record<string, MCPServerConfig>,
+    opts?: { retries?: number; backoffMs?: number }
+  ): Promise<{ connected: string[]; failed: Array<{ name: string; error: string }>; skippedNeedsAuth: string[] }> {
+    const retries = opts?.retries ?? 1;
+    const backoffMs = opts?.backoffMs ?? 750;
+
+    const connected: string[] = [];
+    const skippedNeedsAuth: string[] = [];
+    const failed: Array<{ name: string; error: string }> = [];
+
+    for (const [name, cfg] of Object.entries(servers)) {
+      let attempt = 0;
+      while (true) {
+        attempt++;
+        try {
+          await this.connect(name, cfg);
+          connected.push(name);
+          break;
+        } catch (err: any) {
+          const msg = err instanceof Error ? err.message : String(err);
+          const st = this.serverStates.get(name);
+          if (st?.state === 'needs-auth') {
+            skippedNeedsAuth.push(name);
+            break;
+          }
+          if (attempt > retries) {
+            failed.push({ name, error: msg });
+            break;
+          }
+          await new Promise((r) => setTimeout(r, backoffMs * attempt));
+        }
+      }
+    }
+
+    return { connected, failed, skippedNeedsAuth };
   }
 
   /**
@@ -94,6 +175,7 @@ export class MCPClientManager {
 
     this.clients.delete(serverName);
     this.serverConfigs.delete(serverName);
+    this.setState(serverName, { state: 'error', lastError: 'Disconnected' });
 
     // Remove cached capabilities
     for (const [key, tool] of this.tools.entries()) {
@@ -306,6 +388,10 @@ export class MCPClientManager {
    */
   getConnectedServers(): string[] {
     return Array.from(this.clients.keys());
+  }
+
+  getServerStates(): MCPServerState[] {
+    return Array.from(this.serverStates.values()).sort((a, b) => a.name.localeCompare(b.name));
   }
 
   /**
