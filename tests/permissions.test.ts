@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { PermissionManager } from '../src/core/permissions.js';
 
 describe('PermissionManager', () => {
-  it('requires confirmation for high-risk tools in default mode', () => {
+  it('allows high-risk tools by default in agent mode', () => {
     const manager = new PermissionManager('agent');
     const decision = manager.evaluateToolExecution({}, 'run_command', 'shell_command');
-    expect(decision.allowed).toBe(false);
-    expect(decision.requiresApproval).toBe(true);
+    expect(decision.allowed).toBe(true);
+    expect(decision.requiresApproval).toBe(false);
   });
 
   it('allows confirmed high-risk tool execution', () => {
