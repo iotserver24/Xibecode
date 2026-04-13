@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import matter from 'gray-matter';
 import { crawlDocs, generateSkillFromDocs, type AISynthesisConfig } from './docs-scraper.js';
 import { MarketplaceClient, type MarketplaceSkillResult } from './marketplace-client.js';
 import { SkillsShClient, type SkillsShResult } from './skills-sh-client.js';
@@ -21,6 +22,8 @@ export interface Skill {
     description: string;
     instructions: string;
     tags?: string[];
+    provenance?: 'built-in' | 'user' | 'marketplace' | 'skills.sh' | 'mcp';
+    filePath?: string;
 }
 
 export class SkillManager {
@@ -70,7 +73,10 @@ export class SkillManager {
             for (const file of skillFiles) {
                 const filePath = path.join(dir, file);
                 const content = await fs.readFile(filePath, 'utf-8');
-                const skill = this.parseSkillFile(content, file);
+                const skill = this.parseSkillFile(content, file, {
+                    provenance: source === 'built-in' ? 'built-in' : 'user',
+                    filePath,
+                });
                 if (skill) {
                     this.skills.set(skill.name, skill);
                     if (source === 'built-in') {
@@ -86,37 +92,36 @@ export class SkillManager {
         }
     }
 
-    private parseSkillFile(content: string, filename: string): Skill | null {
-        // Parse YAML frontmatter + markdown content
-        const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+    private parseSkillFile(
+        content: string,
+        filename: string,
+        metaOverride?: { provenance?: Skill['provenance']; filePath?: string },
+    ): Skill | null {
+        try {
+            const parsed = matter(content);
+            const data = (parsed.data || {}) as any;
+            const nameFromFile = filename.replace(/\.md$/i, '');
+            const name = typeof data.name === 'string' && data.name.trim() ? data.name.trim() : nameFromFile;
+            const description = typeof data.description === 'string' ? data.description : '';
+            const tags =
+                Array.isArray(data.tags) ? data.tags.map(String) :
+                typeof data.tags === 'string' ? data.tags.split(',').map((t: string) => t.trim()).filter(Boolean) :
+                [];
 
-        if (!frontmatterMatch) {
+            const instructions = (parsed.content || '').trim();
+            if (!instructions) return null;
+
+            return {
+                name,
+                description,
+                instructions,
+                tags,
+                provenance: metaOverride?.provenance,
+                filePath: metaOverride?.filePath,
+            };
+        } catch {
             return null;
         }
-
-        const [, frontmatter, instructions] = frontmatterMatch;
-        const name = filename.replace('.md', '');
-
-        // Parse simple YAML (name: value format)
-        const meta: Record<string, any> = {};
-        frontmatter.split('\n').forEach(line => {
-            const match = line.match(/^(\w+):\s*(.+)$/);
-            if (match) {
-                const [, key, value] = match;
-                if (key === 'tags') {
-                    meta[key] = value.split(',').map(t => t.trim());
-                } else {
-                    meta[key] = value;
-                }
-            }
-        });
-
-        return {
-            name,
-            description: meta.description || '',
-            instructions: instructions.trim(),
-            tags: meta.tags || [],
-        };
     }
 
     getSkill(name: string): Skill | undefined {
@@ -148,7 +153,23 @@ export class SkillManager {
 
         const selected = selectRelevantBuiltInSkills(this.builtInSkills, taskPrompt, depTokens, options);
         const summary = formatSelectionSummary(selected, this.builtInSkills.length);
-        return this.formatSelectedBuiltInSkillsForPrompt(selected, summary);
+        const bundledBlock = this.formatSelectedBuiltInSkillsForPrompt(selected, summary);
+
+        const catalog = this.formatSkillCatalogForPrompt({ maxChars: 2000 });
+        return bundledBlock + (catalog ? `\n\n---\n\n${catalog}` : '');
+    }
+
+    private formatSkillCatalogForPrompt(opts: { maxChars: number }): string {
+        const all = this.listSkills()
+            .filter((s) => s.provenance !== 'built-in')
+            .sort((a, b) => a.name.localeCompare(b.name));
+        if (all.length === 0) return '';
+        const lines = all.map((s) => `- ${s.name}${s.description ? ` — ${s.description}` : ''}`);
+        let out = `## Available local skills\n\n${lines.join('\n')}`;
+        if (out.length > opts.maxChars) {
+            out = out.slice(0, opts.maxChars) + '\n\n[Skill list truncated]';
+        }
+        return out;
     }
 
     /**
@@ -231,7 +252,10 @@ export class SkillManager {
             onProgress?.('Skill saved locally');
 
             // Register the skill locally
-            const skill = this.parseSkillFile(finalContent, `${fileName}.md`);
+            const skill = this.parseSkillFile(finalContent, `${fileName}.md`, {
+                provenance: 'marketplace',
+                filePath,
+            });
             if (skill) {
                 this.skills.set(skill.name, skill);
             }
@@ -322,7 +346,7 @@ export class SkillManager {
     /**
      * Install a skill from skills.sh
      */
-    async installFromSkillsSh(skillId: string): Promise<{ success: boolean; message?: string }> {
+    async installFromSkillsSh(skillId: string): Promise<{ success: boolean; message?: string; filePath?: string }> {
         // We'll install strictly to the user skills directory if possible
         // But npx skills add might install to a different location or just output the file
         // For now, we'll run it in the user skills directory
@@ -333,7 +357,12 @@ export class SkillManager {
             // Reload skills to pick up the new one
             await this.loadSkillsFromDirectory(this.userSkillsDir, 'user');
 
-            return { success: !!result, message: result || 'Installation failed' };
+            const installedPath = result && result.endsWith('.md') ? result : undefined;
+            return {
+                success: !!result,
+                message: result || 'Installation failed',
+                filePath: installedPath,
+            };
         } catch (error: any) {
             return { success: false, message: error.message };
         }

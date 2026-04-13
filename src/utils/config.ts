@@ -8,6 +8,22 @@ export interface MCPServerConfig {
   command: string; // Command to execute
   args?: string[]; // Command arguments
   env?: Record<string, string>; // Environment variables
+  /**
+   * Optional OAuth configuration for MCP servers that require auth.
+   * This is primarily used for remote MCP servers; stdio servers often use env vars instead.
+   */
+  oauth?: {
+    /** Explicit authorization endpoint (preferred if you know it). */
+    authorizationUrl?: string;
+    /** Explicit token endpoint (preferred if you know it). */
+    tokenUrl?: string;
+    /** Optional RFC 9728 protected resource metadata URL. */
+    protectedResourceMetadataUrl?: string;
+    /** Optional RFC 8414 authorization server metadata URL. */
+    authServerMetadataUrl?: string;
+    clientId?: string;
+    scopes?: string[];
+  };
 }
 
 export const PROVIDER_CONFIGS = {
@@ -111,6 +127,12 @@ export interface XibeCodeConfig {
   testCommandOverride?: string;
   plugins?: string[];
   mcpServers?: MCPServersConfig;
+  /** Allowlist patterns for MCP servers (e.g. \"filesystem\", \"name:*\", \"command:mcp-server-*\") */
+  allowedMcpServers?: string[];
+  /** Denylist patterns for MCP servers (e.g. \"github\", \"name:unsafe*\") */
+  deniedMcpServers?: string[];
+  /** If true, only managed MCP servers are allowed. */
+  allowManagedMcpOnly?: boolean;
   // Provider / endpoints
   provider?: ProviderType;
   customModels?: { id: string; provider: ProviderType }[];
@@ -522,15 +544,38 @@ export class ConfigManager {
    * Returns as object-based format
    */
   async getMCPServers(): Promise<MCPServersConfig> {
+    // Prefer unified multi-scope resolution (project .mcp.json + global + managed override).
+    try {
+      const { resolveMcpServers } = await import('../core/mcp/resolve-mcp-servers.js');
+      const resolved = await resolveMcpServers({
+        cwd: process.cwd(),
+        allowed: this.get('allowedMcpServers') || undefined,
+        denied: this.get('deniedMcpServers') || undefined,
+        allowManagedOnly: this.get('allowManagedMcpOnly') || undefined,
+      });
+      return resolved.servers;
+    } catch (error) {
+      // If multi-scope resolution fails, fall back to the old behavior.
+      console.warn(
+        `Warning: Failed to resolve MCP servers (multi-scope). Falling back to profile/global: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
     try {
       // Try to load from file first
       const fileServers = await this.mcpFileManager.loadMCPServers();
-      if (Object.keys(fileServers).length > 0 || await this.mcpFileManager.fileExists()) {
+      if (Object.keys(fileServers).length > 0 || (await this.mcpFileManager.fileExists())) {
         return fileServers;
       }
     } catch (error) {
       // If file has errors, fall back to config store
-      console.warn(`Warning: Failed to load MCP servers from file, using config store: ${error instanceof Error ? error.message : String(error)}`);
+      console.warn(
+        `Warning: Failed to load MCP servers from file, using config store: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     }
 
     // Fall back to config store

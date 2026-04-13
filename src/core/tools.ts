@@ -21,6 +21,7 @@ import { CodeGraph } from './code-graph.js';
 import { ConflictSolver } from './conflict-solver.js';
 import { SwarmOrchestrator } from './swarm.js';
 import { PermissionManager, type ApprovalScope, type PermissionMode } from './permissions.js';
+import { McpOAuthFlowManager } from './mcp/oauth-flow.js';
 
 const execAsync = promisify(exec);
 
@@ -119,6 +120,7 @@ export class CodingToolExecutor implements ToolExecutor {
   private permissionManager: PermissionManager;
   /** Session-scoped tools synthesized by the agent (meta-agent). Execution is sandboxed via run_command. */
   private dynamicTools = new Map<string, { description: string; script: string }>();
+  private mcpOAuth = new McpOAuthFlowManager();
 
   /**
    * Creates a new CodingToolExecutor instance
@@ -342,7 +344,10 @@ export class CodingToolExecutor implements ToolExecutor {
     }
 
     // Check if it's an MCP tool (format: serverName::toolName)
+    // Harden dispatch: only route if server is currently connected.
     if (this.mcpClientManager && toolName.includes('::')) {
+      const serverName = toolName.split('::')[0];
+      if (serverName && this.mcpClientManager.isConnected(serverName)) {
       try {
         const result = await this.mcpClientManager.executeMCPTool(toolName, p);
         return {
@@ -355,6 +360,7 @@ export class CodingToolExecutor implements ToolExecutor {
           success: false,
           message: error.message,
         };
+      }
       }
     }
 
@@ -574,6 +580,48 @@ export class CodingToolExecutor implements ToolExecutor {
 
       case 'git_show_diff': {
         return this.gitShowDiff(p.file_path, p.target);
+      }
+
+      case 'mcp_list_resources': {
+        if (!this.mcpClientManager) return { success: true, resources: [] };
+        const resources = this.mcpClientManager.getAvailableResources().map((r) => ({
+          server: r.serverName,
+          uri: r.uri,
+          name: r.name,
+          mimeType: r.mimeType,
+          description: r.description,
+        }));
+        return { success: true, resources, count: resources.length };
+      }
+
+      case 'mcp_read_resource': {
+        if (!this.mcpClientManager) return { error: true, success: false, message: 'No MCP manager available' };
+        if (!p.uri || typeof p.uri !== 'string') return { error: true, success: false, message: 'Missing uri (string)' };
+        const result = await this.mcpClientManager.readResource(p.uri);
+        return { success: true, ...result };
+      }
+
+      case 'mcp_list_prompts': {
+        if (!this.mcpClientManager) return { success: true, prompts: [] };
+        const prompts = this.mcpClientManager.getAvailablePrompts().map((pr) => ({
+          server: pr.serverName,
+          name: pr.name,
+          description: pr.description,
+          arguments: (pr as any).arguments,
+        }));
+        return { success: true, prompts, count: prompts.length };
+      }
+
+      case 'mcp_get_prompt': {
+        if (!this.mcpClientManager) return { error: true, success: false, message: 'No MCP manager available' };
+        if (!p.name || typeof p.name !== 'string') return { error: true, success: false, message: 'Missing name (string, format server::promptName)' };
+        const args = p.args && typeof p.args === 'object' ? p.args : undefined;
+        const result = await this.mcpClientManager.getPrompt(p.name, args);
+        return { success: true, ...result };
+      }
+
+      case 'mcp_auth': {
+        return this.mcpAuth(p);
       }
 
       case 'get_mcp_status': {
@@ -1419,6 +1467,51 @@ export class CodingToolExecutor implements ToolExecutor {
         input_schema: {
           type: 'object',
           properties: {},
+        },
+      },
+      {
+        name: 'mcp_list_resources',
+        description: 'List resources exposed by connected MCP servers.',
+        input_schema: { type: 'object', properties: {} },
+      },
+      {
+        name: 'mcp_read_resource',
+        description: 'Read an MCP resource by uri. Use uri in server::uri form.',
+        input_schema: {
+          type: 'object',
+          properties: { uri: { type: 'string', description: 'Resource URI in server::uri form' } },
+          required: ['uri'],
+        },
+      },
+      {
+        name: 'mcp_list_prompts',
+        description: 'List prompts exposed by connected MCP servers.',
+        input_schema: { type: 'object', properties: {} },
+      },
+      {
+        name: 'mcp_get_prompt',
+        description: 'Fetch an MCP prompt template by name (server::promptName) with optional args.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Prompt name in server::promptName form' },
+            args: { type: 'object', description: 'Optional prompt arguments' },
+          },
+          required: ['name'],
+        },
+      },
+      {
+        name: 'mcp_auth',
+        description:
+          'Authenticate an MCP server using OAuth. Use action=start to get an authUrl; if localhost callback is not reachable, use action=finish with callback_url pasted from the browser.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            server: { type: 'string', description: 'MCP server name (as configured)' },
+            action: { type: 'string', enum: ['start', 'finish'], description: 'OAuth flow action' },
+            callback_url: { type: 'string', description: 'Full callback URL (only for action=finish)' },
+          },
+          required: ['server'],
         },
       },
       {
@@ -2690,6 +2783,46 @@ export class CodingToolExecutor implements ToolExecutor {
     }
   }
 
+  private async mcpAuth(p: any): Promise<any> {
+    const action = typeof p.action === 'string' ? p.action : 'start';
+    const server = typeof p.server === 'string' ? p.server : null;
+    if (!server) {
+      return { error: true, success: false, message: 'Missing required parameter: server (string)' };
+    }
+
+    const { ConfigManager } = await import('../utils/config.js');
+    const config = new ConfigManager();
+    const servers = await config.getMCPServers();
+    const serverConfig = servers[server];
+    if (!serverConfig) {
+      return { error: true, success: false, message: `Unknown MCP server: ${server}` };
+    }
+    if (!serverConfig.oauth) {
+      return { error: true, success: false, message: `MCP server ${server} has no oauth config` };
+    }
+
+    if (action === 'start') {
+      const started = await this.mcpOAuth.start(server, serverConfig);
+      return {
+        success: true,
+        server,
+        action,
+        ...started,
+      };
+    }
+
+    if (action === 'finish') {
+      const callbackUrl = typeof p.callback_url === 'string' ? p.callback_url : typeof p.callbackUrl === 'string' ? p.callbackUrl : null;
+      if (!callbackUrl) {
+        return { error: true, success: false, message: 'Missing required parameter: callback_url (string) for action=finish' };
+      }
+      const finished = await this.mcpOAuth.finish(server, callbackUrl);
+      return { success: finished.success, server, action, message: finished.message };
+    }
+
+    return { error: true, success: false, message: `Invalid action: ${action}. Use start|finish.` };
+  }
+
   private async getMCPStatus(): Promise<any> {
     if (!this.mcpClientManager) {
       return {
@@ -2706,6 +2839,7 @@ export class CodingToolExecutor implements ToolExecutor {
       const allTools = this.mcpClientManager.getAvailableTools();
       const allResources = this.mcpClientManager.getAvailableResources();
       const allPrompts = this.mcpClientManager.getAvailablePrompts();
+      const states = this.mcpClientManager.getServerStates?.() || [];
 
       // Get configured servers from config
       const { ConfigManager } = await import('../utils/config.js');
@@ -2717,12 +2851,15 @@ export class CodingToolExecutor implements ToolExecutor {
         const serverTools = allTools.filter(t => t.serverName === serverName);
         const serverResources = allResources.filter(r => r.serverName === serverName);
         const serverPrompts = allPrompts.filter(p => p.serverName === serverName);
+        const state = (states as any[]).find((s) => s.name === serverName);
 
         return {
           name: serverName,
           command: serverConfig.command,
           args: serverConfig.args || [],
           connected: isConnected,
+          state: state?.state || (isConnected ? 'connected' : 'error'),
+          lastError: state?.lastError,
           tools: serverTools.length,
           resources: serverResources.length,
           prompts: serverPrompts.length,
@@ -2733,7 +2870,7 @@ export class CodingToolExecutor implements ToolExecutor {
 
       return {
         success: true,
-        configured: configuredServers.length,
+        configured: Object.keys(configuredServers).length,
         connected: connectedServers.length,
         servers,
         totalTools: allTools.length,
@@ -2741,6 +2878,11 @@ export class CodingToolExecutor implements ToolExecutor {
         totalPrompts: allPrompts.length,
       };
     } catch (error: any) {
+      return {
+        error: true,
+        success: false,
+        message: `Failed to get MCP status: ${error?.message || String(error)}`,
+      };
     }
   }
 
@@ -2765,7 +2907,8 @@ export class CodingToolExecutor implements ToolExecutor {
         return {
           success: true,
           message: result.message || `Successfully installed skill: ${skillId}`,
-          skill_id: skillId
+          skill_id: skillId,
+          filePath: result.filePath,
         };
       } else {
         return { error: true, success: false, message: `Failed to install skill: ${result.message}` };

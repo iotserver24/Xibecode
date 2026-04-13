@@ -37,16 +37,19 @@ export class SkillsShClient {
      */
     async install(skillId: string, targetDir: string): Promise<string | null> {
         try {
-            // npx skills add <skillId> -y
-            // The CLI might create a file in the current directory or .agent/skills
-            // We'll run it in the target directory to be safe, or just in cwd and move it.
-            // Let's try running in cwd.
-            await execAsync(`npx -y skills add ${skillId} -y`, { cwd: targetDir });
+            await fs.mkdir(targetDir, { recursive: true });
 
-            // We need to figure out what file was created. 
-            // The CLI output might tell us, but for now we assume it creates a file based on the skill name.
-            // Since we can't easily parse the output for the filename reliably without running it,
-            // we might just return success and let the user/system discover the new file.
+            const before = new Set((await fs.readdir(targetDir)).filter((f) => f.endsWith('.md')));
+            await execAsync(`npx -y skills add ${skillId} -y`, { cwd: targetDir });
+            const afterList = (await fs.readdir(targetDir)).filter((f) => f.endsWith('.md'));
+            const after = new Set(afterList);
+
+            const created = afterList.find((f) => !before.has(f));
+            if (created) {
+                return path.join(targetDir, created);
+            }
+
+            // Fallback: if nothing obvious, just return a success message.
             return `Skill ${skillId} installed successfully.`;
         } catch (error: any) {
             console.error('Skills.sh install error:', error.message);
