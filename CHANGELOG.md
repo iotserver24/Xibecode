@@ -2,6 +2,14 @@
 
 All notable changes to XibeCode will be documented in this file.
 
+## [0.9.5] - 2026-04-13
+
+### ✨ Improvements
+- Added `xibecode diagnostics` to generate a unified diagnostics bundle.
+- Added config profiles (`--profile`, list/set default profile) for isolated config sets.
+- Improved `xibecode config` menu rendering across terminals (rawlist + robust fallback).
+- Default model selection now fetches live from `GET <baseUrl>/models` using a Bearer token.
+
 ## [0.5.0] - 2026-02-16
 
 ### 🖥️ Desktop App (NEW)
