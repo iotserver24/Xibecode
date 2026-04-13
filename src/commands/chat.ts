@@ -11,6 +11,7 @@ interface ChatOptions {
   theme?: string;
   session?: string;
   noWebui?: boolean;
+  profile?: string;
 }
 
 export async function chatCommand(options: ChatOptions) {

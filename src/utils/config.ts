@@ -1,6 +1,7 @@
 import Conf from 'conf';
 import * as path from 'path';
 import * as os from 'os';
+import * as fs from 'fs/promises';
 import { MCPServersFileManager } from './mcp-servers-file.js';
 
 export interface MCPServerConfig {
@@ -144,18 +145,39 @@ export interface XibeCodeConfig {
   usePkgStyleContext?: boolean;
 }
 
+type XibeCodeMetaConfig = {
+  defaultProfile?: string;
+};
+
 export class ConfigManager {
   private store: Conf<XibeCodeConfig>;
   private configPath: string;
   private mcpFileManager: MCPServersFileManager;
+  private metaStore: Conf<XibeCodeMetaConfig>;
+  private profileName: string;
 
-  constructor() {
+  constructor(profile?: string) {
     this.configPath = path.join(os.homedir(), '.xibecode');
     this.mcpFileManager = new MCPServersFileManager();
+
+    this.metaStore = new Conf<XibeCodeMetaConfig>({
+      projectName: 'xibecode',
+      cwd: this.configPath,
+      configName: 'meta',
+      defaults: {},
+    });
+
+    const resolvedProfile =
+      profile?.trim() ||
+      process.env.XIBECODE_PROFILE?.trim() ||
+      this.metaStore.get('defaultProfile')?.trim() ||
+      'default';
+    this.profileName = resolvedProfile;
 
     this.store = new Conf<XibeCodeConfig>({
       projectName: 'xibecode',
       cwd: this.configPath,
+      configName: `profile-${resolvedProfile}`,
       defaults: {
         model: 'claude-sonnet-4-5-20250929',
         maxIterations: 50,
@@ -179,6 +201,34 @@ export class ConfigManager {
         usePkgStyleContext: false,
       },
     });
+  }
+
+  getProfileName(): string {
+    return this.profileName;
+  }
+
+  async listProfiles(): Promise<string[]> {
+    try {
+      const entries = await fs.readdir(this.configPath);
+      const names = entries
+        .filter((f) => f.startsWith('profile-') && f.endsWith('.json'))
+        .map((f) => f.replace(/^profile-/, '').replace(/\.json$/, ''))
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b));
+      return names.length ? names : ['default'];
+    } catch {
+      return ['default'];
+    }
+  }
+
+  getDefaultProfile(): string {
+    return this.metaStore.get('defaultProfile')?.trim() || 'default';
+  }
+
+  setDefaultProfile(profile: string): void {
+    const normalized = profile.trim();
+    if (!normalized) throw new Error('Profile name cannot be empty');
+    this.metaStore.set('defaultProfile', normalized);
   }
 
   /**
@@ -450,6 +500,7 @@ export class ConfigManager {
   getDisplayConfig(): Record<string, string> {
     const config = this.getAll();
     return {
+      'Profile': this.getProfileName(),
       'API Key': config.apiKey ? this.maskApiKey(config.apiKey) : 'Not set',
       'Provider': config.provider || 'auto-detect',
       'Base URL': config.baseUrl || 'Default',
@@ -460,6 +511,7 @@ export class ConfigManager {
       'Show Thinking': (config.showThinking ?? true).toString(),
       'Cost Mode': config.costMode || 'normal',
       'Economy Model': config.economyModel || 'Not set',
+      'Default Profile': this.getDefaultProfile(),
       'Config Path': this.getConfigPath(),
     };
   }
