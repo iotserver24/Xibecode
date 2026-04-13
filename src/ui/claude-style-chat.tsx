@@ -160,6 +160,47 @@ function XibeCodeChatApp(props: {
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [selectedModelIndex, setSelectedModelIndex] = useState(0);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
+
+  type SetupStep = 'idle' | 'baseUrl' | 'apiKey' | 'loadingModels' | 'pickModel';
+  const [setupStep, setSetupStep] = useState<SetupStep>('idle');
+  const [setupBaseUrl, setSetupBaseUrl] = useState<string>('');
+  const [setupApiKey, setSetupApiKey] = useState<string>('');
+  const [setupModels, setSetupModels] = useState<string[]>([]);
+  const [setupModelPickerOpen, setSetupModelPickerOpen] = useState(false);
+  const [setupSelectedModelIndex, setSetupSelectedModelIndex] = useState(0);
+
+  type ConfigMenuItem =
+    | 'set_baseurl'
+    | 'set_apikey'
+    | 'pick_model'
+    | 'set_provider'
+    | 'set_costmode'
+    | 'set_economy_model'
+    | 'show'
+    | 'close';
+  const CONFIG_MENU: Array<{ label: string; value: ConfigMenuItem; description: string }> = [
+    { label: 'Set Base URL (OpenAI format)', value: 'set_baseurl', description: 'Example: https://api.openai.com/v1' },
+    { label: 'Set API key', value: 'set_apikey', description: 'Bearer token used for /models and chat calls' },
+    { label: 'Pick model from /models', value: 'pick_model', description: 'Fetch models from your base URL and select one' },
+    { label: 'Set provider', value: 'set_provider', description: 'openai / anthropic / auto-detect' },
+    { label: 'Set cost mode', value: 'set_costmode', description: 'normal / economy' },
+    { label: 'Set economy model', value: 'set_economy_model', description: 'Model used when cost mode is economy' },
+    { label: 'Show config summary', value: 'show', description: 'Print current config status' },
+    { label: 'Close', value: 'close', description: 'Return to chat' },
+  ];
+  const [configMenuOpen, setConfigMenuOpen] = useState(false);
+  const [configSelectedIndex, setConfigSelectedIndex] = useState(0);
+  type ConfigPrompt =
+    | { kind: 'none' }
+    | { kind: 'baseUrl' }
+    | { kind: 'apiKey' }
+    | { kind: 'economyModel' };
+  const [configPrompt, setConfigPrompt] = useState<ConfigPrompt>({ kind: 'none' });
+  const [configProviderPickerOpen, setConfigProviderPickerOpen] = useState(false);
+  const [configProviderIndex, setConfigProviderIndex] = useState(0);
+  const [configCostModePickerOpen, setConfigCostModePickerOpen] = useState(false);
+  const [configCostModeIndex, setConfigCostModeIndex] = useState(0);
+
   const [workSpinnerFrame, setWorkSpinnerFrame] = useState(0);
   const [workVerbIndex, setWorkVerbIndex] = useState(0);
   const [lines, setLines] = useState<UiLine[]>([
@@ -212,6 +253,63 @@ function XibeCodeChatApp(props: {
     }
   }, [availableModels, props]);
 
+  const printConfigSummary = useCallback(() => {
+    const config = new ConfigManager();
+    const apiKeyPresent = Boolean(config.getApiKey());
+    const costMode = config.getCostMode();
+    const provider = (config.get('provider') as ProviderType | undefined) ?? undefined;
+    const model = config.getModel(costMode === 'economy');
+    const baseUrl = config.getBaseUrl();
+    const requestFormat =
+      (config.get('requestFormat') as RequestWireFormat | undefined) ?? 'auto';
+    pushLine({
+      type: 'info',
+      text: `Config: apiKey=${apiKeyPresent ? 'set' : 'missing'} | provider=${provider || 'auto'} | model=${model || '(none)'} | costMode=${costMode} | baseUrl=${baseUrl || '(default)'} | format=${requestFormat}`,
+    });
+  }, [pushLine]);
+
+  const requestOpenAIModelsFrom = useCallback(
+    async (baseUrl: string, apiKey: string): Promise<string[]> => {
+      const normalized = baseUrl.replace(/\/+$/, '');
+      const response = await fetch(`${normalized}/models`, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (!response.ok) {
+        throw new Error(`GET ${normalized}/models failed (${response.status})`);
+      }
+      const payload = (await response.json()) as { data?: Array<{ id?: string }> };
+      return (payload.data ?? [])
+        .map((entry) => entry.id ?? '')
+        .filter((id) => id.length > 0);
+    },
+    [],
+  );
+
+  const startSetupWizard = useCallback(() => {
+    setSetupStep('baseUrl');
+    setSetupBaseUrl('');
+    setSetupApiKey('');
+    setSetupModels([]);
+    setSetupModelPickerOpen(false);
+    setSetupSelectedModelIndex(0);
+    pushLine({
+      type: 'info',
+      text: 'Setup 1/3 — enter Base URL (OpenAI format). Example: https://api.openai.com/v1',
+    });
+  }, [pushLine]);
+
+  const beginConfigMenu = useCallback(() => {
+    setConfigMenuOpen(true);
+    setConfigSelectedIndex(0);
+    setConfigPrompt({ kind: 'none' });
+    setConfigProviderPickerOpen(false);
+    setConfigCostModePickerOpen(false);
+    pushLine({ type: 'info', text: 'Config menu open — use ↑/↓ and Enter. Esc closes.' });
+  }, [pushLine]);
+
   const applyModel = useCallback(
     async (nextModel: string) => {
       if (!nextModel) return;
@@ -263,6 +361,99 @@ function XibeCodeChatApp(props: {
 
       setInput('');
 
+      // Setup wizard input capture
+      if (setupStep !== 'idle') {
+        const config = new ConfigManager();
+        if (setupStep === 'baseUrl') {
+          if (!trimmed.startsWith('http')) {
+            pushLine({ type: 'error', text: 'Base URL must start with http:// or https://' });
+            pushLine({
+              type: 'info',
+              text: 'Setup 1/3 — enter Base URL (OpenAI format). Example: https://api.openai.com/v1',
+            });
+            return;
+          }
+          const nextBase = trimmed.replace(/\/+$/, '');
+          setSetupBaseUrl(nextBase);
+          config.set('baseUrl', nextBase);
+          // Explicitly force OpenAI wire format for this workflow.
+          config.set('requestFormat', 'openai');
+          config.set('provider', 'openai');
+          pushLine({ type: 'info', text: `Saved base URL: ${nextBase}` });
+          setSetupStep('apiKey');
+          pushLine({ type: 'info', text: 'Setup 2/3 — enter API key (will be saved locally).' });
+          return;
+        }
+        if (setupStep === 'apiKey') {
+          if (trimmed.length < 10) {
+            pushLine({ type: 'error', text: 'API key seems too short. Paste the full key.' });
+            pushLine({ type: 'info', text: 'Setup 2/3 — enter API key.' });
+            return;
+          }
+          setSetupApiKey(trimmed);
+          config.set('apiKey', trimmed);
+          pushLine({ type: 'info', text: 'API key saved.' });
+          setSetupStep('loadingModels');
+          pushLine({ type: 'info', text: 'Setup 3/3 — fetching models from /models…' });
+          try {
+            const models = await requestOpenAIModelsFrom(setupBaseUrl || config.getBaseUrl() || '', trimmed);
+            const unique = Array.from(new Set(models)).sort();
+            if (unique.length === 0) {
+              throw new Error('No models returned from /models');
+            }
+            setSetupModels(unique);
+            setSetupModelPickerOpen(true);
+            setSetupSelectedModelIndex(0);
+            setSetupStep('pickModel');
+            pushLine({
+              type: 'info',
+              text: `Loaded ${unique.length} model(s). Pick one with ↑/↓ and Enter.`,
+            });
+          } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Failed to fetch models';
+            pushLine({ type: 'error', text: message });
+            pushLine({
+              type: 'info',
+              text: 'Type /setup to restart setup.',
+            });
+            setSetupStep('idle');
+          }
+          return;
+        }
+      }
+
+      // Config prompts capture (single-field edits)
+      if (configPrompt.kind !== 'none') {
+        const config = new ConfigManager();
+        if (configPrompt.kind === 'baseUrl') {
+          if (!trimmed.startsWith('http')) {
+            pushLine({ type: 'error', text: 'Base URL must start with http:// or https://' });
+            return;
+          }
+          const nextBase = trimmed.replace(/\/+$/, '');
+          config.set('baseUrl', nextBase);
+          pushLine({ type: 'info', text: `Saved base URL: ${nextBase}` });
+          setConfigPrompt({ kind: 'none' });
+          return;
+        }
+        if (configPrompt.kind === 'apiKey') {
+          if (trimmed.length < 10) {
+            pushLine({ type: 'error', text: 'API key seems too short.' });
+            return;
+          }
+          config.set('apiKey', trimmed);
+          pushLine({ type: 'info', text: 'API key saved.' });
+          setConfigPrompt({ kind: 'none' });
+          return;
+        }
+        if (configPrompt.kind === 'economyModel') {
+          config.set('economyModel', trimmed);
+          pushLine({ type: 'info', text: `Economy model set to: ${trimmed}` });
+          setConfigPrompt({ kind: 'none' });
+          return;
+        }
+      }
+
       if (resolvedInput === '/exit') {
         exit();
         return;
@@ -286,52 +477,12 @@ function XibeCodeChatApp(props: {
       }
 
       if (resolvedInput === '/config') {
-        const config = new ConfigManager();
-        const apiKeyPresent = Boolean(config.getApiKey());
-        const costMode = config.getCostMode();
-        const provider = (config.get('provider') as ProviderType | undefined) ?? undefined;
-        const model = config.getModel(costMode === 'economy');
-        const baseUrl = config.getBaseUrl();
-        const requestFormat = (config.get('requestFormat') as RequestWireFormat | undefined) ?? 'auto';
-
-        pushLine({
-          type: 'info',
-          text: `Config: apiKey=${apiKeyPresent ? 'set' : 'missing'} | provider=${provider || 'auto'} | model=${model || '(none)'} | costMode=${costMode} | baseUrl=${baseUrl || '(default)'} | format=${requestFormat}`,
-        });
-        pushLine({
-          type: 'info',
-          text: 'Tip: run `xibecode config` for full interactive config, or type /setup here for guided setup.',
-        });
+        beginConfigMenu();
         return;
       }
 
       if (resolvedInput === '/setup') {
-        const config = new ConfigManager();
-        if (!config.getApiKey()) {
-          pushLine({
-            type: 'info',
-            text: 'Setup step 1/2: set your API key with: xibecode config --set-key YOUR_KEY',
-          });
-          pushLine({
-            type: 'info',
-            text: 'After setting the key, type /setup again to pick provider/model inside this chat.',
-          });
-          return;
-        }
-
-        pushLine({ type: 'info', text: 'Setup step 2/2: loading models… (use /model to pick)' });
-        try {
-          await ensureModelsLoaded();
-          setModelPickerOpen(true);
-          setSelectedModelIndex(0);
-          pushLine({
-            type: 'info',
-            text: 'Select a model with ↑/↓ and Enter, or type /model <id>.',
-          });
-        } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : 'Failed to load models';
-          pushLine({ type: 'error', text: message });
-        }
+        startSetupWizard();
         return;
       }
 
@@ -451,15 +602,21 @@ function XibeCodeChatApp(props: {
     },
     [
       applyModel,
+      beginConfigMenu,
+      configPrompt.kind,
       ensureModelsLoaded,
       exit,
       isRunning,
       props,
       pushLine,
+      requestOpenAIModelsFrom,
       selectedCommandIndex,
       activeMode,
+      setupBaseUrl,
+      setupStep,
       wireFormat,
       applyMode,
+      startSetupWizard,
     ],
   );
 
@@ -488,6 +645,190 @@ function XibeCodeChatApp(props: {
     if (key.ctrl && inputKey === 'c') {
       exit();
       return;
+    }
+
+    if (configMenuOpen && !isRunning) {
+      if (key.escape) {
+        setConfigMenuOpen(false);
+        pushLine({ type: 'info', text: 'Config menu closed.' });
+        return;
+      }
+      if (key.upArrow) {
+        setConfigSelectedIndex((prev) => (prev === 0 ? CONFIG_MENU.length - 1 : prev - 1));
+        return;
+      }
+      if (key.downArrow) {
+        setConfigSelectedIndex((prev) => (prev >= CONFIG_MENU.length - 1 ? 0 : prev + 1));
+        return;
+      }
+      if (key.return) {
+        const picked = CONFIG_MENU[configSelectedIndex];
+        const config = new ConfigManager();
+        if (!picked) return;
+        if (picked.value === 'close') {
+          setConfigMenuOpen(false);
+          pushLine({ type: 'info', text: 'Config menu closed.' });
+          return;
+        }
+        if (picked.value === 'show') {
+          printConfigSummary();
+          return;
+        }
+        if (picked.value === 'set_baseurl') {
+          setConfigPrompt({ kind: 'baseUrl' });
+          pushLine({
+            type: 'info',
+            text: 'Enter Base URL (OpenAI format). Example: https://api.openai.com/v1',
+          });
+          return;
+        }
+        if (picked.value === 'set_apikey') {
+          setConfigPrompt({ kind: 'apiKey' });
+          pushLine({ type: 'info', text: 'Enter API key (will be saved locally).' });
+          return;
+        }
+        if (picked.value === 'set_economy_model') {
+          setConfigPrompt({ kind: 'economyModel' });
+          pushLine({ type: 'info', text: 'Enter economy model id:' });
+          return;
+        }
+        if (picked.value === 'set_provider') {
+          setConfigProviderPickerOpen(true);
+          setConfigProviderIndex(0);
+          pushLine({ type: 'info', text: 'Pick provider: ↑/↓ then Enter (Esc to cancel)' });
+          return;
+        }
+        if (picked.value === 'set_costmode') {
+          setConfigCostModePickerOpen(true);
+          setConfigCostModeIndex(0);
+          pushLine({ type: 'info', text: 'Pick cost mode: ↑/↓ then Enter (Esc to cancel)' });
+          return;
+        }
+        if (picked.value === 'pick_model') {
+          // Fetch /models using current baseUrl + apiKey
+          const baseUrl = config.getBaseUrl();
+          const apiKey = config.getApiKey();
+          if (!baseUrl || !apiKey) {
+            pushLine({
+              type: 'error',
+              text: 'Missing baseUrl or apiKey. Set them first (Base URL + API key).',
+            });
+            return;
+          }
+          pushLine({ type: 'info', text: 'Fetching models from /models…' });
+          void (async () => {
+            try {
+              const models = await requestOpenAIModelsFrom(baseUrl, apiKey);
+              const unique = Array.from(new Set(models)).sort();
+              setSetupModels(unique);
+              setSetupModelPickerOpen(true);
+              setSetupSelectedModelIndex(0);
+              setSetupStep('pickModel');
+              pushLine({ type: 'info', text: `Loaded ${unique.length} model(s). Pick one with ↑/↓ and Enter.` });
+            } catch (error: unknown) {
+              const message = error instanceof Error ? error.message : 'Failed to fetch models';
+              pushLine({ type: 'error', text: message });
+            }
+          })();
+          return;
+        }
+      }
+    }
+
+    if (configProviderPickerOpen && !isRunning) {
+      const providers: Array<{ label: string; value: ProviderType | 'auto' }> = [
+        { label: 'auto-detect', value: 'auto' },
+        { label: 'openai', value: 'openai' },
+        { label: 'anthropic', value: 'anthropic' },
+        { label: 'deepseek', value: 'deepseek' },
+        { label: 'openrouter', value: 'openrouter' },
+        { label: 'google', value: 'google' },
+        { label: 'grok', value: 'grok' },
+        { label: 'kimi', value: 'kimi' },
+        { label: 'zai', value: 'zai' },
+      ];
+      if (key.escape) {
+        setConfigProviderPickerOpen(false);
+        return;
+      }
+      if (key.upArrow) {
+        setConfigProviderIndex((prev) => (prev === 0 ? providers.length - 1 : prev - 1));
+        return;
+      }
+      if (key.downArrow) {
+        setConfigProviderIndex((prev) => (prev >= providers.length - 1 ? 0 : prev + 1));
+        return;
+      }
+      if (key.return) {
+        const picked = providers[configProviderIndex];
+        if (!picked) return;
+        const config = new ConfigManager();
+        if (picked.value === 'auto') {
+          config.delete('provider');
+          pushLine({ type: 'info', text: 'Provider set to auto-detect.' });
+        } else {
+          config.set('provider', picked.value);
+          pushLine({ type: 'info', text: `Provider set to: ${picked.value}` });
+        }
+        setConfigProviderPickerOpen(false);
+        return;
+      }
+    }
+
+    if (configCostModePickerOpen && !isRunning) {
+      const modes: Array<{ label: string; value: 'normal' | 'economy' }> = [
+        { label: 'normal', value: 'normal' },
+        { label: 'economy', value: 'economy' },
+      ];
+      if (key.escape) {
+        setConfigCostModePickerOpen(false);
+        return;
+      }
+      if (key.upArrow) {
+        setConfigCostModeIndex((prev) => (prev === 0 ? modes.length - 1 : prev - 1));
+        return;
+      }
+      if (key.downArrow) {
+        setConfigCostModeIndex((prev) => (prev >= modes.length - 1 ? 0 : prev + 1));
+        return;
+      }
+      if (key.return) {
+        const picked = modes[configCostModeIndex];
+        if (!picked) return;
+        const config = new ConfigManager();
+        config.set('costMode', picked.value);
+        pushLine({ type: 'info', text: `Cost mode set to: ${picked.value}` });
+        setConfigCostModePickerOpen(false);
+        return;
+      }
+    }
+
+    if (setupModelPickerOpen && !isRunning && setupModels.length > 0) {
+      if (key.escape) {
+        setSetupModelPickerOpen(false);
+        setSetupStep('idle');
+        pushLine({ type: 'info', text: 'Setup cancelled.' });
+        return;
+      }
+      if (key.upArrow) {
+        setSetupSelectedModelIndex((prev) => (prev === 0 ? setupModels.length - 1 : prev - 1));
+        return;
+      }
+      if (key.downArrow) {
+        setSetupSelectedModelIndex((prev) => (prev >= setupModels.length - 1 ? 0 : prev + 1));
+        return;
+      }
+      if (key.return) {
+        const picked = setupModels[setupSelectedModelIndex];
+        if (!picked) return;
+        const config = new ConfigManager();
+        config.set('model', picked);
+        pushLine({ type: 'info', text: `Model set to: ${picked}` });
+        setSetupModelPickerOpen(false);
+        setSetupStep('idle');
+        pushLine({ type: 'info', text: 'Setup complete. Type a prompt to start.' });
+        return;
+      }
     }
 
     if (
@@ -803,6 +1144,121 @@ function XibeCodeChatApp(props: {
               </React.Fragment>
             ))
           )}
+          <Text color="subtle">↑/↓ navigate • Enter apply • Esc close</Text>
+        </Box>
+      )}
+      {setupModelPickerOpen && (
+        <Box
+          marginTop={1}
+          borderStyle="round"
+          borderColor="claude"
+          flexDirection="column"
+          paddingX={1}
+        >
+          <Text bold color="claude">
+            Setup: select model
+          </Text>
+          {setupModels.length === 0 ? (
+            <Text color="inactive">No models loaded.</Text>
+          ) : (
+            setupModels.slice(0, 14).map((modelName, index) => (
+              <React.Fragment key={modelName}>
+                <Text>
+                  <Text color={index === setupSelectedModelIndex ? 'claude' : 'inactive'}>
+                    {index === setupSelectedModelIndex ? '▸ ' : '  '}
+                  </Text>
+                  <Text color={index === setupSelectedModelIndex ? 'claude' : 'text'}>
+                    {modelName}
+                  </Text>
+                </Text>
+              </React.Fragment>
+            ))
+          )}
+          <Text color="subtle">↑/↓ navigate • Enter apply • Esc cancel</Text>
+        </Box>
+      )}
+      {configMenuOpen && (
+        <Box
+          marginTop={1}
+          borderStyle="round"
+          borderColor="suggestion"
+          flexDirection="column"
+          paddingX={1}
+        >
+          <Text bold color="suggestion">
+            Config
+          </Text>
+          {CONFIG_MENU.map((item, index) => (
+            <React.Fragment key={item.value}>
+              <Text>
+                <Text color={index === configSelectedIndex ? 'claude' : 'inactive'}>
+                  {index === configSelectedIndex ? '▸ ' : '  '}
+                </Text>
+                <Text bold color={index === configSelectedIndex ? 'claude' : 'text'}>
+                  {item.label}
+                </Text>
+                <Text color="inactive"> — {item.description}</Text>
+              </Text>
+            </React.Fragment>
+          ))}
+          <Text color="subtle">↑/↓ navigate • Enter select • Esc close</Text>
+        </Box>
+      )}
+      {configProviderPickerOpen && (
+        <Box
+          marginTop={1}
+          borderStyle="round"
+          borderColor="suggestion"
+          flexDirection="column"
+          paddingX={1}
+        >
+          <Text bold color="suggestion">
+            Provider
+          </Text>
+          {[
+            'auto-detect',
+            'openai',
+            'anthropic',
+            'deepseek',
+            'openrouter',
+            'google',
+            'grok',
+            'kimi',
+            'zai',
+          ].map((label, index) => (
+            <React.Fragment key={label}>
+              <Text>
+                <Text color={index === configProviderIndex ? 'claude' : 'inactive'}>
+                  {index === configProviderIndex ? '▸ ' : '  '}
+                </Text>
+                <Text color={index === configProviderIndex ? 'claude' : 'text'}>{label}</Text>
+              </Text>
+            </React.Fragment>
+          ))}
+          <Text color="subtle">↑/↓ navigate • Enter apply • Esc close</Text>
+        </Box>
+      )}
+      {configCostModePickerOpen && (
+        <Box
+          marginTop={1}
+          borderStyle="round"
+          borderColor="suggestion"
+          flexDirection="column"
+          paddingX={1}
+        >
+          <Text bold color="suggestion">
+            Cost mode
+          </Text>
+          {['normal', 'economy'].map((label, index) => (
+            <React.Fragment key={label}>
+              <Text>
+                <Text color={index === configCostModeIndex ? 'claude' : 'inactive'}>
+                  {index === configCostModeIndex ? '▸ ' : '  '}
+                </Text>
+                <Text color={index === configCostModeIndex ? 'claude' : 'text'}>{label}</Text>
+              </Text>
+            </React.Fragment>
+          ))}
           <Text color="subtle">↑/↓ navigate • Enter apply • Esc close</Text>
         </Box>
       )}
