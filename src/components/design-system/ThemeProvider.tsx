@@ -24,6 +24,10 @@ export function useThemeSetting(): 'dark' {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const value = React.useMemo(() => ({ theme: darkTuiTheme }), []);
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  // Avoid hooks here so the provider is safe even if a renderer mismatch occurs.
+  return (
+    <ThemeContext.Provider value={{ theme: darkTuiTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
 }
