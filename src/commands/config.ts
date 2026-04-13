@@ -1,8 +1,28 @@
-import { ConfigManager, MCPServerConfig, PROVIDER_CONFIGS } from '../utils/config.js';
+import { ConfigManager, MCPServerConfig } from '../utils/config.js';
 import { EnhancedUI } from '../ui/enhanced-tui.js';
 import { mcpCommand } from './mcp.js';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
+
+async function fetchModelsFromEndpoint(opts: {
+  baseUrl: string;
+  apiKey: string;
+}): Promise<string[]> {
+  const normalizedBase = opts.baseUrl.replace(/\/+$/, '');
+
+  const res = await fetch(`${normalizedBase}/models`, {
+    headers: {
+      Authorization: `Bearer ${opts.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!res.ok) throw new Error(`GET /models failed (${res.status})`);
+  const payload = (await res.json()) as { data?: Array<{ id?: string }> };
+  const models = (payload.data ?? []).map((m) => m.id ?? '').filter(Boolean);
+  const unique = Array.from(new Set(models)).filter(Boolean).sort((a, b) => a.localeCompare(b));
+  if (!unique.length) throw new Error('No models returned from /models');
+  return unique;
+}
 
 interface ConfigOptions {
   setKey?: string;
@@ -24,6 +44,33 @@ interface ConfigOptions {
 export async function configCommand(options: ConfigOptions) {
   const ui = new EnhancedUI(false);
   const config = new ConfigManager(options.profile);
+
+  const canRenderInteractiveLists =
+    Boolean(process.stdin.isTTY) &&
+    Boolean(process.stdout.isTTY) &&
+    !process.env.CI &&
+    process.env.TERM !== 'dumb';
+
+  const printNonInteractiveMenu = () => {
+    ui.header('1.0.0');
+    console.log(chalk.bold.white('⚙️  Configuration (non-interactive)\n'));
+    console.log(chalk.dim('Interactive menu could not be rendered.\n'));
+    console.log(chalk.bold('Available options:\n'));
+    console.log(chalk.cyan('  xibecode config --show'));
+    console.log(chalk.cyan('  xibecode config --set-key <key>'));
+    console.log(chalk.cyan('  xibecode config --set-url <url>'));
+    console.log(chalk.cyan('  xibecode config --set-model <model>'));
+    console.log(chalk.cyan('  xibecode config --set-provider <provider>'));
+    console.log(chalk.cyan('  xibecode config --set-cost-mode <normal|economy>'));
+    console.log(chalk.cyan('  xibecode config --set-economy-model <model>'));
+    console.log(chalk.cyan('  xibecode config --list-mcp-servers'));
+    console.log(chalk.cyan('  xibecode config --list-profiles'));
+    console.log(chalk.cyan('  xibecode config --set-default-profile <name>'));
+    console.log(chalk.cyan('  xibecode config --reset'));
+    console.log('');
+    console.log(chalk.dim('Tip: add `--profile <name>` to target a specific profile.'));
+    console.log('');
+  };
 
   // Quick set operations
   if (options.setKey) {
@@ -224,29 +271,45 @@ export async function configCommand(options: ConfigOptions) {
     return;
   }
 
+  if (!canRenderInteractiveLists) {
+    printNonInteractiveMenu();
+    return;
+  }
+
   // Interactive configuration (loop until user chooses Exit)
   ui.header('1.0.0');
   console.log(chalk.bold.white('⚙️  Configuration Setup\n'));
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const { action } = await inquirer.prompt([
-      {
-        type: 'list',
-        name: 'action',
-        message: 'What would you like to configure?',
-        choices: [
-          { name: '🔑 Set API Key', value: 'set_key' },
-          { name: '🌐 Set Base URL', value: 'set_url' },
-          { name: '🤖 Set Default Model (Anthropic & OpenAI)', value: 'set_model' },
-          { name: '📡 Manage MCP Servers', value: 'mcp_servers' },
-          { name: '👀 View Current Config', value: 'view' },
-          { name: '🗑️  Clear API Key', value: 'clear_key' },
-          { name: '↩️  Reset All Settings', value: 'reset' },
-          { name: '❌ Exit', value: 'exit' },
-        ],
-      },
-    ]);
+    let action: string;
+    try {
+      const answer = await inquirer.prompt([
+        {
+          // Use rawlist so options always render as plain text.
+          // Some terminals show the prompt but fail to render interactive lists.
+          type: 'rawlist',
+          name: 'action',
+          message: 'What would you like to configure?',
+          choices: [
+            { name: '🔑 Set API Key', value: 'set_key' },
+            { name: '🌐 Set Base URL', value: 'set_url' },
+            { name: '🤖 Set Default Model (from /models)', value: 'set_model' },
+            { name: '📡 Manage MCP Servers', value: 'mcp_servers' },
+            { name: '👀 View Current Config', value: 'view' },
+            { name: '🗑️  Clear API Key', value: 'clear_key' },
+            { name: '↩️  Reset All Settings', value: 'reset' },
+            { name: '❌ Exit', value: 'exit' },
+          ],
+        },
+      ]);
+      action = answer.action;
+    } catch (error: any) {
+      // Some terminals report TTY=true but cannot render inquirer lists.
+      ui.warning(`Interactive menu failed: ${error?.name || 'Error'}`);
+      printNonInteractiveMenu();
+      return;
+    }
 
     console.log('');
 
@@ -260,7 +323,7 @@ export async function configCommand(options: ConfigOptions) {
           {
             type: 'password',
             name: 'apiKey',
-            message: 'Enter your API key (Anthropic or OpenAI):',
+            message: 'Enter your API key (Bearer token):',
             mask: '*',
             validate: (input) => {
               if (!input) return 'API key cannot be empty';
@@ -306,106 +369,87 @@ export async function configCommand(options: ConfigOptions) {
           'gpt-4o',
           'o3-mini',
         ];
-        const customModels = (config.get('customModels') || []) as { id: string; provider: 'anthropic' | 'openai' }[];
+        const apiKey = config.getApiKey();
+        const baseUrl = config.getBaseUrl();
 
-        const { model } = await inquirer.prompt([
-          {
-            type: 'list',
-            name: 'model',
-            message: 'Select default model:',
-            choices: [
-              new inquirer.Separator('── Anthropic (Claude) ──'),
-              { name: 'Claude Sonnet 4.5 (Recommended)', value: fixedAnthropicModels[0] },
-              { name: 'Claude Opus 4.5 (Most Capable)', value: fixedAnthropicModels[1] },
-              { name: 'Claude Haiku 4.5 (Fastest)', value: fixedAnthropicModels[2] },
-              new inquirer.Separator('── OpenAI ──'),
-              { name: 'GPT-4.1', value: fixedOpenAIModels[1] },
-              { name: 'GPT-4o', value: fixedOpenAIModels[2] },
-              new inquirer.Separator('── DeepSeek ──'),
-              { name: 'DeepSeek Chat (V3)', value: PROVIDER_CONFIGS.deepseek.defaultModel },
-              new inquirer.Separator('── Z.ai (GLM) ──'),
-              { name: 'GLM-4 Flash (Fast & Free-tier)', value: PROVIDER_CONFIGS.zai.defaultModel },
-              new inquirer.Separator('── Kimi (Moonshot) ──'),
-              { name: 'Moonshot v1 8k', value: PROVIDER_CONFIGS.kimi.defaultModel },
-              new inquirer.Separator('── Grok (xAI) ──'),
-              { name: 'Grok Beta', value: PROVIDER_CONFIGS.grok.defaultModel },
-              new inquirer.Separator('── OpenRouter ──'),
-              { name: 'Claude 3.5 Sonnet (via OpenRouter)', value: PROVIDER_CONFIGS.openrouter.defaultModel },
-              ...(customModels.length
-                ? [
-                  new inquirer.Separator('── Saved custom models ──'),
-                  ...customModels.map(cm => ({
-                    name: `${cm.id} (${cm.provider})`,
-                    value: cm.id,
-                  })),
-                ]
-                : []),
-              new inquirer.Separator('──────────────────────────────'),
-              { name: 'Add new custom model', value: 'custom_new' },
-            ],
-          },
-        ]);
+        if (!apiKey || !baseUrl) {
+          ui.error('Missing API key or Base URL. Set them first (Set API Key + Set Base URL).');
+          break;
+        }
 
-        let chosenModelId = model;
+        let fetchedModels: string[] = [];
+        try {
+          fetchedModels = await fetchModelsFromEndpoint({ apiKey, baseUrl });
+        } catch (error: any) {
+          ui.warning(`Failed to fetch /models: ${error?.message || String(error)}`);
+        }
 
-        if (model === 'custom_new') {
+        if (fetchedModels.length === 0) {
           const { customModel } = await inquirer.prompt([
             {
               type: 'input',
               name: 'customModel',
-              message: 'Enter custom model ID:',
+              message: 'Enter model ID:',
+              validate: (input) => input?.trim() ? true : 'Model ID cannot be empty',
             },
           ]);
-          chosenModelId = customModel;
+          const chosenModelId = String(customModel).trim();
+          config.set('model', chosenModelId);
+          ui.success(`Default model set to: ${chosenModelId}`);
+          break;
         }
 
-        config.set('model', chosenModelId);
-        ui.success(`Default model set to: ${chosenModelId}`);
-
-        // Ask which API format this model uses
-        const { provider } = await inquirer.prompt([
+        const { filter } = await inquirer.prompt([
           {
-            type: 'list',
-            name: 'provider',
-            message: 'Select Provider / API Format:',
+            type: 'input',
+            name: 'filter',
+            message: 'Filter models (press Enter to show all):',
+            default: '',
+          },
+        ]);
+        const needle = String(filter || '').trim().toLowerCase();
+        const filtered = needle
+          ? fetchedModels.filter((m) => m.toLowerCase().includes(needle))
+          : fetchedModels;
+        const list = filtered.slice(0, 80);
+
+        const { model } = await inquirer.prompt([
+          {
+            type: 'rawlist',
+            name: 'model',
+            message: `Select default model (${list.length}${filtered.length > list.length ? ` of ${filtered.length}` : ''}):`,
             choices: [
-              { name: 'Auto-detect (Recommended)', value: 'auto' },
-              { name: 'Anthropic (Claude)', value: 'anthropic' },
-              { name: 'OpenAI', value: 'openai' },
-              { name: 'DeepSeek', value: 'deepseek' },
-              { name: 'Z.ai (GLM)', value: 'zai' },
-              { name: 'Kimi (Moonshot)', value: 'kimi' },
-              { name: 'Grok (xAI)', value: 'grok' },
-              { name: 'OpenRouter', value: 'openrouter' },
+              ...list.map((m) => ({ name: m, value: m })),
+              ...(filtered.length > list.length ? [{ name: 'Too many results — refine filter', value: '__refine__' }] : []),
+              { name: 'Enter model ID manually', value: '__manual__' },
             ],
           },
         ]);
 
-        if (provider === 'auto') {
-          config.delete('provider');
-          ui.success('Provider set to: auto-detect.');
-        } else {
-          config.set('provider', provider);
-          ui.success(`Provider set to: ${provider}`);
+        if (model === '__refine__') {
+          ui.warning('Refine your filter and try again.');
+          break;
         }
 
-        // Persist custom model entry (upsert) when it's not one of the fixed built-ins
-        const isFixed =
-          fixedAnthropicModels.includes(chosenModelId) || fixedOpenAIModels.includes(chosenModelId);
-        if (!isFixed) {
-          let updatedCustomModels = (config.get('customModels') || []) as {
-            id: string;
-            provider: 'anthropic' | 'openai';
-          }[];
-          // Remove any existing entry with same id
-          updatedCustomModels = updatedCustomModels.filter(m => m.id !== chosenModelId);
-          // Add new / updated entry (when provider is explicit; skip for auto)
-          if (provider !== 'auto') {
-            updatedCustomModels.push({ id: chosenModelId, provider });
-          }
-          config.set('customModels', updatedCustomModels);
-          ui.success(`Custom model saved: ${chosenModelId} (${provider})`);
+        if (model === '__manual__') {
+          const { customModel } = await inquirer.prompt([
+            {
+              type: 'input',
+              name: 'customModel',
+              message: 'Enter model ID:',
+              validate: (input) => input?.trim() ? true : 'Model ID cannot be empty',
+            },
+          ]);
+          const chosenModelId = String(customModel).trim();
+          config.set('model', chosenModelId);
+          ui.success(`Default model set to: ${chosenModelId}`);
+          break;
         }
+
+        const chosenModelId = String(model).trim();
+
+        config.set('model', chosenModelId);
+        ui.success(`Default model set to: ${chosenModelId}`);
 
         break;
       }

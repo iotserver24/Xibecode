@@ -1377,66 +1377,29 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
         : undefined;
     const resolvedBaseUrl = baseUrl || fallbackBaseUrl;
     const normalizedBase = (resolvedBaseUrl || '').replace(/\/+$/, '');
-    const isAnthropicFormat = isAnthropicWireFormat(
-      wireFormat,
-      provider,
-      customProviderFormat,
-    );
 
-    const errors: string[] = [];
-    const requestOpenAIModels = async (): Promise<string[]> => {
-      const response = await fetch(`${normalizedBase}/models`, {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (!response.ok) {
-        throw new Error(`OpenAI-style /models failed (${response.status})`);
-      }
-      const payload = (await response.json()) as { data?: Array<{ id?: string }> };
-      return (payload.data ?? [])
-        .map((entry) => entry.id ?? '')
-        .filter((id) => id.length > 0);
-    };
+    const response = await fetch(`${normalizedBase}/models`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
 
-    const requestAnthropicModels = async (): Promise<string[]> => {
-      const response = await fetch(`${normalizedBase}/models`, {
-        headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'Content-Type': 'application/json',
-        },
-      });
-      if (!response.ok) {
-        throw new Error(`Anthropic-style /models failed (${response.status})`);
-      }
-      const payload = (await response.json()) as {
-        data?: Array<{ id?: string }>;
-        models?: Array<{ id?: string }>;
-      };
-      const models = payload.data ?? payload.models ?? [];
-      return models.map((entry) => entry.id ?? '').filter((id) => id.length > 0);
-    };
-
-    const strategies = isAnthropicFormat
-      ? [requestAnthropicModels, requestOpenAIModels]
-      : [requestOpenAIModels, requestAnthropicModels];
-
-    for (const strategy of strategies) {
-      try {
-        const models = await strategy();
-        if (models.length > 0) {
-          return Array.from(new Set(models)).sort();
-        }
-      } catch (error: unknown) {
-        errors.push(error instanceof Error ? error.message : String(error));
-      }
+    if (!response.ok) {
+      throw new Error(`Unable to fetch models from ${normalizedBase || 'provider endpoint'}: /models failed (${response.status})`);
     }
 
-    throw new Error(
-      `Unable to fetch models from ${normalizedBase || 'provider endpoint'}: ${errors.join(' | ')}`,
-    );
+    const payload = (await response.json()) as { data?: Array<{ id?: string }> };
+    const models = (payload.data ?? [])
+      .map((entry) => entry.id ?? '')
+      .filter((id) => id.length > 0);
+
+    const unique = Array.from(new Set(models)).sort();
+    if (unique.length === 0) {
+      throw new Error(`Unable to fetch models from ${normalizedBase || 'provider endpoint'}: no models returned`);
+    }
+
+    return unique;
   };
 
   const runPrompt = async (prompt: string, onLine: (line: UiLine) => void) => {
