@@ -23,6 +23,7 @@ interface RunPrOptions {
   baseUrl?: string;
   apiKey?: string;
   provider?: string;
+  profile?: string;
   maxIterations: string;
   verbose: boolean;
   costMode?: string;
@@ -258,7 +259,7 @@ async function createBranchAndPR(opts: {
 
 export async function runPrCommand(prompt: string | undefined, options: RunPrOptions) {
   const ui = new EnhancedUI(options.verbose);
-  const config = new ConfigManager();
+  const config = new ConfigManager(options.profile);
   const cwd = process.cwd();
 
   ui.header('0.9.4');

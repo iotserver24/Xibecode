@@ -20,6 +20,7 @@ export type ChatOptions = {
   provider?: string;
   costMode?: string;
   noWebui?: boolean;
+  profile?: string;
 };
 
 type UiLineType = 'user' | 'assistant' | 'tool' | 'tool_out' | 'info' | 'error';
@@ -141,6 +142,7 @@ function XibeCodeChatApp(props: {
   modeOptions: Array<{ id: AgentMode; label: string; description: string }>;
   initialRequestFormat: RequestWireFormat;
   customProviderFormat?: 'openai' | 'anthropic';
+  profile?: string;
   runPrompt: (prompt: string, onLine: (line: UiLine) => void) => Promise<void>;
   loadModels: () => Promise<string[]>;
   onModelChange: (nextModel: string) => Promise<void>;
@@ -254,7 +256,7 @@ function XibeCodeChatApp(props: {
   }, [availableModels, props]);
 
   const printConfigSummary = useCallback(() => {
-    const config = new ConfigManager();
+    const config = new ConfigManager(props.profile);
     const apiKeyPresent = Boolean(config.getApiKey());
     const costMode = config.getCostMode();
     const provider = (config.get('provider') as ProviderType | undefined) ?? undefined;
@@ -266,7 +268,7 @@ function XibeCodeChatApp(props: {
       type: 'info',
       text: `Config: apiKey=${apiKeyPresent ? 'set' : 'missing'} | provider=${provider || 'auto'} | model=${model || '(none)'} | costMode=${costMode} | baseUrl=${baseUrl || '(default)'} | format=${requestFormat}`,
     });
-  }, [pushLine]);
+  }, [props.profile, pushLine]);
 
   const requestOpenAIModelsFrom = useCallback(
     async (baseUrl: string, apiKey: string): Promise<string[]> => {
@@ -363,7 +365,7 @@ function XibeCodeChatApp(props: {
 
       // Setup wizard input capture
       if (setupStep !== 'idle') {
-        const config = new ConfigManager();
+        const config = new ConfigManager(props.profile);
         if (setupStep === 'baseUrl') {
           if (!trimmed.startsWith('http')) {
             pushLine({ type: 'error', text: 'Base URL must start with http:// or https://' });
@@ -424,7 +426,7 @@ function XibeCodeChatApp(props: {
 
       // Config prompts capture (single-field edits)
       if (configPrompt.kind !== 'none') {
-        const config = new ConfigManager();
+        const config = new ConfigManager(props.profile);
         if (configPrompt.kind === 'baseUrl') {
           if (!trimmed.startsWith('http')) {
             pushLine({ type: 'error', text: 'Base URL must start with http:// or https://' });
@@ -663,7 +665,7 @@ function XibeCodeChatApp(props: {
       }
       if (key.return) {
         const picked = CONFIG_MENU[configSelectedIndex];
-        const config = new ConfigManager();
+        const config = new ConfigManager(props.profile);
         if (!picked) return;
         if (picked.value === 'close') {
           setConfigMenuOpen(false);
@@ -762,7 +764,7 @@ function XibeCodeChatApp(props: {
       if (key.return) {
         const picked = providers[configProviderIndex];
         if (!picked) return;
-        const config = new ConfigManager();
+        const config = new ConfigManager(props.profile);
         if (picked.value === 'auto') {
           config.delete('provider');
           pushLine({ type: 'info', text: 'Provider set to auto-detect.' });
@@ -795,7 +797,7 @@ function XibeCodeChatApp(props: {
       if (key.return) {
         const picked = modes[configCostModeIndex];
         if (!picked) return;
-        const config = new ConfigManager();
+        const config = new ConfigManager(props.profile);
         config.set('costMode', picked.value);
         pushLine({ type: 'info', text: `Cost mode set to: ${picked.value}` });
         setConfigCostModePickerOpen(false);
@@ -821,7 +823,7 @@ function XibeCodeChatApp(props: {
       if (key.return) {
         const picked = setupModels[setupSelectedModelIndex];
         if (!picked) return;
-        const config = new ConfigManager();
+        const config = new ConfigManager(props.profile);
         config.set('model', picked);
         pushLine({ type: 'info', text: `Model set to: ${picked}` });
         setSetupModelPickerOpen(false);
@@ -1301,7 +1303,7 @@ function XibeCodeChatApp(props: {
 }
 
 export async function launchClaudeStyleChat(options: ChatOptions): Promise<void> {
-  const config = new ConfigManager();
+  const config = new ConfigManager(options.profile);
   const apiKey = options.apiKey || config.getApiKey();
   if (!apiKey) {
     throw new Error('No API key found. Run xibecode config --set-key YOUR_KEY');
@@ -1528,6 +1530,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
       modeOptions={modeOptions}
       initialRequestFormat={wireFormat}
       customProviderFormat={customProviderFormat}
+      profile={options.profile}
       runPrompt={runPrompt}
       loadModels={loadModels}
       onModelChange={onModelChange}

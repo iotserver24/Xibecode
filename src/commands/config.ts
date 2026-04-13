@@ -16,11 +16,14 @@ interface ConfigOptions {
   listMcpServers?: boolean;
   addMcpServer?: string;
   removeMcpServer?: string;
+  profile?: string;
+  listProfiles?: boolean;
+  setDefaultProfile?: string;
 }
 
 export async function configCommand(options: ConfigOptions) {
   const ui = new EnhancedUI(false);
-  const config = new ConfigManager();
+  const config = new ConfigManager(options.profile);
 
   // Quick set operations
   if (options.setKey) {
@@ -82,6 +85,29 @@ export async function configCommand(options: ConfigOptions) {
   if (options.setEconomyModel) {
     config.set('economyModel', options.setEconomyModel);
     ui.success(`Economy model set to: ${options.setEconomyModel}`);
+    return;
+  }
+
+  if (options.listProfiles) {
+    const profiles = await config.listProfiles();
+    console.log(chalk.bold.white('\n👤 Config Profiles\n'));
+    const defaultProfile = config.getDefaultProfile();
+    for (const name of profiles) {
+      const isDefault = name === defaultProfile;
+      console.log(chalk.cyan(`  ${name}`) + (isDefault ? chalk.dim(' (default)') : ''));
+    }
+    console.log('');
+    return;
+  }
+
+  if (options.setDefaultProfile) {
+    try {
+      config.setDefaultProfile(options.setDefaultProfile);
+      ui.success(`Default profile set to: ${options.setDefaultProfile}`);
+    } catch (error: any) {
+      ui.error(`Failed to set default profile: ${error.message}`);
+      process.exit(1);
+    }
     return;
   }
 

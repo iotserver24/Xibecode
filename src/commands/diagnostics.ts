@@ -6,6 +6,7 @@ import { promisify } from 'util';
 import chalk from 'chalk';
 import { EnhancedUI } from '../ui/enhanced-tui.js';
 import { GitUtils } from '../utils/git.js';
+import { ConfigManager } from '../utils/config.js';
 
 const execAsync = promisify(exec);
 const require = createRequire(import.meta.url);
@@ -16,6 +17,7 @@ interface DiagnosticsOptions {
   includeDiff?: boolean;
   diffTarget?: string;
   verbose?: boolean;
+  profile?: string;
 }
 
 function redactLine(line: string): string {
@@ -64,6 +66,7 @@ export async function diagnosticsCommand(options: DiagnosticsOptions) {
   const ui = new EnhancedUI(Boolean(options.verbose));
   const cwd = process.cwd();
   const git = new GitUtils(cwd);
+  const config = new ConfigManager(options.profile);
 
   const ts = new Date();
   const stamp = ts.toISOString().replace(/[:.]/g, '-');
@@ -81,6 +84,7 @@ export async function diagnosticsCommand(options: DiagnosticsOptions) {
 
   sections.push(formatSection('XibeCode', [
     `version=${pkg.version}`,
+    `profile=${config.getProfileName()}`,
     `node=${process.version}`,
     `platform=${process.platform}`,
     `arch=${process.arch}`,
