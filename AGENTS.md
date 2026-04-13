@@ -18,8 +18,7 @@
 ## Learned Workspace Facts
 
 - Project: **XibeCode** — an autonomous AI coding CLI tool (`xibecode`), published as an npm package at `xibecode`; repo path `/home/r3ap3reditz/codes/xibecode`; GitHub: `https://github.com/iotserver24/Xibecode`
-- Primary package manager: **pnpm** with `pnpm-lock.yaml` at root; webui has its own `webui/pnpm-lock.yaml`.
-- Build commands: `pnpm run build` (TypeScript → `dist/`) and `pnpm run build:webui` (Vite → `webui-dist/`).
+- Primary package manager: **pnpm** with `pnpm-lock.yaml` at root; webui has its own `webui/pnpm-lock.yaml`. Build commands: `pnpm run build` (TypeScript → `dist/`) and `pnpm run build:webui` (Vite → `webui-dist/`).
 - Version string lives in three places: `package.json`, `electron/package.json`, and the `ui.header(...)` call in `src/commands/run.ts` (and `src/commands/run-pr.ts`).
 - Agent modes are defined in `src/core/modes.ts` under `MODE_CONFIG`; each has `allowedCategories` controlling tool access. Agent mode `agent` must include `'network'` in `allowedCategories` so `fetch_url`, `web_search`, and skills-sh tools work.
 - `xibecode run` must call `process.exit(0)` in the `finally` block (unless `--non-interactive`) to avoid hanging after task completion.
@@ -27,6 +26,6 @@
 - The `site/` and `site/app/donate/` directories are excluded from git and added to `.cursorignore`; `openclaude/` is gitignored as local reference OpenClaude-style code and should not be committed.
 - `pnpm install --frozen-lockfile` in CI (and locally) requires the root `pnpm-lock.yaml` and any nested lockfiles used in workflows (e.g. under `webui/` and `electron/`) to match their `package.json` files; after dependency changes, run `pnpm install`, commit updated lockfiles, then push.
 - Embedded or sandboxed agent runs should treat the repository root as the working directory for file tools and relative paths; do not assume the checkout lives at `/workspace`, `/app`, or `/project`.
-- `run-pr` command (`src/commands/run-pr.ts`) requires `gh` CLI installed and authenticated (`gh auth login`) before use.
-- `xibecode run-pr` runs the agent, performs test verification (unless `--skip-tests`) with up to 2 self-correction retries on failures, and the resulting PR triggers CI security checks including `pnpm audit --audit-level=high`.
+- `run-pr` command (`src/commands/run-pr.ts`) requires `gh` CLI installed and authenticated (`gh auth login`) before use; it performs test verification (unless `--skip-tests`) with up to 2 self-correction retries and triggers CI security checks including `pnpm audit --audit-level=high`.
+- CLI supports config profiles (default profile + `--profile <name>` across commands) and includes `xibecode diagnostics` to generate a redacted Markdown diagnostics bundle.
 - **Playwright is not a dependency** of the CLI: no Chromium download on install. **`agent-browser` is not bundled** (optional global install on supported platforms); browser-oriented agent tools are stubbed with guidance to use `run_command` + `agent-browser`, MCP, or `fetch_url`. Playwright E2E belongs in the consumer repo if needed.

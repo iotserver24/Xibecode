@@ -63,6 +63,16 @@ export type AgentMode =
   | 'researcher';    // Sanvi - Research
 
 /**
+ * Modes currently enabled for users to select.
+ * Other modes remain defined internally but are temporarily disabled.
+ */
+export const ENABLED_MODES: readonly AgentMode[] = ['agent', 'plan', 'review'] as const;
+
+export function isEnabledMode(mode: string): mode is (typeof ENABLED_MODES)[number] {
+  return (ENABLED_MODES as readonly string[]).includes(mode);
+}
+
+/**
  * Tool category classifications
  *
  * Tools are grouped into categories for permission management. Each mode
@@ -1442,6 +1452,9 @@ export function parseModeRequest(text: string): { mode: AgentMode; reason: strin
   const reason = match[2].trim();
 
   if (!isValidMode(mode)) {
+    return null;
+  }
+  if (!isEnabledMode(mode)) {
     return null;
   }
 

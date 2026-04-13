@@ -1,6 +1,13 @@
 import { launchClaudeStyleChat } from '../ui/claude-style-chat.js';
 import { createRoot } from '../ink.js';
 import { exitWithMessage } from '../interactiveHelpers.js';
+import * as readline from 'node:readline';
+import { createRequire } from 'module';
+import { ConfigManager } from '../utils/config.js';
+import { SkillManager } from '../core/skills.js';
+import { MCPClientManager } from '../core/mcp-client.js';
+import { CodingToolExecutor } from '../core/tools.js';
+import { EnhancedAgent } from '../core/agent.js';
 
 interface ChatOptions {
   model?: string;
@@ -12,10 +19,127 @@ interface ChatOptions {
   session?: string;
   noWebui?: boolean;
   profile?: string;
+  plain?: boolean;
+}
+
+async function runPlainChat(options: ChatOptions): Promise<void> {
+  const require = createRequire(import.meta.url);
+  const pkg = require('../../package.json') as { version?: string };
+  const version = pkg.version ?? '';
+
+  const config = new ConfigManager(options.profile);
+  const apiKey = options.apiKey || config.getApiKey();
+  if (!apiKey) {
+    throw new Error('No API key found. Run xibecode config --set-key YOUR_KEY');
+  }
+
+  const useEconomy = (options.costMode || config.getCostMode()) === 'economy';
+  const model = options.model || config.getModel(useEconomy);
+  const baseUrl = options.baseUrl || config.getBaseUrl();
+  const provider = (options.provider as any) || config.get('provider');
+
+  const skillManager = new SkillManager(process.cwd(), apiKey, baseUrl, model, provider);
+  await skillManager.loadSkills();
+  const defaultSkillsPrompt = await skillManager.buildDefaultSkillsPromptForTask('', process.cwd());
+
+  const mcpClientManager = new MCPClientManager();
+  const toolExecutor = new CodingToolExecutor(process.cwd(), { mcpClientManager, skillManager });
+
+  const agent = new EnhancedAgent(
+    {
+      apiKey,
+      baseUrl,
+      model,
+      maxIterations: 150,
+      verbose: false,
+      provider,
+      customProviderFormat: config.get('customProviderFormat'),
+      requestFormat: config.get('requestFormat') ?? 'auto',
+      defaultSkillsPrompt,
+    },
+    provider,
+  );
+
+  console.log(`xibecode chat (plain) v${version}`.trim());
+  console.log(`model: ${model} | provider: ${provider ?? 'auto'} | format: ${config.get('requestFormat') ?? 'auto'}`);
+  console.log('Type /exit to quit.');
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: true,
+    prompt: '> ',
+  });
+
+  const print = (line: string) => {
+    process.stdout.write(line.endsWith('\n') ? line : line + '\n');
+  };
+
+  const onEvent = (event: any) => {
+    switch (event.type) {
+      case 'thinking':
+        print(`[info] ${(event.data?.message as string) || 'Thinking…'}`);
+        break;
+      case 'tool_call':
+        print(`[tool] ${String(event.data?.name ?? 'tool')}`);
+        break;
+      case 'tool_result':
+        print(
+          `[tool_out] ${String(event.data?.name ?? 'tool')}: ${
+            event.data?.success === false ? 'error' : 'ok'
+          }`,
+        );
+        break;
+      case 'stream_start':
+        print('[assistant] ');
+        break;
+      case 'stream_text':
+        process.stdout.write(String(event.data?.text ?? ''));
+        break;
+      case 'stream_end':
+        process.stdout.write('\n');
+        break;
+      case 'response':
+        print(String(event.data?.text ?? ''));
+        break;
+      case 'error':
+        print(`[error] ${(event.data?.message as string) || (event.data?.error as string) || 'Unknown error'}`);
+        break;
+      default:
+        break;
+    }
+  };
+
+  rl.prompt();
+  for await (const line of rl) {
+    const input = String(line ?? '').trim();
+    if (!input) {
+      rl.prompt();
+      continue;
+    }
+    if (input === '/exit') {
+      rl.close();
+      break;
+    }
+    agent.removeAllListeners('event');
+    agent.on('event', onEvent);
+    await agent.run(input, toolExecutor.getTools(), toolExecutor);
+    const stats = agent.getStats();
+    print(
+      `[done] tokens ${stats.inputTokens} in / ${stats.outputTokens} out / ${stats.totalTokens} total${
+        stats.costLabel ? ` · cost ${stats.costLabel}` : ''
+      }`,
+    );
+    rl.prompt();
+  }
 }
 
 export async function chatCommand(options: ChatOptions) {
   try {
+    if (options.plain) {
+      await runPlainChat(options);
+      return;
+    }
     await launchClaudeStyleChat(options);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error starting chat session';

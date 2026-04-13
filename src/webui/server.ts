@@ -253,7 +253,7 @@ export class WebUIServer {
     try {
       // Health check
       if (pathname === '/api/health') {
-        sendJSON({ status: 'ok', version: '0.9.5' });
+        sendJSON({ status: 'ok', version: '0.9.6' });
         return;
       }
 
@@ -1945,17 +1945,7 @@ else:
     const MODES = [
       { id: 'agent', name: 'Agent', icon: '&#x1F916;', desc: 'Autonomous coding', color: '#00E676' },
       { id: 'plan', name: 'Plan', icon: '&#x1F4CB;', desc: 'Analyze and plan without modifying', color: '#40C4FF' },
-      { id: 'tester', name: 'Tester', icon: '&#x1F9EA;', desc: 'Testing and QA', color: '#FF4081' },
-      { id: 'debugger', name: 'Debugger', icon: '&#x1F41B;', desc: 'Bug investigation', color: '#FFD740' },
-      { id: 'security', name: 'Security', icon: '&#x1F512;', desc: 'Security analysis', color: '#FF5252' },
       { id: 'review', name: 'Review', icon: '&#x1F440;', desc: 'Code review', color: '#BB86FC' },
-      { id: 'team_leader', name: 'Team Leader', icon: '&#x1F451;', desc: 'Coordinate team', color: '#FFD600' },
-      { id: 'architect', name: 'Architect', icon: '&#x1F3DB;', desc: 'System design', color: '#7C4DFF' },
-      { id: 'engineer', name: 'Engineer', icon: '&#x1F6E0;', desc: 'Implementation', color: '#00E676' },
-      { id: 'seo', name: 'SEO', icon: '&#x1F310;', desc: 'SEO optimization', color: '#00B0FF' },
-      { id: 'product', name: 'Product', icon: '&#x1F525;', desc: 'Product strategy', color: '#FF6D00' },
-      { id: 'data', name: 'Data', icon: '&#x1F4CA;', desc: 'Data analysis', color: '#00BCD4' },
-      { id: 'researcher', name: 'Researcher', icon: '&#x1F4DA;', desc: 'Deep research', color: '#E91E63' },
     ];
 
     // Combined list for slash popup
@@ -2268,7 +2258,7 @@ else:
 - **/files** - List project files
 - **/mode [name]** - Switch agent mode
 
-**Available Modes:** agent, plan, tester, security, pentest, review, team_leader
+**Available Modes:** agent, plan, review
 
 **Tips:**
 - Type **@** to reference files

@@ -14,6 +14,26 @@ export interface BackgroundTask {
     logPath: string;
 }
 
+async function resolveXibeCodeEntryScript(): Promise<string> {
+    // Prefer the currently-running package's compiled entrypoint, not the target repo's cwd.
+    // This avoids relying on `tsx` existing in end-user environments.
+    const thisFile = fileURLToPath(import.meta.url);
+    const thisDir = path.dirname(thisFile);
+
+    // In builds, this file is `dist/core/background-agent.js`, so `../index.js` exists.
+    const distIndex = path.resolve(thisDir, '..', 'index.js');
+    try {
+        await fs.access(distIndex);
+        return distIndex;
+    } catch {
+        // Fallback: if the CLI was launched another way, argv[1] should still point at the entry file.
+        // (Best-effort: still avoids assuming the caller's repo has our src/ tree.)
+        const argvEntry = process.argv[1];
+        if (argvEntry) return argvEntry;
+        return distIndex;
+    }
+}
+
 export class BackgroundAgentManager {
     private baseDir: string;
     private processesDir: string;
@@ -36,21 +56,7 @@ export class BackgroundAgentManager {
         const taskId = createHash('md5').update(prompt + Date.now()).digest('hex').substring(0, 8);
         const logPath = path.join(this.logsDir, `${taskId}.log`);
 
-
-        // ... (in startTask)
-        // Determine the executable command
-        const distPath = path.join(this.baseDir, '../dist/index.js');
-        let command = 'tsx';
-        let scriptPath = path.join(process.cwd(), 'src/index.ts');
-
-        try {
-            await fs.access(distPath);
-            command = 'node';
-            scriptPath = distPath;
-        } catch (e) {
-            // Fallback to src/index.ts with tsx
-        }
-
+        const scriptPath = await resolveXibeCodeEntryScript();
         const args = [scriptPath, 'run', prompt, '--non-interactive'];
 
         // Spawn detached process
@@ -60,11 +66,34 @@ export class BackgroundAgentManager {
         const env: NodeJS.ProcessEnv = { ...process.env, BACKGROUND_AGENT_ID: taskId };
         delete env['NODE_OPTIONS']; // Prevent inheritance of loaders that might break child process
 
-        const child = spawn(command, args, {
+        const child = spawn(process.execPath, args, {
             detached: true,
             stdio: ['ignore', out.fd, err.fd],
             cwd: process.cwd(),
             env
+        });
+
+        child.on('error', async (spawnError: any) => {
+            try {
+                const msg = `[background-agent] spawn failed: ${spawnError?.message || String(spawnError)}\n`;
+                await fs.appendFile(logPath, msg);
+            } catch {
+                // ignore
+            }
+            try {
+                const task: BackgroundTask = {
+                    id: taskId,
+                    pid: 0,
+                    prompt,
+                    startTime: Date.now(),
+                    status: 'failed',
+                    logPath,
+                };
+                await this.saveTask(task);
+                SessionBridge.onTaskStatus(task.id, `Background task ${task.id}`, 'failed');
+            } catch {
+                // ignore
+            }
         });
 
         child.unref();

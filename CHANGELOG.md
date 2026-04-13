@@ -10,6 +10,11 @@ All notable changes to XibeCode will be documented in this file.
 - Improved `xibecode config` menu rendering across terminals (rawlist + robust fallback).
 - Default model selection now fetches live from `GET <baseUrl>/models` using a Bearer token.
 
+## [0.9.6] - 2026-04-13
+
+### ✨ Improvements
+- Chat now starts in `agent` mode by default.
+
 ## [0.5.0] - 2026-02-16
 
 ### 🖥️ Desktop App (NEW)

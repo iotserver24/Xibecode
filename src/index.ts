@@ -81,6 +81,7 @@ program
   .option('--theme <theme>', 'UI theme to use')
   .option('--session <id>', 'Resume a specific chat session by id')
   .option('--no-webui', 'Disable WebUI server (TUI only)')
+  .option('--plain', 'Disable Ink UI; print line-by-line output (best for copying)', false)
   .action(chatCommand);
 
 // WebUI - Browser-based interface

@@ -692,7 +692,7 @@ export class CodingToolExecutor implements ToolExecutor {
         const summary = tasks.map(t =>
           `ID: ${t.id} | Status: ${t.status} | Started: ${new Date(t.startTime).toISOString()} | Prompt: "${t.prompt.substring(0, 50)}..."`
         ).join('\n');
-        return { success: true, message: `Active Tasks:\n${summary || 'No active tasks.'}` };
+        return { success: true, message: `Active Tasks:\n${summary || 'No active tasks.'}`, tasks };
       }
 
       case 'check_background_task': {
@@ -700,7 +700,8 @@ export class CodingToolExecutor implements ToolExecutor {
           return { error: true, success: false, message: 'Missing required parameter: task_id (string)' };
         }
         const logs = await this.backgroundAgent.getTaskLogs(p.task_id);
-        return { success: true, logs };
+        const task = await this.backgroundAgent.getTask(p.task_id);
+        return { success: true, task, logs };
       }
 
       case 'start_background_task': {
@@ -716,7 +717,7 @@ export class CodingToolExecutor implements ToolExecutor {
         const summary = tasks.map(t =>
           `ID: ${t.id} | Status: ${t.status} | Started: ${new Date(t.startTime).toISOString()} | Prompt: "${t.prompt.substring(0, 50)}..."`
         ).join('\n');
-        return { success: true, message: `Active Tasks:\n${summary || 'No active tasks.'}` };
+        return { success: true, message: `Active Tasks:\n${summary || 'No active tasks.'}`, tasks };
       }
 
       case 'check_background_task': {
@@ -724,7 +725,8 @@ export class CodingToolExecutor implements ToolExecutor {
           return { error: true, success: false, message: 'Missing required parameter: task_id (string)' };
         }
         const logs = await this.backgroundAgent.getTaskLogs(p.task_id);
-        return { success: true, logs };
+        const task = await this.backgroundAgent.getTask(p.task_id);
+        return { success: true, task, logs };
       }
 
       case 'search_code_graph': {
@@ -1430,22 +1432,6 @@ export class CodingToolExecutor implements ToolExecutor {
         }
       },
       {
-        name: 'delegate_subtask',
-        description: 'Delegate a task to a specialized sub-agent (swarm worker). The main agent waits for the result. Useful for parallelizing or isolating complex tasks.',
-        input_schema: {
-          type: 'object',
-          properties: {
-            task: { type: 'string', description: 'Task description for the worker.' },
-            worker_type: {
-              type: 'string',
-              description: 'Agent mode/persona to use (e.g. "engineer", "reviewer", "planner")',
-              enum: ['plan', 'agent', 'tester', 'debugger', 'security', 'review', 'team_leader', 'seo', 'product', 'architect', 'engineer', 'data', 'researcher']
-            }
-          },
-          required: ['task', 'worker_type']
-        }
-      },
-      {
         name: 'run_swarm',
         description:
           'Run multiple specialized sub-agents in parallel (separate background processes) to save wall-clock time. Each entry has worker_type + task. Cap concurrent workers with max_parallel (default 6). Risk: workers editing the same files can conflict—split work by disjoint paths or use delegate_subtask serially when unsure.',
@@ -1462,7 +1448,7 @@ export class CodingToolExecutor implements ToolExecutor {
                   worker_type: {
                     type: 'string',
                     description: 'Agent mode for this worker',
-                    enum: ['plan', 'agent', 'tester', 'debugger', 'security', 'review', 'team_leader', 'seo', 'product', 'architect', 'engineer', 'data', 'researcher']
+                    enum: ['agent', 'plan', 'review']
                   }
                 },
                 required: ['task', 'worker_type']

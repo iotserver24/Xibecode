@@ -705,25 +705,25 @@ export class EnhancedAgent extends EventEmitter {
           // Check for task completion
           const taskComplete = parseTaskComplete(block.text);
           if (taskComplete) {
-            // Switch back to team_leader mode
-            this.modeState = transitionMode(this.modeState, 'team_leader', 'Task completed: ' + taskComplete.summary);
-            this.permissionManager.setMode('team_leader');
+            // Switch to review mode (team_leader temporarily disabled)
+            this.modeState = transitionMode(this.modeState, 'review', 'Task completed: ' + taskComplete.summary);
+            this.permissionManager.setMode('review');
             this.emit('mode_changed', {
               from: this.modeState.previous,
-              to: 'team_leader',
+              to: 'review',
               reason: 'Task completion reported',
               auto: true
             });
 
             // Update tool executor mode if applicable
             if (toolExecutor.setMode) {
-              toolExecutor.setMode('team_leader');
+              toolExecutor.setMode('review');
             }
 
-            // Add a system note to help Arya know what happened
+            // Add a system note to help reviewer mode understand what happened
             this.messages.push({
               role: 'user',
-              content: `[SYSTEM] Agent reported task completion:\nSummary: ${taskComplete.summary}\n\nYou are now Arya (Team Leader) again. Review the summary and decide the next step.`
+              content: `[SYSTEM] Agent reported task completion:\nSummary: ${taskComplete.summary}\n\nSwitching to review mode. Review the summary and decide the next step.`
             });
           }
         }

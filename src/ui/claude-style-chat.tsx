@@ -1,13 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import TextInput from 'ink-text-input';
 import { Box, Text, createRoot, useApp, useInput } from '../ink.js';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import type { TuiThemeColorKey } from '../utils/tui-theme.js';
 import { ConfigManager, ProviderType, PROVIDER_CONFIGS } from '../utils/config.js';
 import { EnhancedAgent } from '../core/agent.js';
 import { CodingToolExecutor } from '../core/tools.js';
 import { MCPClientManager } from '../core/mcp-client.js';
 import { SkillManager } from '../core/skills.js';
-import { AgentMode, MODE_CONFIG } from '../core/modes.js';
+import { AgentMode, ENABLED_MODES, MODE_CONFIG } from '../core/modes.js';
 import { renderAndRun } from '../interactiveHelpers.js';
 import { AssistantMarkdown } from '../components/AssistantMarkdown.js';
 import { formatToolArgs, formatToolOutcome, formatRunSwarmDetailLines } from '../utils/tool-display.js';
@@ -25,7 +27,7 @@ export type ChatOptions = {
 
 type UiLineType = 'user' | 'assistant' | 'tool' | 'tool_out' | 'info' | 'error';
 type UiLine = { type: UiLineType; text: string };
-const APP_VERSION = '0.9.5';
+const APP_VERSION = '0.9.6';
 const HERO_LOGO = [
   '██╗  ██╗██╗██████╗ ███████╗',
   '╚██╗██╔╝██║██╔══██╗██╔════╝',
@@ -133,6 +135,11 @@ function prefixColorKey(type: UiLineType): TuiThemeColorKey {
   }
 }
 
+function formatUiLineForLog(line: UiLine): string {
+  const prefix = prefixForType(line.type);
+  return `[${prefix}] ${line.text}`;
+}
+
 function XibeCodeChatApp(props: {
   model: string;
   initialMode: AgentMode;
@@ -143,7 +150,16 @@ function XibeCodeChatApp(props: {
   initialRequestFormat: RequestWireFormat;
   customProviderFormat?: 'openai' | 'anthropic';
   profile?: string;
-  runPrompt: (prompt: string, onLine: (line: UiLine) => void) => Promise<void>;
+  runPrompt: (
+    prompt: string,
+    onLine: (line: UiLine) => void,
+  ) => Promise<ReturnType<EnhancedAgent['getStats']>>;
+  listBackgroundTasks: () => Promise<
+    Array<{ id: string; status: string; startTime: number; prompt: string }>
+  >;
+  checkBackgroundTask: (taskId: string) => Promise<{ status?: string; lastLine?: string }>;
+  onUiLine?: (line: UiLine) => void;
+  getLiveStats?: () => ReturnType<EnhancedAgent['getStats']>;
   loadModels: () => Promise<string[]>;
   onModelChange: (nextModel: string) => Promise<void>;
   onModeChange: (nextMode: AgentMode) => Promise<void>;
@@ -152,6 +168,10 @@ function XibeCodeChatApp(props: {
   const { exit } = useApp();
   const [input, setInput] = useState('');
   const [isRunning, setIsRunning] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
+  const [runElapsedMs, setRunElapsedMs] = useState<number>(0);
+  const [liveStats, setLiveStats] = useState<ReturnType<EnhancedAgent['getStats']> | null>(null);
   const [wireFormat, setWireFormat] = useState<RequestWireFormat>(props.initialRequestFormat);
   const [activeModel, setActiveModel] = useState(props.model);
   const [activeMode, setActiveMode] = useState<AgentMode>(props.initialMode);
@@ -210,7 +230,66 @@ function XibeCodeChatApp(props: {
       type: 'info',
       text: 'XibeCode interactive session. Type /exit to quit, /clear to reset the transcript.',
     },
+    { type: 'info', text: 'Tip: press p to pause/resume live updates (for copying).' },
   ]);
+
+  const pausedBuffer = useRef<UiLine[]>([]);
+  const pushLine = useCallback(
+    (line: UiLine) => {
+      props.onUiLine?.(line);
+      if (paused) {
+        pausedBuffer.current.push(line);
+        return;
+      }
+      // Keep a much larger in-memory transcript so context doesn't vanish quickly.
+      setLines((prev: UiLine[]) => [...prev.slice(-5000), line]);
+    },
+    [paused, props],
+  );
+
+  const togglePaused = useCallback(() => {
+    setPaused((prev) => {
+      const next = !prev;
+      if (prev && pausedBuffer.current.length > 0) {
+        const buffered = pausedBuffer.current.splice(0, pausedBuffer.current.length);
+        setLines((current) => [...current.slice(-5000), ...buffered].slice(-5000));
+      }
+      return next;
+    });
+  }, []);
+
+  const lastBgLineByTask = useRef<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    if (!isRunning) return;
+    let cancelled = false;
+    const interval = setInterval(() => {
+      void (async () => {
+        try {
+          const tasks = await props.listBackgroundTasks();
+          const running = tasks.filter((t) => t.status === 'running').slice(0, 3);
+          if (running.length === 0) return;
+          for (const t of running) {
+            const status = await props.checkBackgroundTask(t.id);
+            const line = status.lastLine?.trim();
+            if (!line) continue;
+            const prev = lastBgLineByTask.current.get(t.id);
+            if (prev === line) continue;
+            lastBgLineByTask.current.set(t.id, line);
+            if (!cancelled) {
+              pushLine({ type: 'tool_out', text: `bg:${t.id} ${line}` });
+            }
+          }
+        } catch {
+          // ignore background monitor errors
+        }
+      })();
+    }, 1200);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isRunning, props, pushLine]);
 
   useEffect(() => {
     if (!isRunning) {
@@ -224,6 +303,32 @@ function XibeCodeChatApp(props: {
   }, [isRunning]);
 
   useEffect(() => {
+    if (!isRunning) {
+      setRunStartedAt(null);
+      setRunElapsedMs(0);
+      return;
+    }
+    const started = Date.now();
+    setRunStartedAt(started);
+    const id = setInterval(() => {
+      setRunElapsedMs(Date.now() - started);
+    }, 250);
+    return () => clearInterval(id);
+  }, [isRunning]);
+
+  useEffect(() => {
+    if (!isRunning || !props.getLiveStats) return;
+    const id = setInterval(() => {
+      try {
+        setLiveStats(props.getLiveStats!());
+      } catch {
+        // ignore
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [isRunning, props]);
+
+  useEffect(() => {
     if (!isRunning) return;
     setWorkVerbIndex(Math.floor(Math.random() * SPINNER_VERBS.length));
   }, [isRunning]);
@@ -235,11 +340,6 @@ function XibeCodeChatApp(props: {
     }, WORK_VERB_ROTATE_MS);
     return () => clearInterval(id);
   }, [isRunning]);
-
-  const pushLine = useCallback((line: UiLine) => {
-    // Keep a much larger in-memory transcript so context doesn't vanish quickly.
-    setLines((prev: UiLine[]) => [...prev.slice(-5000), line]);
-  }, []);
 
   const ensureModelsLoaded = useCallback(async (): Promise<string[]> => {
     if (availableModels.length > 0) {
@@ -594,7 +694,17 @@ function XibeCodeChatApp(props: {
       pushLine({ type: 'user', text: resolvedInput });
       setIsRunning(true);
       try {
-        await props.runPrompt(resolvedInput, pushLine);
+        const startedAt = Date.now();
+        const stats = await props.runPrompt(resolvedInput, pushLine);
+        const elapsedMs = Date.now() - startedAt;
+        const seconds = (elapsedMs / 1000).toFixed(1);
+        pushLine({
+          type: 'info',
+          text:
+            `Done in ${seconds}s · ` +
+            `tokens ${stats.inputTokens} in / ${stats.outputTokens} out / ${stats.totalTokens} total` +
+            (stats.costLabel ? ` · cost ${stats.costLabel}` : ''),
+        });
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         pushLine({ type: 'error', text: message });
@@ -646,6 +756,11 @@ function XibeCodeChatApp(props: {
   useInput((inputKey, key) => {
     if (key.ctrl && inputKey === 'c') {
       exit();
+      return;
+    }
+
+    if (!key.ctrl && !key.meta && !key.shift && (inputKey === 'p' || inputKey === 'P')) {
+      togglePaused();
       return;
     }
 
@@ -944,7 +1059,13 @@ function XibeCodeChatApp(props: {
         ? `${workVerbPhrase.slice(0, 30)}…`
         : workVerbPhrase;
     const tail = `working ${WORK_SPINNER_FRAMES[workSpinnerFrame]} · ${shortVerb}`;
-    return `model: ${activeModel} | format: ${wireFormat} | mode: ${activeMode} | provider: ${props.provider || 'auto'} | ${tail}`;
+    const pauseLabel = paused ? ' | PAUSED' : '';
+    const elapsed = runElapsedMs ? ` | elapsed ${(runElapsedMs / 1000).toFixed(1)}s` : '';
+    const tokens =
+      liveStats
+        ? ` | tokens ${liveStats.inputTokens}/${liveStats.outputTokens}/${liveStats.totalTokens}`
+        : '';
+    return `model: ${activeModel} | format: ${wireFormat} | mode: ${activeMode} | provider: ${props.provider || 'auto'} | ${tail}${pauseLabel}${elapsed}${tokens}`;
   }, [
     activeModel,
     activeMode,
@@ -953,6 +1074,9 @@ function XibeCodeChatApp(props: {
     wireFormat,
     workSpinnerFrame,
     workVerbPhrase,
+    paused,
+    runElapsedMs,
+    liveStats,
   ]);
   const showWelcome = lines.length <= 1;
   const providerName = props.provider ? props.provider.toUpperCase() : 'AUTO';
@@ -1295,9 +1419,6 @@ function XibeCodeChatApp(props: {
           <Text color="subtle">↑/↓ navigate • Enter apply • Esc close</Text>
         </Box>
       )}
-      <Box marginTop={1} justifyContent="flex-end">
-        <Text color="inactive">Ctrl+k to generate command</Text>
-      </Box>
     </Box>
   );
 }
@@ -1340,7 +1461,8 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     );
   let activeAgent = createAgentForModel(model);
   let activeModel = model;
-  let activeMode: AgentMode = activeAgent.getMode();
+  let activeMode: AgentMode = 'agent';
+  activeAgent.setModeFromUser('agent', 'Default start mode');
   toolExecutor.setMode(activeMode);
 
   const onModelChange = async (nextModel: string): Promise<void> => {
@@ -1402,7 +1524,10 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     return unique;
   };
 
-  const runPrompt = async (prompt: string, onLine: (line: UiLine) => void) => {
+  const runPrompt = async (
+    prompt: string,
+    onLine: (line: UiLine) => void,
+  ): Promise<ReturnType<EnhancedAgent['getStats']>> => {
     activeAgent.removeAllListeners('event');
     let streamedBuffer = '';
 
@@ -1473,13 +1598,45 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     await activeAgent.run(prompt, toolExecutor.getTools(), toolExecutor);
     activeMode = activeAgent.getMode();
     toolExecutor.setMode(activeMode);
+    return activeAgent.getStats();
   };
 
-  const modeOptions = (Object.keys(MODE_CONFIG) as AgentMode[]).map((id) => ({
+  const getLiveStats = (): ReturnType<EnhancedAgent['getStats']> => activeAgent.getStats();
+
+  const listBackgroundTasks = async (): Promise<
+    Array<{ id: string; status: string; startTime: number; prompt: string }>
+  > => {
+    const result: any = await toolExecutor.execute('list_background_tasks', {});
+    if (result?.success && Array.isArray(result.tasks)) {
+      return result.tasks as Array<{ id: string; status: string; startTime: number; prompt: string }>;
+    }
+    return [];
+  };
+
+  const checkBackgroundTask = async (taskId: string): Promise<{ status?: string; lastLine?: string }> => {
+    const result: any = await toolExecutor.execute('check_background_task', { task_id: taskId });
+    const logs = typeof result?.logs === 'string' ? result.logs : '';
+    const lastLine = logs.split('\n').filter(Boolean).slice(-1)[0];
+    const status = result?.task?.status;
+    return { status, lastLine };
+  };
+
+  const modeOptions = (ENABLED_MODES as AgentMode[]).map((id) => ({
     id,
     label: MODE_CONFIG[id].name,
     description: MODE_CONFIG[id].description,
   }));
+
+  const homeDir = process.env.HOME || process.env.USERPROFILE || '.';
+  const logsDir = path.join(homeDir, '.xibecode', 'logs');
+  await fs.mkdir(logsDir, { recursive: true });
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const chatLogPath = path.join(logsDir, `chat-${ts}.log`);
+  let logChain: Promise<void> = Promise.resolve();
+  const appendLogLine = (line: UiLine) => {
+    const rendered = formatUiLineForLog(line) + '\n';
+    logChain = logChain.then(() => fs.appendFile(chatLogPath, rendered, 'utf8')).catch(() => {});
+  };
 
   const root = createRoot({ exitOnCtrlC: true });
   await renderAndRun(
@@ -1495,6 +1652,10 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
       customProviderFormat={customProviderFormat}
       profile={options.profile}
       runPrompt={runPrompt}
+      getLiveStats={getLiveStats}
+      listBackgroundTasks={listBackgroundTasks}
+      checkBackgroundTask={checkBackgroundTask}
+      onUiLine={appendLogLine}
       loadModels={loadModels}
       onModelChange={onModelChange}
       onModeChange={onModeChange}
