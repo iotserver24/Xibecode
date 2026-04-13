@@ -17,13 +17,24 @@ const pnpmCmd = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 
 execSync(`${pnpmCmd} exec tsc`, { cwd: root, stdio: 'inherit', shell: true });
 
+const interactiveCommands = new Set(['config', 'chat']);
+// `bun run dev <cmd>` doesn't always report TTY consistently, but interactive
+// subcommands still need stable stdio (no watcher noise, no restarts).
+const isInteractiveRun = forwarded.length > 0 && interactiveCommands.has(forwarded[0]);
+
 const tscWatch = spawn(pnpmCmd, ['exec', 'tsc', '-w', '--preserveWatchOutput'], {
   cwd: root,
-  stdio: 'inherit',
+  // When running interactive CLI commands, silence watcher output so it doesn't
+  // corrupt Inquirer/Ink rendering. The watcher still rebuilds in the background.
+  stdio: isInteractiveRun ? 'ignore' : 'inherit',
   shell: process.platform === 'win32',
 });
 
-const nodeWatch = spawn(process.execPath, ['--watch', 'dist/index.js', ...forwarded], {
+const nodeArgs = isInteractiveRun
+  ? ['dist/index.js', ...forwarded]
+  : ['--watch', 'dist/index.js', ...forwarded];
+
+const nodeWatch = spawn(process.execPath, nodeArgs, {
   cwd: root,
   stdio: 'inherit',
 });

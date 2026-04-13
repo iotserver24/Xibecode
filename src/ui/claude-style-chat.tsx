@@ -45,13 +45,15 @@ const WORK_SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '�
 /** How fast to advance OpenClaude-style spinner verbs (ms) */
 const WORK_VERB_ROTATE_MS = 2400;
 
-const QUICK_HELP = ['/help', '/mode', '/format', '/model', '/clear', '/exit'];
+const QUICK_HELP = ['/help', '/mode', '/format', '/model', '/setup', '/config', '/clear', '/exit'];
 const CHAT_COMMANDS: Array<{ name: string; description: string }> = [
   { name: '/help', description: 'Show available shortcuts and usage hints' },
   { name: '/mode', description: 'Switch agent mode from an interactive picker' },
   { name: '/clear', description: 'Clear the current chat transcript' },
   { name: '/format', description: 'Switch wire format: auto | anthropic | openai' },
   { name: '/model', description: 'Fetch and switch available models for this provider' },
+  { name: '/setup', description: 'Guided setup (set API key, then pick provider/model)' },
+  { name: '/config', description: 'Show current config and quick config hints' },
   { name: '/exit', description: 'Exit the interactive chat session' },
 ];
 
@@ -280,6 +282,56 @@ function XibeCodeChatApp(props: {
             text: 'Press Ctrl+C to quit. Type any prompt and XibeCode will run agent mode.',
           },
         ]);
+        return;
+      }
+
+      if (resolvedInput === '/config') {
+        const config = new ConfigManager();
+        const apiKeyPresent = Boolean(config.getApiKey());
+        const costMode = config.getCostMode();
+        const provider = (config.get('provider') as ProviderType | undefined) ?? undefined;
+        const model = config.getModel(costMode === 'economy');
+        const baseUrl = config.getBaseUrl();
+        const requestFormat = (config.get('requestFormat') as RequestWireFormat | undefined) ?? 'auto';
+
+        pushLine({
+          type: 'info',
+          text: `Config: apiKey=${apiKeyPresent ? 'set' : 'missing'} | provider=${provider || 'auto'} | model=${model || '(none)'} | costMode=${costMode} | baseUrl=${baseUrl || '(default)'} | format=${requestFormat}`,
+        });
+        pushLine({
+          type: 'info',
+          text: 'Tip: run `xibecode config` for full interactive config, or type /setup here for guided setup.',
+        });
+        return;
+      }
+
+      if (resolvedInput === '/setup') {
+        const config = new ConfigManager();
+        if (!config.getApiKey()) {
+          pushLine({
+            type: 'info',
+            text: 'Setup step 1/2: set your API key with: xibecode config --set-key YOUR_KEY',
+          });
+          pushLine({
+            type: 'info',
+            text: 'After setting the key, type /setup again to pick provider/model inside this chat.',
+          });
+          return;
+        }
+
+        pushLine({ type: 'info', text: 'Setup step 2/2: loading models… (use /model to pick)' });
+        try {
+          await ensureModelsLoaded();
+          setModelPickerOpen(true);
+          setSelectedModelIndex(0);
+          pushLine({
+            type: 'info',
+            text: 'Select a model with ↑/↓ and Enter, or type /model <id>.',
+          });
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : 'Failed to load models';
+          pushLine({ type: 'error', text: message });
+        }
         return;
       }
 
