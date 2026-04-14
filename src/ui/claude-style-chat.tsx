@@ -32,7 +32,7 @@ type UiLine = { type: UiLineType; text: string };
 type StaticItem =
   | { kind: 'hero'; id: number }
   | ({ kind: 'line'; id: number } & UiLine);
-const APP_VERSION = '0.9.7';
+const APP_VERSION = '0.9.8';
 const HERO_LOGO = [
   '██╗  ██╗██╗██████╗ ███████╗',
   '╚██╗██╔╝██║██╔══██╗██╔════╝',

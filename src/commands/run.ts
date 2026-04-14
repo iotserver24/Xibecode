@@ -37,7 +37,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   const ui = new EnhancedUI(options.verbose);
   const config = new ConfigManager(options.profile);
 
-  ui.header('0.9.7');
+  ui.header('0.9.8');
 
   // Get API key
   const apiKey = options.apiKey || config.getApiKey();
