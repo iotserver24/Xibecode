@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import TextInput from 'ink-text-input';
-import { Box, Text, createRoot, useApp, useInput } from '../ink.js';
+import { Box, Static, Text, createRoot, useApp, useInput } from '../ink.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { TuiThemeColorKey } from '../utils/tui-theme.js';
@@ -27,6 +27,9 @@ export type ChatOptions = {
 
 type UiLineType = 'user' | 'assistant' | 'tool' | 'tool_out' | 'info' | 'error';
 type UiLine = { type: UiLineType; text: string };
+type StaticItem =
+  | { kind: 'hero'; id: number }
+  | ({ kind: 'line'; id: number } & UiLine);
 const APP_VERSION = '0.9.6';
 const HERO_LOGO = [
   '██╗  ██╗██╗██████╗ ███████╗',
@@ -222,19 +225,23 @@ function XibeCodeChatApp(props: {
 
   const [workSpinnerFrame, setWorkSpinnerFrame] = useState(0);
   const [workVerbIndex, setWorkVerbIndex] = useState(0);
-  const [lines, setLines] = useState<UiLine[]>([
+  const nextLineIdRef = useRef(1);
+  const [lines, setLines] = useState<StaticItem[]>([
     {
+      kind: 'line',
+      id: nextLineIdRef.current++,
       type: 'info',
       text: 'XibeCode interactive session. Type /exit to quit, /clear to reset the transcript.',
     },
-    { type: 'info', text: 'Type /help for shortcuts.' },
+    { kind: 'line', id: nextLineIdRef.current++, type: 'info', text: 'Type /help for shortcuts.' },
   ]);
 
   const pushLine = useCallback(
     (line: UiLine) => {
+      const withId: StaticItem = { ...line, kind: 'line', id: nextLineIdRef.current++ };
       props.onUiLine?.(line);
       // Keep a much larger in-memory transcript so context doesn't vanish quickly.
-      setLines((prev: UiLine[]) => [...prev.slice(-5000), line]);
+      setLines((prev: StaticItem[]) => [...prev.slice(-5000), withId]);
     },
     [props],
   );
@@ -279,7 +286,7 @@ function XibeCodeChatApp(props: {
     }
     const id = setInterval(() => {
       setWorkSpinnerFrame((f) => (f + 1) % WORK_SPINNER_FRAMES.length);
-    }, 90);
+    }, 120);
     return () => clearInterval(id);
   }, [isRunning]);
 
@@ -531,15 +538,22 @@ function XibeCodeChatApp(props: {
       }
 
       if (resolvedInput === '/clear') {
-        setLines([{ type: 'info', text: 'Cleared transcript.' }]);
+        pushLine({ type: 'info', text: '──────────── transcript cleared ────────────' });
         return;
       }
 
       if (resolvedInput === '/help') {
-        setLines((prev: UiLine[]) => [
+        setLines((prev: StaticItem[]) => [
           ...prev,
-          { type: 'info', text: `Shortcuts: ${QUICK_HELP.join(' · ')}` },
           {
+            kind: 'line',
+            id: nextLineIdRef.current++,
+            type: 'info',
+            text: `Shortcuts: ${QUICK_HELP.join(' · ')}`,
+          },
+          {
+            kind: 'line',
+            id: nextLineIdRef.current++,
             type: 'info',
             text: 'Press Ctrl+C to quit. Type any prompt and XibeCode will run agent mode.',
           },
@@ -1035,113 +1049,114 @@ function XibeCodeChatApp(props: {
   /** Taller transcript area once there is real chat; hero stays visible for the whole session. */
   const hasChatContent = lines.some(
     (l) =>
-      l.type === 'user' ||
-      l.type === 'assistant' ||
-      l.type === 'tool' ||
-      l.type === 'tool_out' ||
-      l.type === 'error',
+      l.kind === 'line' &&
+      (l.type === 'user' ||
+        l.type === 'assistant' ||
+        l.type === 'tool' ||
+        l.type === 'tool_out' ||
+        l.type === 'error'),
   );
   const providerName = props.provider ? props.provider.toUpperCase() : 'AUTO';
   const divider = '─'.repeat(98);
-  const chatPanelHeight = hasChatContent ? 18 : 12;
+
+  const staticItems = useMemo<StaticItem[]>(
+    () => [{ kind: 'hero', id: 0 }, ...lines],
+    [lines],
+  );
 
   return (
     <Box flexDirection="column" paddingX={1}>
-      <Box flexDirection="column" marginBottom={1}>
-        {HERO_LOGO.map((line, idx) => (
-          <React.Fragment key={`logo-${idx}`}>
-            <Text bold color={idx < 6 ? 'claude' : 'suggestion'}>
-              {line}
-            </Text>
-          </React.Fragment>
-        ))}
-        <Text color="suggestion">✦ Any model, Every tool, Zero limits. ✦</Text>
-        <Box
-          marginTop={1}
-          borderStyle="round"
-          borderColor="claude"
-          flexDirection="column"
-          paddingX={1}
-        >
-          <Text>
-            <Text color="inactive">Provider </Text>
-            <Text color="claude" bold>
-              {providerName}
-            </Text>
-          </Text>
-          <Text>
-            <Text color="inactive">Model    </Text>
-            <Text>{activeModel}</Text>
-          </Text>
-          <Text>
-            <Text color="inactive">Endpoint </Text>
-            <Text>{props.baseUrl || 'provider default'}</Text>
-          </Text>
-          <Text>
-            <Text color="inactive">Format  </Text>
-            <Text>
-              {wireFormat}{' '}
-              <Text dimColor>
-                (
-                {isAnthropicWireFormat(
-                  wireFormat,
-                  props.provider,
-                  props.customProviderFormat,
-                )
-                  ? 'Anthropic Messages'
-                  : 'OpenAI chat'}
-                )
-              </Text>
-            </Text>
-          </Text>
-        </Box>
-        <Box marginTop={1}>
-          <Text color="suggestion">◈ cloud</Text>
-          <Text color="inactive">  Ready — type </Text>
-          <Text color="claude">/help</Text>
-          <Text color="inactive"> to begin</Text>
-        </Box>
-        <Text color="inactive">
-          xibecode <Text color="claude">v{APP_VERSION}</Text>
-        </Text>
-      </Box>
-
       <Text dimColor>{status}</Text>
       <Text color="subtle">{divider}</Text>
-      <Box
-        marginTop={1}
-        borderStyle="round"
-        borderColor="promptBorder"
-        flexDirection="column"
-        paddingX={1}
-        minHeight={chatPanelHeight}
-      >
-        {lines.slice(-chatPanelHeight + 2).map((line: UiLine, index: number) =>
-          line.type === 'assistant' ? (
-            <Box
-              key={`${index}-assistant-${line.text.length}-${line.text.slice(0, 12)}`}
-              flexDirection="column"
-              marginBottom={1}
-            >
+      <Static items={staticItems}>
+        {(item) => {
+          if (item.kind === 'hero') {
+            return (
+              <Box flexDirection="column" marginBottom={1}>
+                {HERO_LOGO.map((line, idx) => (
+                  <React.Fragment key={`logo-${idx}`}>
+                    <Text bold color={idx < 6 ? 'claude' : 'suggestion'}>
+                      {line}
+                    </Text>
+                  </React.Fragment>
+                ))}
+                <Text color="suggestion">✦ Any model, Every tool, Zero limits. ✦</Text>
+                <Box
+                  marginTop={1}
+                  borderStyle="round"
+                  borderColor="claude"
+                  flexDirection="column"
+                  paddingX={1}
+                >
+                  <Text>
+                    <Text color="inactive">Provider </Text>
+                    <Text color="claude" bold>
+                      {providerName}
+                    </Text>
+                  </Text>
+                  <Text>
+                    <Text color="inactive">Model    </Text>
+                    <Text>{activeModel}</Text>
+                  </Text>
+                  <Text>
+                    <Text color="inactive">Endpoint </Text>
+                    <Text>{props.baseUrl || 'provider default'}</Text>
+                  </Text>
+                  <Text>
+                    <Text color="inactive">Format  </Text>
+                    <Text>
+                      {wireFormat}{' '}
+                      <Text dimColor>
+                        (
+                        {isAnthropicWireFormat(
+                          wireFormat,
+                          props.provider,
+                          props.customProviderFormat,
+                        )
+                          ? 'Anthropic Messages'
+                          : 'OpenAI chat'}
+                        )
+                      </Text>
+                    </Text>
+                  </Text>
+                </Box>
+                <Box marginTop={1}>
+                  <Text color="suggestion">◈ cloud</Text>
+                  <Text color="inactive">  Ready — type </Text>
+                  <Text color="claude">/help</Text>
+                  <Text color="inactive"> to begin</Text>
+                </Box>
+                <Text color="inactive">
+                  xibecode <Text color="claude">v{APP_VERSION}</Text>
+                </Text>
+              </Box>
+            );
+          }
+
+          return item.type === 'assistant' ? (
+            <Box flexDirection="column" marginBottom={1}>
               <Text bold color={prefixColorKey('assistant')}>
                 {prefixForType('assistant')}:
               </Text>
               <Box marginLeft={2} flexDirection="column">
-                <AssistantMarkdown content={line.text} />
+                <AssistantMarkdown content={item.text} />
               </Box>
             </Box>
           ) : (
-            <React.Fragment key={`${index}-${line.type}-${line.text.slice(0, 24)}`}>
-              <Text>
-                <Text bold color={prefixColorKey(line.type)}>
-                  {prefixForType(line.type)}:{' '}
-                </Text>
-                <Text color={lineColorKey(line.type)}>{line.text}</Text>
+            <Text>
+              <Text bold color={prefixColorKey(item.type)}>
+                {prefixForType(item.type)}:{' '}
               </Text>
-            </React.Fragment>
-          ),
-        )}
-      </Box>
+              <Text color={lineColorKey(item.type)}>{item.text}</Text>
+            </Text>
+          );
+        }}
+      </Static>
+      {!hasChatContent && (
+        <Box marginTop={1} flexDirection="column">
+          <Text color="inactive">(send a message to start)</Text>
+        </Box>
+      )}
       <Text color="subtle">{divider}</Text>
       {isRunning && (
         <Box
