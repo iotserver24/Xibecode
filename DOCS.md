@@ -547,7 +547,6 @@ XibeCode is built to run across common platforms and device types.
 |--------|------------|--------|
 | **CLI** | Linux (x64, ARM64), macOS (Intel, Apple Silicon), Windows (x64, ARM64) | Node.js 18+. ARM64 includes Raspberry Pi and ARM servers. |
 | **WebUI** | Any browser | Responsive, mobile-friendly layout; touch-friendly. Optional PWA/installable. |
-| **Desktop (Electron)** | Windows (x64/ARM64), macOS (Intel/Apple Silicon), Linux (x64/ARM64) | Download from [Releases](https://github.com/iotserver24/xibecode/releases). AppImage/deb for arm64 on Linux. |
 | **Headless / embedded** | Servers, Docker, Raspberry Pi | Use `xibecode run` or `xibecode run-pr` with env-based config (e.g. `ANTHROPIC_API_KEY`, `xibecode config`). No TUI required; suitable for CI, cron, or an agent daemon. |
 
 CI runs on Linux x64 and ARM64 (where available) to validate the CLI. For headless usage, set your API key and endpoint via environment or config, then run tasks non-interactively.

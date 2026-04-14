@@ -158,6 +158,7 @@ function XibeCodeChatApp(props: {
   initialMode: AgentMode;
   provider?: ProviderType;
   baseUrl?: string;
+  needsFirstRunSetup?: boolean;
   defaultModel: string;
   modeOptions: Array<{ id: AgentMode; label: string; description: string }>;
   initialRequestFormat: RequestWireFormat;
@@ -194,13 +195,15 @@ function XibeCodeChatApp(props: {
   const [selectedModelIndex, setSelectedModelIndex] = useState(0);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
 
-  type SetupStep = 'idle' | 'baseUrl' | 'apiKey' | 'loadingModels' | 'pickModel';
+  type SetupStep = 'idle' | 'pickProvider' | 'baseUrl' | 'apiKey' | 'loadingModels' | 'pickModel';
   const [setupStep, setSetupStep] = useState<SetupStep>('idle');
   const [setupBaseUrl, setSetupBaseUrl] = useState<string>('');
   const [setupApiKey, setSetupApiKey] = useState<string>('');
   const [setupModels, setSetupModels] = useState<string[]>([]);
   const [setupModelPickerOpen, setSetupModelPickerOpen] = useState(false);
   const [setupSelectedModelIndex, setSetupSelectedModelIndex] = useState(0);
+  const [setupProviderPickerOpen, setSetupProviderPickerOpen] = useState(false);
+  const [setupProviderIndex, setSetupProviderIndex] = useState(0);
 
   type ConfigMenuItem =
     | 'set_baseurl'
@@ -403,17 +406,23 @@ function XibeCodeChatApp(props: {
   );
 
   const startSetupWizard = useCallback(() => {
-    setSetupStep('baseUrl');
+    setSetupStep('pickProvider');
     setSetupBaseUrl('');
     setSetupApiKey('');
     setSetupModels([]);
     setSetupModelPickerOpen(false);
     setSetupSelectedModelIndex(0);
-    pushLine({
-      type: 'info',
-      text: 'Setup 1/3 — enter Base URL (OpenAI format). Example: https://api.openai.com/v1',
-    });
+    setSetupProviderPickerOpen(true);
+    setSetupProviderIndex(0);
+    pushLine({ type: 'info', text: 'Setup started.' });
   }, [pushLine]);
+
+  useEffect(() => {
+    if (!props.needsFirstRunSetup) return;
+    pushLine({ type: 'info', text: 'No API key configured yet — starting guided setup.' });
+    pushLine({ type: 'info', text: 'Tip: paste Base URL first, then API key; models will load automatically.' });
+    startSetupWizard();
+  }, [props.needsFirstRunSetup, pushLine, startSetupWizard]);
 
   const beginConfigMenu = useCallback(() => {
     setConfigMenuOpen(true);
@@ -490,16 +499,20 @@ function XibeCodeChatApp(props: {
             pushLine({ type: 'error', text: 'Base URL must start with http:// or https://' });
             pushLine({
               type: 'info',
-              text: 'Setup 1/3 — enter Base URL (OpenAI format). Example: https://api.openai.com/v1',
+              text: 'Setup — enter Base URL (OpenAI format). Example: https://api.openai.com/v1',
             });
             return;
           }
           const nextBase = trimmed.replace(/\/+$/, '');
           setSetupBaseUrl(nextBase);
           config.set('baseUrl', nextBase);
-          // Explicitly force OpenAI wire format for this workflow.
-          config.set('requestFormat', 'openai');
-          config.set('provider', 'openai');
+          // If the user hasn't picked a provider explicitly, assume OpenAI-compatible.
+          if (!config.get('provider')) {
+            config.set('provider', 'openai');
+          }
+          if (!config.get('requestFormat')) {
+            config.set('requestFormat', 'openai');
+          }
           pushLine({ type: 'info', text: `Saved base URL: ${nextBase}` });
           setSetupStep('apiKey');
           pushLine({ type: 'info', text: 'Setup 2/3 — enter API key (will be saved locally).' });
@@ -1037,6 +1050,77 @@ function XibeCodeChatApp(props: {
       }
     }
 
+    if (setupProviderPickerOpen && !isRunning) {
+      const providers: Array<{
+        label: string;
+        value: ProviderType | 'custom';
+        baseUrl?: string;
+        format?: RequestWireFormat;
+        note?: string;
+      }> = [
+        { label: 'OpenAI', value: 'openai', baseUrl: PROVIDER_CONFIGS.openai.baseUrl, format: 'openai' },
+        { label: 'Anthropic', value: 'anthropic', baseUrl: PROVIDER_CONFIGS.anthropic.baseUrl, format: 'anthropic' },
+        { label: 'OpenRouter', value: 'openrouter', baseUrl: PROVIDER_CONFIGS.openrouter.baseUrl, format: 'openai' },
+        { label: 'Groq', value: 'groq', baseUrl: PROVIDER_CONFIGS.groq.baseUrl, format: 'openai' },
+        { label: 'DeepSeek', value: 'deepseek', baseUrl: PROVIDER_CONFIGS.deepseek.baseUrl, format: 'openai' },
+        { label: 'Google (Gemini)', value: 'google', baseUrl: PROVIDER_CONFIGS.google.baseUrl, format: 'openai' },
+        { label: 'xAI (Grok)', value: 'grok', baseUrl: PROVIDER_CONFIGS.grok.baseUrl, format: 'openai' },
+        { label: 'Moonshot (Kimi)', value: 'kimi', baseUrl: PROVIDER_CONFIGS.kimi.baseUrl, format: 'anthropic' },
+        { label: 'Zhipu AI (z.ai)', value: 'zai', baseUrl: PROVIDER_CONFIGS.zai.baseUrl, format: 'anthropic' },
+        {
+          label: 'Custom (paste your own Base URL)',
+          value: 'custom',
+          note: 'Lets you paste any OpenAI-compatible endpoint',
+        },
+      ];
+
+      if (key.escape) {
+        setSetupProviderPickerOpen(false);
+        setSetupStep('idle');
+        pushLine({ type: 'info', text: 'Setup cancelled.' });
+        return;
+      }
+      if (key.upArrow) {
+        setSetupProviderIndex((prev) => (prev === 0 ? providers.length - 1 : prev - 1));
+        return;
+      }
+      if (key.downArrow) {
+        setSetupProviderIndex((prev) => (prev >= providers.length - 1 ? 0 : prev + 1));
+        return;
+      }
+      if (key.return) {
+        const picked = providers[setupProviderIndex];
+        if (!picked) return;
+        const config = new ConfigManager(props.profile);
+        setSetupProviderPickerOpen(false);
+
+        if (picked.value === 'custom') {
+          setSetupStep('baseUrl');
+          pushLine({
+            type: 'info',
+            text: 'Setup — enter Base URL (OpenAI format). Example: https://api.openai.com/v1',
+          });
+          return;
+        }
+
+        // Preset: write config + proceed to API key
+        config.set('provider', picked.value);
+        if (picked.baseUrl) {
+          config.set('baseUrl', picked.baseUrl);
+          setSetupBaseUrl(picked.baseUrl);
+        }
+        if (picked.format) {
+          config.set('requestFormat', picked.format);
+        }
+        pushLine({
+          type: 'info',
+          text: `Selected provider: ${picked.value} (${picked.format ?? 'auto'}). Now enter API key.`,
+        });
+        setSetupStep('apiKey');
+        return;
+      }
+    }
+
     if (setupModelPickerOpen && !isRunning && setupModels.length > 0) {
       if (key.escape) {
         setSetupModelPickerOpen(false);
@@ -1429,6 +1513,68 @@ function XibeCodeChatApp(props: {
           <Text color="subtle">↑/↓ navigate • Enter apply • Esc cancel</Text>
         </Box>
       )}
+      {(setupStep !== 'idle' || setupProviderPickerOpen) && (
+        <Box
+          marginTop={1}
+          borderStyle="round"
+          borderColor="suggestion"
+          flexDirection="column"
+          paddingX={1}
+        >
+          <Text bold color="suggestion">
+            Setup wizard
+          </Text>
+          <Text wrap="wrap">
+            <Text color="claude" bold>
+              You are configuring your provider connection.
+            </Text>
+            <Text color="inactive">
+              {' '}
+              This is required before the agent can run.
+            </Text>
+          </Text>
+          {setupProviderPickerOpen && (
+            <Box flexDirection="column" marginTop={1}>
+              <Text color="inactive">Pick a provider preset (↑/↓, Enter). Esc cancels.</Text>
+              {[
+                'OpenAI',
+                'Anthropic',
+                'OpenRouter',
+                'Groq',
+                'DeepSeek',
+                'Google (Gemini)',
+                'xAI (Grok)',
+                'Moonshot (Kimi)',
+                'Zhipu AI (z.ai)',
+                'Custom (paste your own Base URL)',
+              ].map((label, index) => (
+                <React.Fragment key={label}>
+                  <Text>
+                    <Text color={index === setupProviderIndex ? 'claude' : 'inactive'}>
+                      {index === setupProviderIndex ? '▸ ' : '  '}
+                    </Text>
+                    <Text color={index === setupProviderIndex ? 'claude' : 'text'}>{label}</Text>
+                  </Text>
+                </React.Fragment>
+              ))}
+            </Box>
+          )}
+          {setupStep === 'baseUrl' && !setupProviderPickerOpen && (
+            <Text color="inactive">
+              Step: Base URL — paste an OpenAI-compatible endpoint (example: https://api.openai.com/v1)
+            </Text>
+          )}
+          {setupStep === 'apiKey' && !setupProviderPickerOpen && (
+            <Text color="inactive">Step: API key — paste your key (stored locally)</Text>
+          )}
+          {setupStep === 'loadingModels' && (
+            <Text color="inactive">Step: Models — fetching `/models`…</Text>
+          )}
+          {setupStep === 'pickModel' && (
+            <Text color="inactive">Step: Model — select one below</Text>
+          )}
+        </Box>
+      )}
       {configMenuOpen && (
         <Box
           marginTop={1}
@@ -1551,10 +1697,8 @@ function XibeCodeChatApp(props: {
 
 export async function launchClaudeStyleChat(options: ChatOptions): Promise<void> {
   const config = new ConfigManager(options.profile);
-  const apiKey = options.apiKey || config.getApiKey();
-  if (!apiKey) {
-    throw new Error('No API key found. Run xibecode config --set-key YOUR_KEY');
-  }
+  const apiKey = options.apiKey || config.getApiKey() || '';
+  const needsFirstRunSetup = !apiKey;
 
   const useEconomy = (options.costMode || config.getCostMode()) === 'economy';
   const model = options.model || config.getModel(useEconomy);
@@ -1570,11 +1714,11 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
   const toolExecutor = new CodingToolExecutor(process.cwd(), { mcpClientManager, skillManager });
   let wireFormat: RequestWireFormat = config.get('requestFormat') ?? 'auto';
   const customProviderFormat = config.get('customProviderFormat');
-  const createAgentForModel = (modelName: string): EnhancedAgent =>
+  const createAgentForModel = (modelName: string, creds: { apiKey: string; baseUrl?: string }): EnhancedAgent =>
     new EnhancedAgent(
       {
-        apiKey,
-        baseUrl,
+        apiKey: creds.apiKey,
+        baseUrl: creds.baseUrl,
         model: modelName,
         maxIterations: 150,
         verbose: false,
@@ -1585,25 +1729,30 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
       },
       provider,
     );
-  let activeAgent = createAgentForModel(model);
+  let activeAgent: EnhancedAgent | null = apiKey ? createAgentForModel(model, { apiKey, baseUrl }) : null;
+  let activeCreds = { apiKey, baseUrl };
   let activeModel = model;
   let activeMode: AgentMode = 'agent';
-  activeAgent.setModeFromUser('agent', 'Default start mode');
+  activeAgent?.setModeFromUser('agent', 'Default start mode');
   toolExecutor.setMode(activeMode);
 
   const onModelChange = async (nextModel: string): Promise<void> => {
     if (nextModel === activeModel) return;
-    activeAgent.removeAllListeners('event');
+    activeAgent?.removeAllListeners('event');
     activeModel = nextModel;
     config.set('model', nextModel);
-    activeAgent = createAgentForModel(nextModel);
-    activeAgent.setModeFromUser(activeMode, 'Preserve user-selected mode after model switch');
+    if (activeCreds.apiKey) {
+      activeAgent = createAgentForModel(nextModel, { apiKey: activeCreds.apiKey, baseUrl: activeCreds.baseUrl });
+      activeAgent.setModeFromUser(activeMode, 'Preserve user-selected mode after model switch');
+    } else {
+      activeAgent = null;
+    }
     toolExecutor.setMode(activeMode);
   };
 
   const onModeChange = async (nextMode: AgentMode): Promise<void> => {
     activeMode = nextMode;
-    activeAgent.setModeFromUser(nextMode, 'User selected /mode in chat');
+    activeAgent?.setModeFromUser(nextMode, 'User selected /mode in chat');
     toolExecutor.setMode(nextMode);
   };
 
@@ -1614,21 +1763,33 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     } else {
       config.set('requestFormat', next);
     }
-    activeAgent.removeAllListeners('event');
-    activeAgent = createAgentForModel(activeModel);
+    activeAgent?.removeAllListeners('event');
+    if (activeCreds.apiKey) {
+      activeAgent = createAgentForModel(activeModel, { apiKey: activeCreds.apiKey, baseUrl: activeCreds.baseUrl });
+      activeAgent.setModeFromUser(activeMode, 'Preserve user-selected mode after format switch');
+    } else {
+      activeAgent = null;
+    }
   };
 
   const loadModels = async (): Promise<string[]> => {
-    const fallbackBaseUrl =
-      provider && provider !== 'custom'
+    const currentApiKey = config.getApiKey();
+    const currentBaseUrl =
+      config.getBaseUrl() ||
+      (provider && provider !== 'custom'
         ? PROVIDER_CONFIGS[provider as keyof typeof PROVIDER_CONFIGS]?.baseUrl
-        : undefined;
-    const resolvedBaseUrl = baseUrl || fallbackBaseUrl;
-    const normalizedBase = (resolvedBaseUrl || '').replace(/\/+$/, '');
+        : undefined);
+    if (!currentApiKey) {
+      throw new Error('Missing API key. Run /setup first.');
+    }
+    if (!currentBaseUrl) {
+      throw new Error('Missing Base URL. Run /setup first.');
+    }
+    const normalizedBase = (currentBaseUrl || '').replace(/\/+$/, '');
 
     const response = await fetch(`${normalizedBase}/models`, {
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${currentApiKey}`,
         'Content-Type': 'application/json',
       },
     });
@@ -1655,6 +1816,24 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     onLine: (line: UiLine) => void,
     opts?: { images?: ImageAttachment[]; signal?: AbortSignal; onVisibleOutput?: () => void },
   ): Promise<ReturnType<EnhancedAgent['getStats']>> => {
+    const currentApiKey = config.getApiKey() || options.apiKey || '';
+    const currentBaseUrl = config.getBaseUrl() || options.baseUrl;
+    if (!currentApiKey) {
+      onLine({ type: 'error', text: 'Missing API key. Type /setup to configure Base URL + API key.' });
+      throw new Error('Missing API key');
+    }
+
+    if (
+      !activeAgent ||
+      activeCreds.apiKey !== currentApiKey ||
+      activeCreds.baseUrl !== currentBaseUrl
+    ) {
+      activeCreds = { apiKey: currentApiKey, baseUrl: currentBaseUrl };
+      activeAgent = createAgentForModel(activeModel, { apiKey: currentApiKey, baseUrl: currentBaseUrl });
+      activeAgent.setModeFromUser(activeMode, 'Refresh agent after credential change');
+      toolExecutor.setMode(activeMode);
+    }
+
     activeAgent.removeAllListeners('event');
     let streamedBuffer = '';
 
@@ -1778,6 +1957,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
       initialMode={activeMode}
       provider={provider}
       baseUrl={baseUrl}
+      needsFirstRunSetup={needsFirstRunSetup}
       defaultModel={model}
       modeOptions={modeOptions}
       initialRequestFormat={wireFormat}

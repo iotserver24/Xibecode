@@ -1,14 +1,13 @@
 # XibeCode
 
-AI-powered autonomous coding assistant for your terminal, browser, and desktop.
+AI-powered autonomous coding assistant for your terminal and browser.
 
 [![Donate](https://img.shields.io/badge/Donate-Support%20XibeCode-ff69b4?style=for-the-badge)](https://www.anishkumar.tech/donate)
 [![Version](https://img.shields.io/npm/v/xibecode?style=for-the-badge)](https://www.npmjs.com/package/xibecode)
-[![Desktop App](https://img.shields.io/badge/Desktop_App-Download-blue?style=for-the-badge)](https://github.com/iotserver24/xibecode/releases)
 
 ## Overview
 
-XibeCode is a CLI agent that can read and edit code, run commands, and iterate on tasks from your terminal using LLMs. It includes a **WebUI** for a browser-based experience, a **Desktop App** (Electron) for native IDE-like usage, **AI-powered test generation**, and **multi-model support** for both Anthropic and OpenAI models.
+XibeCode is a CLI agent that can read and edit code, run commands, and iterate on tasks from your terminal using LLMs. It includes a **WebUI** for a browser-based experience, **AI-powered test generation**, and **multi-model support** for both Anthropic and OpenAI-compatible providers.
 
 ## What's New in v0.9.1
 
@@ -38,66 +37,6 @@ XibeCode is a CLI agent that can read and edit code, run commands, and iterate o
 - **GitHub Actions reliability fixes** for TypeScript + dependency install paths.
 - **No bundled Playwright** — browser automation is via optional `agent-browser` / MCP; npm install does not pull browser binaries.
 - **Type declarations for `marked-terminal`** included in source to prevent clean-CI type failures.
-
-## Screenshots
-
-### Main Interface
-
-![Main Interface](screenshots/01-main-interface.png)
-*Modern v0.dev-inspired interface with activity bar, chat panel, code editor, and terminal*
-
-### File Explorer
-
-![File Explorer](screenshots/02-file-explorer.png)
-*Browse and open files with recursive directory tree*
-
-### Chat Interface
-
-![Chat Interface](screenshots/03-chat-interface.png)
-*Interactive AI chat with streaming responses and markdown rendering*
-
-### Git Panel
-
-![Git Panel](screenshots/04-git-panel.png)
-*Git integration with commit history, staging, and diffs*
-
-### Settings Panel
-
-![Settings Panel](screenshots/05-settings-panel.png)
-*Comprehensive settings modal with multiple configuration categories*
-
-### AI Provider Settings
-
-![AI Provider Settings](screenshots/06-ai-provider-settings.png)
-*Configure AI models, API keys, and provider settings*
-
-### MCP Servers Editor
-
-![MCP Servers Editor](screenshots/07-mcp-servers-editor.png)
-*Edit MCP server configuration with Monaco editor and syntax highlighting*
-
-### Terminal View
-
-![Terminal View](screenshots/08-terminal-view.png)
-*Fully interactive terminal with PTY support, colors, and tab completion*
-
-## Desktop App
-
-Download the native desktop app for your platform from [GitHub Releases](https://github.com/iotserver24/xibecode/releases):
-
-| Platform | Architecture | Download |
-|----------|-------------|----------|
-| **Windows** | x64 / arm64 | `.exe` installer |
-| **macOS** | Intel / Apple Silicon | `.dmg` |
-| **Linux** | x64 | `.deb`, `.rpm`, `.AppImage` |
-| **Linux** | arm64 | `.deb`, `.rpm`, `.AppImage` |
-
-The desktop app is a thin shell that runs the `xibecode` CLI underneath. Install the CLI first, then the desktop app gives you a native window with:
-
-- VS Code-style welcome screen with recent projects
-- Open Folder / Clone Repository / New Project
-- Full XibeCode WebUI in a native window
-- CLI updates automatically propagate (no app update needed)
 
 ## Installation
 
