@@ -116,25 +116,37 @@ export class HistoryManager {
     await this.ensureDir();
     try {
       const files = await fs.readdir(this.projectDir);
-      const summaries: ConversationSummary[] = [];
 
-      for (const file of files) {
-        if (!file.endsWith('.json')) continue;
-        try {
-          const filePath = path.join(this.projectDir, file);
-          const content = await fs.readFile(filePath, 'utf-8');
-          const conv = JSON.parse(content) as SavedConversation;
-          summaries.push({
-            id: conv.id,
-            title: conv.title,
-            created: conv.created,
-            updated: conv.updated,
-            messageCount: conv.messages.length,
-            model: conv.model,
-          });
-        } catch {
-          // Skip corrupted files
-        }
+      // ⚡ Bolt: Parallelize file reading to improve performance
+      // Reading history files concurrently reduces I/O wait time significantly.
+      // We use bounded concurrency to prevent EMFILE errors (too many open files) when the user has hundreds of sessions.
+      const jsonFiles = files.filter((file) => file.endsWith('.json'));
+      const summaries: ConversationSummary[] = [];
+      const concurrencyLimit = 50;
+
+      for (let i = 0; i < jsonFiles.length; i += concurrencyLimit) {
+        const chunk = jsonFiles.slice(i, i + concurrencyLimit);
+        const promises = chunk.map(async (file) => {
+          try {
+            const filePath = path.join(this.projectDir, file);
+            const content = await fs.readFile(filePath, 'utf-8');
+            const conv = JSON.parse(content) as SavedConversation;
+            return {
+              id: conv.id,
+              title: conv.title,
+              created: conv.created,
+              updated: conv.updated,
+              messageCount: conv.messages.length,
+              model: conv.model,
+            } as ConversationSummary;
+          } catch {
+            // Skip corrupted files
+            return null;
+          }
+        });
+
+        const results = await Promise.all(promises);
+        summaries.push(...results.filter((summary): summary is ConversationSummary => summary !== null));
       }
 
       // Sort by updated time, newest first

@@ -150,21 +150,30 @@ export class SessionManager {
       return [];
     }
 
+    // ⚡ Bolt: Parallelize file reading to improve performance
+    // Reading many session files concurrently reduces I/O wait time significantly compared to sequential iteration.
+    // We use bounded concurrency to prevent EMFILE errors (too many open files) when the user has hundreds of sessions.
+    const jsonFiles = files.filter((file) => file.endsWith('.json'));
     const metas: SessionMetadata[] = [];
+    const concurrencyLimit = 50;
 
-    for (const file of files) {
-      if (!file.endsWith('.json')) continue;
+    for (let i = 0; i < jsonFiles.length; i += concurrencyLimit) {
+      const chunk = jsonFiles.slice(i, i + concurrencyLimit);
+      const promises = chunk.map(async (file) => {
+        const fullPath = path.join(this.sessionsDir, file);
+        try {
+          const raw = await fs.readFile(fullPath, 'utf-8');
+          const data = JSON.parse(raw) as ChatSession;
+          const { messages: _messages, stats: _stats, ...meta } = data;
+          return meta;
+        } catch {
+          // Ignore malformed files
+          return null;
+        }
+      });
 
-      const fullPath = path.join(this.sessionsDir, file);
-      try {
-        const raw = await fs.readFile(fullPath, 'utf-8');
-        const data = JSON.parse(raw) as ChatSession;
-        const { messages: _messages, stats: _stats, ...meta } = data;
-        metas.push(meta);
-      } catch {
-        // Ignore malformed files
-        continue;
-      }
+      const results = await Promise.all(promises);
+      metas.push(...results.filter((meta): meta is SessionMetadata => meta !== null));
     }
 
     metas.sort((a, b) => b.updated.localeCompare(a.updated));

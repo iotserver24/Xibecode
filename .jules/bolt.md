@@ -1,0 +1,4 @@
+## 2024-04-14 - Parallelize session and history file reading
+**Learning:** In electron/node environments, sequential reading of many JSON files (like in `SessionManager.listSessions` or `HistoryManager.list`) can be a significant I/O bottleneck when the file count grows. Testing showed a >3x speedup by parallelizing reads.
+However, using unbounded `Promise.all` with `Array.prototype.map` over an unknown number of files can cause the application to exceed the operating system's maximum open file descriptors limit (`EMFILE`). Worse, if error handling swallows the error, legitimate files will disappear from results.
+**Action:** Always use **bounded concurrency** (e.g., chunking the promises into batches of 50-100 or using tools like `p-map`) when parallelizing file I/O over an arbitrary number of files to prevent application crashes and silent data loss.
