@@ -468,7 +468,7 @@ export class EnhancedAgent extends EventEmitter {
     initialPrompt: string,
     tools: Tool[],
     toolExecutor: any,
-    opts?: { images?: ImageAttachment[] },
+    opts?: { images?: ImageAttachment[]; signal?: AbortSignal },
   ): Promise<void> {
     // Reset per-turn state (keeps conversation history in this.messages)
     this.iterationCount = 0;
@@ -537,7 +537,7 @@ export class EnhancedAgent extends EventEmitter {
       this.currentTier = 'strategic';
       this.emit('thinking', { message: 'Strategic planning (plan-first mode)...' });
       try {
-        const planResult = await this.callModel([]);
+        const planResult = await this.callModel([], opts?.signal);
         const planContent = planResult.message?.content;
         let planText = '';
         if (Array.isArray(planContent)) {
@@ -587,7 +587,7 @@ export class EnhancedAgent extends EventEmitter {
         const effectiveTools = tools;
         for (let attempt = 1; attempt <= maxApiRetries; attempt++) {
           try {
-            const result = await this.callModel(effectiveTools);
+            const result = await this.callModel(effectiveTools, opts?.signal);
             response = result.message;
             streamed = result.streamed;
             const persona = result.persona;
@@ -951,7 +951,10 @@ export class EnhancedAgent extends EventEmitter {
   /**
    * Call the model with streaming (fallback to non-streaming).
    */
-  private async callModel(tools: Tool[]): Promise<{ message: any; streamed: boolean; persona?: { name: string; color: string } }> {
+  private async callModel(
+    tools: Tool[],
+    signal?: AbortSignal,
+  ): Promise<{ message: any; streamed: boolean; persona?: { name: string; color: string } }> {
     // Route to provider-specific implementation
     // Check if the provider uses the Anthropic format or OpenAI format
     let isAnthropicFormat = false;
@@ -970,7 +973,7 @@ export class EnhancedAgent extends EventEmitter {
 
     // If it's NOT Anthropic format, use the OpenAI-compatible client
     if (!isAnthropicFormat) {
-      const result = await this.callOpenAI(tools);
+      const result = await this.callOpenAI(tools, signal);
       const currentModeConfig = MODE_CONFIG[this.modeState.current];
       const persona = {
         name: currentModeConfig.personaName,
@@ -1168,7 +1171,10 @@ export class EnhancedAgent extends EventEmitter {
     return `${base}/chat/completions`;
   }
 
-  private async callOpenAI(tools: Tool[]): Promise<{ message: any; streamed: boolean; persona?: { name: string; color: string } }> {
+  private async callOpenAI(
+    tools: Tool[],
+    signal?: AbortSignal,
+  ): Promise<{ message: any; streamed: boolean; persona?: { name: string; color: string } }> {
     if (!this.config.apiKey) {
       // Try to get from specifics if generic is missing, though ConfigManager should have handled this
       // strict check might remain here
@@ -1198,6 +1204,7 @@ export class EnhancedAgent extends EventEmitter {
           Authorization: `Bearer ${this.config.apiKey}`,
         },
         body: JSON.stringify({ ...baseBody, stream: true }),
+        signal,
       });
 
       if (!streamResponse.ok || !streamResponse.body) {
@@ -1328,6 +1335,7 @@ export class EnhancedAgent extends EventEmitter {
           Authorization: `Bearer ${this.config.apiKey}`,
         },
         body: JSON.stringify(baseBody),
+        signal,
       });
 
       if (!response.ok) {
