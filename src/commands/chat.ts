@@ -40,25 +40,9 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
 
   const skillManager = new SkillManager(process.cwd(), apiKey, baseUrl, model, provider);
   await skillManager.loadSkills();
-  const defaultSkillsPrompt = await skillManager.buildDefaultSkillsPromptForTask('', process.cwd());
 
   const mcpClientManager = new MCPClientManager();
   const toolExecutor = new CodingToolExecutor(process.cwd(), { mcpClientManager, skillManager });
-
-  const agent = new EnhancedAgent(
-    {
-      apiKey,
-      baseUrl,
-      model,
-      maxIterations: 150,
-      verbose: false,
-      provider,
-      customProviderFormat: config.get('customProviderFormat'),
-      requestFormat: config.get('requestFormat') ?? 'auto',
-      defaultSkillsPrompt,
-    },
-    provider,
-  );
 
   console.log(`xibecode chat (plain) v${version}`.trim());
   console.log(`model: ${model} | provider: ${provider ?? 'auto'} | format: ${config.get('requestFormat') ?? 'auto'}`);
@@ -121,7 +105,36 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
       rl.close();
       break;
     }
-    agent.removeAllListeners('event');
+    const autoSkillsShEnabled =
+      process.env.XIBECODE_AUTO_SKILLS_SH === '1' || process.env.XIBECODE_AUTO_SKILLS_SH === 'true';
+    let autoInstalledSkillNames: string[] = [];
+    if (autoSkillsShEnabled) {
+      const auto = await skillManager.autoInstallFromSkillsShForTask(input, { enabled: true, maxInstalls: 1 });
+      autoInstalledSkillNames = auto.installedSkillNames || [];
+    }
+    let defaultSkillsPrompt = await skillManager.buildDefaultSkillsPromptForTask(input, process.cwd());
+    for (const name of autoInstalledSkillNames) {
+      const s = skillManager.getSkill(name);
+      if (!s?.instructions) continue;
+      defaultSkillsPrompt += `\n\n---\n\n## Auto-installed skills.sh skill\n\n### ${s.name}\n*${s.description}*\n\n${s.instructions}`;
+      break;
+    }
+
+    const agent = new EnhancedAgent(
+      {
+        apiKey,
+        baseUrl,
+        model,
+        maxIterations: 150,
+        verbose: false,
+        provider,
+        customProviderFormat: config.get('customProviderFormat'),
+        requestFormat: config.get('requestFormat') ?? 'auto',
+        defaultSkillsPrompt,
+      },
+      provider,
+    );
+
     agent.on('event', onEvent);
     await agent.run(input, toolExecutor.getTools(), toolExecutor);
     const stats = agent.getStats();

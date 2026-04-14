@@ -8,6 +8,7 @@ import { chatCommand } from './commands/chat.js';
 import { configCommand } from './commands/config.js';
 import { mcpCommand } from './commands/mcp.js';
 import { diagnosticsCommand } from './commands/diagnostics.js';
+import { skillsCommand } from './commands/skills.js';
 import { startWebUI } from './webui/server.js';
 import dotenv from 'dotenv';
 import { createRequire } from 'module';
@@ -152,6 +153,12 @@ program
   .option('--diff-target <ref>', 'Diff target ref (default: HEAD)', 'HEAD')
   .option('-v, --verbose', 'Show detailed logs', false)
   .action(diagnosticsCommand);
+
+// Skills management (OpenClaude-style playbooks)
+program
+  .command('skills [action] [args...]')
+  .description('List/search/show skills (built-in + .xibecode/skills)')
+  .action((action: string | undefined, args: string[], options: any) => skillsCommand(action, args, options));
 
 // MCP Server Management
 const mcpCmd = program

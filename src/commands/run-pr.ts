@@ -369,7 +369,27 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
   await memory.init().catch(() => {});
   const skillManager = new SkillManager(cwd, apiKey, baseUrl, model, provider);
   await skillManager.loadSkills();
-  const defaultSkillsPrompt = await skillManager.buildDefaultSkillsPromptForTask(finalPrompt, cwd);
+  const autoSkillsShEnabled =
+    process.env.XIBECODE_AUTO_SKILLS_SH === '1' || process.env.XIBECODE_AUTO_SKILLS_SH === 'true';
+  let autoInstalledSkillNames: string[] = [];
+  if (autoSkillsShEnabled) {
+    const auto = await skillManager.autoInstallFromSkillsShForTask(finalPrompt, {
+      enabled: true,
+      maxInstalls: 1,
+      onProgress: (msg) => ui.info(msg),
+    });
+    if (auto.installed) {
+      ui.info(`Auto-installed a skills.sh skill: ${auto.skillId}`);
+      autoInstalledSkillNames = auto.installedSkillNames || [];
+    }
+  }
+  let defaultSkillsPrompt = await skillManager.buildDefaultSkillsPromptForTask(finalPrompt, cwd);
+  for (const name of autoInstalledSkillNames) {
+    const s = skillManager.getSkill(name);
+    if (!s?.instructions) continue;
+    defaultSkillsPrompt += `\n\n---\n\n## Auto-installed skills.sh skill\n\n### ${s.name}\n*${s.description}*\n\n${s.instructions}`;
+    break; // keep it to 1 for safety
+  }
 
   // ── Build tool executor + agent ───────────────────────────────────────────
   const toolExecutor = new CodingToolExecutor(cwd, {
