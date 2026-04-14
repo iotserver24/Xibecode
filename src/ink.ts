@@ -84,5 +84,5 @@ export {
   useThemeSetting,
 } from './components/design-system/ThemeProvider.js';
 
-export { useInput, useApp } from 'ink';
+export { useInput, useApp, Static } from 'ink';
 export type { Key } from 'ink';
