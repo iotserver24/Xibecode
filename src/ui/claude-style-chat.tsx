@@ -1129,6 +1129,8 @@ function XibeCodeChatApp(props: {
                 <Text color="inactive">
                   xibecode <Text color="claude">v{APP_VERSION}</Text>
                 </Text>
+                <Text color="subtle">{'─'.repeat(98)}</Text>
+                <Text color="inactive">Agent transcript</Text>
               </Box>
             );
           }
