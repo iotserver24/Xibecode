@@ -26,6 +26,8 @@ import { TestRunnerDetector } from '../utils/testRunner.js';
 import { TestGenerator, writeTestFile } from '../tools/test-generator.js';
 import { SessionBridge } from '../core/session-bridge.js';
 import { HistoryManager, type SavedConversation, type HistoryMessage } from '../core/history-manager.js';
+import { extractAtReferences, splitAtReferences } from '../utils/at-references.js';
+import { loadImageAttachment, mimeFromExtension, type ImageAttachment } from '../utils/image-attachments.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1263,7 +1265,21 @@ else:
 
       // Run agent
       const tools = session.toolExecutor.getTools();
-      await agent.run(message, tools, session.toolExecutor);
+      const refs = extractAtReferences(message, this.workingDir);
+      const { image: imageRefs } = splitAtReferences(refs);
+      const images: ImageAttachment[] = [];
+      for (const ref of imageRefs) {
+        try {
+          const mime = mimeFromExtension(ref.extension);
+          if (!mime) continue;
+          const attachment = await loadImageAttachment(ref.resolvedPath, { mime });
+          images.push(attachment);
+        } catch {
+          // Ignore image load failures so text chat still works.
+        }
+      }
+
+      await agent.run(message, tools, session.toolExecutor, images.length ? { images } : undefined);
 
       session.messages.push({ role: 'user', content: message });
       session.status = 'idle';
