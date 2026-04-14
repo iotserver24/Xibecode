@@ -16,6 +16,7 @@ import {
   formatMemoriesForContext,
   isAutoMemoryLoadEnabled,
 } from '../utils/auto-memory.js';
+import type { ImageAttachment } from '../utils/image-attachments.js';
 
 /** Reasoning tier for hierarchical (AX-lite) behavior: strategic = plan only, tactical = per-step decisions, operational = tool use. */
 export type ReasoningTier = 'strategic' | 'tactical' | 'operational';
@@ -463,7 +464,12 @@ export class EnhancedAgent extends EventEmitter {
     return super.emit('event', { type: event, data });
   }
 
-  async run(initialPrompt: string, tools: Tool[], toolExecutor: any): Promise<void> {
+  async run(
+    initialPrompt: string,
+    tools: Tool[],
+    toolExecutor: any,
+    opts?: { images?: ImageAttachment[] },
+  ): Promise<void> {
     // Reset per-turn state (keeps conversation history in this.messages)
     this.iterationCount = 0;
     this.toolCallCount = 0;
@@ -490,10 +496,21 @@ export class EnhancedAgent extends EventEmitter {
       }
     }
 
-    this.messages.push({
-      role: 'user',
-      content: initialPrompt,
-    });
+    if (opts?.images && opts.images.length > 0) {
+      const blocks: any[] = [{ type: 'text', text: initialPrompt }];
+      for (const img of opts.images) {
+        blocks.push({
+          type: 'image_url',
+          image_url: { url: `data:${img.mime};base64,${img.dataBase64}` },
+        });
+      }
+      this.messages.push({ role: 'user', content: blocks as any });
+    } else {
+      this.messages.push({
+        role: 'user',
+        content: initialPrompt,
+      });
+    }
 
     // ─── Neural Memory Recall ───
     try {
@@ -1051,8 +1068,18 @@ export class EnhancedAgent extends EventEmitter {
   /**
    * Build OpenAI-format messages from internal Anthropic-style history (including tool_calls and tool results).
    */
-  private buildOpenAIMessages(): Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content?: string; tool_call_id?: string; tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }> }> {
-    const out: Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content?: string; tool_call_id?: string; tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }> }> = [];
+  private buildOpenAIMessages(): Array<{
+    role: 'system' | 'user' | 'assistant' | 'tool';
+    content?: any;
+    tool_call_id?: string;
+    tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>;
+  }> {
+    const out: Array<{
+      role: 'system' | 'user' | 'assistant' | 'tool';
+      content?: any;
+      tool_call_id?: string;
+      tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>;
+    }> = [];
 
     out.push({ role: 'system', content: this.getSystemPrompt() });
 
@@ -1079,7 +1106,15 @@ export class EnhancedAgent extends EventEmitter {
           } else {
             const textBlocks = arr.filter((b: any) => b.type === 'text') as TextBlock[];
             const text = textBlocks.map((b) => b.text).join('\n');
-            if (text) out.push({ role: 'user', content: text });
+            const imageBlocks = arr.filter((b: any) => b.type === 'image_url');
+            if (imageBlocks.length > 0) {
+              const parts: any[] = [];
+              if (text) parts.push({ type: 'text', text });
+              for (const ib of imageBlocks) parts.push(ib);
+              out.push({ role: 'user', content: parts });
+            } else if (text) {
+              out.push({ role: 'user', content: text });
+            }
           }
         }
         continue;

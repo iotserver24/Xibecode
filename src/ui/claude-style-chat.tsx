@@ -14,6 +14,8 @@ import { renderAndRun } from '../interactiveHelpers.js';
 import { AssistantMarkdown } from '../components/AssistantMarkdown.js';
 import { formatToolArgs, formatToolOutcome, formatRunSwarmDetailLines } from '../utils/tool-display.js';
 import { SPINNER_VERBS } from '../constants/spinnerVerbs.js';
+import { extractAtReferences, splitAtReferences } from '../utils/at-references.js';
+import { loadImageAttachment, mimeFromExtension, type ImageAttachment } from '../utils/image-attachments.js';
 
 export type ChatOptions = {
   model?: string;
@@ -82,6 +84,14 @@ function isAnthropicWireFormat(
     );
   }
   return false;
+}
+
+function computeWindowStart(total: number, selected: number, windowSize: number): number {
+  if (total <= windowSize) return 0;
+  const clampedSelected = Math.max(0, Math.min(selected, total - 1));
+  const maxStart = total - windowSize;
+  const start = clampedSelected - Math.floor(windowSize / 2);
+  return Math.max(0, Math.min(start, maxStart));
 }
 
 function lineColorKey(type: UiLineType): TuiThemeColorKey {
@@ -156,6 +166,7 @@ function XibeCodeChatApp(props: {
   runPrompt: (
     prompt: string,
     onLine: (line: UiLine) => void,
+    opts?: { images?: ImageAttachment[] },
   ) => Promise<ReturnType<EnhancedAgent['getStats']>>;
   listBackgroundTasks: () => Promise<
     Array<{ id: string; status: string; startTime: number; prompt: string }>
@@ -678,7 +689,21 @@ function XibeCodeChatApp(props: {
       setIsRunning(true);
       try {
         const startedAt = Date.now();
-        const stats = await props.runPrompt(resolvedInput, pushLine);
+        const refs = extractAtReferences(resolvedInput, process.cwd());
+        const { image: imageRefs } = splitAtReferences(refs);
+        const images: ImageAttachment[] = [];
+        for (const ref of imageRefs) {
+          try {
+            const mime = mimeFromExtension(ref.extension);
+            if (!mime) continue;
+            const attachment = await loadImageAttachment(ref.resolvedPath, { mime });
+            images.push(attachment);
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Failed to load image';
+            pushLine({ type: 'error', text: message });
+          }
+        }
+        const stats = await props.runPrompt(resolvedInput, pushLine, images.length ? { images } : undefined);
         const elapsedMs = Date.now() - startedAt;
         const seconds = (elapsedMs / 1000).toFixed(1);
         pushLine({
@@ -731,6 +756,27 @@ function XibeCodeChatApp(props: {
   );
   const filteredCommands = CHAT_COMMANDS.filter((command) =>
     command.name.toLowerCase().startsWith(normalizedInput || '/'),
+  );
+
+  const MODEL_PICKER_WINDOW = 14;
+  const modelPickerStart = computeWindowStart(
+    filteredModels.length,
+    selectedModelIndex,
+    MODEL_PICKER_WINDOW,
+  );
+  const visibleModelOptions = filteredModels.slice(
+    modelPickerStart,
+    modelPickerStart + MODEL_PICKER_WINDOW,
+  );
+
+  const setupModelPickerStart = computeWindowStart(
+    setupModels.length,
+    setupSelectedModelIndex,
+    MODEL_PICKER_WINDOW,
+  );
+  const visibleSetupModelOptions = setupModels.slice(
+    setupModelPickerStart,
+    setupModelPickerStart + MODEL_PICKER_WINDOW,
   );
 
   useInput((inputKey, key) => {
@@ -913,9 +959,8 @@ function XibeCodeChatApp(props: {
       if (key.return) {
         const picked = setupModels[setupSelectedModelIndex];
         if (!picked) return;
-        const config = new ConfigManager(props.profile);
-        config.set('model', picked);
-        pushLine({ type: 'info', text: `Model set to: ${picked}` });
+        // Use the same path as /model so the live status line updates immediately.
+        void applyModel(picked);
         setSetupModelPickerOpen(false);
         setSetupStep('idle');
         pushLine({ type: 'info', text: 'Setup complete. Type a prompt to start.' });
@@ -1234,18 +1279,22 @@ function XibeCodeChatApp(props: {
           ) : filteredModels.length === 0 ? (
             <Text color="inactive">No models matched current filter.</Text>
           ) : (
-            filteredModels.slice(0, 14).map((modelName, index) => (
+            visibleModelOptions.map((modelName, index) => {
+              const absoluteIndex = modelPickerStart + index;
+              const isSelected = absoluteIndex === selectedModelIndex;
+              return (
               <React.Fragment key={modelName}>
                 <Text>
-                  <Text color={index === selectedModelIndex ? 'claude' : 'inactive'}>
-                    {index === selectedModelIndex ? '▸ ' : '  '}
+                  <Text color={isSelected ? 'claude' : 'inactive'}>
+                    {isSelected ? '▸ ' : '  '}
                   </Text>
-                  <Text color={index === selectedModelIndex ? 'claude' : 'text'}>
+                  <Text color={isSelected ? 'claude' : 'text'}>
                     {modelName}
                   </Text>
                 </Text>
               </React.Fragment>
-            ))
+              );
+            })
           )}
           <Text color="subtle">↑/↓ navigate • Enter apply • Esc close</Text>
         </Box>
@@ -1264,18 +1313,22 @@ function XibeCodeChatApp(props: {
           {setupModels.length === 0 ? (
             <Text color="inactive">No models loaded.</Text>
           ) : (
-            setupModels.slice(0, 14).map((modelName, index) => (
+            visibleSetupModelOptions.map((modelName, index) => {
+              const absoluteIndex = setupModelPickerStart + index;
+              const isSelected = absoluteIndex === setupSelectedModelIndex;
+              return (
               <React.Fragment key={modelName}>
                 <Text>
-                  <Text color={index === setupSelectedModelIndex ? 'claude' : 'inactive'}>
-                    {index === setupSelectedModelIndex ? '▸ ' : '  '}
+                  <Text color={isSelected ? 'claude' : 'inactive'}>
+                    {isSelected ? '▸ ' : '  '}
                   </Text>
-                  <Text color={index === setupSelectedModelIndex ? 'claude' : 'text'}>
+                  <Text color={isSelected ? 'claude' : 'text'}>
                     {modelName}
                   </Text>
                 </Text>
               </React.Fragment>
-            ))
+              );
+            })
           )}
           <Text color="subtle">↑/↓ navigate • Enter apply • Esc cancel</Text>
         </Box>
@@ -1504,6 +1557,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
   const runPrompt = async (
     prompt: string,
     onLine: (line: UiLine) => void,
+    opts?: { images?: ImageAttachment[] },
   ): Promise<ReturnType<EnhancedAgent['getStats']>> => {
     activeAgent.removeAllListeners('event');
     let streamedBuffer = '';
@@ -1572,7 +1626,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
       }
     });
 
-    await activeAgent.run(prompt, toolExecutor.getTools(), toolExecutor);
+    await activeAgent.run(prompt, toolExecutor.getTools(), toolExecutor, opts);
     activeMode = activeAgent.getMode();
     toolExecutor.setMode(activeMode);
     return activeAgent.getStats();
