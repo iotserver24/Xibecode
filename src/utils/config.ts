@@ -35,7 +35,7 @@ export const PROVIDER_CONFIGS = {
     name: 'Anthropic'
   },
   zai: {
-    baseUrl: 'https://api.z.ai/v1',
+    baseUrl: 'https://api.z.ai/api/paas/v4',
     defaultModel: 'glm-4.7',
     format: 'anthropic',
     envKey: 'ZAI_API_KEY',

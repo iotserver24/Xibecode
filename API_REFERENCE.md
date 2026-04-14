@@ -12,7 +12,7 @@ This document provides an overview of the XibeCode API. For detailed documentati
 3. [Quick Reference](#quick-reference)
 4. [Tool Categories](#tool-categories)
 5. [Mode System](#mode-system)
-6. [Extension APIs](#extension-apis)
+6. [Plugin APIs](#plugin-apis)
 7. [Configuration](#configuration)
 
 ---
@@ -573,7 +573,7 @@ Base Agent Tools
 
 ---
 
-## Extension APIs
+## Plugin APIs
 
 ### Creating Custom Tools
 

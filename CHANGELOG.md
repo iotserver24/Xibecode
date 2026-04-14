@@ -17,13 +17,6 @@ All notable changes to XibeCode will be documented in this file.
 
 ## [0.5.0] - 2026-02-16
 
-### 🖥️ Desktop App (NEW)
-- Native Electron desktop app for Windows, macOS, and Linux
-- VS Code-style welcome screen with recent projects, Open Folder, Clone Repository, New Project
-- Thin shell that runs the `xibecode` CLI underneath — CLI updates auto-propagate
-- Builds for Windows (.exe), macOS (.dmg), Linux (.deb, .rpm, .AppImage) for both x64 and arm64
-- GitHub Actions CI for automated multi-platform builds on tag push
-
 ### 📝 Interactive Plan Mode
 - Plan mode now asks clarifying questions with a Cursor-style overlay UI (numbered questions, A/B/C options, "Other..." text input)
 - Searches the web using DuckDuckGo for research

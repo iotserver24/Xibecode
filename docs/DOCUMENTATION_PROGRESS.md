@@ -104,7 +104,7 @@ Comprehensive API reference overview:
 - Quick reference examples
 - Tool categories table
 - Mode capabilities matrix
-- Extension APIs (plugins, custom tools, modes)
+- Plugin APIs (plugins, custom tools, modes)
 - Configuration reference
 - Links to detailed docs
 - TypeScript definitions guide

@@ -1,6 +1,6 @@
 ## Project
 
-- This repo is **XibeCode**, an autonomous AI coding CLI (`xibecode`) plus WebUI/Electron app.
+- This repo is **XibeCode**, an autonomous AI coding CLI (`xibecode`) plus WebUI.
 - Main tasks are driven through `xibecode run` and `xibecode run-pr`.
 
 ## How to use `xibecode run-pr`
