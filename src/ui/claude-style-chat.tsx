@@ -166,7 +166,7 @@ function XibeCodeChatApp(props: {
   runPrompt: (
     prompt: string,
     onLine: (line: UiLine) => void,
-    opts?: { images?: ImageAttachment[] },
+    opts?: { images?: ImageAttachment[]; signal?: AbortSignal; onVisibleOutput?: () => void },
   ) => Promise<ReturnType<EnhancedAgent['getStats']>>;
   listBackgroundTasks: () => Promise<
     Array<{ id: string; status: string; startTime: number; prompt: string }>
@@ -257,6 +257,13 @@ function XibeCodeChatApp(props: {
     [props],
   );
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const abortReasonRef = useRef<'none' | 'user' | 'watchdog'>('none');
+  const queuedPromptRef = useRef<string | null>(null);
+  const lastVisibleOutputAtRef = useRef<number>(Date.now());
+  const currentPromptRef = useRef<string | null>(null);
+  const restartAttemptsRef = useRef<number>(0);
+
   const lastBgLineByTask = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
@@ -300,6 +307,24 @@ function XibeCodeChatApp(props: {
     }, 120);
     return () => clearInterval(id);
   }, [isRunning]);
+
+  useEffect(() => {
+    if (!isRunning) return;
+    const id = setInterval(() => {
+      // Silent means: no visible output (tool_call/tool_result/stream_text/response) for 90s.
+      if (Date.now() - lastVisibleOutputAtRef.current > 90_000) {
+        if (abortControllerRef.current && abortReasonRef.current === 'none') {
+          abortReasonRef.current = 'watchdog';
+          pushLine({
+            type: 'info',
+            text: `No output for 90s — restarting (attempt ${Math.min(restartAttemptsRef.current + 1, 2)}/2)…`,
+          });
+          abortControllerRef.current.abort();
+        }
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [isRunning, pushLine]);
 
   useEffect(() => {
     if (!isRunning) {
@@ -435,7 +460,14 @@ function XibeCodeChatApp(props: {
   const onSubmit = useCallback(
     async (value: string) => {
       const trimmed = value.trim();
-      if (!trimmed || isRunning) return;
+      if (!trimmed) return;
+
+      if (isRunning) {
+        queuedPromptRef.current = trimmed;
+        setInput('');
+        pushLine({ type: 'info', text: 'Queued message — will run next.' });
+        return;
+      }
 
       const commandMatches = CHAT_COMMANDS.filter((command) =>
         command.name.toLowerCase().startsWith(trimmed.toLowerCase()),
@@ -685,36 +717,91 @@ function XibeCodeChatApp(props: {
         return;
       }
 
-      pushLine({ type: 'user', text: resolvedInput });
-      setIsRunning(true);
-      try {
-        const startedAt = Date.now();
-        const refs = extractAtReferences(resolvedInput, process.cwd());
-        const { image: imageRefs } = splitAtReferences(refs);
-        const images: ImageAttachment[] = [];
-        for (const ref of imageRefs) {
-          try {
-            const mime = mimeFromExtension(ref.extension);
-            if (!mime) continue;
-            const attachment = await loadImageAttachment(ref.resolvedPath, { mime });
-            images.push(attachment);
-          } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : 'Failed to load image';
-            pushLine({ type: 'error', text: message });
+      const runOne = async (prompt: string): Promise<void> => {
+        currentPromptRef.current = prompt;
+        abortReasonRef.current = 'none';
+        lastVisibleOutputAtRef.current = Date.now();
+        abortControllerRef.current = new AbortController();
+
+        pushLine({ type: 'user', text: prompt });
+        setIsRunning(true);
+        try {
+          const startedAt = Date.now();
+          const refs = extractAtReferences(prompt, process.cwd());
+          const { image: imageRefs } = splitAtReferences(refs);
+          const images: ImageAttachment[] = [];
+          for (const ref of imageRefs) {
+            try {
+              const mime = mimeFromExtension(ref.extension);
+              if (!mime) continue;
+              const attachment = await loadImageAttachment(ref.resolvedPath, { mime });
+              images.push(attachment);
+            } catch (err: unknown) {
+              const message = err instanceof Error ? err.message : 'Failed to load image';
+              pushLine({ type: 'error', text: message });
+            }
+          }
+
+          const stats = await props.runPrompt(prompt, pushLine, {
+            images: images.length ? images : undefined,
+            signal: abortControllerRef.current.signal,
+            onVisibleOutput: () => {
+              lastVisibleOutputAtRef.current = Date.now();
+            },
+          });
+          const elapsedMs = Date.now() - startedAt;
+          const seconds = (elapsedMs / 1000).toFixed(1);
+          pushLine({
+            type: 'info',
+            text: `Done in ${seconds}s` + (stats.costLabel ? ` · cost ${stats.costLabel}` : ''),
+          });
+        } finally {
+          abortControllerRef.current = null;
+          currentPromptRef.current = null;
+          setIsRunning(false);
+        }
+      };
+
+      const isAbortError = (err: unknown): boolean => {
+        if (!err || typeof err !== 'object') return false;
+        const anyErr = err as any;
+        return anyErr.name === 'AbortError' || String(anyErr.message || '').toLowerCase().includes('aborted');
+      };
+
+      // Watchdog auto-restart loop (up to 2 restarts)
+      restartAttemptsRef.current = 0;
+      let promptToRun: string | null = resolvedInput;
+      while (promptToRun) {
+        try {
+          await runOne(promptToRun);
+          break;
+        } catch (err: unknown) {
+          if (isAbortError(err) && abortReasonRef.current === 'watchdog') {
+            restartAttemptsRef.current += 1;
+            if (restartAttemptsRef.current <= 2) {
+              // Restart same prompt
+              continue;
+            }
+            pushLine({ type: 'error', text: 'Restart limit reached (2). Stopping.' });
+            break;
+          }
+          if (isAbortError(err) && abortReasonRef.current === 'user') {
+            pushLine({ type: 'info', text: 'Cancelled.' });
+            break;
+          }
+          const message = err instanceof Error ? err.message : 'Unknown error';
+          pushLine({ type: 'error', text: message });
+          break;
+        } finally {
+          // If a message was queued during this run, send it next.
+          if (!isRunning && queuedPromptRef.current) {
+            const q = queuedPromptRef.current;
+            queuedPromptRef.current = null;
+            promptToRun = q;
+          } else {
+            promptToRun = null;
           }
         }
-        const stats = await props.runPrompt(resolvedInput, pushLine, images.length ? { images } : undefined);
-        const elapsedMs = Date.now() - startedAt;
-        const seconds = (elapsedMs / 1000).toFixed(1);
-        pushLine({
-          type: 'info',
-          text: `Done in ${seconds}s` + (stats.costLabel ? ` · cost ${stats.costLabel}` : ''),
-        });
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        pushLine({ type: 'error', text: message });
-      } finally {
-        setIsRunning(false);
       }
     },
     [
@@ -734,6 +821,7 @@ function XibeCodeChatApp(props: {
       wireFormat,
       applyMode,
       startSetupWizard,
+      isRunning,
     ],
   );
 
@@ -782,6 +870,14 @@ function XibeCodeChatApp(props: {
   useInput((inputKey, key) => {
     if (key.ctrl && inputKey === 'c') {
       exit();
+      return;
+    }
+
+    if (isRunning && key.escape) {
+      if (abortControllerRef.current && abortReasonRef.current === 'none') {
+        abortReasonRef.current = 'user';
+        abortControllerRef.current.abort();
+      }
       return;
     }
 
@@ -1557,7 +1653,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
   const runPrompt = async (
     prompt: string,
     onLine: (line: UiLine) => void,
-    opts?: { images?: ImageAttachment[] },
+    opts?: { images?: ImageAttachment[]; signal?: AbortSignal; onVisibleOutput?: () => void },
   ): Promise<ReturnType<EnhancedAgent['getStats']>> => {
     activeAgent.removeAllListeners('event');
     let streamedBuffer = '';
@@ -1571,6 +1667,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
           });
           break;
         case 'tool_call': {
+          opts?.onVisibleOutput?.();
           const name = String(event.data?.name ?? 'tool');
           const input = event.data?.input;
           const args = formatToolArgs(name, input);
@@ -1581,6 +1678,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
           break;
         }
         case 'tool_result': {
+          opts?.onVisibleOutput?.();
           const name = String(event.data?.name ?? 'tool');
           const result = event.data?.result;
           const success = event.data?.success !== false;
@@ -1601,6 +1699,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
           break;
         }
         case 'stream_text':
+          opts?.onVisibleOutput?.();
           streamedBuffer += (event.data?.text as string) || '';
           break;
         case 'stream_end':
@@ -1610,6 +1709,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
           streamedBuffer = '';
           break;
         case 'response':
+          opts?.onVisibleOutput?.();
           onLine({ type: 'assistant', text: (event.data?.text as string) || '' });
           break;
         case 'error':
@@ -1626,7 +1726,10 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
       }
     });
 
-    await activeAgent.run(prompt, toolExecutor.getTools(), toolExecutor, opts);
+    await activeAgent.run(prompt, toolExecutor.getTools(), toolExecutor, {
+      images: opts?.images,
+      signal: opts?.signal,
+    });
     activeMode = activeAgent.getMode();
     toolExecutor.setMode(activeMode);
     return activeAgent.getStats();
