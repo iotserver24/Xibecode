@@ -548,9 +548,6 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
         duration,
         filesChanged: stats.filesChanged,
         toolCalls: stats.toolCalls,
-        inputTokens: stats.inputTokens,
-        outputTokens: stats.outputTokens,
-        totalTokens: stats.totalTokens,
         costLabel: stats.costLabel,
       });
 
@@ -750,9 +747,6 @@ function buildPrBody(
   const seconds = (durationMs / 1000).toFixed(1);
   const fileList = changedFiles.map(f => `- \`${f}\``).join('\n');
 
-  const inputTokens = stats?.inputTokens;
-  const outputTokens = stats?.outputTokens;
-  const totalTokens = stats?.totalTokens;
   const costLabel = stats?.costLabel;
 
   const verificationLines = [
@@ -789,9 +783,6 @@ function buildPrBody(
     `| Tool calls | ${stats?.toolCalls ?? 0} |`,
     `| Files changed | ${stats?.filesChanged ?? stats?.changedFiles?.length ?? 0} |`,
     `| Duration | ${seconds}s |`,
-    `| Input tokens | ${inputTokens ?? 'n/a'} |`,
-    `| Output tokens | ${outputTokens ?? 'n/a'} |`,
-    `| Total tokens | ${totalTokens ?? 'n/a'} |`,
     `| Cost | ${costLabel ?? 'n/a'} |`,
     '',
     '## Verification',

@@ -159,7 +159,6 @@ function XibeCodeChatApp(props: {
   >;
   checkBackgroundTask: (taskId: string) => Promise<{ status?: string; lastLine?: string }>;
   onUiLine?: (line: UiLine) => void;
-  getLiveStats?: () => ReturnType<EnhancedAgent['getStats']>;
   loadModels: () => Promise<string[]>;
   onModelChange: (nextModel: string) => Promise<void>;
   onModeChange: (nextMode: AgentMode) => Promise<void>;
@@ -168,10 +167,8 @@ function XibeCodeChatApp(props: {
   const { exit } = useApp();
   const [input, setInput] = useState('');
   const [isRunning, setIsRunning] = useState(false);
-  const [paused, setPaused] = useState(false);
   const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
   const [runElapsedMs, setRunElapsedMs] = useState<number>(0);
-  const [liveStats, setLiveStats] = useState<ReturnType<EnhancedAgent['getStats']> | null>(null);
   const [wireFormat, setWireFormat] = useState<RequestWireFormat>(props.initialRequestFormat);
   const [activeModel, setActiveModel] = useState(props.model);
   const [activeMode, setActiveMode] = useState<AgentMode>(props.initialMode);
@@ -230,33 +227,17 @@ function XibeCodeChatApp(props: {
       type: 'info',
       text: 'XibeCode interactive session. Type /exit to quit, /clear to reset the transcript.',
     },
-    { type: 'info', text: 'Tip: press p to pause/resume live updates (for copying).' },
+    { type: 'info', text: 'Type /help for shortcuts.' },
   ]);
 
-  const pausedBuffer = useRef<UiLine[]>([]);
   const pushLine = useCallback(
     (line: UiLine) => {
       props.onUiLine?.(line);
-      if (paused) {
-        pausedBuffer.current.push(line);
-        return;
-      }
       // Keep a much larger in-memory transcript so context doesn't vanish quickly.
       setLines((prev: UiLine[]) => [...prev.slice(-5000), line]);
     },
-    [paused, props],
+    [props],
   );
-
-  const togglePaused = useCallback(() => {
-    setPaused((prev) => {
-      const next = !prev;
-      if (prev && pausedBuffer.current.length > 0) {
-        const buffered = pausedBuffer.current.splice(0, pausedBuffer.current.length);
-        setLines((current) => [...current.slice(-5000), ...buffered].slice(-5000));
-      }
-      return next;
-    });
-  }, []);
 
   const lastBgLineByTask = useRef<Map<string, string>>(new Map());
 
@@ -315,18 +296,6 @@ function XibeCodeChatApp(props: {
     }, 250);
     return () => clearInterval(id);
   }, [isRunning]);
-
-  useEffect(() => {
-    if (!isRunning || !props.getLiveStats) return;
-    const id = setInterval(() => {
-      try {
-        setLiveStats(props.getLiveStats!());
-      } catch {
-        // ignore
-      }
-    }, 1000);
-    return () => clearInterval(id);
-  }, [isRunning, props]);
 
   useEffect(() => {
     if (!isRunning) return;
@@ -700,10 +669,7 @@ function XibeCodeChatApp(props: {
         const seconds = (elapsedMs / 1000).toFixed(1);
         pushLine({
           type: 'info',
-          text:
-            `Done in ${seconds}s · ` +
-            `tokens ${stats.inputTokens} in / ${stats.outputTokens} out / ${stats.totalTokens} total` +
-            (stats.costLabel ? ` · cost ${stats.costLabel}` : ''),
+          text: `Done in ${seconds}s` + (stats.costLabel ? ` · cost ${stats.costLabel}` : ''),
         });
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown error';
@@ -756,11 +722,6 @@ function XibeCodeChatApp(props: {
   useInput((inputKey, key) => {
     if (key.ctrl && inputKey === 'c') {
       exit();
-      return;
-    }
-
-    if (!key.ctrl && !key.meta && !key.shift && (inputKey === 'p' || inputKey === 'P')) {
-      togglePaused();
       return;
     }
 
@@ -1059,13 +1020,8 @@ function XibeCodeChatApp(props: {
         ? `${workVerbPhrase.slice(0, 30)}…`
         : workVerbPhrase;
     const tail = `working ${WORK_SPINNER_FRAMES[workSpinnerFrame]} · ${shortVerb}`;
-    const pauseLabel = paused ? ' | PAUSED' : '';
     const elapsed = runElapsedMs ? ` | elapsed ${(runElapsedMs / 1000).toFixed(1)}s` : '';
-    const tokens =
-      liveStats
-        ? ` | tokens ${liveStats.inputTokens}/${liveStats.outputTokens}/${liveStats.totalTokens}`
-        : '';
-    return `model: ${activeModel} | format: ${wireFormat} | mode: ${activeMode} | provider: ${props.provider || 'auto'} | ${tail}${pauseLabel}${elapsed}${tokens}`;
+    return `model: ${activeModel} | format: ${wireFormat} | mode: ${activeMode} | provider: ${props.provider || 'auto'} | ${tail}${elapsed}`;
   }, [
     activeModel,
     activeMode,
@@ -1074,77 +1030,81 @@ function XibeCodeChatApp(props: {
     wireFormat,
     workSpinnerFrame,
     workVerbPhrase,
-    paused,
     runElapsedMs,
-    liveStats,
   ]);
-  const showWelcome = lines.length <= 1;
+  /** Taller transcript area once there is real chat; hero stays visible for the whole session. */
+  const hasChatContent = lines.some(
+    (l) =>
+      l.type === 'user' ||
+      l.type === 'assistant' ||
+      l.type === 'tool' ||
+      l.type === 'tool_out' ||
+      l.type === 'error',
+  );
   const providerName = props.provider ? props.provider.toUpperCase() : 'AUTO';
   const divider = '─'.repeat(98);
-  const chatPanelHeight = showWelcome ? 12 : 22;
+  const chatPanelHeight = hasChatContent ? 18 : 12;
 
   return (
     <Box flexDirection="column" paddingX={1}>
-      {showWelcome && (
-        <Box flexDirection="column" marginBottom={1}>
-          {HERO_LOGO.map((line, idx) => (
-            <React.Fragment key={`logo-${idx}`}>
-              <Text bold color={idx < 6 ? 'claude' : 'suggestion'}>
-                {line}
-              </Text>
-            </React.Fragment>
-          ))}
-          <Text color="suggestion">✦ Any model, Every tool, Zero limits. ✦</Text>
-          <Box
-            marginTop={1}
-            borderStyle="round"
-            borderColor="claude"
-            flexDirection="column"
-            paddingX={1}
-          >
-            <Text>
-              <Text color="inactive">Provider </Text>
-              <Text color="claude" bold>
-                {providerName}
-              </Text>
+      <Box flexDirection="column" marginBottom={1}>
+        {HERO_LOGO.map((line, idx) => (
+          <React.Fragment key={`logo-${idx}`}>
+            <Text bold color={idx < 6 ? 'claude' : 'suggestion'}>
+              {line}
             </Text>
-            <Text>
-              <Text color="inactive">Model    </Text>
-              <Text>{activeModel}</Text>
+          </React.Fragment>
+        ))}
+        <Text color="suggestion">✦ Any model, Every tool, Zero limits. ✦</Text>
+        <Box
+          marginTop={1}
+          borderStyle="round"
+          borderColor="claude"
+          flexDirection="column"
+          paddingX={1}
+        >
+          <Text>
+            <Text color="inactive">Provider </Text>
+            <Text color="claude" bold>
+              {providerName}
             </Text>
+          </Text>
+          <Text>
+            <Text color="inactive">Model    </Text>
+            <Text>{activeModel}</Text>
+          </Text>
+          <Text>
+            <Text color="inactive">Endpoint </Text>
+            <Text>{props.baseUrl || 'provider default'}</Text>
+          </Text>
+          <Text>
+            <Text color="inactive">Format  </Text>
             <Text>
-              <Text color="inactive">Endpoint </Text>
-              <Text>{props.baseUrl || 'provider default'}</Text>
-            </Text>
-            <Text>
-              <Text color="inactive">Format  </Text>
-              <Text>
-                {wireFormat}{' '}
-                <Text dimColor>
-                  (
-                  {isAnthropicWireFormat(
-                    wireFormat,
-                    props.provider,
-                    props.customProviderFormat,
-                  )
-                    ? 'Anthropic Messages'
-                    : 'OpenAI chat'}
-                  )
-                </Text>
+              {wireFormat}{' '}
+              <Text dimColor>
+                (
+                {isAnthropicWireFormat(
+                  wireFormat,
+                  props.provider,
+                  props.customProviderFormat,
+                )
+                  ? 'Anthropic Messages'
+                  : 'OpenAI chat'}
+                )
               </Text>
             </Text>
-          </Box>
-          <Box marginTop={1}>
-            <Text color="suggestion">◈ cloud</Text>
-            <Text color="inactive">  Ready — type </Text>
-            <Text color="claude">/help</Text>
-            <Text color="inactive"> to begin</Text>
-          </Box>
-          <Text color="inactive">
-            xibecode <Text color="claude">v{APP_VERSION}</Text>
           </Text>
         </Box>
-      )}
+        <Box marginTop={1}>
+          <Text color="suggestion">◈ cloud</Text>
+          <Text color="inactive">  Ready — type </Text>
+          <Text color="claude">/help</Text>
+          <Text color="inactive"> to begin</Text>
+        </Box>
+        <Text color="inactive">
+          xibecode <Text color="claude">v{APP_VERSION}</Text>
+        </Text>
+      </Box>
 
       <Text dimColor>{status}</Text>
       <Text color="subtle">{divider}</Text>
@@ -1601,8 +1561,6 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     return activeAgent.getStats();
   };
 
-  const getLiveStats = (): ReturnType<EnhancedAgent['getStats']> => activeAgent.getStats();
-
   const listBackgroundTasks = async (): Promise<
     Array<{ id: string; status: string; startTime: number; prompt: string }>
   > => {
@@ -1652,7 +1610,6 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
       customProviderFormat={customProviderFormat}
       profile={options.profile}
       runPrompt={runPrompt}
-      getLiveStats={getLiveStats}
       listBackgroundTasks={listBackgroundTasks}
       checkBackgroundTask={checkBackgroundTask}
       onUiLine={appendLogLine}

@@ -126,9 +126,7 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
     await agent.run(input, toolExecutor.getTools(), toolExecutor);
     const stats = agent.getStats();
     print(
-      `[done] tokens ${stats.inputTokens} in / ${stats.outputTokens} out / ${stats.totalTokens} total${
-        stats.costLabel ? ` · cost ${stats.costLabel}` : ''
-      }`,
+      `[done]` + (stats.costLabel ? ` cost ${stats.costLabel}` : ''),
     );
     rl.prompt();
   }

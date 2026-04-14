@@ -79,7 +79,6 @@ export class EnhancedUI {
   renderStatusBar(info: {
     model: string;
     sessionTitle?: string;
-    tokensLabel?: string;
     cwd?: string;
     toolsEnabled?: boolean;
     themeName?: string;
@@ -89,14 +88,13 @@ export class EnhancedUI {
     const left = info.cwd ? this.T.muted(info.cwd) : '';
     const session = info.sessionTitle ? `session: ${info.sessionTitle}` : '';
     const model = `model: ${info.model}`;
-    const tokens = info.tokensLabel ? `tokens: ${info.tokensLabel}` : '';
     const tools = info.toolsEnabled === undefined ? '' : `tools: ${info.toolsEnabled ? 'on' : 'off'}`;
     const theme = info.themeName ? `theme: ${info.themeName}` : '';
     const mode = info.mode ? `mode: ${info.mode}` : '';
     const skill = info.activeSkill ? `skill: ${info.activeSkill}` : '';
 
     const line1Parts = [model, mode, skill, session].filter(Boolean);
-    const line2Parts = [tokens, tools, theme].filter(Boolean);
+    const line2Parts = [tools, theme].filter(Boolean);
 
     console.log('  ' + this.line('─'));
     if (left) {
@@ -576,17 +574,10 @@ export class EnhancedUI {
     duration: number;
     filesChanged: number;
     toolCalls: number;
-    inputTokens?: number;
-    outputTokens?: number;
-    totalTokens?: number;
     costLabel?: string;
   }) {
     this.stopSpinner();
     const elapsed = this.formatDuration(stats.duration);
-    const tokensLabel =
-      stats.totalTokens !== undefined
-        ? `${stats.inputTokens ?? 0} in / ${stats.outputTokens ?? 0} out / ${stats.totalTokens} total`
-        : undefined;
     const costLabel = stats.costLabel ? `cost ${stats.costLabel}` : undefined;
 
     console.log('  ' + this.T.border('╭' + '─'.repeat(W) + '╮'));
@@ -598,9 +589,8 @@ export class EnhancedUI {
       this.T.dim('  ·  files ') + this.T.text(String(stats.filesChanged)) +
       this.T.dim('  ·  ') + this.T.text(elapsed), W
     ) + this.T.border('│'));
-    if (tokensLabel || costLabel) {
-      const right = [tokensLabel ? `tokens ${tokensLabel}` : '', costLabel || ''].filter(Boolean).join('  ·  ');
-      console.log('  ' + this.T.border('│') + pad('  ' + this.T.dim(right), W) + this.T.border('│'));
+    if (costLabel) {
+      console.log('  ' + this.T.border('│') + pad('  ' + this.T.dim(costLabel), W) + this.T.border('│'));
     }
     console.log('  ' + this.T.border('│') + '                                                              ' + this.T.border('│'));
     console.log('  ' + this.T.border('╰' + '─'.repeat(W) + '╯'));
