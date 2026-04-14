@@ -336,6 +336,46 @@ export class SkillManager {
         }
     }
 
+    async autoInstallFromSkillsShForTask(
+        taskPrompt: string,
+        opts?: { enabled?: boolean; maxInstalls?: number; onProgress?: (msg: string) => void }
+    ): Promise<{ installed: boolean; skillId?: string; installedSkillNames?: string[]; message?: string }> {
+        const enabled = opts?.enabled ?? false;
+        const maxInstalls = opts?.maxInstalls ?? 1;
+        if (!enabled) return { installed: false };
+        if (!taskPrompt.trim()) return { installed: false };
+        if (maxInstalls <= 0) return { installed: false };
+
+        // If the user already has relevant local skills, don’t auto-install new ones.
+        // “Relevant” here is a cheap metadata search (name/description/tags) to avoid silent growth.
+        try {
+            const existingMd = (await fs.readdir(this.userSkillsDir)).filter((f) => f.endsWith('.md'));
+            if (existingMd.length > 0) {
+                const localMatches = this.searchSkills(taskPrompt).filter((s) => s.provenance !== 'built-in');
+                if (localMatches.length > 0) return { installed: false, message: 'Local skills matched; skipping auto-install' };
+            }
+        } catch {
+            // ignore
+        }
+
+        const beforeNames = new Set(this.listSkills().map((s) => s.name));
+
+        opts?.onProgress?.('Searching skills.sh for relevant skills…');
+        const results = await this.searchSkillsSh(taskPrompt);
+        const first = results[0];
+        if (!first) return { installed: false, message: 'No skills.sh results' };
+
+        opts?.onProgress?.(`Installing skills.sh skill: ${first.id}`);
+        const installResult = await this.installFromSkillsSh(first.id);
+        if (!installResult.success) {
+            return { installed: false, skillId: first.id, message: installResult.message };
+        }
+
+        const after = this.listSkills().map((s) => s.name);
+        const added = after.filter((n) => !beforeNames.has(n));
+        return { installed: true, skillId: first.id, installedSkillNames: added, message: installResult.message };
+    }
+
     /**
      * Search skills.sh for skills
      */

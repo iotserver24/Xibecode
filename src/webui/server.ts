@@ -1205,7 +1205,20 @@ else:
             this.configManager.get('provider') as ProviderType | undefined
           );
           await sm.loadSkills();
+          const autoSkillsShEnabled =
+            process.env.XIBECODE_AUTO_SKILLS_SH === '1' || process.env.XIBECODE_AUTO_SKILLS_SH === 'true';
+          let autoInstalledSkillNames: string[] = [];
+          if (autoSkillsShEnabled) {
+            const auto = await sm.autoInstallFromSkillsShForTask(message, { enabled: true, maxInstalls: 1 });
+            autoInstalledSkillNames = auto.installedSkillNames || [];
+          }
           session.builtInSkillsPrompt = await sm.buildDefaultSkillsPromptForTask(message, this.workingDir);
+          for (const name of autoInstalledSkillNames) {
+            const s = sm.getSkill(name);
+            if (!s?.instructions) continue;
+            session.builtInSkillsPrompt += `\n\n---\n\n## Auto-installed skills.sh skill\n\n### ${s.name}\n*${s.description}*\n\n${s.instructions}`;
+            break;
+          }
         }
         session.agent = new EnhancedAgent({
           apiKey,
