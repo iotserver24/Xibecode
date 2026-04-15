@@ -117,24 +117,32 @@ export class HistoryManager {
     try {
       const files = await fs.readdir(this.projectDir);
       const summaries: ConversationSummary[] = [];
+      const jsonFiles = files.filter(f => f.endsWith('.json'));
 
-      for (const file of files) {
-        if (!file.endsWith('.json')) continue;
-        try {
-          const filePath = path.join(this.projectDir, file);
-          const content = await fs.readFile(filePath, 'utf-8');
-          const conv = JSON.parse(content) as SavedConversation;
-          summaries.push({
-            id: conv.id,
-            title: conv.title,
-            created: conv.created,
-            updated: conv.updated,
-            messageCount: conv.messages.length,
-            model: conv.model,
-          });
-        } catch {
-          // Skip corrupted files
-        }
+      // Use bounded concurrency to read files in parallel without hitting EMFILE
+      const batchSize = 100;
+      for (let i = 0; i < jsonFiles.length; i += batchSize) {
+        const batch = jsonFiles.slice(i, i + batchSize);
+        const batchResults = await Promise.all(
+          batch.map(async (file) => {
+            try {
+              const filePath = path.join(this.projectDir, file);
+              const content = await fs.readFile(filePath, 'utf-8');
+              const conv = JSON.parse(content) as SavedConversation;
+              return {
+                id: conv.id,
+                title: conv.title,
+                created: conv.created,
+                updated: conv.updated,
+                messageCount: conv.messages.length,
+                model: conv.model,
+              };
+            } catch {
+              return null; // Skip corrupted files
+            }
+          })
+        );
+        summaries.push(...batchResults.filter((s): s is ConversationSummary => s !== null));
       }
 
       // Sort by updated time, newest first

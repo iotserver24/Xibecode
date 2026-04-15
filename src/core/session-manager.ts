@@ -151,20 +151,27 @@ export class SessionManager {
     }
 
     const metas: SessionMetadata[] = [];
+    const jsonFiles = files.filter(f => f.endsWith('.json'));
 
-    for (const file of files) {
-      if (!file.endsWith('.json')) continue;
+    // Use bounded concurrency to read files in parallel without hitting EMFILE
+    const batchSize = 100;
+    for (let i = 0; i < jsonFiles.length; i += batchSize) {
+      const batch = jsonFiles.slice(i, i + batchSize);
+      const batchResults = await Promise.all(
+        batch.map(async (file) => {
+          try {
+            const fullPath = path.join(this.sessionsDir, file);
+            const raw = await fs.readFile(fullPath, 'utf-8');
+            const data = JSON.parse(raw) as ChatSession;
+            const { messages: _messages, stats: _stats, ...meta } = data;
+            return meta;
+          } catch {
+            return null; // Ignore malformed files
+          }
+        })
+      );
 
-      const fullPath = path.join(this.sessionsDir, file);
-      try {
-        const raw = await fs.readFile(fullPath, 'utf-8');
-        const data = JSON.parse(raw) as ChatSession;
-        const { messages: _messages, stats: _stats, ...meta } = data;
-        metas.push(meta);
-      } catch {
-        // Ignore malformed files
-        continue;
-      }
+      metas.push(...batchResults.filter((m): m is SessionMetadata => m !== null));
     }
 
     metas.sort((a, b) => b.updated.localeCompare(a.updated));

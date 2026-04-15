@@ -89,15 +89,25 @@ export class PlanSessionManager {
       return [];
     }
     const sessions: PlanSession[] = [];
-    for (const file of files) {
-      if (!file.endsWith('.json')) continue;
-      try {
-        const raw = await fs.readFile(path.join(this.sessionDir, file), 'utf8');
-        sessions.push(JSON.parse(raw) as PlanSession);
-      } catch {
-        // Ignore malformed session files to avoid breaking the list.
-      }
+    const jsonFiles = files.filter(f => f.endsWith('.json'));
+
+    // Use bounded concurrency to read files in parallel without hitting EMFILE
+    const batchSize = 100;
+    for (let i = 0; i < jsonFiles.length; i += batchSize) {
+      const batch = jsonFiles.slice(i, i + batchSize);
+      const batchResults = await Promise.all(
+        batch.map(async (file) => {
+          try {
+            const raw = await fs.readFile(path.join(this.sessionDir, file), 'utf8');
+            return JSON.parse(raw) as PlanSession;
+          } catch {
+            return null; // Ignore malformed session files to avoid breaking the list.
+          }
+        })
+      );
+      sessions.push(...batchResults.filter((s): s is PlanSession => s !== null));
     }
+
     return sessions
       .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
       .slice(0, limit);
