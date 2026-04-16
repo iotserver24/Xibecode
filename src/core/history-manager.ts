@@ -117,24 +117,34 @@ export class HistoryManager {
     try {
       const files = await fs.readdir(this.projectDir);
       const summaries: ConversationSummary[] = [];
+      const jsonFiles = files.filter(f => f.endsWith('.json'));
 
-      for (const file of files) {
-        if (!file.endsWith('.json')) continue;
-        try {
-          const filePath = path.join(this.projectDir, file);
-          const content = await fs.readFile(filePath, 'utf-8');
-          const conv = JSON.parse(content) as SavedConversation;
-          summaries.push({
-            id: conv.id,
-            title: conv.title,
-            created: conv.created,
-            updated: conv.updated,
-            messageCount: conv.messages.length,
-            model: conv.model,
-          });
-        } catch {
-          // Skip corrupted files
-        }
+      // ⚡ Bolt Performance Optimization
+      // Replaced serial file reading with bounded concurrency (chunks of 50).
+      // This significantly speeds up loading history when a user has many past conversations,
+      // while preventing OS-level 'EMFILE' (too many open files) errors by bounding the concurrency.
+      const CHUNK_SIZE = 50;
+      for (let i = 0; i < jsonFiles.length; i += CHUNK_SIZE) {
+        const chunk = jsonFiles.slice(i, i + CHUNK_SIZE);
+        await Promise.all(
+          chunk.map(async (file) => {
+            try {
+              const filePath = path.join(this.projectDir, file);
+              const content = await fs.readFile(filePath, 'utf-8');
+              const conv = JSON.parse(content) as SavedConversation;
+              summaries.push({
+                id: conv.id,
+                title: conv.title,
+                created: conv.created,
+                updated: conv.updated,
+                messageCount: conv.messages.length,
+                model: conv.model,
+              });
+            } catch {
+              // Skip corrupted files
+            }
+          })
+        );
       }
 
       // Sort by updated time, newest first

@@ -1,0 +1,3 @@
+## 2024-05-24 - File I/O Concurrency
+**Learning:** Sequential, blocking `fs.readFile` calls in a `for...of` loop can become a significant bottleneck when reading directories with many files (like session or history logs), but unbounded `Promise.all` can cause fatal `EMFILE` errors at the OS level due to file descriptor limits.
+**Action:** When aggregating file contents over potentially large directory lists, use bounded concurrency. Splitting files into chunks (e.g. `const CHUNK_SIZE = 50;`) and processing each chunk via `Promise.all` provides a massive speedup without triggering resource limits.

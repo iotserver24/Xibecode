@@ -151,20 +151,28 @@ export class SessionManager {
     }
 
     const metas: SessionMetadata[] = [];
+    const jsonFiles = files.filter(f => f.endsWith('.json'));
 
-    for (const file of files) {
-      if (!file.endsWith('.json')) continue;
-
-      const fullPath = path.join(this.sessionsDir, file);
-      try {
-        const raw = await fs.readFile(fullPath, 'utf-8');
-        const data = JSON.parse(raw) as ChatSession;
-        const { messages: _messages, stats: _stats, ...meta } = data;
-        metas.push(meta);
-      } catch {
-        // Ignore malformed files
-        continue;
-      }
+    // ⚡ Bolt Performance Optimization
+    // Replaced serial file reading with bounded concurrency (chunks of 50).
+    // This significantly speeds up listing sessions when a user has many sessions,
+    // while preventing OS-level 'EMFILE' (too many open files) errors by bounding the concurrency.
+    const CHUNK_SIZE = 50;
+    for (let i = 0; i < jsonFiles.length; i += CHUNK_SIZE) {
+      const chunk = jsonFiles.slice(i, i + CHUNK_SIZE);
+      await Promise.all(
+        chunk.map(async (file) => {
+          const fullPath = path.join(this.sessionsDir, file);
+          try {
+            const raw = await fs.readFile(fullPath, 'utf-8');
+            const data = JSON.parse(raw) as ChatSession;
+            const { messages: _messages, stats: _stats, ...meta } = data;
+            metas.push(meta);
+          } catch {
+            // Ignore malformed files
+          }
+        })
+      );
     }
 
     metas.sort((a, b) => b.updated.localeCompare(a.updated));
