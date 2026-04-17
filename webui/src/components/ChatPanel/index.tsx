@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, memo } from 'react';
 import { useChatStore, ChatMessage, AgentMode } from '../../stores/chatStore';
 import { useEditorStore } from '../../stores/editorStore';
 import { createWebSocket, api } from '../../utils/api';
@@ -749,7 +749,10 @@ const TOOL_ICONS: Record<string, { icon: string; label: string }> = {
   create_directory: { icon: '📁', label: 'Create Dir' },
 };
 
-function MessageItem({ message }: { message: ChatMessage }) {
+// ⚡ Bolt Optimization: Wrapped MessageItem in React.memo
+// Prevents unnecessary re-renders of the entire message history list when a new message is streaming or added.
+// Expected Impact: Significantly reduces UI thread blocking during long conversations, resulting in smoother streaming and lower CPU usage.
+const MessageItem = memo(function MessageItem({ message }: { message: ChatMessage }) {
   if (message.role === 'tool') {
     const toolInfo = TOOL_ICONS[message.toolName || ''] || { icon: '🔧', label: message.toolName || 'Tool' };
     const isRunning = message.toolStatus === 'running';
@@ -872,4 +875,4 @@ function MessageItem({ message }: { message: ChatMessage }) {
       </div>
     </div>
   );
-}
+});
