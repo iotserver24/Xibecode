@@ -117,24 +117,32 @@ export class HistoryManager {
     try {
       const files = await fs.readdir(this.projectDir);
       const summaries: ConversationSummary[] = [];
+      const jsonFiles = files.filter((file) => file.endsWith('.json'));
 
-      for (const file of files) {
-        if (!file.endsWith('.json')) continue;
-        try {
-          const filePath = path.join(this.projectDir, file);
-          const content = await fs.readFile(filePath, 'utf-8');
-          const conv = JSON.parse(content) as SavedConversation;
-          summaries.push({
-            id: conv.id,
-            title: conv.title,
-            created: conv.created,
-            updated: conv.updated,
-            messageCount: conv.messages.length,
-            model: conv.model,
-          });
-        } catch {
-          // Skip corrupted files
-        }
+      // Bounded concurrency to speed up reading many session files
+      const CONCURRENCY_LIMIT = 20;
+      for (let i = 0; i < jsonFiles.length; i += CONCURRENCY_LIMIT) {
+        const chunk = jsonFiles.slice(i, i + CONCURRENCY_LIMIT);
+
+        await Promise.all(
+          chunk.map(async (file) => {
+            try {
+              const filePath = path.join(this.projectDir, file);
+              const content = await fs.readFile(filePath, 'utf-8');
+              const conv = JSON.parse(content) as SavedConversation;
+              summaries.push({
+                id: conv.id,
+                title: conv.title,
+                created: conv.created,
+                updated: conv.updated,
+                messageCount: conv.messages.length,
+                model: conv.model,
+              });
+            } catch {
+              // Skip corrupted files
+            }
+          })
+        );
       }
 
       // Sort by updated time, newest first
