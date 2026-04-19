@@ -8,6 +8,7 @@ import { SkillManager } from '../core/skills.js';
 import { MCPClientManager } from '../core/mcp-client.js';
 import { CodingToolExecutor } from '../core/tools.js';
 import { EnhancedAgent } from '../core/agent.js';
+import { SessionManager } from '../core/session-manager.js';
 
 interface ChatOptions {
   model?: string;
@@ -147,6 +148,25 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
 
 export async function chatCommand(options: ChatOptions) {
   try {
+    if (options.session) {
+      const sessionManager = new SessionManager();
+      const session = await sessionManager.loadSession(options.session);
+      if (!session) {
+        console.error(`Session not found: ${options.session}`);
+        process.exit(1);
+      }
+      const initialMessages = session.messages.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      }));
+      await launchClaudeStyleChat({
+        ...options,
+        sessionId: session.id,
+        initialMessages,
+        model: options.model || session.model,
+      });
+      return;
+    }
     if (options.plain) {
       await runPlainChat(options);
       return;
