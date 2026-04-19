@@ -16,6 +16,8 @@ import { formatToolArgs, formatToolOutcome, formatRunSwarmDetailLines } from '..
 import { SPINNER_VERBS } from '../constants/spinnerVerbs.js';
 import { extractAtReferences, splitAtReferences } from '../utils/at-references.js';
 import { loadImageAttachment, mimeFromExtension, type ImageAttachment } from '../utils/image-attachments.js';
+import { SessionManager, type ChatSession } from '../core/session-manager.js';
+import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
 
 export type ChatOptions = {
   model?: string;
@@ -184,6 +186,8 @@ function XibeCodeChatApp(props: {
   onModelChange: (nextModel: string) => Promise<void>;
   onModeChange: (nextMode: AgentMode) => Promise<void>;
   onWireFormatChange: (format: RequestWireFormat) => void;
+  onSessionCreated?: (sessionId: string) => void;
+  onMessagesUpdate?: (messages: MessageParam[]) => void;
 }) {
   const { exit } = useApp();
   const [input, setInput] = useState('');
@@ -316,6 +320,9 @@ function XibeCodeChatApp(props: {
   const lastVisibleOutputAtRef = useRef<number>(Date.now());
   const currentPromptRef = useRef<string | null>(null);
   const restartAttemptsRef = useRef<number>(0);
+  const sessionMessagesRef = useRef<MessageParam[]>(
+    (props.initialMessages as MessageParam[]) || []
+  );
 
   const lastBgLineByTask = useRef<Map<string, string>>(new Map());
 
@@ -639,6 +646,7 @@ function XibeCodeChatApp(props: {
       }
 
       if (resolvedInput === '/exit') {
+        props.onMessagesUpdate?.(sessionMessagesRef.current);
         exit();
         return;
       }
@@ -787,6 +795,7 @@ function XibeCodeChatApp(props: {
         abortControllerRef.current = new AbortController();
 
         pushLine({ type: 'user', text: prompt });
+        sessionMessagesRef.current.push({ role: 'user', content: prompt });
         setIsRunning(true);
         try {
           const startedAt = Date.now();
@@ -2046,6 +2055,45 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
   process.on('unhandledRejection', onUnhandledRejection);
   process.on('uncaughtException', onUncaughtException);
 
+  const sessionManager = new SessionManager();
+  let currentSessionId = options.sessionId;
+  let currentSession: ChatSession | null = null;
+
+  if (!currentSessionId) {
+    currentSession = await sessionManager.createSession({
+      title: 'Untitled Session',
+      model,
+      cwd: process.cwd(),
+    });
+    currentSessionId = currentSession.id;
+    if (options.initialMessages && options.initialMessages.length > 0) {
+      currentSession.messages = options.initialMessages as MessageParam[];
+      await sessionManager.saveSession(currentSession);
+    }
+  } else {
+    currentSession = await sessionManager.loadSession(currentSessionId);
+  }
+
+  const onSessionCreated = (sessionId: string) => {
+    currentSessionId = sessionId;
+  };
+
+  const onMessagesUpdate = async (messages: MessageParam[]) => {
+    if (currentSessionId && currentSession) {
+      currentSession.messages = messages;
+      if (messages.length > 0) {
+        const firstUserMsg = messages.find((m) => m.role === 'user');
+        if (firstUserMsg && typeof firstUserMsg.content === 'string') {
+          const title = firstUserMsg.content.trim().slice(0, 60);
+          if (title) {
+            currentSession.title = title + (firstUserMsg.content.length > 60 ? '…' : '');
+          }
+        }
+      }
+      await sessionManager.saveSession(currentSession);
+    }
+  };
+
   const root = createRoot({ exitOnCtrlC: true });
   try {
     await renderAndRun(
@@ -2061,7 +2109,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
         initialRequestFormat={wireFormat}
         customProviderFormat={customProviderFormat}
         profile={options.profile}
-        sessionId={options.sessionId}
+        sessionId={currentSessionId}
         initialMessages={options.initialMessages}
         runPrompt={runPrompt}
         listBackgroundTasks={listBackgroundTasks}
@@ -2073,10 +2121,20 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
         onModelChange={onModelChange}
         onModeChange={onModeChange}
         onWireFormatChange={onWireFormatChange}
+        onSessionCreated={onSessionCreated}
+        onMessagesUpdate={onMessagesUpdate}
       />,
     );
   } finally {
     process.off('unhandledRejection', onUnhandledRejection);
     process.off('uncaughtException', onUncaughtException);
+
+    if (currentSessionId) {
+      console.log('\n');
+      console.log('─'.repeat(60));
+      console.log(`Session: ${currentSessionId}`);
+      console.log(`To resume: xibecode resume ${currentSessionId}`);
+      console.log('─'.repeat(60));
+    }
   }
 }
