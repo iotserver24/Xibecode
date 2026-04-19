@@ -298,7 +298,7 @@ export const MODE_CONFIG: Record<AgentMode, ModeCapabilities> = {
     description: 'Interactive planning with questions, web research, and implementations.md generation',
     personaName: 'Planner',
     personaRole: 'the Strategic Planner',
-    allowedCategories: ['read_only', 'git_read', 'context', 'network'],
+    allowedCategories: ['read_only', 'git_read', 'context', 'network', 'shell_command'],
     canModify: false,
     defaultDryRun: false,
     displayColor: '#FF9100', // orange
