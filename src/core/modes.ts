@@ -667,7 +667,7 @@ When the user wants to fix vulnerabilities, they will click "Fix". You can also 
     description: 'Code review and quality analysis',
     personaName: 'Nova',
     personaRole: 'the Reviewer',
-    allowedCategories: ['read_only', 'git_read', 'tests', 'context'],
+    allowedCategories: ['read_only', 'git_read', 'tests', 'context', 'shell_command'],
     canModify: false,
     defaultDryRun: true,
     displayColor: '#BB86FC', // purple

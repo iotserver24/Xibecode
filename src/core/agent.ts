@@ -1194,6 +1194,16 @@ export class EnhancedAgent extends EventEmitter {
       baseBody.tools = this.mapToolsToOpenAI(tools);
     }
 
+    const isAbortError = (err: unknown): boolean => {
+      if (!err || typeof err !== 'object') return false;
+      const anyErr = err as any;
+      return (
+        anyErr.name === 'AbortError' ||
+        anyErr.type === 'aborted' ||
+        String(anyErr.message || '').toLowerCase().includes('aborted')
+      );
+    };
+
     // ── Try streaming first (SSE) ─────────────────────────
     try {
       const streamResponse = await fetch(url, {
@@ -1231,6 +1241,12 @@ export class EnhancedAgent extends EventEmitter {
       if (!body) {
         throw new Error('Streaming body not available');
       }
+
+      // When the user cancels (Esc), node-fetch aborts the Readable stream and emits an
+      // 'error' event. If no listener is attached, Node treats it as unhandled and crashes.
+      body.on('error', (err: unknown) => {
+        if (isAbortError(err) || signal?.aborted) return;
+      });
 
       let fullText = '';
       const toolCallsAccum: Array<{ id: string; name: string; arguments: string; index: number }> = [];
@@ -1327,16 +1343,27 @@ export class EnhancedAgent extends EventEmitter {
       const message = { content: content.length ? content : [{ type: 'text', text: '' } as TextBlock] };
       return { message, streamed: hasEmittedStart };
     } catch (_streamError) {
+      // If the request was cancelled, do not fall back to non-streaming — just bubble up
+      // the abort so the UI can render "Cancelled." without crashing.
+      if (signal?.aborted || isAbortError(_streamError)) {
+        throw _streamError;
+      }
       // ── Fallback to non-streaming ───────────────────────
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.config.apiKey}`,
-        },
-        body: JSON.stringify(baseBody),
-        signal,
-      });
+      let response: any;
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.config.apiKey}`,
+          },
+          body: JSON.stringify(baseBody),
+          signal,
+        });
+      } catch (err: unknown) {
+        if (signal?.aborted || isAbortError(err)) throw err;
+        throw err;
+      }
 
       if (!response.ok) {
         const text = await response.text();

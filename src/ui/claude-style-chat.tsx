@@ -32,7 +32,7 @@ type UiLine = { type: UiLineType; text: string };
 type StaticItem =
   | { kind: 'hero'; id: number }
   | ({ kind: 'line'; id: number } & UiLine);
-const APP_VERSION = '0.9.8';
+const APP_VERSION = '0.9.9';
 const HERO_LOGO = [
   '██╗  ██╗██╗██████╗ ███████╗',
   '╚██╗██╔╝██║██╔══██╗██╔════╝',
@@ -174,6 +174,8 @@ function XibeCodeChatApp(props: {
   >;
   checkBackgroundTask: (taskId: string) => Promise<{ status?: string; lastLine?: string }>;
   onUiLine?: (line: UiLine) => void;
+  registerUiSink?: (sink: (line: UiLine) => void) => void;
+  registerModeSink?: (sink: (mode: AgentMode) => void) => void;
   loadModels: () => Promise<string[]>;
   onModelChange: (nextModel: string) => Promise<void>;
   onModeChange: (nextMode: AgentMode) => Promise<void>;
@@ -259,6 +261,16 @@ function XibeCodeChatApp(props: {
     },
     [props],
   );
+
+  useEffect(() => {
+    props.registerUiSink?.(pushLine);
+  }, [props, pushLine]);
+
+  useEffect(() => {
+    props.registerModeSink?.((nextMode: AgentMode) => {
+      setActiveMode(nextMode);
+    });
+  }, [props]);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const abortReasonRef = useRef<'none' | 'user' | 'watchdog'>('none');
@@ -1360,22 +1372,26 @@ function XibeCodeChatApp(props: {
             );
           }
 
-          return item.type === 'assistant' ? (
-            <Box flexDirection="column" marginBottom={1}>
-              <Text bold color={prefixColorKey('assistant')}>
-                {prefixForType('assistant')}:
-              </Text>
-              <Box marginLeft={2} flexDirection="column">
-                <AssistantMarkdown content={item.text} />
-              </Box>
-            </Box>
-          ) : (
-            <Text>
-              <Text bold color={prefixColorKey(item.type)}>
-                {prefixForType(item.type)}:{' '}
-              </Text>
-              <Text color={lineColorKey(item.type)}>{item.text}</Text>
-            </Text>
+          return (
+            <React.Fragment key={item.id}>
+              {item.type === 'assistant' ? (
+                <Box flexDirection="column" marginBottom={1}>
+                  <Text bold color={prefixColorKey('assistant')}>
+                    {prefixForType('assistant')}:
+                  </Text>
+                  <Box marginLeft={2} flexDirection="column">
+                    <AssistantMarkdown content={item.text} />
+                  </Box>
+                </Box>
+              ) : (
+                <Text>
+                  <Text bold color={prefixColorKey(item.type)}>
+                    {prefixForType(item.type)}:{' '}
+                  </Text>
+                  <Text color={lineColorKey(item.type)}>{item.text}</Text>
+                </Text>
+              )}
+            </React.Fragment>
           );
         }}
       </Static>
@@ -1900,6 +1916,16 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
               'Unknown error',
           });
           break;
+        case 'mode_changed': {
+          const next = String(event.data?.to ?? '') as AgentMode;
+          if (next) {
+            activeMode = next;
+            toolExecutor.setMode(next);
+            modeSink?.(next);
+            onLine({ type: 'info', text: `Mode changed to ${next}` });
+          }
+          break;
+        }
         default:
           break;
       }
@@ -1911,6 +1937,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     });
     activeMode = activeAgent.getMode();
     toolExecutor.setMode(activeMode);
+    modeSink?.(activeMode);
     return activeAgent.getStats();
   };
 
@@ -1949,28 +1976,67 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     logChain = logChain.then(() => fs.appendFile(chatLogPath, rendered, 'utf8')).catch(() => {});
   };
 
+  // Keep the chat UI alive even if something throws unexpectedly.
+  // We surface errors as chat lines instead of crashing the whole process.
+  let uiSink: ((line: UiLine) => void) | null = null;
+  const registerUiSink = (sink: (line: UiLine) => void) => {
+    uiSink = sink;
+  };
+
+  // Keep the UI's displayed mode in sync with the tool permission mode.
+  let modeSink: ((mode: AgentMode) => void) | null = null;
+  const registerModeSink = (sink: (mode: AgentMode) => void) => {
+    modeSink = sink;
+  };
+
+  const formatUnknownError = (err: unknown): string => {
+    if (err instanceof Error) return err.stack || err.message;
+    try {
+      return typeof err === 'string' ? err : JSON.stringify(err);
+    } catch {
+      return String(err);
+    }
+  };
+
+  const onUnhandledRejection = (reason: unknown) => {
+    uiSink?.({ type: 'error', text: `Unhandled rejection:\n${formatUnknownError(reason)}` });
+  };
+  const onUncaughtException = (err: unknown) => {
+    uiSink?.({ type: 'error', text: `Uncaught exception:\n${formatUnknownError(err)}` });
+  };
+
+  process.on('unhandledRejection', onUnhandledRejection);
+  process.on('uncaughtException', onUncaughtException);
+
   const root = createRoot({ exitOnCtrlC: true });
-  await renderAndRun(
-    root,
-    <XibeCodeChatApp
-      model={model}
-      initialMode={activeMode}
-      provider={provider}
-      baseUrl={baseUrl}
-      needsFirstRunSetup={needsFirstRunSetup}
-      defaultModel={model}
-      modeOptions={modeOptions}
-      initialRequestFormat={wireFormat}
-      customProviderFormat={customProviderFormat}
-      profile={options.profile}
-      runPrompt={runPrompt}
-      listBackgroundTasks={listBackgroundTasks}
-      checkBackgroundTask={checkBackgroundTask}
-      onUiLine={appendLogLine}
-      loadModels={loadModels}
-      onModelChange={onModelChange}
-      onModeChange={onModeChange}
-      onWireFormatChange={onWireFormatChange}
-    />,
-  );
+  try {
+    await renderAndRun(
+      root,
+      <XibeCodeChatApp
+        model={model}
+        initialMode={activeMode}
+        provider={provider}
+        baseUrl={baseUrl}
+        needsFirstRunSetup={needsFirstRunSetup}
+        defaultModel={model}
+        modeOptions={modeOptions}
+        initialRequestFormat={wireFormat}
+        customProviderFormat={customProviderFormat}
+        profile={options.profile}
+        runPrompt={runPrompt}
+        listBackgroundTasks={listBackgroundTasks}
+        checkBackgroundTask={checkBackgroundTask}
+        onUiLine={appendLogLine}
+        registerUiSink={registerUiSink}
+        registerModeSink={registerModeSink}
+        loadModels={loadModels}
+        onModelChange={onModelChange}
+        onModeChange={onModeChange}
+        onWireFormatChange={onWireFormatChange}
+      />,
+    );
+  } finally {
+    process.off('unhandledRejection', onUnhandledRejection);
+    process.off('uncaughtException', onUncaughtException);
+  }
 }
