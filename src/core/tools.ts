@@ -1956,12 +1956,18 @@ export class CodingToolExecutor implements ToolExecutor {
   }
 
   private async readMultipleFiles(paths: string[]): Promise<any> {
-    const results = await Promise.allSettled(
-      paths.map(async (p) => {
-        const content = await this.readFile(p);
-        return { path: p, ...content };
-      })
-    );
+    const CONCURRENCY_LIMIT = 20;
+    const results: PromiseSettledResult<any>[] = [];
+    for (let i = 0; i < paths.length; i += CONCURRENCY_LIMIT) {
+      const chunk = paths.slice(i, i + CONCURRENCY_LIMIT);
+      const chunkResults = await Promise.allSettled(
+        chunk.map(async (p) => {
+          const content = await this.readFile(p);
+          return { path: p, ...content };
+        })
+      );
+      results.push(...chunkResults);
+    }
 
     return {
       files: results
@@ -2133,26 +2139,32 @@ export class CodingToolExecutor implements ToolExecutor {
     const fullPath = this.resolvePath(dirPath);
     try {
       const entries = await fs.readdir(fullPath, { withFileTypes: true });
-      const results = await Promise.all(
-        entries.map(async (entry) => {
-          const entryPath = path.join(fullPath, entry.name);
-          try {
-            const stats = await fs.stat(entryPath);
-            return {
-              name: entry.name,
-              type: entry.isDirectory() ? 'directory' : 'file',
-              size: stats.size,
-              modified: stats.mtime,
-            };
-          } catch {
-            return {
-              name: entry.name,
-              type: entry.isDirectory() ? 'directory' : 'file',
-              size: 0,
-            };
-          }
-        })
-      );
+      const CONCURRENCY_LIMIT = 50;
+      const results: any[] = [];
+      for (let i = 0; i < entries.length; i += CONCURRENCY_LIMIT) {
+        const chunk = entries.slice(i, i + CONCURRENCY_LIMIT);
+        const chunkResults = await Promise.all(
+          chunk.map(async (entry) => {
+            const entryPath = path.join(fullPath, entry.name);
+            try {
+              const stats = await fs.stat(entryPath);
+              return {
+                name: entry.name,
+                type: entry.isDirectory() ? 'directory' : 'file',
+                size: stats.size,
+                modified: stats.mtime,
+              };
+            } catch {
+              return {
+                name: entry.name,
+                type: entry.isDirectory() ? 'directory' : 'file',
+                size: 0,
+              };
+            }
+          })
+        );
+        results.push(...chunkResults);
+      }
       return { path: dirPath, entries: results, count: results.length };
     } catch (error: any) {
       return { error: true, success: false, message: `Failed to list directory ${dirPath}: ${error.message}` };
