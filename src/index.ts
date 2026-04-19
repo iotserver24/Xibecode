@@ -5,6 +5,7 @@ import chalk from 'chalk';
 import { runCommand } from './commands/run.js';
 import { runPrCommand } from './commands/run-pr.js';
 import { chatCommand } from './commands/chat.js';
+import { resumeCommand } from './commands/resume.js';
 import { configCommand } from './commands/config.js';
 import { mcpCommand } from './commands/mcp.js';
 import { diagnosticsCommand } from './commands/diagnostics.js';
@@ -84,6 +85,16 @@ program
   .option('--no-webui', 'Disable WebUI server (TUI only)')
   .option('--plain', 'Disable Ink UI; print line-by-line output (best for copying)', false)
   .action(chatCommand);
+
+// Resume a previous session
+program
+  .command('resume')
+  .description('Resume a previous chat session')
+  .argument('[session-id]', 'Session ID to resume (optional - shows picker if not provided)')
+  .option('--profile <name>', 'Config profile to use (default: configured default profile)')
+  .action((sessionId: string | undefined, options: { profile?: string }) => {
+    resumeCommand({ session: sessionId, profile: options.profile });
+  });
 
 // WebUI - Browser-based interface
 program

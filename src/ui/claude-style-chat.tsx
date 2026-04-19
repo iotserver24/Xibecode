@@ -25,6 +25,8 @@ export type ChatOptions = {
   costMode?: string;
   noWebui?: boolean;
   profile?: string;
+  sessionId?: string;
+  initialMessages?: Array<{ role: string; content: string | Array<any> }>;
 };
 
 type UiLineType = 'user' | 'assistant' | 'tool' | 'tool_out' | 'info' | 'error';
@@ -164,6 +166,8 @@ function XibeCodeChatApp(props: {
   initialRequestFormat: RequestWireFormat;
   customProviderFormat?: 'openai' | 'anthropic';
   profile?: string;
+  sessionId?: string;
+  initialMessages?: Array<{ role: string; content: string | Array<any> }>;
   runPrompt: (
     prompt: string,
     onLine: (line: UiLine) => void,
@@ -242,15 +246,49 @@ function XibeCodeChatApp(props: {
   const [workSpinnerFrame, setWorkSpinnerFrame] = useState(0);
   const [workVerbIndex, setWorkVerbIndex] = useState(0);
   const nextLineIdRef = useRef(1);
-  const [lines, setLines] = useState<StaticItem[]>([
-    {
-      kind: 'line',
-      id: nextLineIdRef.current++,
-      type: 'info',
-      text: 'XibeCode interactive session. Type /exit to quit, /clear to reset the transcript.',
-    },
-    { kind: 'line', id: nextLineIdRef.current++, type: 'info', text: 'Type /help for shortcuts.' },
-  ]);
+  const initialMessagesRef = useRef(props.initialMessages);
+  const sessionIdRef = useRef(props.sessionId);
+
+  const buildInitialLines = useCallback((): StaticItem[] => {
+    const base: StaticItem[] = [
+      {
+        kind: 'line',
+        id: nextLineIdRef.current++,
+        type: 'info',
+        text: 'XibeCode interactive session. Type /exit to quit, /clear to reset the transcript.',
+      },
+      { kind: 'line', id: nextLineIdRef.current++, type: 'info', text: 'Type /help for shortcuts.' },
+    ];
+
+    if (sessionIdRef.current) {
+      base.push({
+        kind: 'line',
+        id: nextLineIdRef.current++,
+        type: 'info',
+        text: `Resumed session: ${sessionIdRef.current}`,
+      });
+    }
+
+    if (initialMessagesRef.current && initialMessagesRef.current.length > 0) {
+      for (const msg of initialMessagesRef.current) {
+        if (msg.role === 'user') {
+          const text = typeof msg.content === 'string' ? msg.content : '';
+          if (text.trim()) {
+            base.push({ kind: 'line', id: nextLineIdRef.current++, type: 'user', text });
+          }
+        } else if (msg.role === 'assistant') {
+          const text = typeof msg.content === 'string' ? msg.content : '';
+          if (text.trim()) {
+            base.push({ kind: 'line', id: nextLineIdRef.current++, type: 'assistant', text });
+          }
+        }
+      }
+    }
+
+    return base;
+  }, []);
+
+  const [lines, setLines] = useState<StaticItem[]>(buildInitialLines);
 
   const pushLine = useCallback(
     (line: UiLine) => {
@@ -2023,6 +2061,8 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
         initialRequestFormat={wireFormat}
         customProviderFormat={customProviderFormat}
         profile={options.profile}
+        sessionId={options.sessionId}
+        initialMessages={options.initialMessages}
         runPrompt={runPrompt}
         listBackgroundTasks={listBackgroundTasks}
         checkBackgroundTask={checkBackgroundTask}
