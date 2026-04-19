@@ -84,29 +84,33 @@ export class LoopDetector {
     if (recentDuplicates.length >= this.maxRepeats) {
       return {
         allowed: false,
-        reason: `Loop detected: ${toolName} called ${this.maxRepeats}+ times with same parameters`,
+        reason: `CRITICAL ERROR: Loop detected! You called ${toolName} ${this.maxRepeats}+ times with the exact same parameters. YOU MUST STOP AND RE-EVALUATE YOUR STRATEGY. Do not use this tool again right now. Change your mindset. Use 'search_files' or 'get_context' to gather new facts before proceeding.`,
       };
     }
 
     const sameTool = this.history.filter(h => h.tool === toolName);
     const sameCoarse = this.history.filter(h => h.coarse === coarse);
-    if (sameCoarse.length >= this.maxRepeats + 2) {
+
+    // Aggressive coarse match rejection
+    if (sameCoarse.length >= this.maxRepeats + 1) {
       return {
         allowed: false,
-        reason: `Loop detected: repeated ${toolName} attempts with near-identical input patterns`,
+        reason: `CRITICAL ERROR: Repeated ${toolName} attempts with near-identical patterns. YOUR ASSUMPTIONS ARE WRONG. Step back, verify file paths with 'search_files', and try a completely different approach.`,
       };
     }
-    if (sameTool.length >= this.maxRepeats * 2) {
+
+    // Lower threshold for repeated tool failures
+    if (sameTool.length >= this.maxRepeats + 2) {
       const uniquePatterns = new Set(sameTool.map(h => h.coarse)).size;
-      if (uniquePatterns <= 2) {
+      if (uniquePatterns <= 3) {
         return {
           allowed: false,
-          reason: `Loop detected: ${toolName} repeated ${sameTool.length} times with low-variation inputs`,
+          reason: `CRITICAL ERROR: ${toolName} repeated ${sameTool.length} times with little variation. STOP guessing. Use 'read_file' or 'grep_code' to find the actual code structure, or use 'web_search' if you lack documentation.`,
         };
       }
       return {
         allowed: true,
-        reason: `Warning: ${toolName} called ${sameTool.length} times recently`,
+        reason: `Warning: ${toolName} called ${sameTool.length} times recently. Ensure you are making progress.`,
       };
     }
 
@@ -1435,14 +1439,14 @@ Working directory: ${process.cwd()}
 ${this.defaultSkillsPrompt ? `${this.defaultSkillsPrompt}\n\n` : ''}
 ## Core Principles
 
-1. **Read Before Edit**: ALWAYS read files with read_file before modifying them
-2. **Use Verified Editing**: ALWAYS prefer verified_edit as your PRIMARY file editing tool. It requires old_content verification which prevents mistakes. Only fall back to edit_file or edit_lines if verified_edit fails.
-3. **Context Awareness**: Use get_context to understand project structure before making changes
-4. **Incremental Changes**: Make small, tested changes rather than large rewrites
-5. **Error Recovery**: If something fails, analyze the error and try a different approach
-6. **Search First**: Use grep_code to find code patterns, usages, and references before making changes
-7. **Web Research**: Use web_search and fetch_url when you need documentation, error solutions, or up-to-date info
-8. **Remember Important Things**: Use update_memory to save project knowledge for future sessions${this.autoMemoryMarkdownSection ? `
+1. **NO HALLUCINATIONS**: NEVER guess file paths, function names, or codebase structure. ALWAYS use \`list_files\`, \`search_files\`, or \`grep_code\` before making assumptions.
+2. **Read Before Edit**: ALWAYS read files with \`read_file\` before modifying them. Never edit a file blindly.
+3. **Use Verified Editing**: ALWAYS prefer \`verified_edit\` as your PRIMARY file editing tool. It requires old_content verification which prevents mistakes. Only fall back to \`edit_file\` or \`edit_lines\` if \`verified_edit\` fails.
+4. **Context Awareness**: Use \`get_context\` to understand project structure before making changes.
+5. **Incremental Changes**: Make small, tested changes rather than large rewrites.
+6. **Error Recovery & Loop Avoidance**: If a tool fails, DO NOT call it again with the same parameters. Analyze the error, verify your assumptions (using read/search tools), and try a COMPLETELY different approach.
+7. **Web Research**: Use \`web_search\` and \`fetch_url\` when you need documentation, error solutions, or up-to-date info.
+8. **Remember Important Things**: Use \`update_memory\` to save project knowledge for future sessions.${this.autoMemoryMarkdownSection ? `
 
 The following markdown memories were selected for this session (keyword-ranked; verify critical facts):
 
@@ -1454,8 +1458,8 @@ ${this.activeSkill.instructions}
 
 ---
 ` : ''}
-6. **Think Systematically**: Decompose complex problems, form hypotheses, and validate assumptions
-7. **Consider Impact**: Analyze how changes affect related code and downstream dependencies
+9. **Think Systematically**: Decompose complex problems, form hypotheses, and validate assumptions.
+10. **Consider Impact**: Analyze how changes affect related code and downstream dependencies.
 
 ## Advanced Reasoning and Problem-Solving
 
