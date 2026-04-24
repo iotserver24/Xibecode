@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { MessageParam, Tool, ToolUseBlock, TextBlock, ContentBlock } from '@anthropic-ai/sdk/resources/messages';
 import fetch from 'node-fetch';
 import { existsSync, readFileSync } from 'fs';
+import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { EventEmitter } from 'events';
 import { AgentMode, MODE_CONFIG, ModeState, createModeState, transitionMode, ModeOrchestrator, parseModeRequest, stripModeRequests, parseTaskComplete, stripTaskComplete, ModeTransitionPolicy } from './modes.js';
@@ -493,7 +494,10 @@ export class EnhancedAgent extends EventEmitter {
       const fallbackMd = join(process.cwd(), '.xibecode', 'memory.md');
       if (existsSync(fallbackMd)) {
         try {
-          this.autoMemoryMarkdownSection = `\n\n## Project Memory\n\n${readFileSync(fallbackMd, 'utf-8').trim()}`;
+          // ⚡ Bolt: Use asynchronous readFile to prevent blocking the Node.js event loop
+          // Performance impact: Keeps the agent and web UI responsive while loading fallback memory
+          const content = await readFile(fallbackMd, 'utf-8');
+          this.autoMemoryMarkdownSection = `\n\n## Project Memory\n\n${content.trim()}`;
         } catch {
           /* ignore */
         }
