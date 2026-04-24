@@ -1508,10 +1508,13 @@ function setupIPC(): void {
   });
 
   // Activity log
-  ipcMain.handle('get-activity-log', (_event, limit: number = 100) => {
+  ipcMain.handle('get-activity-log', async (_event, limit: number = 100) => {
     try {
       if (!fs.existsSync(ACTIVITY_LOG_FILE)) return [];
-      const lines = fs.readFileSync(ACTIVITY_LOG_FILE, 'utf-8').trim().split('\n');
+      // ⚡ Bolt: Use asynchronous readFile to prevent blocking the Electron main thread
+      // Performance impact: Keeps the UI responsive when loading large activity logs
+      const content = await fs.promises.readFile(ACTIVITY_LOG_FILE, 'utf-8');
+      const lines = content.trim().split('\n');
       return lines.slice(-limit).map(line => {
         try {
           return JSON.parse(line);
