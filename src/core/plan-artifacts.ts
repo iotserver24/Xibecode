@@ -37,13 +37,22 @@ export async function loadLatestPlanArtifact(workingDir: string): Promise<{ path
   const markdownFiles = files.filter((file) => file.endsWith('.md'));
   if (markdownFiles.length === 0) return null;
 
-  const withStats = await Promise.all(
-    markdownFiles.map(async (file) => {
-      const fullPath = path.join(plansDir, file);
-      const stat = await fs.stat(fullPath);
-      return { fullPath, mtimeMs: stat.mtimeMs };
-    }),
-  );
+  // Bounded concurrency (chunks of 20) to prevent EMFILE errors while speeding up IO
+  const CONCURRENCY_LIMIT = 20;
+  const withStats: { fullPath: string; mtimeMs: number }[] = [];
+
+  for (let i = 0; i < markdownFiles.length; i += CONCURRENCY_LIMIT) {
+    const chunk = markdownFiles.slice(i, i + CONCURRENCY_LIMIT);
+
+    const results = await Promise.all(
+      chunk.map(async (file) => {
+        const fullPath = path.join(plansDir, file);
+        const stat = await fs.stat(fullPath);
+        return { fullPath, mtimeMs: stat.mtimeMs };
+      })
+    );
+    withStats.push(...results);
+  }
 
   withStats.sort((a, b) => b.mtimeMs - a.mtimeMs);
   const latestPath = withStats[0]!.fullPath;
