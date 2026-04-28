@@ -99,7 +99,7 @@ function transcriptLinesFromMessage(message: MessageParam): UiLine[] {
   }
   return lines;
 }
-const APP_VERSION = '0.9.9';
+const APP_VERSION = '1.0.0';
 const HERO_LOGO = [
   '██╗  ██╗██╗██████╗ ███████╗',
   '╚██╗██╔╝██║██╔══██╗██╔════╝',
