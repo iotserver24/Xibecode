@@ -25,6 +25,25 @@ import { McpOAuthFlowManager } from './mcp/oauth-flow.js';
 
 const execAsync = promisify(exec);
 
+const DEFAULT_COMMAND_OUTPUT_CHARS = 20000;
+
+function compactCommandOutput(value: string, maxChars: number): { output: string; truncated: boolean; originalLength: number } {
+  if (value.length <= maxChars) {
+    return { output: value, truncated: false, originalLength: value.length };
+  }
+
+  const marker = `\n\n[output truncated: kept head/tail, original length ${value.length} chars]\n\n`;
+  const available = Math.max(0, maxChars - marker.length);
+  const headLength = Math.ceil(available * 0.6);
+  const tailLength = Math.floor(available * 0.4);
+
+  return {
+    output: `${value.slice(0, headLength)}${marker}${value.slice(value.length - tailLength)}`,
+    truncated: true,
+    originalLength: value.length,
+  };
+}
+
 /** Returned by former Playwright-backed browser tools; XibeCode does not bundle browsers. */
 export const NO_EMBEDDED_BROWSER_MESSAGE =
   'XibeCode does not bundle Playwright, Chromium, or agent-browser. Install agent-browser globally on supported OS/arch if you want it, or use your environment browser MCP / fetch_url. For Playwright E2E in a repo, add @playwright/test there and run it via run_command.';
@@ -52,6 +71,10 @@ export interface ToolExecutor {
    */
   getTools(): Tool[];
 }
+
+export const __testing = {
+  compactCommandOutput,
+};
 
 /**
  * Main tool executor for XibeCode agent
@@ -490,7 +513,7 @@ export class CodingToolExecutor implements ToolExecutor {
         if (!p.command || typeof p.command !== 'string') {
           return { error: true, success: false, message: 'Missing required parameter: command (string)' };
         }
-        return this.runCommand(p.command, p.cwd, p.input, p.timeout);
+        return this.runCommand(p.command, p.cwd, p.input, p.timeout, p.max_output_chars);
       }
 
       case 'create_directory': {
@@ -1236,6 +1259,10 @@ export class CodingToolExecutor implements ToolExecutor {
             timeout: {
               type: 'number',
               description: 'Timeout in seconds (default: 120). Increase for long-running commands like installs.',
+            },
+            max_output_chars: {
+              type: 'number',
+              description: `Maximum stdout/stderr characters to return per stream (default: ${DEFAULT_COMMAND_OUTPUT_CHARS}). Large output is summarized with head/tail context.`,
             },
           },
           required: ['command'],
@@ -2240,93 +2267,78 @@ export class CodingToolExecutor implements ToolExecutor {
     return this.runCommand(def.script, this.workingDir, undefined, 60);
   }
 
-  private async runCommand(command: string, cwd?: string, input?: string, timeout?: number): Promise<any> {
+  private async runCommand(command: string, cwd?: string, input?: string, timeout?: number, maxOutputChars?: number): Promise<any> {
     const workDir = cwd ? this.resolvePath(cwd) : this.workingDir;
     const timeoutMs = (timeout || 120) * 1000;
     const shell = this.platform === 'win32' ? 'powershell.exe' : '/bin/sh';
+    const outputLimit = Math.max(1000, maxOutputChars ?? DEFAULT_COMMAND_OUTPUT_CHARS);
 
-    // ── Use spawn when stdin input is provided ──
-    if (input) {
-      return new Promise((resolve) => {
-        const child = spawn(shell, this.platform === 'win32' ? ['-Command', command] : ['-c', command], {
-          cwd: workDir,
-          env: { ...process.env },
-          stdio: ['pipe', 'pipe', 'pipe'],
-        });
-
-        let stdout = '';
-        let stderr = '';
-        let killed = false;
-
-        const timer = setTimeout(() => {
-          killed = true;
-          child.kill('SIGTERM');
-        }, timeoutMs);
-
-        child.stdout.on('data', (data: Buffer) => { stdout += data.toString(); });
-        child.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
-
-        // Pipe stdin input (supports \n for multiple answers)
-        const stdinData = input.replace(/\\n/g, '\n');
-        child.stdin.write(stdinData);
-        child.stdin.end();
-
-        child.on('close', (code: number | null) => {
-          clearTimeout(timer);
-          resolve({
-            stdout: stdout.trim(),
-            stderr: stderr.trim(),
-            success: !killed && code === 0,
-            exitCode: code,
-            timedOut: killed,
-            platform: this.platform,
-          });
-        });
-
-        child.on('error', (err: Error) => {
-          clearTimeout(timer);
-          resolve({
-            stdout: stdout.trim(),
-            stderr: err.message,
-            success: false,
-            platform: this.platform,
-          });
-        });
-      });
-    }
-
-    // ── Regular exec with timeout ──
-    try {
-      const { stdout, stderr } = await execAsync(command, {
+    return new Promise((resolve) => {
+      const child = spawn(shell, this.platform === 'win32' ? ['-Command', command] : ['-c', command], {
         cwd: workDir,
-        maxBuffer: 1024 * 1024 * 10,
-        timeout: timeoutMs,
-        shell: this.platform === 'win32' ? 'powershell.exe' : undefined,
+        env: { ...process.env },
+        stdio: ['pipe', 'pipe', 'pipe'],
       });
-      return {
-        stdout: stdout.trim(),
-        stderr: stderr.trim(),
-        success: true,
-        platform: this.platform,
-      };
-    } catch (error: any) {
-      if (error.killed) {
-        return {
-          stdout: error.stdout?.trim() || '',
-          stderr: 'Command timed out after ' + (timeout || 120) + 's. Try increasing the timeout parameter, or use non-interactive flags like --yes to avoid prompts.',
-          success: false,
-          timedOut: true,
+
+      let stdout = '';
+      let stderr = '';
+      let timedOut = false;
+      let settled = false;
+
+      const finish = (result: any) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+
+        const compactedStdout = compactCommandOutput(String(result.stdout ?? '').trim(), outputLimit);
+        const compactedStderr = compactCommandOutput(String(result.stderr ?? '').trim(), outputLimit);
+
+        resolve({
+          ...result,
+          stdout: compactedStdout.output,
+          stderr: compactedStderr.output,
+          truncated: compactedStdout.truncated || compactedStderr.truncated,
+          originalStdoutLength: compactedStdout.originalLength,
+          originalStderrLength: compactedStderr.originalLength,
           platform: this.platform,
-        };
-      }
-      return {
-        stdout: error.stdout?.trim() || '',
-        stderr: error.stderr?.trim() || error.message,
-        success: false,
-        exitCode: error.code,
-        platform: this.platform,
+        });
       };
-    }
+
+      const timer = setTimeout(() => {
+        timedOut = true;
+        child.kill('SIGTERM');
+      }, timeoutMs);
+
+      child.stdout.on('data', (data: Buffer) => { stdout += data.toString(); });
+      child.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
+
+      if (input) {
+        child.stdin.write(input.replace(/\\n/g, '\n'));
+      }
+      child.stdin.end();
+
+      child.on('close', (code: number | null) => {
+        finish({
+          stdout,
+          stderr: timedOut
+            ? `${stderr}\nCommand timed out after ${timeout || 120}s. Try increasing the timeout parameter, or use non-interactive flags like --yes to avoid prompts.`
+            : stderr,
+          success: !timedOut && code === 0,
+          exitCode: code,
+          timedOut,
+        });
+      });
+
+      child.on('error', (err: Error) => {
+        finish({
+          stdout,
+          stderr: err.message,
+          success: false,
+          exitCode: undefined,
+          timedOut,
+        });
+      });
+    });
   }
 
   private async createDirectory(dirPath: string): Promise<any> {

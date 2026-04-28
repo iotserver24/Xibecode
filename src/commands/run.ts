@@ -168,10 +168,10 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
     }
   }
 
-  // Load plugins
   const pluginManager = new PluginManager();
   const pluginPaths = config.get('plugins') || [];
-  if (pluginPaths.length > 0) {
+  const pluginLoadPromise = (async () => {
+    if (pluginPaths.length === 0) return;
     try {
       await pluginManager.loadPlugins(pluginPaths);
       const loadedPlugins = pluginManager.getPlugins();
@@ -181,13 +181,13 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
     } catch (error: any) {
       ui.warning(`Failed to load some plugins: ${error.message}`);
     }
-  }
+  })();
 
-  // Load and connect to MCP servers
   const mcpClientManager = new MCPClientManager();
   const mcpServers = await config.getMCPServers();
   const serverNames = Object.keys(mcpServers);
-  if (serverNames.length > 0) {
+  const mcpConnectPromise = (async () => {
+    if (serverNames.length === 0) return;
     ui.info(`Connecting to ${serverNames.length} MCP server(s)...`);
     const result = await mcpClientManager.connectAll(mcpServers, { retries: 1, backoffMs: 750 });
     for (const name of result.connected) {
@@ -200,17 +200,31 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
     for (const f of result.failed) {
       ui.warning(`  ✗ Failed to connect to ${f.name}: ${f.error}`);
     }
-  }
+  })();
 
   // Show session info
   ui.startSession(effectivePrompt, { model, maxIterations, dryRun });
 
   // Initialize components
   const memory = new NeuralMemory();
-  await memory.init().catch(() => { });
+  const memoryInitPromise = memory.init().catch(() => { });
 
   const skillManager = new SkillManager(process.cwd(), apiKey, baseUrl, model, provider);
-  await skillManager.loadSkills();
+  const skillLoadPromise = skillManager.loadSkills();
+  const sessionMemory = new SessionMemory(process.cwd());
+  const sessionMemoryLoadPromise = sessionMemory.loadPreviousLearnings().catch(() => {});
+  const maxContextFiles = config.getMaxContextFiles();
+  const contextHintFilesPromise = maxContextFiles > 0
+    ? pruneContext(process.cwd(), effectivePrompt, { maxFiles: maxContextFiles, usePkgStyleContext: config.getUsePkgStyleContext() }).catch(() => [])
+    : Promise.resolve([] as string[]);
+
+  await Promise.all([
+    pluginLoadPromise,
+    mcpConnectPromise,
+    memoryInitPromise,
+    skillLoadPromise,
+  ]);
+
   const autoSkillsShEnabled =
     process.env.XIBECODE_AUTO_SKILLS_SH === '1' || process.env.XIBECODE_AUTO_SKILLS_SH === 'true';
   let autoInstalledSkillNames: string[] = [];
@@ -243,13 +257,10 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
     memory,
     skillManager,
   });
-  const sessionMemory = new SessionMemory(process.cwd());
-  await sessionMemory.loadPreviousLearnings().catch(() => {});
-
-  const maxContextFiles = config.getMaxContextFiles();
-  const contextHintFiles = maxContextFiles > 0
-    ? await pruneContext(process.cwd(), effectivePrompt, { maxFiles: maxContextFiles, usePkgStyleContext: config.getUsePkgStyleContext() }).catch(() => [])
-    : [];
+  const [contextHintFiles] = await Promise.all([
+    contextHintFilesPromise,
+    sessionMemoryLoadPromise,
+  ]);
 
   const agent = new EnhancedAgent(
     {

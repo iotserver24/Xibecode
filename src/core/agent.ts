@@ -236,6 +236,46 @@ class ThinkTagFilter {
   }
 }
 
+const MAX_TOOL_RESULT_CHARS = 30000;
+
+export function compactToolResultPayload(result: unknown, maxChars: number = MAX_TOOL_RESULT_CHARS): unknown {
+  if (typeof result === 'string') {
+    return compactLargeString(result, maxChars);
+  }
+
+  if (Array.isArray(result)) {
+    return result.map((item) => compactToolResultPayload(item, maxChars));
+  }
+
+  if (!result || typeof result !== 'object') {
+    return result;
+  }
+
+  const compacted: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(result as Record<string, unknown>)) {
+    if (typeof value === 'string' && ['stdout', 'stderr', 'content', 'output', 'message'].includes(key)) {
+      compacted[key] = compactLargeString(value, maxChars);
+      if (compacted[key] !== value) {
+        compacted[`${key}Truncated`] = true;
+        compacted[`${key}OriginalLength`] = value.length;
+      }
+    } else {
+      compacted[key] = compactToolResultPayload(value, Math.max(4000, Math.floor(maxChars / 2)));
+    }
+  }
+
+  return compacted;
+}
+
+function compactLargeString(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value;
+  const marker = `\n\n[tool result truncated: original length ${value.length} chars]\n\n`;
+  const available = Math.max(0, maxChars - marker.length);
+  const headLength = Math.ceil(available * 0.6);
+  const tailLength = Math.floor(available * 0.4);
+  return `${value.slice(0, headLength)}${marker}${value.slice(value.length - tailLength)}`;
+}
+
 // ─── Agent ────────────────────────────────────────────────────
 export class EnhancedAgent extends EventEmitter {
   private client: Anthropic;
@@ -821,10 +861,11 @@ export class EnhancedAgent extends EventEmitter {
           async (toolUse, i) => this.executeSingleToolUse(toolExecutor, toolUse, i),
         );
         for (const update of updates) {
+          const compactedResult = compactToolResultPayload(update.result);
           const payload =
-            typeof update.result === 'string'
-              ? update.result
-              : JSON.stringify(update.result, null, 2);
+            typeof compactedResult === 'string'
+              ? compactedResult
+              : JSON.stringify(compactedResult, null, 2);
           toolResults.push({
             type: 'tool_result' as const,
             tool_use_id: update.toolUse.id,
