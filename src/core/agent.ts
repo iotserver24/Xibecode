@@ -310,6 +310,16 @@ export class EnhancedAgent extends EventEmitter {
   private toolOrchestrator: ToolOrchestrator;
   private evidenceTrail: Array<{ kind: string; detail: string; ts: number }> = [];
 
+  private isAbortError(err: unknown): boolean {
+    if (!err || typeof err !== 'object') return false;
+    const anyErr = err as any;
+    return (
+      anyErr.name === 'AbortError' ||
+      anyErr.type === 'aborted' ||
+      String(anyErr.message || '').toLowerCase().includes('aborted')
+    );
+  }
+
   public injectMessage(message: string): void {
     this.injectedMessages.push(message);
   }
@@ -641,6 +651,9 @@ export class EnhancedAgent extends EventEmitter {
             const persona = result.persona;
             break;
           } catch (apiError: any) {
+            if (opts?.signal?.aborted || this.isAbortError(apiError)) {
+              throw apiError;
+            }
             this.emit('error', { message: 'API Error', error: apiError.message });
             if (attempt < maxApiRetries) {
               this.emit('warning', {
@@ -892,6 +905,9 @@ export class EnhancedAgent extends EventEmitter {
         });
 
       } catch (error: any) {
+        if (opts?.signal?.aborted || this.isAbortError(error)) {
+          throw error;
+        }
         this.emit('error', {
           message: 'API Error',
           error: error.message,
