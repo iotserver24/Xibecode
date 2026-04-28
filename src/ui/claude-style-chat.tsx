@@ -31,11 +31,74 @@ export type ChatOptions = {
   initialMessages?: Array<{ role: string; content: string | Array<any> }>;
 };
 
+function isAbortLikeError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const anyErr = err as any;
+  return (
+    anyErr.name === 'AbortError' ||
+    anyErr.type === 'aborted' ||
+    String(anyErr.message || '').toLowerCase().includes('aborted')
+  );
+}
+
 type UiLineType = 'user' | 'assistant' | 'tool' | 'tool_out' | 'info' | 'error';
 type UiLine = { type: UiLineType; text: string };
 type StaticItem =
   | { kind: 'hero'; id: number }
   | ({ kind: 'line'; id: number } & UiLine);
+
+function summarizeToolResultContent(content: unknown): string {
+  const raw = typeof content === 'string' ? content : JSON.stringify(content ?? '');
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      const record = parsed as Record<string, unknown>;
+      if (typeof record.path === 'string') {
+        const details = [
+          typeof record.lines === 'number' ? `${record.lines} lines` : null,
+          typeof record.count === 'number' ? `${record.count} entries` : null,
+          typeof record.total === 'number' ? `${record.total} result(s)` : null,
+        ].filter(Boolean).join(', ');
+        return details ? `${record.path} (${details})` : record.path;
+      }
+      if (typeof record.message === 'string') return record.message;
+      if (typeof record.stdout === 'string') return record.stdout.slice(0, 300);
+    }
+  } catch {
+    // Fall through to plain text summary.
+  }
+  return raw.replace(/\s+/g, ' ').trim().slice(0, 300);
+}
+
+function transcriptLinesFromMessage(message: MessageParam): UiLine[] {
+  if (typeof message.content === 'string') {
+    const text = message.content.trim();
+    return text ? [{ type: message.role === 'assistant' ? 'assistant' : 'user', text }] : [];
+  }
+
+  if (!Array.isArray(message.content)) return [];
+
+  const lines: UiLine[] = [];
+  for (const block of message.content as any[]) {
+    if (block?.type === 'text') {
+      const text = String(block.text || '').trim();
+      if (text) lines.push({ type: message.role === 'assistant' ? 'assistant' : 'user', text });
+      continue;
+    }
+    if (block?.type === 'tool_use') {
+      const name = String(block.name || 'tool');
+      lines.push({ type: 'tool', text: `${name}${block.input ? ` — ${formatToolArgs(name, block.input)}` : ''}` });
+      continue;
+    }
+    if (block?.type === 'tool_result') {
+      lines.push({
+        type: 'tool_out',
+        text: `tool_result: ${summarizeToolResultContent(block.content)}`,
+      });
+    }
+  }
+  return lines;
+}
 const APP_VERSION = '0.9.9';
 const HERO_LOGO = [
   '██╗  ██╗██╗██████╗ ███████╗',
@@ -188,6 +251,7 @@ function XibeCodeChatApp(props: {
   onWireFormatChange: (format: RequestWireFormat) => void;
   onSessionCreated?: (sessionId: string) => void;
   onMessagesUpdate?: (messages: MessageParam[]) => void;
+  getCurrentMessages?: () => MessageParam[];
 }) {
   const { exit } = useApp();
   const [input, setInput] = useState('');
@@ -275,16 +339,8 @@ function XibeCodeChatApp(props: {
 
     if (initialMessagesRef.current && initialMessagesRef.current.length > 0) {
       for (const msg of initialMessagesRef.current) {
-        if (msg.role === 'user') {
-          const text = typeof msg.content === 'string' ? msg.content : '';
-          if (text.trim()) {
-            base.push({ kind: 'line', id: nextLineIdRef.current++, type: 'user', text });
-          }
-        } else if (msg.role === 'assistant') {
-          const text = typeof msg.content === 'string' ? msg.content : '';
-          if (text.trim()) {
-            base.push({ kind: 'line', id: nextLineIdRef.current++, type: 'assistant', text });
-          }
+        for (const line of transcriptLinesFromMessage(msg as MessageParam)) {
+          base.push({ kind: 'line', id: nextLineIdRef.current++, ...line });
         }
       }
     }
@@ -646,7 +702,7 @@ function XibeCodeChatApp(props: {
       }
 
       if (resolvedInput === '/exit') {
-        props.onMessagesUpdate?.(sessionMessagesRef.current);
+        props.onMessagesUpdate?.(props.getCurrentMessages?.() ?? sessionMessagesRef.current);
         exit();
         return;
       }
@@ -1356,7 +1412,7 @@ function XibeCodeChatApp(props: {
         {(item) => {
           if (item.kind === 'hero') {
             return (
-              <Box flexDirection="column" marginBottom={1}>
+              <Box key={item.id} flexDirection="column" marginBottom={1}>
                 {HERO_LOGO.map((line, idx) => (
                   <React.Fragment key={`logo-${idx}`}>
                     <Text bold color={idx < 6 ? 'claude' : 'suggestion'}>
@@ -1806,6 +1862,9 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     config.set('model', nextModel);
     if (activeCreds.apiKey) {
       activeAgent = createAgentForModel(nextModel, { apiKey: activeCreds.apiKey, baseUrl: activeCreds.baseUrl });
+      if (currentSession?.messages?.length) {
+        activeAgent.setMessages(currentSession.messages);
+      }
       activeAgent.setModeFromUser(activeMode, 'Preserve user-selected mode after model switch');
     } else {
       activeAgent = null;
@@ -1829,6 +1888,9 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     activeAgent?.removeAllListeners('event');
     if (activeCreds.apiKey) {
       activeAgent = createAgentForModel(activeModel, { apiKey: activeCreds.apiKey, baseUrl: activeCreds.baseUrl });
+      if (currentSession?.messages?.length) {
+        activeAgent.setMessages(currentSession.messages);
+      }
       activeAgent.setModeFromUser(activeMode, 'Preserve user-selected mode after format switch');
     } else {
       activeAgent = null;
@@ -1893,6 +1955,9 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     ) {
       activeCreds = { apiKey: currentApiKey, baseUrl: currentBaseUrl };
       activeAgent = createAgentForModel(activeModel, { apiKey: currentApiKey, baseUrl: currentBaseUrl });
+      if (currentSession?.messages?.length) {
+        activeAgent.setMessages(currentSession.messages);
+      }
       activeAgent.setModeFromUser(activeMode, 'Refresh agent after credential change');
       toolExecutor.setMode(activeMode);
     }
@@ -1955,6 +2020,9 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
           onLine({ type: 'assistant', text: (event.data?.text as string) || '' });
           break;
         case 'error':
+          if (isAbortLikeError(event.data?.message) || isAbortLikeError(event.data?.error)) {
+            break;
+          }
           onLine({
             type: 'error',
             text:
@@ -1982,6 +2050,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
       images: opts?.images,
       signal: opts?.signal,
     });
+    await onMessagesUpdate(activeAgent.getMessages());
     activeMode = activeAgent.getMode();
     toolExecutor.setMode(activeMode);
     modeSink?.(activeMode);
@@ -2046,9 +2115,11 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
   };
 
   const onUnhandledRejection = (reason: unknown) => {
+    if (isAbortLikeError(reason)) return;
     uiSink?.({ type: 'error', text: `Unhandled rejection:\n${formatUnknownError(reason)}` });
   };
   const onUncaughtException = (err: unknown) => {
+    if (isAbortLikeError(err)) return;
     uiSink?.({ type: 'error', text: `Uncaught exception:\n${formatUnknownError(err)}` });
   };
 
@@ -2072,6 +2143,12 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     }
   } else {
     currentSession = await sessionManager.loadSession(currentSessionId);
+  }
+
+  if (currentSession?.messages?.length) {
+    activeAgent?.setMessages(currentSession.messages);
+  } else if (options.initialMessages && options.initialMessages.length > 0) {
+    activeAgent?.setMessages(options.initialMessages as MessageParam[]);
   }
 
   const onSessionCreated = (sessionId: string) => {
@@ -2123,6 +2200,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
         onWireFormatChange={onWireFormatChange}
         onSessionCreated={onSessionCreated}
         onMessagesUpdate={onMessagesUpdate}
+        getCurrentMessages={() => activeAgent?.getMessages() ?? currentSession?.messages ?? []}
       />,
     );
   } finally {
