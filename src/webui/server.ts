@@ -255,7 +255,7 @@ export class WebUIServer {
     try {
       // Health check
       if (pathname === '/api/health') {
-        sendJSON({ status: 'ok', version: '1.0.0' });
+        sendJSON({ status: 'ok', version: '1.0.1' });
         return;
       }
 

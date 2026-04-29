@@ -1269,6 +1269,10 @@ export class EnhancedAgent extends EventEmitter {
       );
     };
 
+    // Track abort state to handle errors during streaming
+    let streamAborted = false;
+    let abortHandler: (() => void) | undefined;
+
     // ── Try streaming first (SSE) ─────────────────────────
     try {
       const streamResponse = await fetch(url, {
@@ -1307,10 +1311,21 @@ export class EnhancedAgent extends EventEmitter {
         throw new Error('Streaming body not available');
       }
 
+      // Set up abort handler to track abort state
+      abortHandler = () => {
+        streamAborted = true;
+        // node-fetch returns a Node.js Readable stream which has destroy()
+        // TypeScript types don't include destroy(), but it exists at runtime
+        (body as any).destroy();
+      };
+      signal?.addEventListener('abort', abortHandler);
+
       // When the user cancels (Esc), node-fetch aborts the Readable stream and emits an
       // 'error' event. If no listener is attached, Node treats it as unhandled and crashes.
       body.on('error', (err: unknown) => {
-        if (isAbortError(err) || signal?.aborted) return;
+        if (isAbortError(err) || signal?.aborted || streamAborted) return;
+        // Re-throw non-abort errors so they can be caught by the outer try-catch
+        throw err;
       });
 
       let fullText = '';
@@ -1405,12 +1420,18 @@ export class EnhancedAgent extends EventEmitter {
         }
       }
 
+      // Clean up abort listener on successful completion
+      if (abortHandler) signal?.removeEventListener('abort', abortHandler);
+
       const message = { content: content.length ? content : [{ type: 'text', text: '' } as TextBlock] };
       return { message, streamed: hasEmittedStart };
     } catch (_streamError) {
+      // Clean up abort listener on error
+      if (abortHandler) signal?.removeEventListener('abort', abortHandler);
+
       // If the request was cancelled, do not fall back to non-streaming — just bubble up
       // the abort so the UI can render "Cancelled." without crashing.
-      if (signal?.aborted || isAbortError(_streamError)) {
+      if (signal?.aborted || isAbortError(_streamError) || streamAborted) {
         throw _streamError;
       }
       // ── Fallback to non-streaming ───────────────────────
