@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { useFileStore, FileNode } from '../../stores/fileStore';
 import { useEditorStore } from '../../stores/editorStore';
 import { api } from '../../utils/api';
@@ -11,29 +11,13 @@ function cn(...inputs: (string | undefined | null | false)[]) {
 }
 
 export function FileExplorer() {
-  const { fileTree, expandedPaths, selectedPath, isLoading, refreshFileTree, toggleExpanded, setSelectedPath } = useFileStore();
-  const { openFile } = useEditorStore();
+  const fileTree = useFileStore(state => state.fileTree);
+  const isLoading = useFileStore(state => state.isLoading);
+  const refreshFileTree = useFileStore(state => state.refreshFileTree);
 
   useEffect(() => {
     refreshFileTree();
-  }, []);
-
-  const handleFileClick = async (node: FileNode) => {
-    setSelectedPath(node.path);
-
-    if (node.isDirectory) {
-      toggleExpanded(node.path);
-    } else {
-      try {
-        const result = await api.files.read(node.path);
-        if (result.success && result.content !== undefined) {
-          openFile({ path: node.path, content: result.content });
-        }
-      } catch (err) {
-        console.error('Failed to read file:', err);
-      }
-    }
-  };
+  }, [refreshFileTree]);
 
   if (isLoading && fileTree.length === 0) {
     return (
@@ -59,10 +43,6 @@ export function FileExplorer() {
               key={node.path}
               node={node}
               depth={0}
-              expandedPaths={expandedPaths}
-              selectedPath={selectedPath}
-              onToggle={toggleExpanded}
-              onClick={handleFileClick}
             />
           ))}
         </div>
@@ -74,20 +54,41 @@ export function FileExplorer() {
 interface TreeNodeProps {
   node: FileNode;
   depth: number;
-  expandedPaths: Set<string>;
-  selectedPath: string | null;
-  onToggle: (path: string) => void;
-  onClick: (node: FileNode) => void;
 }
 
-function TreeNode({ node, depth, expandedPaths, selectedPath, onToggle, onClick }: TreeNodeProps) {
-  const isExpanded = expandedPaths.has(node.path);
-  const isSelected = selectedPath === node.path;
+// ⚡ Bolt Optimization:
+// Memoize the recursive TreeNode to prevent O(N) re-renders when the file tree is large.
+// By using granular Zustand selectors below, each node subscribes only to its own specific
+// expansion and selection states. This ensures that when a user clicks a file, only that
+// specific file node re-renders, rather than the entire file tree.
+const TreeNode = React.memo(function TreeNode({ node, depth }: TreeNodeProps) {
+  const isExpanded = useFileStore(state => state.expandedPaths.has(node.path));
+  const isSelected = useFileStore(state => state.selectedPath === node.path);
+  const toggleExpanded = useFileStore(state => state.toggleExpanded);
+  const setSelectedPath = useFileStore(state => state.setSelectedPath);
+  const openFile = useEditorStore(state => state.openFile);
 
-  const handleToggle = (e: React.MouseEvent) => {
+  const handleToggle = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    onToggle(node.path);
-  };
+    toggleExpanded(node.path);
+  }, [node.path, toggleExpanded]);
+
+  const handleFileClick = useCallback(async () => {
+    setSelectedPath(node.path);
+
+    if (node.isDirectory) {
+      toggleExpanded(node.path);
+    } else {
+      try {
+        const result = await api.files.read(node.path);
+        if (result.success && result.content !== undefined) {
+          openFile({ path: node.path, content: result.content });
+        }
+      } catch (err) {
+        console.error('Failed to read file:', err);
+      }
+    }
+  }, [node.path, node.isDirectory, setSelectedPath, toggleExpanded, openFile]);
 
   return (
     <>
@@ -99,7 +100,7 @@ function TreeNode({ node, depth, expandedPaths, selectedPath, onToggle, onClick 
             : "text-zinc-500 hover:bg-zinc-800/30 hover:text-zinc-300"
         )}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
-        onClick={() => onClick(node)}
+        onClick={handleFileClick}
       >
         <span
           className="flex items-center justify-center w-4 h-4 text-zinc-600 transition-colors flex-shrink-0"
@@ -128,14 +129,10 @@ function TreeNode({ node, depth, expandedPaths, selectedPath, onToggle, onClick 
               key={child.path}
               node={child}
               depth={depth + 1}
-              expandedPaths={expandedPaths}
-              selectedPath={selectedPath}
-              onToggle={onToggle}
-              onClick={onClick}
             />
           ))}
         </div>
       )}
     </>
   );
-}
+});
