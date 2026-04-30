@@ -233,7 +233,7 @@ export class PluginManager {
  */
 export const examplePlugin: XibeCodePlugin = {
   name: 'example-plugin',
-  version: '1.0.1',
+  version: '1.0.2',
   description: 'An example plugin that demonstrates the plugin API',
 
   initialize() {

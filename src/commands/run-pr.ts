@@ -262,7 +262,7 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
   const config = new ConfigManager(options.profile);
   const cwd = process.cwd();
 
-  ui.header('1.0.1');
+  ui.header('1.0.2');
 
   // ── Pre-flight checks ────────────────────────────────────────────────────
   try {
