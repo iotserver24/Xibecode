@@ -1909,6 +1909,8 @@ else:
             <select id="settings-provider" onchange="onProviderChange()">
               <option value="anthropic">Anthropic (Claude)</option>
               <option value="openai">OpenAI</option>
+              <option value="routingrun">Routing.run (recommended) (cheapest opensource model provider)</option>
+              <option value="zenllm">zenllm.org (recommended) (best ai provider with 200+ models)</option>
               <option value="custom">Custom / OpenAI-compatible</option>
             </select>
           </div>
@@ -2606,6 +2608,15 @@ else:
         customField.style.display = 'none';
         baseUrlField.style.display = 'none';
       } else if (provider === 'openai') {
+        modelSelect.innerHTML = \`
+          <option value="gpt-4o">GPT-4o</option>
+          <option value="gpt-4o-mini">GPT-4o Mini</option>
+          <option value="gpt-4-turbo">GPT-4 Turbo</option>
+          <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+        \`;
+        customField.style.display = 'none';
+        baseUrlField.style.display = 'none';
+      } else if (provider === 'routingrun' || provider === 'zenllm') {
         modelSelect.innerHTML = \`
           <option value="gpt-4o">GPT-4o</option>
           <option value="gpt-4o-mini">GPT-4o Mini</option>

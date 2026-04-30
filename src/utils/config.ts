@@ -34,6 +34,20 @@ export const PROVIDER_CONFIGS = {
     envKey: 'ANTHROPIC_API_KEY',
     name: 'Anthropic'
   },
+  routingrun: {
+    baseUrl: 'https://api.routing.run/v1',
+    defaultModel: 'gpt-4o',
+    format: 'openai',
+    envKey: 'ROUTINGRUN_API_KEY',
+    name: 'Routing.run',
+  },
+  zenllm: {
+    baseUrl: 'https://zenllm.org/v1',
+    defaultModel: 'gpt-4o',
+    format: 'openai',
+    envKey: 'ZENLLM_API_KEY',
+    name: 'zenllm.org',
+  },
   zai: {
     baseUrl: 'https://api.z.ai/api/paas/v4',
     defaultModel: 'glm-4.7',
@@ -327,7 +341,9 @@ export class ConfigManager {
       process.env.MOONSHOT_API_KEY ||
       process.env.XAI_API_KEY ||
       process.env.GROQ_API_KEY ||
-      process.env.OPENROUTER_API_KEY;
+      process.env.OPENROUTER_API_KEY ||
+      process.env.ROUTINGRUN_API_KEY ||
+      process.env.ZENLLM_API_KEY;
   }
 
   /**

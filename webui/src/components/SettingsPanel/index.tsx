@@ -642,7 +642,9 @@ function AIProviderSettings({
                 m.provider === 'grok' ? 'Grok' :
                   m.provider === 'google' ? 'Google' :
                     m.provider === 'groq' ? 'Groq' :
-                      m.provider === 'openrouter' ? 'OpenRouter' : 'Other';
+                      m.provider === 'openrouter' ? 'OpenRouter' :
+                        m.provider === 'routingrun' ? 'Routing.run' :
+                          m.provider === 'zenllm' ? 'zenllm.org' : 'Other';
     if (!groupedModels[key]) groupedModels[key] = [];
     groupedModels[key].push(m);
   });
@@ -669,6 +671,8 @@ function AIProviderSettings({
           <option value="google">Google (Gemini)</option>
           <option value="groq">Groq</option>
           <option value="openrouter">OpenRouter</option>
+          <option value="routingrun">Routing.run (recommended) (cheapest opensource model provider)</option>
+          <option value="zenllm">zenllm.org (recommended) (best ai provider with 200+ models)</option>
           <option value="custom">Custom (Compatible)</option>
         </select>
       </SettingRow>
