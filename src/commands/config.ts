@@ -52,7 +52,7 @@ export async function configCommand(options: ConfigOptions) {
     process.env.TERM !== 'dumb';
 
   const printNonInteractiveMenu = () => {
-    ui.header('1.0.1');
+    ui.header('1.0.2');
     console.log(chalk.bold.white('⚙️  Configuration (non-interactive)\n'));
     console.log(chalk.dim('Interactive menu could not be rendered.\n'));
     console.log(chalk.bold('Available options:\n'));
@@ -255,7 +255,7 @@ export async function configCommand(options: ConfigOptions) {
   }
 
   if (options.show) {
-    ui.header('1.0.1');
+    ui.header('1.0.2');
     console.log(chalk.bold.white('⚙️  Current Configuration\n'));
 
     const displayConfig = config.getDisplayConfig();
@@ -289,7 +289,7 @@ export async function configCommand(options: ConfigOptions) {
   }
 
   // Interactive configuration (loop until user chooses Exit)
-  ui.header('1.0.1');
+  ui.header('1.0.2');
   console.log(chalk.bold.white('⚙️  Configuration Setup\n'));
 
   // eslint-disable-next-line no-constant-condition

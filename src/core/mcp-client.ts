@@ -71,7 +71,7 @@ export class MCPClientManager {
       this.setState(serverName, { state: 'connecting', lastError: undefined });
       const client = new Client({
         name: 'xibecode',
-        version: '1.0.1',
+        version: '1.0.2',
       }, {
         capabilities: {},
       });
