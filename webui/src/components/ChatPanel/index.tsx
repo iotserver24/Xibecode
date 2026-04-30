@@ -750,9 +750,8 @@ const TOOL_ICONS: Record<string, { icon: string; label: string }> = {
 };
 
 // ⚡ Bolt Optimization:
-// Memoize MessageItem to prevent O(N) re-renders of the entire chat history
-// when streaming new tokens. Since Zustand maintains object references for
-// unchanged messages, this successfully skips rendering for all past messages.
+// Wrap MessageItem in React.memo to prevent O(N) cascading re-renders
+// of unchanged messages during token streaming or frequent state updates in ChatPanel.
 const MessageItem = React.memo(function MessageItem({ message }: { message: ChatMessage }) {
   if (message.role === 'tool') {
     const toolInfo = TOOL_ICONS[message.toolName || ''] || { icon: '🔧', label: message.toolName || 'Tool' };
