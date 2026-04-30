@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useChatStore, ChatMessage, AgentMode } from '../../stores/chatStore';
 import { useEditorStore } from '../../stores/editorStore';
 import { createWebSocket, api } from '../../utils/api';
@@ -749,7 +749,10 @@ const TOOL_ICONS: Record<string, { icon: string; label: string }> = {
   create_directory: { icon: '📁', label: 'Create Dir' },
 };
 
-function MessageItem({ message }: { message: ChatMessage }) {
+// ⚡ Bolt Optimization:
+// Wrap MessageItem in React.memo to prevent O(N) cascading re-renders
+// of unchanged messages during token streaming or frequent state updates in ChatPanel.
+const MessageItem = React.memo(function MessageItem({ message }: { message: ChatMessage }) {
   if (message.role === 'tool') {
     const toolInfo = TOOL_ICONS[message.toolName || ''] || { icon: '🔧', label: message.toolName || 'Tool' };
     const isRunning = message.toolStatus === 'running';
@@ -872,4 +875,4 @@ function MessageItem({ message }: { message: ChatMessage }) {
       </div>
     </div>
   );
-}
+});
