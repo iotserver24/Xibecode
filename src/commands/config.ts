@@ -97,7 +97,19 @@ export async function configCommand(options: ConfigOptions) {
 
   if (options.setProvider) {
     const provider = options.setProvider.toLowerCase();
-    const allowed = ['anthropic', 'openai', 'deepseek', 'zai', 'kimi', 'grok', 'openrouter', 'google', 'auto'];
+    const allowed = [
+      'anthropic',
+      'openai',
+      'deepseek',
+      'zai',
+      'kimi',
+      'grok',
+      'openrouter',
+      'google',
+      'routingrun',
+      'zenllm',
+      'auto',
+    ];
 
     if (!allowed.includes(provider)) {
       ui.error(

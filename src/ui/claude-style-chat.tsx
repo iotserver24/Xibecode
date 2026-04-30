@@ -120,7 +120,7 @@ const WORK_SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '�
 /** How fast to advance OpenClaude-style spinner verbs (ms) */
 const WORK_VERB_ROTATE_MS = 2400;
 
-const QUICK_HELP = ['/help', '/mode', '/format', '/model', '/setup', '/config', '/clear', '/exit'];
+const QUICK_HELP = ['/help', '/mode', '/format', '/model', '/setup', '/config', '/donate', '/sponsor', '/clear', '/exit'];
 const CHAT_COMMANDS: Array<{ name: string; description: string }> = [
   { name: '/help', description: 'Show available shortcuts and usage hints' },
   { name: '/mode', description: 'Switch agent mode from an interactive picker' },
@@ -129,6 +129,8 @@ const CHAT_COMMANDS: Array<{ name: string; description: string }> = [
   { name: '/model', description: 'Fetch and switch available models for this provider' },
   { name: '/setup', description: 'Guided setup (set API key, then pick provider/model)' },
   { name: '/config', description: 'Show current config and quick config hints' },
+  { name: '/donate', description: 'Open the donation page in your browser' },
+  { name: '/sponsor', description: 'Open the sponsorship page in your browser' },
   { name: '/exit', description: 'Exit the interactive chat session' },
 ];
 
@@ -731,6 +733,20 @@ function XibeCodeChatApp(props: {
         return;
       }
 
+      if (resolvedInput === '/donate' || resolvedInput === '/sponsor') {
+        const url = 'https://ai.xibebase.in';
+        try {
+          const open = (await import('open')).default;
+          await open(url);
+          pushLine({ type: 'info', text: `Opened: ${url}` });
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          pushLine({ type: 'error', text: `Failed to open browser: ${message}` });
+          pushLine({ type: 'info', text: `You can open it manually: ${url}` });
+        }
+        return;
+      }
+
       if (resolvedInput === '/config') {
         beginConfigMenu();
         return;
@@ -1108,6 +1124,8 @@ function XibeCodeChatApp(props: {
         { label: 'grok', value: 'grok' },
         { label: 'kimi', value: 'kimi' },
         { label: 'zai', value: 'zai' },
+        { label: 'routingrun', value: 'routingrun' },
+        { label: 'zenllm', value: 'zenllm' },
       ];
       if (key.escape) {
         setConfigProviderPickerOpen(false);
@@ -1173,6 +1191,18 @@ function XibeCodeChatApp(props: {
         format?: RequestWireFormat;
         note?: string;
       }> = [
+        {
+          label: 'Routing.run (recommended) (cheapest opensource model provider)',
+          value: 'routingrun',
+          baseUrl: PROVIDER_CONFIGS.routingrun.baseUrl,
+          format: 'openai',
+        },
+        {
+          label: 'zenllm.org (recommended) (best ai provider with 200+ models)',
+          value: 'zenllm',
+          baseUrl: PROVIDER_CONFIGS.zenllm.baseUrl,
+          format: 'openai',
+        },
         { label: 'OpenAI', value: 'openai', baseUrl: PROVIDER_CONFIGS.openai.baseUrl, format: 'openai' },
         { label: 'Anthropic', value: 'anthropic', baseUrl: PROVIDER_CONFIGS.anthropic.baseUrl, format: 'anthropic' },
         { label: 'OpenRouter', value: 'openrouter', baseUrl: PROVIDER_CONFIGS.openrouter.baseUrl, format: 'openai' },
@@ -1656,6 +1686,8 @@ function XibeCodeChatApp(props: {
             <Box flexDirection="column" marginTop={1}>
               <Text color="inactive">Pick a provider preset (↑/↓, Enter). Esc cancels.</Text>
               {[
+                'Routing.run (recommended) (cheapest opensource model provider)',
+                'zenllm.org (recommended) (best ai provider with 200+ models)',
                 'OpenAI',
                 'Anthropic',
                 'OpenRouter',
