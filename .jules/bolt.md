@@ -14,6 +14,13 @@
 **Learning:** Even lightweight I/O operations like `fs.stat` require bounded concurrency (e.g., chunking promises into batches) when operating on an arbitrary or potentially large number of files. Unbounded `Promise.all` can still trigger OS-level 'EMFILE' (too many open files) errors because Node.js attempts to open all file descriptors simultaneously.
 **Action:** Always apply bounded concurrency (like `CONCURRENCY_LIMIT = 20`) for any `fs` operations that iterate over directories or unknown list sizes, not just for reading file contents.
 ## 2024-04-28 - O(N) cascade re-renders in FileExplorer with Zustand\n**Learning:** Prop-drilling large state objects from Zustand to recursive UI components (like tree nodes) creates O(N) re-renders because every single component evaluates top-down when one state changes. React.memo requires complicated state logic to resolve if parents receive all state.\n**Action:** Extract large state reads into fine-grained Zustand selectors directly at the target child component. Zustand manages subscriptions per-component, achieving O(1) targeted updates.
+
+
+## 2026-04-29 - O(N) cascade re-renders in ChatPanel with Zustand
+**Learning:** When using React components like ChatPanel to display a list of messages, if the messages list updates frequently (e.g. streaming tokens), it will trigger O(N) re-renders for every message because the parent component renders on every token. Zustand maintains object references for unchanged items, but the parent re-renders them all.
+**Action:** Always wrap list item components with `React.memo()` when rendering lists driven by frequent updates (like token streaming) to prevent O(N) cascade re-renders.
+
 ## 2025-05-18 - [O(N) Cascade re-renders in ChatPanel with React]
 **Learning:** Prop-drilling large state objects from Zustand to UI components mapping arrays (like `MessageItem`s array mapping) creates O(N) re-renders because every single component evaluates when the array maps changes.
 **Action:** Extract large state reads, such as mappings onto lists, and wrap mapping target component with `React.memo` to achieve O(1) targeted updates.
+
