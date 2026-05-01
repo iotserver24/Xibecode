@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
+import { createRequire } from 'module';
 import { EnhancedAgent } from '../core/agent.js';
 import { CodingToolExecutor } from '../core/tools.js';
 import { PluginManager } from '../core/plugins.js';
@@ -13,6 +14,8 @@ import { pruneContext } from '../core/context-pruner.js';
 import { SkillManager } from '../core/skills.js';
 import chalk from 'chalk';
 import fetch from 'node-fetch';
+
+const pkg = createRequire(import.meta.url)('../../package.json');
 import Anthropic from '@anthropic-ai/sdk';
 
 const execAsync = promisify(exec);
@@ -262,7 +265,7 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
   const config = new ConfigManager(options.profile);
   const cwd = process.cwd();
 
-  ui.header('1.0.2');
+  ui.header(pkg.version);
 
   // ── Pre-flight checks ────────────────────────────────────────────────────
   try {

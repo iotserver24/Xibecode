@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createRequire } from 'module';
 import TextInput from 'ink-text-input';
 import { Box, Static, Text, createRoot, useApp, useInput } from '../ink.js';
 import * as fs from 'fs/promises';
@@ -6,6 +7,8 @@ import * as path from 'path';
 import type { TuiThemeColorKey } from '../utils/tui-theme.js';
 import { ConfigManager, ProviderType, PROVIDER_CONFIGS } from '../utils/config.js';
 import { EnhancedAgent } from '../core/agent.js';
+
+const pkg = createRequire(import.meta.url)('../../package.json');
 import { CodingToolExecutor } from '../core/tools.js';
 import { MCPClientManager } from '../core/mcp-client.js';
 import { SkillManager } from '../core/skills.js';
@@ -99,7 +102,7 @@ function transcriptLinesFromMessage(message: MessageParam): UiLine[] {
   }
   return lines;
 }
-const APP_VERSION = '1.0.2';
+const APP_VERSION = pkg.version;
 const HERO_LOGO = [
   '██╗  ██╗██╗██████╗ ███████╗',
   '╚██╗██╔╝██║██╔══██╗██╔════╝',

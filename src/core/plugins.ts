@@ -1,7 +1,10 @@
+import { createRequire } from 'module';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
 import type { EnhancedAgent } from './agent.js';
+
+const pkg = createRequire(import.meta.url)('../../package.json');
 
 /**
  * Plugin interface that all plugins must implement
@@ -233,7 +236,7 @@ export class PluginManager {
  */
 export const examplePlugin: XibeCodePlugin = {
   name: 'example-plugin',
-  version: '1.0.2',
+  version: pkg.version,
   description: 'An example plugin that demonstrates the plugin API',
 
   initialize() {

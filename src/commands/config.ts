@@ -1,8 +1,11 @@
+import { createRequire } from 'module';
 import { ConfigManager, MCPServerConfig } from '../utils/config.js';
 import { EnhancedUI } from '../ui/enhanced-tui.js';
 import { mcpCommand } from './mcp.js';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
+
+const pkg = createRequire(import.meta.url)('../../package.json');
 
 async function fetchModelsFromEndpoint(opts: {
   baseUrl: string;
@@ -52,7 +55,7 @@ export async function configCommand(options: ConfigOptions) {
     process.env.TERM !== 'dumb';
 
   const printNonInteractiveMenu = () => {
-    ui.header('1.0.2');
+    ui.header(pkg.version);
     console.log(chalk.bold.white('⚙️  Configuration (non-interactive)\n'));
     console.log(chalk.dim('Interactive menu could not be rendered.\n'));
     console.log(chalk.bold('Available options:\n'));
@@ -255,7 +258,7 @@ export async function configCommand(options: ConfigOptions) {
   }
 
   if (options.show) {
-    ui.header('1.0.2');
+    ui.header(pkg.version);
     console.log(chalk.bold.white('⚙️  Current Configuration\n'));
 
     const displayConfig = config.getDisplayConfig();
@@ -289,7 +292,7 @@ export async function configCommand(options: ConfigOptions) {
   }
 
   // Interactive configuration (loop until user chooses Exit)
-  ui.header('1.0.2');
+  ui.header(pkg.version);
   console.log(chalk.bold.white('⚙️  Configuration Setup\n'));
 
   // eslint-disable-next-line no-constant-condition

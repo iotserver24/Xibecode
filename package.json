@@ -20,7 +20,8 @@
     "ui:dev": "node scripts/dev.mjs ui",
     "docs:generate": "typedoc --options typedoc.json",
     "docs:watch": "typedoc --options typedoc.json --watch",
-    "docs:serve": "npx http-server ./docs/api-generated -p 8080 -o"
+    "docs:serve": "npx http-server ./docs/api-generated -p 8080 -o",
+    "sync-version": "node scripts/sync-version.mjs"
   },
   "keywords": [
     "cli",

@@ -3,7 +3,7 @@
 ## Learned User Preferences
 
 - Always use **pnpm** as the package manager; fall back to bun only if pnpm is unavailable; never use npm directly for installs or scripts.
-- When doing a version release, bump `package.json`, `electron/package.json`, and any hard-coded version strings in source (e.g. `ui.header(...)` in `src/commands/run.ts` and `src/commands/run-pr.ts`) all together.
+- When doing a version release, bump only `package.json` — all source files (`run.ts`, `run-pr.ts`, `config.ts`, `diagnostics.ts`) read the version dynamically via `createRequire(import.meta.url)('../../package.json')`, and `electron/package.json` is synced via `pnpm run sync-version`.
 - After making code changes, always edit the file directly — do not describe what to change without applying it; after each edit, briefly explain what changed and why.
 - For Ink-based terminal UI (`xibecode chat` and related), follow the existing OpenClaude-aligned stack (`src/ink.ts`, `src/utils/tui-theme.ts`, themed components) and XibeCode branding instead of ad hoc raw Ink or chalk-only styling.
 - When building for release: run `pnpm run build` then `pnpm run build:webui`, then `git add`, `git commit`, `git push`, and `pnpm publish --access public` — all in one unattended sequence.
@@ -19,7 +19,7 @@
 
 - Project: **XibeCode** — an autonomous AI coding CLI tool (`xibecode`), published as an npm package at `xibecode`; repo path `/home/r3ap3reditz/codes/xibecode`; GitHub: `https://github.com/iotserver24/Xibecode`
 - Primary package manager: **pnpm** with `pnpm-lock.yaml` at root; webui has its own `webui/pnpm-lock.yaml`. Build commands: `pnpm run build` (TypeScript → `dist/`) and `pnpm run build:webui` (Vite → `webui-dist/`).
-- Version string lives in three places: `package.json`, `electron/package.json`, and the `ui.header(...)` call in `src/commands/run.ts` (and `src/commands/run-pr.ts`).
+- Version string is defined in **`package.json` only** — the single source of truth. Source files read it via `createRequire(import.meta.url)('../../package.json')` and reference `pkg.version`. The `electron/package.json` version is synced via `pnpm run sync-version` (which should be run before building the Electron app).
 - Agent modes are defined in `src/core/modes.ts` under `MODE_CONFIG`; each has `allowedCategories` controlling tool access. Agent mode `agent` must include `'network'` in `allowedCategories` so `fetch_url`, `web_search`, and skills-sh tools work.
 - `xibecode run` must call `process.exit(0)` in the `finally` block (unless `--non-interactive`) to avoid hanging after task completion.
 - Electron desktop app lives in `electron/` with its own `package.json`; it is a separate build from the CLI. Terminal `xibecode chat` is Ink-based (`src/commands/chat.ts` → `src/ui/claude-style-chat.tsx` via `src/ink.ts` and `src/utils/tui-theme.ts`).
