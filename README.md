@@ -1,67 +1,44 @@
 # XibeCode
 
-AI-powered autonomous coding assistant for your terminal and browser.
+AI-powered autonomous coding assistant for your terminal.
 
 [![Donate](https://img.shields.io/badge/Donate-Support%20XibeCode-ff69b4?style=for-the-badge)](https://www.anishkumar.tech/donate)
 [![Version](https://img.shields.io/npm/v/xibecode?style=for-the-badge)](https://www.npmjs.com/package/xibecode)
+[![Core](https://img.shields.io/npm/v/xibecode-core?style=for-the-badge&label=core)](https://www.npmjs.com/package/xibecode-core)
 
 ## Overview
 
-XibeCode is a CLI agent that can read and edit code, run commands, and iterate on tasks from your terminal using LLMs. It includes a **WebUI** for a browser-based experience, **AI-powered test generation**, and **multi-model support** for both Anthropic and OpenAI-compatible providers.
+XibeCode is a CLI agent that reads and edits code, runs commands, and iterates on tasks from your terminal using LLMs. It features **AI-powered test generation**, **multi-model support** for Anthropic and OpenAI-compatible providers, **MCP server integration**, and a **skill system** with 40+ built-in skills.
 
-## What's New in v0.9.1
+The project is structured as a **monorepo** with two packages:
 
-### Reliability and anti-hallucination upgrades
-
-- **Evidence-aware completion gate**: the agent now requires grounded signals before declaring a task complete.
-- **Post-edit verification**: write/edit operations are validated with read-back checks to reduce silent bad edits.
-- **Improved loop resistance**: canonicalized loop detection blocks repeated or low-variation command/tool loops.
-- **Safer memory recall**: recalled memories are labeled as unverified hints and filtered by minimum relevance score.
-- **Grounded context compaction**: old context now keeps a **Grounded Facts Ledger** + conversation summary instead of blind truncation.
-
-### Better chat UX and tool transparency
-
-- **Large transcript retention** in terminal chat (much less history loss during long sessions).
-- **Token-aware auto compaction** around large context budgets (near 120k token estimate) instead of fixed message-count trimming.
-- **Richer tool rendering** in chat: tool call arguments and result summaries are shown for better observability.
-- **Improved Markdown rendering** for assistant output in the TUI.
-
-### Model and provider improvements
-
-- **`/model` picker refresh** with provider/base-url-aware model loading.
-- **`/format` command** to switch request wire format (`auto`, `anthropic`, `openai`) and persist it.
-- Continued support for Anthropic, OpenAI-compatible providers, Gemini, and custom endpoints.
-
-### CI and release workflow hardening
-
-- **GitHub Actions reliability fixes** for TypeScript + dependency install paths.
-- **No bundled Playwright** — browser automation is via optional `agent-browser` / MCP; npm install does not pull browser binaries.
-- **Type declarations for `marked-terminal`** included in source to prevent clean-CI type failures.
+- **`xibecode-core`** - The AI agent engine (tool execution, MCP, memory, modes, permissions). Usable as a standalone library.
+- **`xibecode`** - The CLI interface (commands, terminal UI, built-in skills).
 
 ## Installation
 
-### CLI (required)
+### From npm
 
 ```bash
+pnpm install -g xibecode
+# or
 npm install -g xibecode
 ```
 
-From source:
+### From source
 
 ```bash
 git clone https://github.com/iotserver24/xibecode
 cd xibecode
 pnpm install
 pnpm run build
-npm link
+pnpm link --global --dir packages/cli
 ```
 
 ## Requirements
 
 - Node.js 18+
-- API key from Anthropic or OpenAI
-
-**Platforms:** CLI and WebUI run on Linux (x64, ARM64), macOS (Intel, Apple Silicon), and Windows. For servers, Docker, or Raspberry Pi, use headless runs: `xibecode run` / `xibecode run-pr` with env-based config (no TUI). See [DOCS.md](DOCS.md#platforms-and-devices) for the full device matrix.
+- API key from Anthropic, OpenAI, or a compatible provider
 
 ## Quick Start
 
@@ -72,41 +49,14 @@ xibecode config --set-key YOUR_API_KEY
 # Interactive terminal mode
 xibecode chat
 
-# Open WebUI in browser (recommended for beginners)
-xibecode ui --open
-
 # Autonomous run
 xibecode run "Create an Express API with auth"
+
+# Run and open a PR
+xibecode run-pr "Fix the TypeScript errors in src/agent.ts"
 ```
 
-## Main Commands
-
-### `xibecode ui`
-
-**NEW** - Start the WebUI in your browser.
-
-```bash
-xibecode ui              # Start on localhost:3847
-xibecode ui --open       # Auto-open browser
-xibecode ui -p 8080      # Custom port
-```
-
-Features:
-
-- **v0.dev-style Layout** - Activity bar (left) → Chat panel (resizable) → Code editor (right)
-- **Monaco Code Editor** - Professional code editor with syntax highlighting and IntelliSense
-- **File Tree Explorer** - Browse and open project files with recursive directory tree
-- **Multi-Terminal Tabs** - Create/manage multiple shell sessions with + and X buttons
-- **Real PTY Terminal** - Fully interactive bash/zsh with colors, tab-completion, vim/nano support
-- **Git Integration** - Commit history graph, stage/unstage files, view diffs, write commits
-- **Settings Modal** - Configure AI provider, display preferences, dev tools, and MCP servers
-- **MCP JSON Editor** - Edit mcp-servers.json directly with Monaco syntax highlighting
-- **Custom Models** - Add any AI model (Claude, GPT-4, DeepSeek, Llama) via dropdown + text input
-- **Real-time Chat** - Streaming AI responses with markdown rendering
-- **Status Bar** - Connection status, current mode, active AI model, cursor position
-- **Resizable Panels** - Drag the divider between chat and code areas to adjust layout
-- **Slash Commands** - Type `/` for commands and mode switching, `@` for file references
-- **New Chat Button** - Clear conversation with + button in chat input
+## Commands
 
 ### `xibecode run`
 
@@ -118,250 +68,173 @@ xibecode run "Fix the TypeScript errors" --verbose
 xibecode run --file task.txt
 ```
 
-Options:
-
-- `-f, --file <path>` prompt from file
-- `-m, --model <model>` model override
-- `--mode <mode>` initial agent mode
-- `-b, --base-url <url>` custom API URL
-- `-k, --api-key <key>` API key override
-- `--provider <provider>` `anthropic` or `openai`
-- `-d, --max-iterations <number>` default `150` (`0` = unlimited)
-- `-v, --verbose`
-- `--cost-mode <mode>` `normal` or `economy` (use cheaper model and lower iteration caps to save API cost)
-- `--dry-run`
-- `--changed-only`
+Options: `-f, --file`, `-m, --model`, `--mode`, `-b, --base-url`, `-k, --api-key`, `--provider`, `-d, --max-iterations`, `-v, --verbose`, `--cost-mode`, `--dry-run`, `--changed-only`
 
 ### `xibecode run-pr`
 
-Autonomous coding **with automatic branch + GitHub PR creation**. The command:
-
-1. Runs the full agent task (same as `run`)
-2. Executes your project's test suite for verification
-3. Creates a new branch (`xibecode/<slug>-<timestamp>` by default)
-4. Commits + pushes the branch to `origin`
-5. Opens a PR against the remote default branch via the GitHub CLI (`gh`)
-6. Prints the PR URL and exits
-
-The PR description now includes task summary, per-file changes rationale (diff-based), run stats (iterations/tool calls and token/cost when available), and verification results (test command + pass/fail + duration, including any self-correction retries). In `--cost-mode economy`, explanation is budgeted and may fall back to file + `+/-` counts.
-
-**Prerequisites:**
-
-- [`gh` (GitHub CLI)](https://cli.github.com/) must be installed and authenticated:
-
-  ```bash
-  gh auth login
-  ```
-
-**Usage:**
+Autonomous coding with automatic branch and GitHub PR creation.
 
 ```bash
-xibecode run-pr "Fix the TypeScript errors in src/core/agent.ts"
-xibecode run-pr "Add input validation" --verbose
-xibecode run-pr "Refactor utils" --branch feat/refactor-utils --draft
-xibecode run-pr --file task.txt --skip-tests
+xibecode run-pr "Fix the TypeScript errors"
+xibecode run-pr "Add input validation" --branch feat/validation --draft
 ```
 
-Options:
+Prerequisites: [`gh` CLI](https://cli.github.com/) must be installed and authenticated (`gh auth login`).
 
-- `-f, --file <path>` prompt from file
-- `-m, --model <model>` model override
-- `-b, --base-url <url>` custom API URL
-- `-k, --api-key <key>` API key override
-- `--provider <provider>` `anthropic` or `openai`
-- `-d, --max-iterations <number>` default `150` (`0` = unlimited)
-- `-v, --verbose`
-- `--cost-mode <mode>` `normal` or `economy` (save API cost)
-- `--branch <name>` override generated branch name
-- `--title <title>` override PR title
-- `--draft` open PR as draft
-- `--skip-tests` skip test verification before creating PR
-
-**Example output:**
-
-```
-  ✅ Pull Request created successfully!
-
-  PR URL: https://github.com/your-org/your-repo/pull/42
-```
+Options: `-f, --file`, `-m, --model`, `-b, --base-url`, `-k, --api-key`, `--provider`, `-d, --max-iterations`, `-v, --verbose`, `--cost-mode`, `--branch`, `--title`, `--draft`, `--skip-tests`
 
 ### `xibecode chat`
 
-Interactive terminal chat + tool use.
+Interactive terminal chat with tool execution.
 
-Options:
+```bash
+xibecode chat
+xibecode chat --model claude-opus-4-5-20251101
+```
 
-- `-m, --model <model>`
-- `-b, --base-url <url>`
-- `-k, --api-key <key>`
-- `--provider <provider>`
-- `--cost-mode <mode>` `normal` or `economy`
-- `--theme <theme>`
-- `--session <id>`
+Options: `-m, --model`, `-b, --base-url`, `-k, --api-key`, `--provider`, `--cost-mode`, `--theme`, `--session`, `--profile`
 
 ### `xibecode config`
 
-Manage saved config:
+Manage saved configuration.
 
-- `--set-key`, `--set-url`, `--set-model`, `--set-provider`
-- `--set-cost-mode <mode>` set default cost mode: `normal` or `economy`
-- `--set-economy-model <model>` model to use when cost mode is `economy`
-- `--show`, `--reset`
-- MCP helpers: `--list-mcp-servers`, `--add-mcp-server`, `--remove-mcp-server`
+```bash
+xibecode config --set-key YOUR_KEY
+xibecode config --set-model claude-sonnet-4-5-20250929
+xibecode config --show
+```
+
+Options: `--set-key`, `--set-url`, `--set-model`, `--set-provider`, `--set-cost-mode`, `--set-economy-model`, `--show`, `--reset`, `--list-mcp-servers`, `--add-mcp-server`, `--remove-mcp-server`
 
 ### `xibecode mcp`
 
-MCP server management:
+MCP server management.
 
-- `add`, `list`, `remove`, `file`, `edit`, `init`, `reload`
-- `search`, `install`, `login` (Smithery integration)
+```bash
+xibecode mcp list
+xibecode mcp add my-server --command "node" --args "server.js"
+xibecode mcp search                # Search Smithery registry
+xibecode mcp install <skill-id>    # Install from Smithery
+```
+
+Subcommands: `add`, `list`, `remove`, `file`, `edit`, `init`, `reload`, `search`, `install`, `login`
+
+### `xibecode skills`
+
+Skill management.
+
+```bash
+xibecode skills list
+```
+
+### `xibecode diagnostics`
+
+Generate a redacted diagnostics bundle for troubleshooting.
 
 ## Core Features
 
 - **Autonomous multi-step agent loop** - Completes complex tasks automatically
+- **13 agent modes/personas** - plan, agent, tester, debugger, security, pentest, review, team_leader, seo, product, architect, engineer, data, researcher
+- **50+ tools** - File I/O, code search, git, shell execution, web search, MCP, and more
 - **Smart context gathering** - Understands related files and imports
 - **Verified and line-based editing** - Reliable code modifications
 - **Dry-run mode** - Preview changes safely before applying
-- **Git-aware workflows** - `--changed-only`, checkpoints, and reverts
+- **Git-aware workflows** - Checkpoints, reverts, `--changed-only`
 - **Test runner integration** - Auto-detects Vitest, Jest, pytest, Go test
 - **MCP server integration** - Extend capabilities with external tools
-- **Skill system** - Built-in + custom markdown skills
+- **Skill system** - 40+ built-in skills + custom markdown skills + Smithery registry
+- **Swarm orchestration** - Parallel task execution with multiple workers
+- **Background tasks** - Run long tasks in detached processes
+- **Neural memory** - Persistent lesson learning across sessions
 - **Session-aware chat** - Persistent conversation history
-- **Themed terminal UI** - Beautiful, customizable interface
+- **Themed terminal UI** - Beautiful, customizable interface with Ink
 
-## WebUI
+## Agent Modes
 
-The WebUI provides a browser-based interface that syncs in real-time with the terminal.
+| Mode | Persona | Description |
+|------|---------|-------------|
+| `agent` | Blaze | Full autonomous coding (default) |
+| `plan` | Aria | Interactive planning with web research |
+| `review` | Nova | Code review |
+| `tester` | Tess | Testing and QA |
+| `debugger` | Dex | Debugging |
+| `security` | Sentinel | Security analysis |
+| `pentest` | - | Penetration testing |
+| `team_leader` | Arya | Coordinate team |
+| `seo` | Siri | SEO optimization |
+| `product` | Agni | Product strategy |
+| `architect` | Anna | Architecture design |
+| `engineer` | Alex | Implementation |
+| `data` | David | Data analysis |
+| `researcher` | Sanvi | Research |
 
-```bash
-# Start with both TUI and WebUI
-xibecode chat
+Currently enabled for user selection: `agent`, `plan`, `review`. Other modes are defined internally but temporarily disabled.
 
-# WebUI opens automatically at http://localhost:3847
-```
+## Using `xibecode-core` as a Library
 
-### TUI-WebUI Sync
-
-When you run `xibecode chat`, both interfaces are connected:
-
-- Messages sent from **TUI** appear in **WebUI** (marked with "TUI")
-- Messages sent from **WebUI** are processed by **TUI**
-- Streaming responses show in both simultaneously
-- Tool executions display in real-time
-
-### Slash Commands (`/`)
-
-Type `/` in the input to open the command palette:
-
-**Commands:**
-
-| Command | Description |
-|---------|-------------|
-| `/clear` | Clear chat messages |
-| `/help` | Show available commands |
-| `/diff` | Show git diff |
-| `/status` | Show git status |
-| `/test` | Run project tests |
-| `/format` | Format code in project |
-| `/reset` | Reset chat session |
-| `/files` | List project files |
-
-**Modes:**
-
-| Mode | Icon | Description |
-|------|------|-------------|
-| `/mode agent` | 🤖 | Autonomous coding (default) |
-| `/mode plan` | 📝 | Interactive planning with web research |
-| `/mode tester` | 🧪 | Testing and QA |
-| `/mode security` | 🔒 | Security analysis |
-| `/mode pentest` | 🔓 | Penetration testing - run app and probe for vulnerabilities |
-| `/mode review` | 👀 | Code review |
-| `/mode team_leader` | 👑 | Coordinate team |
-
-### File References (`@`)
-
-Type `@` to browse and reference files:
-
-- Shows project files and folders
-- Filter by typing after `@`
-- Select to include file path in message
-- Helps AI understand which files to work with
-
-### Settings Panel
-
-Click the ⚙️ Settings button to configure:
-
-- **Provider** - Anthropic, OpenAI, or Custom
-- **Model** - Select from available models
-- **Custom Model ID** - For custom/local models
-- **API Key** - Your provider API key
-- **Base URL** - Custom API endpoint (for local LLMs)
-- **Session Info** - Working directory, git branch
-
-### Features
-
-- **Markdown Rendering** - Code blocks, bold, italic, lists, links
-- **Tool Execution** - Shows each tool call with status (running/done/failed)
-- **Thinking Indicator** - Spinner while AI is processing
-- **Responsive Design** - Mobile-friendly layout and touch-friendly controls; works on phones, tablets, and desktop
-- **Real-time Streaming** - See responses as they're generated
-
-## AI Test Generation
-
-XibeCode can automatically generate comprehensive test suites for your code:
+The core package can be used independently to build custom AI coding tools:
 
 ```bash
-# Via CLI (in chat mode)
-> generate tests for src/utils/helpers.ts
-
-# Via WebUI
-1. Go to "Test Generator" tab
-2. Enter file path
-3. Select framework (auto-detected)
-4. Click "Generate Tests"
+pnpm add xibecode-core
 ```
-
-### Features
-
-- **Multi-framework support** - Vitest, Jest, Mocha, pytest, Go test
-- **Code analysis** - Understands functions, classes, types
-- **Edge case generation** - Null checks, empty strings, boundaries
-- **Mock setup** - Automatic mock configuration
-- **Type checking tests** - Verifies return types
-- **Error handling tests** - Tests for exceptions
-
-### Example Output
 
 ```typescript
-import { describe, it, expect, vi } from 'vitest';
-import { calculateTotal } from '../utils/helpers';
+import {
+  EnhancedAgent,
+  CodingToolExecutor,
+  NeuralMemory,
+  SkillManager,
+  MCPClientManager,
+  PROVIDER_CONFIGS,
+} from 'xibecode-core';
 
-describe('calculateTotal', () => {
-  it('should execute calculateTotal successfully', () => {
-    expect(calculateTotal([])).toBeDefined();
-  });
+const memory = new NeuralMemory(process.cwd());
+await memory.init();
 
-  it('should return correct type from calculateTotal', () => {
-    expect(typeof calculateTotal([])).toBe('number');
-  });
+const skillManager = new SkillManager(process.cwd());
+await skillManager.loadSkills();
 
-  it('should handle empty array', () => {
-    expect(calculateTotal([])).toBe(0);
-  });
-
-  it('should handle errors in calculateTotal', () => {
-    expect(() => calculateTotal(undefined)).toThrow();
-  });
+const mcpClientManager = new MCPClientManager();
+const toolExecutor = new CodingToolExecutor(process.cwd(), {
+  memory,
+  skillManager,
+  mcpClientManager,
 });
+
+const agent = new EnhancedAgent(
+  {
+    apiKey: process.env.ANTHROPIC_API_KEY!,
+    model: 'claude-sonnet-4-5-20250929',
+    maxIterations: 50,
+  },
+  'anthropic'
+);
+
+agent.on('event', (event) => {
+  console.log(event.type, event.data);
+});
+
+const result = await agent.run('Create a hello world Express server');
 ```
 
-## Browser testing (no bundled browser)
+### Key Exports
 
-XibeCode does **not** ship Playwright or download Chromium. Legacy tool names (`take_screenshot`, `preview_app`, etc.) return a short message pointing you to **`run_command` + [`agent-browser`](https://github.com/vercel-labs/agent-browser)** (install separately if you want it), your **browser MCP**, or **`fetch_url`**. For Playwright E2E, add `@playwright/test` to the **target project** and run it with `run_command` (for example `pnpm exec playwright test`).
-
-**Termux / Android:** Upstream `agent-browser` does not publish an `android-arm64` release binary, so a global `npm i -g xibecode` stays lean and skips that download. Install **`xibecode@latest`** (spell it `latest`, not `latwst`). For browser flows on Termux, rely on MCP, `fetch_url`, or tooling in your project.
-
-**Optional CLI (desktop Linux/macOS/Windows):** `npm i -g agent-browser` when you need snapshot/click automation via `run_command`.
+| Export | Description |
+|--------|-------------|
+| `EnhancedAgent` | Main agent class with streaming and multi-provider support |
+| `CodingToolExecutor` | Tool execution engine (50+ tools) |
+| `MCPClientManager` | MCP server connection management |
+| `NeuralMemory` | Persistent lesson learning system |
+| `SkillManager` | Built-in and custom skill loading |
+| `PluginManager` | Plugin system for extending tools |
+| `SessionManager` | Chat session persistence |
+| `PlanMode` | Interactive planning system |
+| `SwarmOrchestrator` | Parallel task execution |
+| `BackgroundAgentManager` | Detached background task management |
+| `FileEditor` | Multi-strategy file editing |
+| `PermissionManager` | Tool permission control |
+| `ContextManager` | Context window management |
+| `PROVIDER_CONFIGS` | Provider configurations (anthropic, openai, google, groq, etc.) |
 
 ## Configuration
 
@@ -383,69 +256,101 @@ Located at `~/.xibecode/config.json`:
   "model": "claude-sonnet-4-5-20250929",
   "provider": "anthropic",
   "maxIterations": 50,
-  "theme": "default"
+  "costMode": "normal"
 }
 ```
 
-### Available Models
+### Supported Providers
 
-| Model | Provider | Best For |
-|-------|----------|----------|
-| `claude-sonnet-4-5-20250929` | Anthropic | General coding (default) |
-| `claude-opus-4-5-20251101` | Anthropic | Complex reasoning |
-| `claude-haiku-4-5-20251015` | Anthropic | Fast responses |
-| `gpt-4o` | OpenAI | General coding |
-| `gpt-4o-mini` | OpenAI | Fast responses |
-| `o1-preview` | OpenAI | Complex reasoning |
-
-## API
-
-XibeCode provides a REST API when running the WebUI:
-
-```bash
-# Start the server
-xibecode ui
-
-# API endpoints
-GET  /api/health          # Health check
-GET  /api/config          # Get configuration
-PUT  /api/config          # Update configuration
-GET  /api/models          # List available models
-GET  /api/project         # Get project info
-GET  /api/git/status      # Get git status
-GET  /api/git/diff        # Get git diff
-POST /api/files/list      # List directory contents
-POST /api/files/read      # Read file contents
-POST /api/session/create  # Create chat session
-POST /api/tests/generate  # Generate tests for file
-POST /api/tests/analyze   # Analyze file for testable code
-POST /api/tests/run       # Run project tests
-```
+| Provider | Default Model | Environment Variable |
+|----------|--------------|---------------------|
+| Anthropic | claude-sonnet-4-5-20250929 | `ANTHROPIC_API_KEY` |
+| OpenAI | gpt-4o | `OPENAI_API_KEY` |
+| Google | gemini-2.0-flash | `GOOGLE_API_KEY` |
+| Groq | llama-3.3-70b-versatile | `GROQ_API_KEY` |
+| Custom | (user-defined) | (user-defined) |
 
 ## Project Structure
 
-```text
+```
 xibecode/
-├── src/
-│   ├── core/           # Agent, tools, context
-│   ├── commands/       # CLI commands
-│   ├── utils/          # Config, git, safety
-│   ├── tools/          # Test generator, browser
-│   ├── webui/          # WebUI server
-│   └── index.ts        # CLI entry point
-├── site/               # Documentation site
-└── tests/              # Test suites
+├── packages/
+│   ├── core/                    # xibecode-core - AI agent engine
+│   │   ├── src/
+│   │   │   ├── agent.ts         # EnhancedAgent - main agent loop
+│   │   │   ├── tools.ts         # CodingToolExecutor - 50+ tools
+│   │   │   ├── modes.ts         # 13 agent modes/personas
+│   │   │   ├── memory.ts        # NeuralMemory - lesson learning
+│   │   │   ├── skills.ts        # SkillManager - skill system
+│   │   │   ├── plugins.ts       # PluginManager - plugin system
+│   │   │   ├── mcp-client.ts    # MCPClientManager
+│   │   │   ├── swarm.ts         # SwarmOrchestrator
+│   │   │   ├── background-agent.ts  # Background tasks
+│   │   │   ├── editor.ts        # FileEditor
+│   │   │   ├── permissions.ts   # PermissionManager
+│   │   │   ├── context.ts       # ContextManager
+│   │   │   ├── planMode.ts      # Interactive planning
+│   │   │   ├── types/           # Shared types (provider, mcp, todo, attachments)
+│   │   │   ├── utils/           # Core utilities (git, safety, testRunner, etc.)
+│   │   │   ├── mcp/             # MCP subsystem (config, oauth, resolve)
+│   │   │   ├── tools/           # Tool implementations (test-generator)
+│   │   │   └── index.ts         # Public API barrel export
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   └── cli/                     # xibecode - CLI interface
+│       ├── src/
+│       │   ├── commands/        # CLI commands (run, chat, config, mcp, etc.)
+│       │   ├── ui/              # Terminal UI (claude-style-chat, enhanced-tui, themes)
+│       │   ├── components/      # Ink components (AssistantMarkdown, design-system)
+│       │   ├── utils/           # CLI utilities (config, tool-display, tui-theme)
+│       │   ├── types/           # CLI types (command, marked-terminal)
+│       │   ├── constants/       # Constants (spinnerVerbs)
+│       │   └── index.ts         # CLI entry point
+│       ├── skills/              # 40+ built-in skill markdown files
+│       ├── package.json
+│       └── tsconfig.json
+├── electron/                    # xibecode-desktop - Electron desktop app
+├── scripts/                     # Build and dev scripts
+├── docs/                        # Project documentation
+├── site/                        # Documentation website (Next.js)
+├── pnpm-workspace.yaml          # pnpm workspace config
+├── turbo.json                   # Turborepo pipeline config
+└── package.json                 # Root monorepo config
 ```
 
-## Dependency Map
+## Development
 
-![Dependency Map](dependencies.svg)
+### Prerequisites
 
-## Project Docs
+- Node.js 18+
+- pnpm 9+
 
-- `CHANGELOG.md` — release history
-- `FEATURES.md` — feature deep dive
-- `PUBLISHING.md` — npm release process
+### Setup
+
+```bash
+pnpm install
+pnpm run build          # Build all packages with Turborepo
+pnpm run dev            # Watch mode for development
+pnpm run sync-version   # Sync versions across all packages
+```
+
+### Linking CLI Locally
+
+```bash
+pnpm link --global --dir packages/cli
+xibecode --version
+```
+
+### Building a Single Package
+
+```bash
+cd packages/core && pnpm run build
+cd packages/cli && pnpm run build
+```
+
+## Browser Testing
+
+XibeCode does **not** ship Playwright or download Chromium. Tools like `take_screenshot` and `preview_app` return guidance to use `run_command` + [`agent-browser`](https://github.com/vercel-labs/agent-browser) (install separately), your browser MCP, or `fetch_url`. For Playwright E2E, add `@playwright/test` to the target project and run it with `run_command`.
 
 ## Support
 

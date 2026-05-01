@@ -2,6 +2,30 @@
 
 All notable changes to XibeCode will be documented in this file.
 
+## [1.0.4] - 2026-05-01
+
+### Monorepo Restructure
+
+- Restructured into pnpm workspace monorepo with Turborepo build orchestration
+- Extracted core AI engine into `xibecode-core` package (published to npm)
+- CLI remains as `xibecode` package, now depends on `xibecode-core`
+- Two packages: `packages/core/` (xibecode-core) and `packages/cli/` (xibecode)
+- Electron app in `electron/` as separate workspace package
+
+### Breaking Changes
+
+- Removed WebUI (`xibecode ui` command no longer exists)
+- Project structure changed from flat `src/` to monorepo `packages/core/src/` and `packages/cli/src/`
+- Old `tests/` directory removed (imports broken by migration, needs recreation)
+
+### Fixes
+
+- Complete TOOL_CATEGORIES map in modes.ts (56 tools now categorized, was 20)
+- NeuralMemory initialization in all CLI entry points (chat, run, claude-style-chat)
+- FileHandle leak in BackgroundAgentManager (DEP0137 warnings)
+- ESM __dirname compatibility with builtInSkillsDir utility
+- createRequire path resolution for package.json in monorepo structure
+
 ## [0.9.5] - 2026-04-13
 
 ### ✨ Improvements

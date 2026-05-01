@@ -153,7 +153,7 @@ gh auth login
 ```
 
 ```bash
-xibecode run-pr "Fix the null pointer bug in src/core/agent.ts"
+xibecode run-pr "Fix the null pointer bug in packages/core/src/agent.ts"
 xibecode run-pr "Add rate limiting middleware" --verbose
 xibecode run-pr "Refactor config" --branch feat/refactor-config
 xibecode run-pr "Quick fix" --skip-tests --draft
@@ -217,7 +217,6 @@ Interactive terminal chat with full tool access. Supports slash commands, skill 
 ```bash
 xibecode chat
 xibecode chat --model claude-3-7-sonnet-20250219
-xibecode chat --no-webui  # TUI only, no browser WebUI
 ```
 
 **Slash commands inside chat:**
@@ -249,14 +248,12 @@ xibecode config --reset
 
 ---
 
-### `ui`
+### `diagnostics`
 
-Launch the browser-based WebUI dashboard with file diff view, session history, and real-time tool output.
+Generate a redacted diagnostics bundle for troubleshooting.
 
 ```bash
-xibecode ui
-xibecode ui --port 4000
-xibecode ui --open          # auto-opens browser
+xibecode diagnostics
 ```
 
 ---
@@ -535,7 +532,7 @@ xibecode run "your task"
 Agent-triggered shell commands (`run_command`) run with the **same user and privileges** as the XibeCode process. There is no sudo or elevation. For untrusted code or third-party repos, run XibeCode inside a **container or sandbox** (e.g. Docker, E2B, or a disposable VM).
 
 - **Path and URL validation**: File paths used by tools are resolved under the working directory; paths that escape it (e.g. `../etc/passwd`) are rejected. The `fetch_url` tool only allows `http`/`https` URLs and blocks local/private addresses by default to reduce SSRF risk.
-- **Blocked commands**: The built-in safety layer blocks obviously dangerous commands (e.g. `rm -rf /`, fork bombs). See `SECURITY.md` and `src/utils/safety.ts` for details.
+- **Blocked commands**: The built-in safety layer blocks obviously dangerous commands (e.g. `rm -rf /`, fork bombs). See `SECURITY.md` and `packages/core/src/utils/safety.ts` for details.
 
 ---
 
@@ -546,7 +543,6 @@ XibeCode is built to run across common platforms and device types.
 | Surface | Platforms | Notes |
 |--------|------------|--------|
 | **CLI** | Linux (x64, ARM64), macOS (Intel, Apple Silicon), Windows (x64, ARM64) | Node.js 18+. ARM64 includes Raspberry Pi and ARM servers. |
-| **WebUI** | Any browser | Responsive, mobile-friendly layout; touch-friendly. Optional PWA/installable. |
 | **Headless / embedded** | Servers, Docker, Raspberry Pi | Use `xibecode run` or `xibecode run-pr` with env-based config (e.g. `ANTHROPIC_API_KEY`, `xibecode config`). No TUI required; suitable for CI, cron, or an agent daemon. |
 
 CI runs on Linux x64 and ARM64 (where available) to validate the CLI. For headless usage, set your API key and endpoint via environment or config, then run tasks non-interactively.

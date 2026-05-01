@@ -124,7 +124,7 @@ XibeCode follows a **layered agent architecture** with clear separation of conce
 
 ## Core Components
 
-### 1. EnhancedAgent (`src/core/agent.ts`)
+### 1. EnhancedAgent (`packages/core/src/agent.ts`)
 
 **Purpose**: Main orchestration engine for the AI agent
 
@@ -151,7 +151,7 @@ XibeCode follows a **layered agent architecture** with clear separation of conce
 'mode_changed' | 'mode_change_requested'
 ```
 
-### 2. Mode System (`src/core/modes.ts`)
+### 2. Mode System (`packages/core/src/modes.ts`)
 
 **Purpose**: Multi-persona architecture with 13 specialized agent modes
 
@@ -176,7 +176,7 @@ Each mode defines:
 - `riskTolerance`: Safety profile (low/medium/high)
 - `promptSuffix`: Mode-specific instructions
 
-### 3. Tool Executor (`src/core/tools.ts`)
+### 3. Tool Executor (`packages/core/src/tools.ts`)
 
 **Purpose**: 95+ tools across 8 categories for AI agent actions
 
@@ -206,7 +206,7 @@ Result Formatting → Error Handling → Return to Agent
 }
 ```
 
-### 4. File Editor (`src/core/editor.ts`)
+### 4. File Editor (`packages/core/src/editor.ts`)
 
 **Purpose**: Intelligent file editing with multiple strategies
 
@@ -238,7 +238,7 @@ Result Formatting → Error Handling → Return to Agent
 - Rollback on failure
 - Diff generation for review
 
-### 5. Context Manager (`src/core/context.ts`)
+### 5. Context Manager (`packages/core/src/context.ts`)
 
 **Purpose**: Smart discovery of relevant code context
 
@@ -258,7 +258,7 @@ Result Formatting → Error Handling → Return to Agent
 5. Include file excerpts for large files
 ```
 
-### 6. Neural Memory (`src/core/memory.ts`)
+### 6. Neural Memory (`packages/core/src/memory.ts`)
 
 **Purpose**: Persistent learning across sessions
 
@@ -284,7 +284,7 @@ Result Formatting → Error Handling → Return to Agent
 - Track user preferences
 - Learn from past errors
 
-### 7. Skill System (`src/core/skills.ts`)
+### 7. Skill System (`packages/core/src/skills.ts`)
 
 **Purpose**: Dynamic loading of external skills and workflows
 
@@ -310,7 +310,7 @@ Skill Invocation → Load Skill Definition → Inject Prompt →
 Execute in Agent Context → Return Results
 ```
 
-### 8. Plugin System (`src/core/plugins.ts`)
+### 8. Plugin System (`packages/core/src/plugins.ts`)
 
 **Purpose**: Extend agent capabilities with custom tools
 
@@ -337,7 +337,7 @@ interface Plugin {
 - User: `~/.xibecode/plugins/`
 - System: `/usr/local/share/xibecode/plugins/`
 
-### 9. MCP Client (`src/core/mcp-client.ts`)
+### 9. MCP Client (`packages/core/src/mcp-client.ts`)
 
 **Purpose**: Model Context Protocol integration
 
@@ -364,7 +364,7 @@ interface Plugin {
 - Documentation servers
 - Custom domain-specific servers
 
-### 10. Safety Checker (`src/utils/safety.ts`)
+### 10. Safety Checker (`packages/core/src/utils/safety.ts`)
 
 **Purpose**: Risk assessment for agent operations
 
