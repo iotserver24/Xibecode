@@ -1,0 +1,46 @@
+{
+  "name": "xibecode-desktop",
+  "version": "1.0.4",
+  "description": "XibeCode Desktop - AI-powered coding assistant with file access, shell, and web preview",
+  "main": "dist/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.main.json && vite build",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:renderer": "vite build",
+    "build:check": "tsc -p tsconfig.json --noEmit",
+    "preview": "vite preview",
+    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:build": "pnpm run build && electron-builder",
+    "clean": "rm -rf dist release",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "conf": "^15.1.0",
+    "highlight.js": "^11.11.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-markdown": "^9.0.3",
+    "remark-gfm": "^4.0.0",
+    "xibecode-core": "^1.0.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.4",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.4.1",
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^9.1.2",
+    "electron": "^35.2.1",
+    "electron-builder": "^26.0.12",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^4.1.4",
+    "typescript": "^5.3.3",
+    "vite": "^6.3.3",
+    "wait-on": "^8.0.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

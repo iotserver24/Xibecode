@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@theme {
+  --color-xibe-bg: #1a1a1e;
+  --color-xibe-surface: #222226;
+  --color-xibe-surface-raised: #2a2a2e;
+  --color-xibe-surface-hover: #32323a;
+  --color-xibe-border: #3a3a42;
+  --color-xibe-border-subtle: #2e2e34;
+  --color-xibe-border-focus: #4a4a54;
+  --color-xibe-muted: #71717a;
+  --color-xibe-text: #e8e8ec;
+  --color-xibe-text-secondary: #a0a0aa;
+  --color-xibe-text-dim: #6a6a74;
+  --color-xibe-accent: #d4a053;
+  --color-xibe-accent-hover: #c49040;
+  --color-xibe-accent-muted: rgba(212, 160, 83, 0.10);
+  --color-xibe-brand-blue: #6b9bf5;
+  --color-xibe-brand-green: #5cb85c;
+  --color-xibe-brand-orange: #e8915a;
+  --color-xibe-brand-purple: #a87fdb;
+  --color-xibe-brand-red: #e06060;
+  --color-xibe-suggestion: #a0b4f0;
+  --color-xibe-user-bubble: #2f3d2f;
+  --color-xibe-warning: #e8915a;
+  --color-xibe-error: #e06060;
+  --color-xibe-info: #6b9bf5;
+  --color-xibe-success: #5cb85c;
+
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+
+  --animate-fade-in: fade-in 0.15s ease-out;
+  --animate-slide-up: slide-up 0.15s ease-out;
+  --animate-pulse-dot: pulse-dot 1.4s ease-in-out infinite;
+}
+
+:root { color-scheme: dark; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body, #root { height: 100%; width: 100%; overflow: hidden; }
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-xibe-bg);
+  color: var(--color-xibe-text);
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #3a3a42; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #4a4a54; }
+
+::selection { background: rgba(107, 155, 245, 0.2); color: #e8e8ec; }
+pre, code { font-family: var(--font-mono); }
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slide-up { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pulse-dot { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
+
+*:focus-visible { outline: 2px solid var(--color-xibe-brand-blue); outline-offset: -2px; border-radius: 4px; }
