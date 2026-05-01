@@ -1,0 +1,1581 @@
+{
+  "scannedPath": "/home/r3ap3reditz/codes/xibecode",
+  "scanTime": "2026-05-01T04:38:12.857Z",
+  "totalManifests": 17,
+  "totalDependencies": 155,
+  "dependencies": [
+    {
+      "name": "@anthropic-ai/sdk",
+      "version": "^0.32.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@aws-sdk/client-s3",
+      "version": "^3.705.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@aws-sdk/s3-request-presigner",
+      "version": "^3.705.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": false
+    },
+    {
+      "name": "mongodb",
+      "version": "^6.12.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": false
+    },
+    {
+      "name": "next",
+      "version": "^15.5.12",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": false
+    },
+    {
+      "name": "react",
+      "version": "^19.0.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": false
+    },
+    {
+      "name": "react-dom",
+      "version": "^19.0.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": false
+    },
+    {
+      "name": "uuid",
+      "version": "^11.0.5",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": false
+    },
+    {
+      "name": "zod",
+      "version": "^3.24.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@eslint/eslintrc",
+      "version": "^3.0.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": true
+    },
+    {
+      "name": "@types/node",
+      "version": "^22.0.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": true
+    },
+    {
+      "name": "@types/react",
+      "version": "^19.0.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": true
+    },
+    {
+      "name": "@types/react-dom",
+      "version": "^19.0.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": true
+    },
+    {
+      "name": "@types/uuid",
+      "version": "^10.0.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": true
+    },
+    {
+      "name": "autoprefixer",
+      "version": "^10.4.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": true
+    },
+    {
+      "name": "eslint",
+      "version": "^9.0.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": true
+    },
+    {
+      "name": "eslint-config-next",
+      "version": "16.1.6",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": true
+    },
+    {
+      "name": "postcss",
+      "version": "^8.4.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": true
+    },
+    {
+      "name": "tailwindcss",
+      "version": "^3.4.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": true
+    },
+    {
+      "name": "typescript",
+      "version": "^5.0.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/Skill-marketplace/package.json",
+      "isDev": true
+    },
+    {
+      "name": "electron-log",
+      "version": "^5.0.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/electron/package.json",
+      "isDev": false
+    },
+    {
+      "name": "electron-updater",
+      "version": "^6.3.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/electron/package.json",
+      "isDev": false
+    },
+    {
+      "name": "keytar",
+      "version": "^7.9.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/electron/package.json",
+      "isDev": false
+    },
+    {
+      "name": "dmg-license",
+      "version": "^1.0.11",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/electron/package.json",
+      "isDev": true
+    },
+    {
+      "name": "electron",
+      "version": "^33.0.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/electron/package.json",
+      "isDev": true
+    },
+    {
+      "name": "electron-builder",
+      "version": "^25.0.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/electron/package.json",
+      "isDev": true
+    },
+    {
+      "name": "@alcalzone/ansi-tokenize",
+      "version": "0.3.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@anthropic-ai/bedrock-sdk",
+      "version": "0.26.4",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@anthropic-ai/foundry-sdk",
+      "version": "0.2.3",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@anthropic-ai/sandbox-runtime",
+      "version": "0.0.46",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@anthropic-ai/vertex-sdk",
+      "version": "0.14.4",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@commander-js/extra-typings",
+      "version": "12.1.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@growthbook/growthbook",
+      "version": "1.6.5",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@grpc/grpc-js",
+      "version": "^1.14.3",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@grpc/proto-loader",
+      "version": "^0.8.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@mendable/firecrawl-js",
+      "version": "4.18.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@modelcontextprotocol/sdk",
+      "version": "1.29.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@opentelemetry/api",
+      "version": "1.9.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@opentelemetry/api-logs",
+      "version": "0.214.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@opentelemetry/core",
+      "version": "2.6.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@opentelemetry/exporter-logs-otlp-http",
+      "version": "0.214.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@opentelemetry/exporter-trace-otlp-grpc",
+      "version": "0.57.2",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@opentelemetry/resources",
+      "version": "2.6.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@opentelemetry/sdk-logs",
+      "version": "0.214.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@opentelemetry/sdk-metrics",
+      "version": "2.6.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@opentelemetry/sdk-trace-base",
+      "version": "2.6.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@opentelemetry/sdk-trace-node",
+      "version": "2.6.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@opentelemetry/semantic-conventions",
+      "version": "1.40.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "ajv",
+      "version": "8.18.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "auto-bind",
+      "version": "5.0.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "axios",
+      "version": "1.14.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "bidi-js",
+      "version": "1.0.3",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "chalk",
+      "version": "5.6.2",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "chokidar",
+      "version": "4.0.3",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "cli-boxes",
+      "version": "3.0.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "cli-highlight",
+      "version": "2.1.11",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "code-excerpt",
+      "version": "4.0.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "commander",
+      "version": "12.1.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "cross-spawn",
+      "version": "7.0.6",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "diff",
+      "version": "8.0.3",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "duck-duck-scrape",
+      "version": "^2.2.7",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "emoji-regex",
+      "version": "10.6.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "env-paths",
+      "version": "3.0.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "execa",
+      "version": "9.6.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "fflate",
+      "version": "0.8.2",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "figures",
+      "version": "6.1.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "fuse.js",
+      "version": "7.1.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "get-east-asian-width",
+      "version": "1.5.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "google-auth-library",
+      "version": "9.15.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "https-proxy-agent",
+      "version": "7.0.6",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "ignore",
+      "version": "7.0.5",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "indent-string",
+      "version": "5.0.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "jsonc-parser",
+      "version": "3.3.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "lodash-es",
+      "version": "4.18.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "lru-cache",
+      "version": "11.2.7",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "marked",
+      "version": "15.0.12",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "p-map",
+      "version": "7.0.4",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "picomatch",
+      "version": "4.0.4",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "proper-lockfile",
+      "version": "4.1.2",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "qrcode",
+      "version": "1.5.4",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "react-compiler-runtime",
+      "version": "1.0.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "react-reconciler",
+      "version": "0.33.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "semver",
+      "version": "7.7.4",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "sharp",
+      "version": "^0.34.5",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "shell-quote",
+      "version": "1.8.3",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "signal-exit",
+      "version": "4.1.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "stack-utils",
+      "version": "2.0.6",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "strip-ansi",
+      "version": "7.2.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "supports-hyperlinks",
+      "version": "3.2.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "tree-kill",
+      "version": "1.2.2",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "turndown",
+      "version": "7.2.2",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "type-fest",
+      "version": "4.41.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "undici",
+      "version": "7.24.6",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "usehooks-ts",
+      "version": "3.1.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "vscode-languageserver-protocol",
+      "version": "3.17.5",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "wrap-ansi",
+      "version": "9.0.2",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "ws",
+      "version": "8.20.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "xss",
+      "version": "1.0.15",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "yaml",
+      "version": "2.8.3",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@types/bun",
+      "version": "1.3.11",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": true
+    },
+    {
+      "name": "tsx",
+      "version": "^4.21.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/package.json",
+      "isDev": true
+    },
+    {
+      "name": "pytest",
+      "version": "==7.4.4",
+      "ecosystem": "pip",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/python/requirements.txt",
+      "isDev": false
+    },
+    {
+      "name": "pytest-asyncio",
+      "version": "==0.23.3",
+      "ecosystem": "pip",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/python/requirements.txt",
+      "isDev": false
+    },
+    {
+      "name": "httpx",
+      "version": "==0.25.2",
+      "ecosystem": "pip",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/openclaude/python/requirements.txt",
+      "isDev": false
+    },
+    {
+      "name": "conf",
+      "version": "^15.1.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/package.json",
+      "isDev": false
+    },
+    {
+      "name": "dotenv",
+      "version": "^16.3.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/package.json",
+      "isDev": false
+    },
+    {
+      "name": "fast-glob",
+      "version": "^3.3.3",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/package.json",
+      "isDev": false
+    },
+    {
+      "name": "gray-matter",
+      "version": "^4.0.3",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/package.json",
+      "isDev": false
+    },
+    {
+      "name": "ink",
+      "version": "^6.7.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/package.json",
+      "isDev": false
+    },
+    {
+      "name": "ink-select-input",
+      "version": "^6.2.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/package.json",
+      "isDev": false
+    },
+    {
+      "name": "ink-text-input",
+      "version": "^6.0.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/package.json",
+      "isDev": false
+    },
+    {
+      "name": "inquirer",
+      "version": "^13.4.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/package.json",
+      "isDev": false
+    },
+    {
+      "name": "marked-terminal",
+      "version": "^7.3.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/package.json",
+      "isDev": false
+    },
+    {
+      "name": "node-fetch",
+      "version": "^3.3.2",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/package.json",
+      "isDev": false
+    },
+    {
+      "name": "open",
+      "version": "^10.0.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/package.json",
+      "isDev": false
+    },
+    {
+      "name": "ora",
+      "version": "^5.4.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/package.json",
+      "isDev": false
+    },
+    {
+      "name": "ts-morph",
+      "version": "^27.0.2",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@types/diff",
+      "version": "^5.0.8",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/package.json",
+      "isDev": true
+    },
+    {
+      "name": "@types/inquirer",
+      "version": "^9.0.9",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/package.json",
+      "isDev": true
+    },
+    {
+      "name": "@types/ws",
+      "version": "^8.5.10",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/package.json",
+      "isDev": true
+    },
+    {
+      "name": "vite",
+      "version": "^5.4.21",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/package.json",
+      "isDev": true
+    },
+    {
+      "name": "vitest",
+      "version": "^1.6.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/package.json",
+      "isDev": true
+    },
+    {
+      "name": "@langchain/core",
+      "version": "^1.1.34",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@langchain/openai",
+      "version": "^1.3.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@orama/orama",
+      "version": "^3.1.18",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@orama/plugin-data-persistence",
+      "version": "^3.1.18",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@radix-ui/react-slot",
+      "version": "^1.2.4",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@radix-ui/react-tabs",
+      "version": "^1.1.13",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "class-variance-authority",
+      "version": "^0.7.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "clsx",
+      "version": "^2.1.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "fumadocs-core",
+      "version": "16.7.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "fumadocs-mdx",
+      "version": "14.2.11",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "fumadocs-ui",
+      "version": "16.7.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "langchain",
+      "version": "^1.2.35",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "lit",
+      "version": "^3.3.2",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "lucide-react",
+      "version": "^0.577.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "motion",
+      "version": "^12.38.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "next-themes",
+      "version": "^0.4.6",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "react-icons",
+      "version": "^5.6.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "react-markdown",
+      "version": "^10.1.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "remark-gfm",
+      "version": "^4.0.1",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "tailwind-merge",
+      "version": "^3.5.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "tw-animate-css",
+      "version": "^1.4.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@tailwindcss/postcss",
+      "version": "^4.2.2",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": true
+    },
+    {
+      "name": "@types/mdx",
+      "version": "^2.0.13",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": true
+    },
+    {
+      "name": "react-grab",
+      "version": "^0.1.28",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/site/package.json",
+      "isDev": true
+    },
+    {
+      "name": "@monaco-editor/react",
+      "version": "^4.6.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/webui/package.json",
+      "isDev": false
+    },
+    {
+      "name": "framer-motion",
+      "version": "^12.34.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/webui/package.json",
+      "isDev": false
+    },
+    {
+      "name": "react-syntax-highlighter",
+      "version": "^16.1.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/webui/package.json",
+      "isDev": false
+    },
+    {
+      "name": "xterm",
+      "version": "^5.3.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/webui/package.json",
+      "isDev": false
+    },
+    {
+      "name": "xterm-addon-fit",
+      "version": "^0.8.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/webui/package.json",
+      "isDev": false
+    },
+    {
+      "name": "xterm-addon-web-links",
+      "version": "^0.9.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/webui/package.json",
+      "isDev": false
+    },
+    {
+      "name": "zustand",
+      "version": "^4.5.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/webui/package.json",
+      "isDev": false
+    },
+    {
+      "name": "@tailwindcss/vite",
+      "version": "^4.1.18",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/webui/package.json",
+      "isDev": true
+    },
+    {
+      "name": "@vitejs/plugin-react",
+      "version": "^4.2.0",
+      "ecosystem": "npm",
+      "manifestFile": "/home/r3ap3reditz/codes/xibecode/webui/package.json",
+      "isDev": true
+    }
+  ],
+  "vulnerabilities": [
+    {
+      "id": "GHSA-3x4c-7xq6-9pq8",
+      "packageName": "next",
+      "affectedVersion": "^15.5.12",
+      "fixedVersion": "16.1.7",
+      "severity": "MODERATE",
+      "description": "Next.js: Unbounded next/image disk cache growth can exhaust storage",
+      "cvssScore": null,
+      "publishedDate": "2026-03-17T16:17:06Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-27980"
+      ]
+    },
+    {
+      "id": "GHSA-ggv3-7p47-pfv8",
+      "packageName": "next",
+      "affectedVersion": "^15.5.12",
+      "fixedVersion": "16.1.7",
+      "severity": "MODERATE",
+      "description": "Next.js: HTTP request smuggling in rewrites",
+      "cvssScore": null,
+      "publishedDate": "2026-03-17T16:17:15Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-29057"
+      ]
+    },
+    {
+      "id": "GHSA-q4gf-8mx6-v5v3",
+      "packageName": "next",
+      "affectedVersion": "^15.5.12",
+      "fixedVersion": "15.5.15",
+      "severity": "HIGH",
+      "description": "Next.js has a Denial of Service with Server Components",
+      "cvssScore": null,
+      "publishedDate": "2026-04-10T15:35:47Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": []
+    },
+    {
+      "id": "GHSA-w5hq-g745-h8pq",
+      "packageName": "uuid",
+      "affectedVersion": "^11.0.5",
+      "fixedVersion": "14.0.0",
+      "severity": "MODERATE",
+      "description": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+      "cvssScore": null,
+      "publishedDate": "2026-04-22T20:53:24Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": []
+    },
+    {
+      "id": "GHSA-7fh5-64p2-3v2j",
+      "packageName": "postcss",
+      "affectedVersion": "^8.4.0",
+      "fixedVersion": "8.4.31",
+      "severity": "MODERATE",
+      "description": "PostCSS line return parsing error",
+      "cvssScore": null,
+      "publishedDate": "2023-09-30T00:31:10Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2023-44270"
+      ]
+    },
+    {
+      "id": "GHSA-qx2v-qp2m-jg93",
+      "packageName": "postcss",
+      "affectedVersion": "^8.4.0",
+      "fixedVersion": "8.5.10",
+      "severity": "MODERATE",
+      "description": "PostCSS has XSS via Unescaped </style> in its CSS Stringify Output",
+      "cvssScore": null,
+      "publishedDate": "2026-04-24T15:31:42Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-41305"
+      ]
+    },
+    {
+      "id": "GHSA-3c8v-cfp5-9885",
+      "packageName": "electron",
+      "affectedVersion": "^33.0.0",
+      "fixedVersion": "38.8.6",
+      "severity": "MODERATE",
+      "description": "Electron: Out-of-bounds read in second-instance IPC on macOS and Linux",
+      "cvssScore": null,
+      "publishedDate": "2026-04-03T02:43:59Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-34776"
+      ]
+    },
+    {
+      "id": "GHSA-4p4r-m79c-wq3v",
+      "packageName": "electron",
+      "affectedVersion": "^33.0.0",
+      "fixedVersion": "38.8.6",
+      "severity": "MODERATE",
+      "description": "Electron: HTTP Response Header Injection in custom protocol handlers and webRequest",
+      "cvssScore": null,
+      "publishedDate": "2026-04-03T02:37:24Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-34767"
+      ]
+    },
+    {
+      "id": "GHSA-532v-xpq5-8h95",
+      "packageName": "electron",
+      "affectedVersion": "^33.0.0",
+      "fixedVersion": "39.8.1",
+      "severity": "HIGH",
+      "description": "Electron: Use-after-free in offscreen child window paint callback",
+      "cvssScore": null,
+      "publishedDate": "2026-04-03T02:42:27Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-34774"
+      ]
+    },
+    {
+      "id": "GHSA-5rqw-r77c-jp79",
+      "packageName": "electron",
+      "affectedVersion": "^33.0.0",
+      "fixedVersion": "38.8.6",
+      "severity": "MODERATE",
+      "description": "Electron: AppleScript injection in app.moveToApplicationsFolder on macOS",
+      "cvssScore": null,
+      "publishedDate": "2026-04-03T02:46:16Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-34779"
+      ]
+    },
+    {
+      "id": "GHSA-8337-3p73-46f4",
+      "packageName": "electron",
+      "affectedVersion": "^33.0.0",
+      "fixedVersion": "38.8.6",
+      "severity": "HIGH",
+      "description": "Electron: Use-after-free in WebContents fullscreen, pointer-lock, and keyboard-lock permission callbacks",
+      "cvssScore": null,
+      "publishedDate": "2026-04-03T02:40:24Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-34771"
+      ]
+    },
+    {
+      "id": "GHSA-8x5q-pvf5-64mp",
+      "packageName": "electron",
+      "affectedVersion": "^33.0.0",
+      "fixedVersion": "39.8.5",
+      "severity": "LOW",
+      "description": "Electron: Use-after-free in offscreen shared texture release() callback",
+      "cvssScore": null,
+      "publishedDate": "2026-04-03T21:52:33Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-34764"
+      ]
+    },
+    {
+      "id": "GHSA-9899-m83m-qhpj",
+      "packageName": "electron",
+      "affectedVersion": "^33.0.0",
+      "fixedVersion": "38.8.6",
+      "severity": "LOW",
+      "description": "Electron: USB device selection not validated against filtered device list",
+      "cvssScore": null,
+      "publishedDate": "2026-04-03T02:36:52Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-34766"
+      ]
+    },
+    {
+      "id": "GHSA-9w97-2464-8783",
+      "packageName": "electron",
+      "affectedVersion": "^33.0.0",
+      "fixedVersion": "38.8.6",
+      "severity": "MODERATE",
+      "description": "Electron: Use-after-free in download save dialog callback",
+      "cvssScore": null,
+      "publishedDate": "2026-04-03T02:41:23Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-34772"
+      ]
+    },
+    {
+      "id": "GHSA-9wfr-w7mm-pc7f",
+      "packageName": "electron",
+      "affectedVersion": "^33.0.0",
+      "fixedVersion": "38.8.6",
+      "severity": "HIGH",
+      "description": "Electron: Renderer command-line switch injection via undocumented commandLineSwitches webPreference",
+      "cvssScore": null,
+      "publishedDate": "2026-04-03T02:39:15Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-34769"
+      ]
+    },
+    {
+      "id": "GHSA-f37v-82c4-4x64",
+      "packageName": "electron",
+      "affectedVersion": "^33.0.0",
+      "fixedVersion": "39.8.5",
+      "severity": "LOW",
+      "description": "Electron: Crash in clipboard.readImage() on malformed clipboard image data",
+      "cvssScore": null,
+      "publishedDate": "2026-04-07T15:52:28Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-34781"
+      ]
+    },
+    {
+      "id": "GHSA-f3pv-wv63-48x8",
+      "packageName": "electron",
+      "affectedVersion": "^33.0.0",
+      "fixedVersion": "39.8.5",
+      "severity": "MODERATE",
+      "description": "Electron: Named window.open targets not scoped to the opener's browsing context",
+      "cvssScore": null,
+      "publishedDate": "2026-04-07T15:52:25Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-34765"
+      ]
+    },
+    {
+      "id": "GHSA-jfqx-fxh3-c62j",
+      "packageName": "electron",
+      "affectedVersion": "^33.0.0",
+      "fixedVersion": "38.8.6",
+      "severity": "LOW",
+      "description": "Electron: Unquoted executable path in app.setLoginItemSettings on Windows",
+      "cvssScore": null,
+      "publishedDate": "2026-04-03T02:38:08Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-34768"
+      ]
+    },
+    {
+      "id": "GHSA-jjp3-mq3x-295m",
+      "packageName": "electron",
+      "affectedVersion": "^33.0.0",
+      "fixedVersion": "38.8.6",
+      "severity": "HIGH",
+      "description": "Electron: Use-after-free in PowerMonitor on Windows and macOS",
+      "cvssScore": null,
+      "publishedDate": "2026-04-03T02:39:52Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-34770"
+      ]
+    },
+    {
+      "id": "GHSA-mwmh-mq4g-g6gr",
+      "packageName": "electron",
+      "affectedVersion": "^33.0.0",
+      "fixedVersion": "38.8.6",
+      "severity": "MODERATE",
+      "description": "Electron: Registry key path injection in app.setAsDefaultProtocolClient on Windows",
+      "cvssScore": null,
+      "publishedDate": "2026-04-03T02:41:52Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-34773"
+      ]
+    },
+    {
+      "id": "GHSA-r5p7-gp4j-qhrx",
+      "packageName": "electron",
+      "affectedVersion": "^33.0.0",
+      "fixedVersion": "38.8.6",
+      "severity": "MODERATE",
+      "description": "Electron: Incorrect origin passed to permission request handler for iframe requests",
+      "cvssScore": null,
+      "publishedDate": "2026-04-03T02:44:26Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-34777"
+      ]
+    },
+    {
+      "id": "GHSA-vmqv-hx8q-j7mg",
+      "packageName": "electron",
+      "affectedVersion": "^33.0.0",
+      "fixedVersion": "35.7.5",
+      "severity": "MODERATE",
+      "description": "Electron has ASAR Integrity Bypass via resource modification",
+      "cvssScore": null,
+      "publishedDate": "2025-09-03T21:27:37Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2025-55305"
+      ]
+    },
+    {
+      "id": "GHSA-xj5x-m3f3-5x3h",
+      "packageName": "electron",
+      "affectedVersion": "^33.0.0",
+      "fixedVersion": "38.8.6",
+      "severity": "MODERATE",
+      "description": "Electron: Service worker can spoof executeJavaScript IPC replies",
+      "cvssScore": null,
+      "publishedDate": "2026-04-03T02:44:59Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-34778"
+      ]
+    },
+    {
+      "id": "GHSA-xwr5-m59h-vwqr",
+      "packageName": "electron",
+      "affectedVersion": "^33.0.0",
+      "fixedVersion": "38.8.6",
+      "severity": "MODERATE",
+      "description": "Electron: nodeIntegrationInWorker not correctly scoped in shared renderer processes",
+      "cvssScore": null,
+      "publishedDate": "2026-04-03T02:43:05Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-34775"
+      ]
+    },
+    {
+      "id": "GHSA-3p68-rc4w-qgx5",
+      "packageName": "axios",
+      "affectedVersion": "1.14.0",
+      "fixedVersion": "1.15.0",
+      "severity": "MODERATE",
+      "description": "Axios has a NO_PROXY Hostname Normalization Bypass that Leads to SSRF",
+      "cvssScore": null,
+      "publishedDate": "2026-04-09T17:32:19Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2025-62718"
+      ]
+    },
+    {
+      "id": "GHSA-fvcv-3m26-pcqx",
+      "packageName": "axios",
+      "affectedVersion": "1.14.0",
+      "fixedVersion": "1.15.0",
+      "severity": "MODERATE",
+      "description": "Axios has Unrestricted Cloud Metadata Exfiltration via Header Injection Chain",
+      "cvssScore": null,
+      "publishedDate": "2026-04-10T19:47:16Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-40175"
+      ]
+    },
+    {
+      "id": "GHSA-6w46-j5rx-g56g",
+      "packageName": "pytest",
+      "affectedVersion": "==7.4.4",
+      "fixedVersion": "9.0.3",
+      "severity": "MODERATE",
+      "description": "pytest has vulnerable tmpdir handling",
+      "cvssScore": null,
+      "publishedDate": "2026-01-22T06:30:29Z",
+      "ecosystem": "pip",
+      "database": "osv",
+      "aliases": [
+        "CVE-2025-71176"
+      ]
+    },
+    {
+      "id": "GHSA-4w7w-66w2-5vf9",
+      "packageName": "vite",
+      "affectedVersion": "^5.4.21",
+      "fixedVersion": "8.0.5",
+      "severity": "MODERATE",
+      "description": "Vite Vulnerable to Path Traversal in Optimized Deps `.map` Handling",
+      "cvssScore": null,
+      "publishedDate": "2026-04-06T18:03:46Z",
+      "ecosystem": "npm",
+      "database": "osv",
+      "aliases": [
+        "CVE-2026-39365"
+      ]
+    }
+  ],
+  "alternatives": [
+    {
+      "originalPackage": "axios",
+      "alternativePackage": "undici, node-fetch, or native fetch()",
+      "reason": "Node.js 18+ has built-in fetch(). undici is faster.",
+      "notes": "Multiple CVEs including SSRF vulnerabilities"
+    },
+    {
+      "originalPackage": "react-dom",
+      "alternativePackage": "react",
+      "reason": "Only use official react package from facebook",
+      "notes": "Possible typosquatting attack"
+    },
+    {
+      "originalPackage": "eslint-config-next",
+      "alternativePackage": "eslint",
+      "reason": "Check it is the official eslint package",
+      "notes": "Possible typosquatting attack"
+    },
+    {
+      "originalPackage": "typescript",
+      "alternativePackage": "typescript (official)",
+      "reason": "Check you have the correct package. Malicious typosquats: typescript, typescrip, typescrit",
+      "notes": "Always install from official @typescriptlang namespace or typescript"
+    },
+    {
+      "originalPackage": "react-compiler-runtime",
+      "alternativePackage": "react",
+      "reason": "Only use official react package from facebook",
+      "notes": "Possible typosquatting attack"
+    },
+    {
+      "originalPackage": "react-reconciler",
+      "alternativePackage": "react",
+      "reason": "Only use official react package from facebook",
+      "notes": "Possible typosquatting attack"
+    },
+    {
+      "originalPackage": "react-icons",
+      "alternativePackage": "react",
+      "reason": "Only use official react package from facebook",
+      "notes": "Possible typosquatting attack"
+    },
+    {
+      "originalPackage": "react-markdown",
+      "alternativePackage": "react",
+      "reason": "Only use official react package from facebook",
+      "notes": "Possible typosquatting attack"
+    },
+    {
+      "originalPackage": "react-grab",
+      "alternativePackage": "react",
+      "reason": "Only use official react package from facebook",
+      "notes": "Possible typosquatting attack"
+    },
+    {
+      "originalPackage": "react-syntax-highlighter",
+      "alternativePackage": "react",
+      "reason": "Only use official react package from facebook",
+      "notes": "Possible typosquatting attack"
+    }
+  ],
+  "summary": {
+    "total": 28,
+    "critical": 0,
+    "high": 5,
+    "moderate": 19,
+    "low": 4,
+    "unknown": 0
+  }
+}
