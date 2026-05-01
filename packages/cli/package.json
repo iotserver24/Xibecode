@@ -1,0 +1,75 @@
+{
+  "name": "xibecode",
+  "version": "1.0.4",
+  "description": "AI-powered autonomous coding assistant with AI test generation, multi-model support, and plugin system",
+  "main": "dist/index.js",
+  "type": "module",
+  "bin": {
+    "xibecode": "./dist/index.js",
+    "xc": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "cli",
+    "ai",
+    "coding",
+    "assistant",
+    "autonomous",
+    "agent",
+    "automation",
+    "test-generation"
+  ],
+  "author": "Anish Kumar (R3AP3R editz) <https://github.com/iotserver24>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iotserver24/xibecode"
+  },
+  "bugs": {
+    "url": "https://github.com/iotserver24/xibecode/issues"
+  },
+  "homepage": "https://github.com/iotserver24/xibecode#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "xibecode-core": "workspace:*",
+    "@anthropic-ai/sdk": "^0.78.0",
+    "chalk": "^4.1.2",
+    "commander": "^12.0.0",
+    "conf": "^15.1.0",
+    "dotenv": "^16.3.1",
+    "ink": "^6.7.0",
+    "ink-select-input": "^6.2.0",
+    "ink-text-input": "^6.0.0",
+    "inquirer": "^13.4.1",
+    "marked": "^11.2.0",
+    "marked-terminal": "^7.3.0",
+    "node-fetch": "^3.3.2",
+    "open": "^10.0.0",
+    "ora": "^5.4.1",
+    "react": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.9",
+    "@types/node": "^20.10.0",
+    "@types/react": "^19.2.13",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.6.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "README.md"
+  ]
+}

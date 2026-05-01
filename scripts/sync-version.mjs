@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Syncs the version from the root package.json to electron/package.json.
+ * Syncs the version from the root package.json to all workspace packages.
  * Run via: pnpm run sync-version
  */
 
@@ -13,14 +13,28 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '..');
 
 const rootPkg = JSON.parse(readFileSync(resolve(rootDir, 'package.json'), 'utf8'));
-const electronPkgPath = resolve(rootDir, 'electron', 'package.json');
-const electronPkg = JSON.parse(readFileSync(electronPkgPath, 'utf8'));
+const version = rootPkg.version;
 
-if (electronPkg.version === rootPkg.version) {
-  console.log(`electron/package.json already at version ${rootPkg.version} — no change needed.`);
-  process.exit(0);
+const targets = [
+  { name: 'electron/package.json', path: resolve(rootDir, 'electron', 'package.json') },
+  { name: 'packages/core/package.json', path: resolve(rootDir, 'packages', 'core', 'package.json') },
+  { name: 'packages/cli/package.json', path: resolve(rootDir, 'packages', 'cli', 'package.json') },
+];
+
+let changed = false;
+
+for (const target of targets) {
+  const pkg = JSON.parse(readFileSync(target.path, 'utf8'));
+  if (pkg.version === version) {
+    console.log(`${target.name} already at version ${version} — no change needed.`);
+    continue;
+  }
+  pkg.version = version;
+  writeFileSync(target.path, JSON.stringify(pkg, null, 2) + '\n');
+  console.log(`Synced ${target.name} version: ${pkg.version} -> ${version}`);
+  changed = true;
 }
 
-electronPkg.version = rootPkg.version;
-writeFileSync(electronPkgPath, JSON.stringify(electronPkg, null, 2) + '\n');
-console.log(`Synced electron/package.json version: ${electronPkg.version} -> ${rootPkg.version}`);
+if (!changed) {
+  console.log('All packages already at the correct version.');
+}

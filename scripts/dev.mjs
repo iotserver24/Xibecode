@@ -1,31 +1,29 @@
 #!/usr/bin/env node
 /**
- * Dev runner: `tsx` bundles deps with esbuild in CJS mode, which breaks
- * `yoga-layout` (top-level await, used by Ink). Build with `tsc` and run
- * `node --watch dist/index.js` so native ESM loads yoga-layout correctly.
+ * Dev runner for the monorepo.
+ * Builds all packages with turbo, then runs the CLI with --watch.
  */
 import { execSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const cliDir = join(root, 'packages', 'cli');
 let forwarded = process.argv.slice(2);
 if (forwarded[0] === '--') {
   forwarded = forwarded.slice(1);
 }
 const pnpmCmd = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 
-execSync(`${pnpmCmd} exec tsc`, { cwd: root, stdio: 'inherit', shell: true });
+// Initial build
+execSync(`${pnpmCmd} run build`, { cwd: root, stdio: 'inherit', shell: true });
 
 const interactiveCommands = new Set(['config', 'chat']);
-// `bun run dev <cmd>` doesn't always report TTY consistently, but interactive
-// subcommands still need stable stdio (no watcher noise, no restarts).
 const isInteractiveRun = forwarded.length > 0 && interactiveCommands.has(forwarded[0]);
 
+// Watch CLI package TypeScript
 const tscWatch = spawn(pnpmCmd, ['exec', 'tsc', '-w', '--preserveWatchOutput'], {
-  cwd: root,
-  // When running interactive CLI commands, silence watcher output so it doesn't
-  // corrupt Inquirer/Ink rendering. The watcher still rebuilds in the background.
+  cwd: cliDir,
   stdio: isInteractiveRun ? 'ignore' : 'inherit',
   shell: process.platform === 'win32',
 });
@@ -35,7 +33,7 @@ const nodeArgs = isInteractiveRun
   : ['--watch', 'dist/index.js', ...forwarded];
 
 const nodeWatch = spawn(process.execPath, nodeArgs, {
-  cwd: root,
+  cwd: cliDir,
   stdio: 'inherit',
 });
 
