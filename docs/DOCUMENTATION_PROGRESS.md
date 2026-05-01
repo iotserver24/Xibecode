@@ -9,7 +9,6 @@ The project was restructured into a pnpm workspace monorepo:
 
 - **`packages/core/`** (`xibecode-core`) - AI agent engine published as a standalone npm package
 - **`packages/cli/`** (`xibecode`) - CLI interface depending on `xibecode-core`
-- **`electron/`** (`xibecode-desktop`) - Electron desktop app (separate build)
 
 Documentation needs updating across all files to reflect the new structure. Root-level docs (ARCHITECTURE.md, CONTRIBUTING.md, etc.) still reference the old `src/` structure and need a full pass.
 
@@ -21,7 +20,7 @@ This report tracks the progress of the comprehensive documentation initiative fo
 
 | Area | Before Monorepo | After Monorepo Migration |
 |------|-----------------|--------------------------|
-| Project structure | Single package (`src/`) | Monorepo (`packages/core/`, `packages/cli/`, `electron/`) |
+| Project structure | Single package (`src/`) | Monorepo (`packages/core/`, `packages/cli/`) |
 | Core package | Part of `src/core/` | `packages/core/src/` (published as `xibecode-core`) |
 | CLI package | Part of `src/commands/`, `src/ui/` | `packages/cli/src/` (published as `xibecode`) |
 | Skills | Root `skills/` | `packages/cli/skills/` |

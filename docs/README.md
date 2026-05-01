@@ -11,7 +11,6 @@ XibeCode is structured as a **pnpm workspace monorepo** with Turborepo for build
 
 - **`packages/core/`** (`xibecode-core`) - AI agent engine: tool execution, MCP, memory, modes, permissions, swarm orchestration. Published as a standalone npm package.
 - **`packages/cli/`** (`xibecode`) - CLI interface: commands, Ink-based TUI, built-in skills. Depends on `xibecode-core`.
-- **`electron/`** (`xibecode-desktop`) - Electron desktop app (separate build).
 
 ## Documentation Structure
 

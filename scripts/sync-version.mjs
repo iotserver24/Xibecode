@@ -16,7 +16,6 @@ const rootPkg = JSON.parse(readFileSync(resolve(rootDir, 'package.json'), 'utf8'
 const version = rootPkg.version;
 
 const targets = [
-  { name: 'electron/package.json', path: resolve(rootDir, 'electron', 'package.json') },
   { name: 'packages/core/package.json', path: resolve(rootDir, 'packages', 'core', 'package.json') },
   { name: 'packages/cli/package.json', path: resolve(rootDir, 'packages', 'cli', 'package.json') },
 ];
