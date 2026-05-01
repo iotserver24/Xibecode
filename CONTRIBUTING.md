@@ -108,11 +108,14 @@ echo "ANTHROPIC_API_KEY=your_api_key_here" >> .env
 ### 4. Build the Project
 
 ```bash
-# Compile TypeScript
-npm run build
+# Install dependencies
+pnpm install
+
+# Build all packages with Turborepo
+pnpm run build
 
 # Watch mode for development
-npx tsx watch src/index.ts
+pnpm run dev
 ```
 
 ### 5. Verify Installation
@@ -176,10 +179,11 @@ xibecode/
 
 ### Key Directories
 
-- **`src/core/`**: Core agent logic - start here for most contributions
-- **`src/commands/`**: CLI command implementations
-- **`src/utils/`**: Shared utilities and helpers
-- **`test/`**: All test files
+- **`packages/core/src/`**: Core agent engine - start here for most contributions
+- **`packages/cli/src/commands/`**: CLI command implementations
+- **`packages/cli/src/ui/`**: Terminal UI components
+- **`packages/core/src/utils/`**: Core utilities (git, safety, testRunner, etc.)
+- **`packages/cli/src/utils/`**: CLI utilities (config, tool-display, tui-theme)
 - **`docs/`**: Markdown documentation
 
 ---
@@ -564,7 +568,7 @@ describe('functionToTest', () => {
 
 ```typescript
 import { describe, it, expect } from 'vitest';
-import { EnhancedAgent } from '../src/core/agent.js';
+import { EnhancedAgent } from 'xibecode-core';
 
 describe('EnhancedAgent Integration', () => {
   it('should execute complete workflow', async () => {
