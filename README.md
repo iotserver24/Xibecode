@@ -309,7 +309,6 @@ xibecode/
 │       ├── skills/              # 40+ built-in skill markdown files
 │       ├── package.json
 │       └── tsconfig.json
-├── electron/                    # xibecode-desktop - Electron desktop app
 ├── scripts/                     # Build and dev scripts
 ├── docs/                        # Project documentation
 ├── site/                        # Documentation website (Next.js)

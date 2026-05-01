@@ -3,7 +3,7 @@
 ## Learned User Preferences
 
 - Always use **pnpm** as the package manager; fall back to bun only if pnpm is unavailable; never use npm directly for installs or scripts.
-- When doing a version release, bump only `package.json` — all source files (`run.ts`, `run-pr.ts`, `config.ts`, `diagnostics.ts`) read the version dynamically via `createRequire(import.meta.url)('../../package.json')`, and `electron/package.json` is synced via `pnpm run sync-version`.
+- When doing a version release, bump `package.json` — all source files (`run.ts`, `run-pr.ts`, `config.ts`, `diagnostics.ts`) read the version dynamically via `createRequire(import.meta.url)('../../package.json')`.
 - After making code changes, always edit the file directly — do not describe what to change without applying it; after each edit, briefly explain what changed and why.
 - For Ink-based terminal UI (`xibecode chat` and related), follow the existing OpenClaude-aligned stack (`src/ink.ts`, `src/utils/tui-theme.ts`, themed components) and XibeCode branding instead of ad hoc raw Ink or chalk-only styling.
 - When building for release: run `pnpm run build`, then `git add`, `git commit`, `git push`, and `pnpm publish --access public` — all in one unattended sequence.
@@ -19,12 +19,11 @@
 
 - Project: **XibeCode** — an autonomous AI coding CLI tool (`xibecode`), published as an npm package at `xibecode`; repo path `/home/r3ap3reditz/codes/xibecode`; GitHub: `https://github.com/iotserver24/Xibecode`
 - Primary package manager: **pnpm** with `pnpm-lock.yaml` at root. Build command: `pnpm run build` (TypeScript → `dist/`).
-- Version string is defined in **`package.json` only** — the single source of truth. Source files read it via `createRequire(import.meta.url)('../../package.json')` and reference `pkg.version`. The `electron/package.json` version is synced via `pnpm run sync-version` (which should be run before building the Electron app).
+- Version string is defined in **`package.json` only** — the single source of truth. Source files read it via `createRequire(import.meta.url)('../../package.json')` and reference `pkg.version`.
 - Agent modes are defined in `src/core/modes.ts` under `MODE_CONFIG`; each has `allowedCategories` controlling tool access. Agent mode `agent` must include `'network'` in `allowedCategories` so `fetch_url`, `web_search`, and skills-sh tools work.
 - `xibecode run` must call `process.exit(0)` in the `finally` block (unless `--non-interactive`) to avoid hanging after task completion.
-- Electron desktop app lives in `electron/` with its own `package.json`; it is a separate build from the CLI. Terminal `xibecode chat` is Ink-based (`src/commands/chat.ts` → `src/ui/claude-style-chat.tsx` via `src/ink.ts` and `src/utils/tui-theme.ts`).
 - The `site/` and `site/app/donate/` directories are excluded from git and added to `.cursorignore`; `openclaude/` is gitignored as local reference OpenClaude-style code and should not be committed.
-- `pnpm install --frozen-lockfile` in CI (and locally) requires the root `pnpm-lock.yaml` and any nested lockfiles used in workflows (e.g. under `electron/`) to match their `package.json` files; after dependency changes, run `pnpm install`, commit updated lockfiles, then push.
+- `pnpm install --frozen-lockfile` in CI (and locally) requires the root `pnpm-lock.yaml` and any nested lockfiles used in workflows to match their `package.json` files; after dependency changes, run `pnpm install`, commit updated lockfiles, then push.
 - Embedded or sandboxed agent runs should treat the repository root as the working directory for file tools and relative paths; do not assume the checkout lives at `/workspace`, `/app`, or `/project`.
 - `run-pr` command (`src/commands/run-pr.ts`) requires `gh` CLI installed and authenticated (`gh auth login`) before use; it performs test verification (unless `--skip-tests`) with up to 2 self-correction retries and triggers CI security checks including `pnpm audit --audit-level=high`.
 - CLI supports config profiles (default profile + `--profile <name>` across commands) and includes `xibecode diagnostics` to generate a redacted Markdown diagnostics bundle.

@@ -66,7 +66,3 @@ reports/
 screenshots/
 e2e/
 
-# Electron build artifacts
-electron/dist/
-electron/release/
-electron/node_modules/
