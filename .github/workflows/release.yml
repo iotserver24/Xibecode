@@ -1,4 +1,4 @@
-# Build, create tarball, attach to GitHub Release, and publish to npm.
+# Build, create tarballs, attach to GitHub Release, and publish both packages to npm.
 # Trigger: create a Release in GitHub (e.g. from a tag like v1.0.0).
 # Secrets: NPM_TOKEN (npm auth token with publish access).
 
@@ -39,20 +39,41 @@ jobs:
       - name: Build
         run: pnpm run build
 
-      - name: Create tarball
+      - name: Create core tarball
+        working-directory: packages/core
+        run: pnpm pack
+        # Produces xibecode-core-<version>.tgz
+
+      - name: Create CLI tarball
+        working-directory: packages/cli
         run: pnpm pack
         # Produces xibecode-<version>.tgz
+
+      - name: Move tarballs to root
+        run: |
+          mv packages/core/xibecode-core-*.tgz . 2>/dev/null || true
+          mv packages/cli/xibecode-*.tgz . 2>/dev/null || true
 
       - name: Upload to GitHub Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: xibecode-*.tgz
+          files: |
+            xibecode-core-*.tgz
+            xibecode-*.tgz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish to npm
+      - name: Publish xibecode-core to npm
         if: github.event_name == 'release'
+        working-directory: packages/core
+        run: pnpm publish --no-git-checks --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish xibecode CLI to npm
+        if: github.event_name == 'release'
+        working-directory: packages/cli
         run: pnpm publish --no-git-checks --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

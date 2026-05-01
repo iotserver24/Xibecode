@@ -1,0 +1,61 @@
+{
+  "name": "xibecode-core",
+  "version": "1.0.4",
+  "description": "XibeCode Core - AI agent engine with tool execution, MCP, memory, and multi-mode support",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "coding",
+    "autonomous",
+    "mcp",
+    "tools"
+  ],
+  "author": "Anish Kumar (R3AP3R editz) <https://github.com/iotserver24>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iotserver24/xibecode"
+  },
+  "bugs": {
+    "url": "https://github.com/iotserver24/xibecode/issues"
+  },
+  "homepage": "https://github.com/iotserver24/xibecode#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "diff": "^5.1.0",
+    "dotenv": "^16.3.1",
+    "fast-glob": "^3.3.3",
+    "gray-matter": "^4.0.3",
+    "node-fetch": "^3.3.2",
+    "open": "^10.0.0",
+    "strip-ansi": "^7.1.0",
+    "ts-morph": "^27.0.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/diff": "^5.0.8",
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.6.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist"
+  ]
+}

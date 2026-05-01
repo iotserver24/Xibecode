@@ -3,20 +3,12 @@ node_modules/
 package-lock.json
 yarn.lock
 openclaude/
-# Build
-.claude/
-.xibecode/
-dist/
-webui-dist/
-*.tsbuildinfo
-build/
-*.tgz
-.next/
 
-# Electron build artifacts
-electron/dist/
-electron/release/
-electron/node_modules/
+# Build
+dist/
+*.tsbuildinfo
+*.tgz
+.turbo/
 
 # Environment
 .env
@@ -27,6 +19,8 @@ electron/node_modules/
 .vscode/
 .idea/
 .cursor/
+.claude/
+.jules/
 *.swp
 *.swo
 *~
@@ -34,8 +28,11 @@ electron/node_modules/
 # OS
 .DS_Store
 Thumbs.db
+
+# XibeCode runtime
 .xibecode/
-.xibecode
+.xibecode_backups/
+
 # Logs
 *.log
 npm-debug.log*
@@ -50,26 +47,26 @@ test-results/
 playwright-report/
 playwright/.cache/
 
-# XibeCode
-.xibecode/
-.xibecode_backups/
-
 # Temp
 tmp/
 *.tmp
 *.temp
 .cache/
 
-# Optional: uncomment if you don't want to track lockfiles (bun.lock / pnpm-lock.yaml)
+# Optional: uncomment if you don't want to track lockfiles
 # bun.lock
 # pnpm-lock.yaml
-Skill-marketplace
-next/
 
-# Site (not tracked in this repo)
+# Not part of the monorepo (local only)
+Skill-marketplace/
 site/
+extension/
+next/
+reports/
+screenshots/
+e2e/
 
-# Electron
-electron-app/node_modules/
-electron-app/dist/
-electron-app/release/
+# Electron build artifacts
+electron/dist/
+electron/release/
+electron/node_modules/
