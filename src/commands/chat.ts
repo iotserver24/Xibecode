@@ -18,7 +18,6 @@ interface ChatOptions {
   costMode?: string;
   theme?: string;
   session?: string;
-  noWebui?: boolean;
   profile?: string;
   plain?: boolean;
 }
