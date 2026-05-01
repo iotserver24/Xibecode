@@ -14,29 +14,41 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-          cache-dependency-path: electron/pnpm-lock.yaml
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: Install dependencies
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Sync version to electron/package.json
+        run: pnpm run sync-version
+
+      - name: Build CLI
+        run: pnpm run build
+
+      - name: Install electron dependencies
         working-directory: electron
         run: pnpm install --frozen-lockfile
-      - name: Build TypeScript
+
+      - name: Build Electron TypeScript
         working-directory: electron
         run: pnpm run build:ts
+
       - name: Build Linux packages (${{ matrix.arch }})
         working-directory: electron
         run: pnpm exec electron-builder --linux deb rpm AppImage --${{ matrix.arch }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -55,30 +67,41 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-
-          cache: 'pnpm'
-          cache-dependency-path: electron/pnpm-lock.yaml
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: Install dependencies
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Sync version to electron/package.json
+        run: pnpm run sync-version
+
+      - name: Build CLI
+        run: pnpm run build
+
+      - name: Install electron dependencies
         working-directory: electron
         run: pnpm install --frozen-lockfile
-      - name: Build TypeScript
+
+      - name: Build Electron TypeScript
         working-directory: electron
         run: pnpm run build:ts
+
       - name: Build Windows ${{ matrix.arch }}
         working-directory: electron
         run: pnpm exec electron-builder --win --${{ matrix.arch }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -93,31 +116,42 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-
-          cache: 'pnpm'
-          cache-dependency-path: electron/pnpm-lock.yaml
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: Install dependencies
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Sync version to electron/package.json
+        run: pnpm run sync-version
+
+      - name: Build CLI
+        run: pnpm run build
+
+      - name: Install electron dependencies
         working-directory: electron
         run: pnpm install --frozen-lockfile
-      - name: Build TypeScript
+
+      - name: Build Electron TypeScript
         working-directory: electron
         run: pnpm run build:ts
+
       - name: Build macOS (x64 + arm64)
         working-directory: electron
         run: pnpm exec electron-builder --mac --x64 --arm64
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v7
         with:
