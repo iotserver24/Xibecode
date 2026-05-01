@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import chalk from 'chalk';
 import { runCommand } from './commands/run.js';
 import { runPrCommand } from './commands/run-pr.js';
 import { chatCommand } from './commands/chat.js';
@@ -10,7 +9,6 @@ import { configCommand } from './commands/config.js';
 import { mcpCommand } from './commands/mcp.js';
 import { diagnosticsCommand } from './commands/diagnostics.js';
 import { skillsCommand } from './commands/skills.js';
-import { startWebUI } from './webui/server.js';
 import dotenv from 'dotenv';
 import { createRequire } from 'module';
 
@@ -73,7 +71,7 @@ program
 // Interactive chat
 program
   .command('chat')
-  .description('Start an interactive chat session with WebUI')
+  .description('Start an interactive chat session')
   .option('-m, --model <model>', 'AI model to use')
   .option('-b, --base-url <url>', 'Custom API base URL')
   .option('-k, --api-key <key>', 'API key (overrides config)')
@@ -82,7 +80,6 @@ program
   .option('--cost-mode <mode>', 'Cost mode: normal or economy', 'normal')
   .option('--theme <theme>', 'UI theme to use')
   .option('--session <id>', 'Resume a specific chat session by id')
-  .option('--no-webui', 'Disable WebUI server (TUI only)')
   .option('--plain', 'Disable Ink UI; print line-by-line output (best for copying)', false)
   .action(chatCommand);
 
@@ -94,44 +91,6 @@ program
   .option('--profile <name>', 'Config profile to use (default: configured default profile)')
   .action((sessionId: string | undefined, options: { profile?: string }) => {
     resumeCommand({ session: sessionId, profile: options.profile });
-  });
-
-// WebUI - Browser-based interface
-program
-  .command('ui')
-  .description('Start the WebUI - browser-based interface with dashboard, visual diff, and more')
-  .option('-p, --port <port>', 'Port to run on (default: 3847)', '3847')
-  .option('-h, --host <host>', 'Host to bind to (default: localhost)', 'localhost')
-  .option('--open', 'Open browser automatically', false)
-  .action(async (options) => {
-    const port = parseInt(options.port, 10);
-    const host = options.host;
-
-    console.log(chalk.hex('#00D4FF').bold('\n  ⚡ XibeCode WebUI\n'));
-    console.log(chalk.dim(`  Starting server on ${host}:${port}...\n`));
-
-    try {
-      const server = await startWebUI({ port, host, workingDir: process.cwd() });
-
-      const url = `http://${host}:${port}`;
-      console.log(chalk.green('  ✓ Server running at: ') + chalk.hex('#00D4FF')(url));
-      console.log(chalk.dim('\n  Press Ctrl+C to stop\n'));
-
-      if (options.open) {
-        const open = (await import('open')).default;
-        await open(url);
-      }
-
-      // Handle graceful shutdown
-      process.on('SIGINT', async () => {
-        console.log(chalk.dim('\n  Shutting down...'));
-        await server.stop();
-        process.exit(0);
-      });
-    } catch (error: any) {
-      console.error(chalk.red('  ✗ Failed to start: ') + error.message);
-      process.exit(1);
-    }
   });
 
 // Configuration
@@ -229,9 +188,8 @@ mcpCmd
   .description('Authenticate with Smithery')
   .action(() => mcpCommand('login', []));
 
-// Launch chat with WebUI if no command provided
+// Launch chat if no command provided
 if (!process.argv.slice(2).length) {
-  // Default action: start interactive chat with WebUI
   chatCommand({});
 } else {
   program.parse();

@@ -1,6 +1,6 @@
 ## Project
 
-- This repo is **XibeCode**, an autonomous AI coding CLI (`xibecode`) plus WebUI.
+- This repo is **XibeCode**, an autonomous AI coding CLI (`xibecode`).
 - Main tasks are driven through `xibecode run` and `xibecode run-pr`.
 
 ## How to use `xibecode run-pr`
@@ -27,7 +27,7 @@
 - On version bumps, update only `package.json` — source files read the version dynamically via `pkg.version`, and `electron/package.json` is synced via `pnpm run sync-version`.
 - Always apply edits directly to files instead of just describing changes.
 - After editing, briefly explain what changed and why (no emojis unless explicitly requested).
-- For releases, prefer a non-interactive sequence: `pnpm run build`, `pnpm run build:webui`, then `git add`, `git commit`, `git push`, and finally `pnpm publish --access public`.
+- For releases, prefer a non-interactive sequence: `pnpm run build`, then `git add`, `git commit`, `git push`, and finally `pnpm publish --access public`.
 - When `git push` is rejected because local is behind remote, use `git pull --rebase origin main`, resolve conflicts (especially in `pnpm-lock.yaml`), then `GIT_EDITOR=true git rebase --continue` and push.
 - Avoid force-push unless the user explicitly requests it; if needed, prefer `--force-with-lease`.
 - Use conventional commit messages like `feat: ...`, `fix: ...`, `chore: ...`.
