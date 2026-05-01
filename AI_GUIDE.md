@@ -24,7 +24,7 @@
 ## User Preferences (how this AI should behave)
 
 - Use **pnpm** for installs and scripts; only fall back to **bun** if pnpm is unavailable; **never use npm** directly.
-- On version bumps, update `package.json`, `electron/package.json`, and any hard-coded version strings in source (like `ui.header(...)` in `src/commands/run.ts` and `src/commands/run-pr.ts`) together.
+- On version bumps, update only `package.json` — source files read the version dynamically via `pkg.version`, and `electron/package.json` is synced via `pnpm run sync-version`.
 - Always apply edits directly to files instead of just describing changes.
 - After editing, briefly explain what changed and why (no emojis unless explicitly requested).
 - For releases, prefer a non-interactive sequence: `pnpm run build`, `pnpm run build:webui`, then `git add`, `git commit`, `git push`, and finally `pnpm publish --access public`.

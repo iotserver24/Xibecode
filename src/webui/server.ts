@@ -11,7 +11,10 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
+import { createRequire } from 'module';
 import { WebSocketServer, WebSocket } from 'ws';
+
+const pkg = createRequire(import.meta.url)('../../package.json');
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
@@ -255,7 +258,7 @@ export class WebUIServer {
     try {
       // Health check
       if (pathname === '/api/health') {
-        sendJSON({ status: 'ok', version: '1.0.2' });
+        sendJSON({ status: 'ok', version: pkg.version });
         return;
       }
 

@@ -1,4 +1,5 @@
 import * as fs from 'fs/promises';
+import { createRequire } from 'module';
 import { EnhancedAgent } from '../core/agent.js';
 import { CodingToolExecutor } from '../core/tools.js';
 import { PluginManager } from '../core/plugins.js';
@@ -8,6 +9,8 @@ import { ConfigManager } from '../utils/config.js';
 import { PlanMode } from '../core/planMode.js';
 import { TodoManager } from '../utils/todoManager.js';
 import { NeuralMemory } from '../core/memory.js';
+
+const pkg = createRequire(import.meta.url)('../../package.json');
 import { SessionMemory } from '../core/session-memory.js';
 import { pruneContext } from '../core/context-pruner.js';
 import { SkillManager } from '../core/skills.js';
@@ -37,7 +40,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   const ui = new EnhancedUI(options.verbose);
   const config = new ConfigManager(options.profile);
 
-  ui.header('1.0.2');
+  ui.header(pkg.version);
 
   // Get API key
   const apiKey = options.apiKey || config.getApiKey();

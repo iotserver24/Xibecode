@@ -1,3 +1,4 @@
+import { createRequire } from 'module';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type {
@@ -8,6 +9,8 @@ import type {
   ReadResourceResult,
   GetPromptResult,
 } from '@modelcontextprotocol/sdk/types.js';
+
+const pkg = createRequire(import.meta.url)('../../package.json');
 import { MCPServerConfig } from '../utils/config.js';
 
 export interface MCPTool extends Tool {
@@ -71,7 +74,7 @@ export class MCPClientManager {
       this.setState(serverName, { state: 'connecting', lastError: undefined });
       const client = new Client({
         name: 'xibecode',
-        version: '1.0.2',
+        version: pkg.version,
       }, {
         capabilities: {},
       });
