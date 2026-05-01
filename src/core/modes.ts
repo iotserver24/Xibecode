@@ -1396,6 +1396,14 @@ export class ModeOrchestrator {
         if (fromConfig.canModify === toConfig.canModify) {
           return { approved: true, requiresConfirmation: false };
         }
+
+        // Allow optional auto-escalation from read-only → write-enabled modes.
+        // This is what enables the agent to request switching from Review/Plan to Agent
+        // without requiring a separate manual confirmation step.
+        if (!fromConfig.canModify && toConfig.canModify && this.policy.allowAutoEscalation) {
+          return { approved: true, requiresConfirmation: false };
+        }
+
         return {
           approved: false,
           requiresConfirmation: true,
