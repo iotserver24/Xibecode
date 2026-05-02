@@ -312,6 +312,14 @@ export class EnhancedAgent extends EventEmitter {
   /** Tracks consecutive completion-gate rejections to avoid infinite nudge loops. */
   private completionGateRetries = 0;
   private static readonly MAX_COMPLETION_GATE_RETRIES = 2;
+  /** Settings manager for multi-source config */
+  private settingsManager?: import('./settings/settings.js').SettingsManager;
+  /** Permission rule manager for allow/deny/ask rules */
+  private ruleManager?: import('./permission-rules/permission-rules.js').PermissionRuleManager;
+  /** Hooks manager for lifecycle events */
+  private hooksManager?: import('./hooks/hooks.js').HooksManager;
+  /** Auto-memory manager for persistent project memories */
+  private autoMemManager?: import('./auto-memory/auto-memory.js').AutoMemoryManager;
 
   private isAbortError(err: unknown): boolean {
     if (!err || typeof err !== 'object') return false;
@@ -366,6 +374,22 @@ export class EnhancedAgent extends EventEmitter {
 
   private estimateConversationTokens(): number {
     return this.messages.reduce((sum, message) => sum + this.estimateMessageTokens(message), 0);
+  }
+
+  /** Get the context window size for the current model. */
+  private getContextWindowForModel(): number {
+    const model = this.config.model.toLowerCase();
+    if (model.includes('claude-3-5') || model.includes('claude-3.5')) return 200_000;
+    if (model.includes('claude-4') || model.includes('claude-sonnet-4')) return 200_000;
+    if (model.includes('claude-3-opus')) return 200_000;
+    if (model.includes('claude-3-haiku')) return 200_000;
+    if (model.includes('gpt-4o') || model.includes('gpt-4-turbo')) return 128_000;
+    if (model.includes('gpt-4')) return 8_192;
+    if (model.includes('o1') || model.includes('o3')) return 128_000;
+    if (model.includes('deepseek')) return 128_000;
+    if (model.includes('qwen')) return 128_000;
+    // Default safe fallback
+    return 120_000;
   }
 
   private hasRecentGroundedEvidence(windowMs = 5 * 60 * 1000): boolean {
@@ -497,6 +521,14 @@ export class EnhancedAgent extends EventEmitter {
     this.memory = new NeuralMemory();
     this.memory.init().catch(console.error);
 
+    // Initialize settings, permission rules, hooks, and auto-memory
+    this.settingsManager = new (require('./settings/settings.js') as any).SettingsManager();
+    this.ruleManager = new (require('./permission-rules/permission-rules.js') as any).PermissionRuleManager(this.settingsManager);
+    this.hooksManager = new (require('./hooks/hooks.js') as any).HooksManager(this.settingsManager);
+    this.autoMemManager = new (require('./auto-memory/auto-memory.js') as any).AutoMemoryManager({ cwd: process.cwd() });
+
+    // Load settings and hooks asynchronously (non-blocking)
+    this.initializeFeatures().catch(() => { /* non-fatal */ });
   }
 
   detectProvider(model: string): ProviderType {
@@ -511,6 +543,41 @@ export class EnhancedAgent extends EventEmitter {
     if (m.startsWith('llama') || m.startsWith('mixtral')) return 'groq';
     if (m.includes('/')) return 'openrouter';
     return 'openai';
+  }
+
+  /** Initialize settings, permission rules, hooks, and auto-memory from config files. */
+  private async initializeFeatures(): Promise<void> {
+    try {
+      if (this.settingsManager) {
+        const settings = await this.settingsManager.getSettings();
+
+        // Load permission rules
+        if (this.ruleManager) {
+          this.ruleManager.loadFromSettings(settings);
+        }
+
+        // Load hooks
+        if (this.hooksManager) {
+          this.hooksManager.loadFromSettings(settings);
+          await this.hooksManager.execute('SessionStart', {
+            event: 'SessionStart',
+            sessionId: undefined,
+          });
+        }
+
+        // Configure auto-memory from settings
+        if (this.autoMemManager && settings.autoMemoryEnabled !== undefined) {
+          this.autoMemManager.updateConfig({ enabled: settings.autoMemoryEnabled });
+        }
+
+        // Initialize auto-memory directory
+        if (this.autoMemManager) {
+          await this.autoMemManager.initialize();
+        }
+      }
+    } catch {
+      /* non-fatal: features degrade gracefully */
+    }
   }
 
   /** Multi-model routing: use planning model for strategic tier, execution model for tactical/operational when set. */
@@ -696,31 +763,52 @@ export class EnhancedAgent extends EventEmitter {
           }
         }
 
-        // Auto-compact by estimated token budget (OpenClaude-style), not raw message count.
-        const compactionThreshold = 120_000;
-        const compactionTarget = 90_000;
+        // Auto-compact: first try microcompact, then full compaction if needed
+        const contextWindow = this.getContextWindowForModel();
+        const compactThreshold = this.settingsManager
+          ? (await this.settingsManager.getSettings()).autoCompactThreshold ?? 13000
+          : 13000;
         let estimatedTokens = this.estimateConversationTokens();
-        if (estimatedTokens > compactionThreshold) {
-          const beforeCount = this.messages.length;
-          const compacted = compactConversation(this.messages, 24);
-          this.messages = compacted.messages;
-          estimatedTokens = this.estimateConversationTokens();
-          this.emit('warning', {
-            message:
-              `${compacted.summaryNotice || 'Auto-compacted conversation to save context'} ` +
-              `(estimated tokens: ${estimatedTokens})`,
+
+        // Try microcompact first (lighter weight)
+        if (estimatedTokens > contextWindow - compactThreshold) {
+          const { microcompact, resetMicrocompactCircuitBreaker } = await import('./microcompact.js');
+          const mcResult = microcompact({
+            messages: this.messages,
+            tokenCount: estimatedTokens,
+            contextWindow,
+            compactThreshold,
           });
 
-          // If still above target, compact once more with tighter window.
-          if (estimatedTokens > compactionTarget && this.messages.length < beforeCount) {
-            const compactedAgain = compactConversation(this.messages, 16);
-            this.messages = compactedAgain.messages;
+          if (mcResult.strippedCount > 0 || mcResult.ephemeralCount > 0) {
+            this.messages = mcResult.messages;
+            estimatedTokens = this.estimateConversationTokens();
+            this.emit('warning', {
+              message: `Microcompact: stripped ${mcResult.strippedCount}, marked ${mcResult.ephemeralCount} ephemeral. Tokens: ${estimatedTokens}`,
+            });
+          }
+
+          // If microcompact says we need full compaction, do it
+          if (mcResult.triggeredFullCompact) {
+            const beforeCount = this.messages.length;
+            const compacted = compactConversation(this.messages, 24);
+            this.messages = compacted.messages;
             estimatedTokens = this.estimateConversationTokens();
             this.emit('warning', {
               message:
-                `${compactedAgain.summaryNotice || 'Second compaction pass applied'} ` +
+                `${compacted.summaryNotice || 'Auto-compacted conversation to save context'} ` +
                 `(estimated tokens: ${estimatedTokens})`,
             });
+
+            // Fire PreCompact/PostCompact hooks
+            if (this.hooksManager) {
+              try {
+                await this.hooksManager.execute('PostCompact', {
+                  event: 'PostCompact',
+                  compactTrigger: 'auto',
+                });
+              } catch { /* non-fatal */ }
+            }
           }
         }
 
@@ -877,6 +965,9 @@ export class EnhancedAgent extends EventEmitter {
             toolCalls: this.toolCallCount,
             filesChanged: this.filesChanged.size,
           });
+
+          // Fire hooks and memory extraction on completion
+          this.onAgentComplete().catch(() => { /* non-fatal */ });
           break;
         }
 
@@ -899,6 +990,20 @@ export class EnhancedAgent extends EventEmitter {
             content: payload,
             ...(update.success ? {} : { is_error: true as const }),
           });
+
+          // PostToolUse hook
+          if (this.hooksManager) {
+            try {
+              await this.hooksManager.execute('PostToolUse', {
+                event: 'PostToolUse',
+                toolName: update.toolUse.name,
+                toolInput: update.toolUse.input as Record<string, unknown>,
+                toolResult: payload,
+              });
+            } catch {
+              /* non-fatal */
+            }
+          }
         }
 
         // Add injected messages if any exist
@@ -968,6 +1073,49 @@ export class EnhancedAgent extends EventEmitter {
       index: index + 1,
     });
     this.recordEvidence('tool_call', toolUse.name);
+
+    // PreToolUse hook: allow/deny tool execution
+    if (this.hooksManager) {
+      try {
+        const hookResult = await this.hooksManager.execute('PreToolUse', {
+          event: 'PreToolUse',
+          toolName: toolUse.name,
+          toolInput: toolUse.input as Record<string, unknown>,
+        });
+        if (hookResult.decision === 'block') {
+          this.emit('warning', { message: `PreToolUse hook blocked: ${hookResult.reason || 'no reason'}` });
+          return {
+            toolUse,
+            index,
+            result: `Blocked by PreToolUse hook: ${hookResult.reason || 'no reason provided'}`,
+            success: false,
+          };
+        }
+      } catch {
+        /* non-fatal */
+      }
+    }
+
+    // Permission rule check
+    if (this.ruleManager) {
+      try {
+        const decision = this.ruleManager.toPermissionDecision(
+          { toolName: toolUse.name, input: toolUse.input as Record<string, unknown> },
+          this.permissionManager.getContext().permissionMode,
+        );
+        if (!decision.allowed && !decision.requiresApproval) {
+          this.emit('warning', { message: `Permission rule denied: ${decision.reason}` });
+          return {
+            toolUse,
+            index,
+            result: `Denied by permission rule: ${decision.reason}`,
+            success: false,
+          };
+        }
+      } catch {
+        /* non-fatal */
+      }
+    }
 
     try {
       let result = await toolExecutor.execute(toolUse.name, toolUse.input);
@@ -1989,5 +2137,66 @@ ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
    */
   getActiveSkill(): string | null {
     return this.activeSkill?.name || null;
+  }
+
+  /**
+   * Called when the agent completes a run. Fires hooks and extracts memories.
+   */
+  private async onAgentComplete(): Promise<void> {
+    // SessionEnd hook
+    if (this.hooksManager) {
+      try {
+        await this.hooksManager.execute('SessionEnd', {
+          event: 'SessionEnd',
+          sessionId: undefined,
+        });
+      } catch {
+        /* non-fatal */
+      }
+    }
+
+    // Auto-memory extraction
+    if (this.autoMemManager) {
+      try {
+        await this.autoMemManager.extractFromTurn(this.messages);
+      } catch {
+        /* non-fatal */
+      }
+
+      // Maybe run dream consolidation
+      try {
+        await this.autoMemManager.maybeDream();
+      } catch {
+        /* non-fatal */
+      }
+    }
+  }
+
+  /**
+   * Get the settings manager (for external configuration).
+   */
+  getSettingsManager(): import('./settings/settings.js').SettingsManager | undefined {
+    return this.settingsManager;
+  }
+
+  /**
+   * Get the hooks manager (for external hook registration).
+   */
+  getHooksManager(): import('./hooks/hooks.js').HooksManager | undefined {
+    return this.hooksManager;
+  }
+
+  /**
+   * Get the auto-memory manager (for external memory access).
+   */
+  getAutoMemoryManager(): import('./auto-memory/auto-memory.js').AutoMemoryManager | undefined {
+    return this.autoMemManager;
+  }
+
+  /**
+   * Get the permission rule manager (for external rule management).
+   */
+  getRuleManager(): import('./permission-rules/permission-rules.js').PermissionRuleManager | undefined {
+    return this.ruleManager;
   }
 }
