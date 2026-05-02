@@ -309,6 +309,9 @@ export class EnhancedAgent extends EventEmitter {
   private permissionManager: PermissionManager;
   private toolOrchestrator: ToolOrchestrator;
   private evidenceTrail: Array<{ kind: string; detail: string; ts: number }> = [];
+  /** Tracks consecutive completion-gate rejections to avoid infinite nudge loops. */
+  private completionGateRetries = 0;
+  private static readonly MAX_COMPLETION_GATE_RETRIES = 2;
 
   private isAbortError(err: unknown): boolean {
     if (!err || typeof err !== 'object') return false;
@@ -372,8 +375,10 @@ export class EnhancedAgent extends EventEmitter {
 
   private shouldEnforceCompletionEvidence(): boolean {
     if (this.config.completionEvidenceMode === 'off') return false;
-    // Allow single-turn informational answers without tools.
-    if (this.toolCallCount === 0 && this.filesChanged.size === 0 && this.iterationCount <= 1) {
+    // Allow conversational/informational answers with no file mutations.
+    // Even if read-only tools were used (git status, list_directory, etc.),
+    // if no files were changed there's nothing to verify evidence for.
+    if (this.filesChanged.size === 0 && this.iterationCount <= 2) {
       return false;
     }
     return true;
@@ -530,6 +535,7 @@ export class EnhancedAgent extends EventEmitter {
     this.toolCallCount = 0;
     this.loopDetector.reset();
     this.evidenceTrail = [];
+    this.completionGateRetries = 0;
 
     this.autoMemoryMarkdownSection = '';
     if (isAutoMemoryLoadEnabled()) {
@@ -826,19 +832,27 @@ export class EnhancedAgent extends EventEmitter {
             const needsTaskComplete =
               this.config.completionEvidenceMode === 'strict' || this.toolCallCount > 0;
             if ((needsTaskComplete && !hasTaskComplete) || !hasEvidence) {
-              const reason = !hasEvidence
-                ? 'no recent grounded evidence'
-                : 'missing [[TASK_COMPLETE | summary=...]]';
-              this.emit('warning', {
-                message: `Completion evidence gate blocked finalize: ${reason}.`,
-              });
-              this.messages.push({
-                role: 'user',
-                content:
-                  '[SYSTEM] Completion gate: before finishing, provide grounded evidence from tool results/tests and then emit ' +
-                  '[[TASK_COMPLETE | summary=<brief summary> | evidence=<paths/tests/tool proof>]]. Continue working until this is satisfied.',
-              });
-              continue;
+              if (this.completionGateRetries >= EnhancedAgent.MAX_COMPLETION_GATE_RETRIES) {
+                // Give up nudging — finalize to avoid infinite loop
+                this.emit('warning', {
+                  message: `Completion evidence gate gave up after ${this.completionGateRetries} nudges; finalizing anyway.`,
+                });
+              } else {
+                const reason = !hasEvidence
+                  ? 'no recent grounded evidence'
+                  : 'missing [[TASK_COMPLETE | summary=...]]';
+                this.completionGateRetries++;
+                this.emit('warning', {
+                  message: `Completion evidence gate blocked finalize: ${reason}.`,
+                });
+                this.messages.push({
+                  role: 'user',
+                  content:
+                    '[SYSTEM] Completion gate: before finishing, provide grounded evidence from tool results/tests and then emit ' +
+                    '[[TASK_COMPLETE | summary=<brief summary> | evidence=<paths/tests/tool proof>]]. Continue working until this is satisfied.',
+                });
+                continue;
+              }
             }
           }
           if (

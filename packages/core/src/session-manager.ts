@@ -26,32 +26,66 @@ export interface ChatSession extends SessionMetadata {
   stats?: SessionStats;
 }
 
+const MAX_SANITIZED_LENGTH = 60;
+
+/**
+ * Convert a directory path into a filesystem-safe directory name.
+ * Mirrors OpenClaude's sanitizePath pattern: non-alphanumeric chars become `-`,
+ * and long paths are truncated with a hash suffix to stay unique.
+ */
+function sanitizePath(dirPath: string): string {
+  const sanitized = dirPath.replace(/[^a-zA-Z0-9]/g, '-');
+  if (sanitized.length <= MAX_SANITIZED_LENGTH) {
+    return sanitized;
+  }
+  // Simple hash for when Bun is not available
+  let hash = 0;
+  for (let i = 0; i < dirPath.length; i++) {
+    const chr = dirPath.charCodeAt(i);
+    hash = ((hash << 5) - hash + chr) | 0;
+  }
+  return `${sanitized.slice(0, MAX_SANITIZED_LENGTH)}-${Math.abs(hash).toString(36)}`;
+}
+
 /**
  * JSON-based session persistence for chat conversations.
  *
  * Sessions are stored under:
- *   ~/.xibecode/sessions/<session-id>.json
+ *   ~/.xibecode/projects/<sanitized-cwd>/<session-id>.json
+ *
+ * This mirrors OpenClaude's per-project directory layout, so sessions
+ * from different working directories are naturally separated.
  */
 export class SessionManager {
-  private readonly sessionsDir: string;
+  private readonly baseDir: string;
 
   constructor(baseDir?: string) {
-    const defaultDir = path.join(os.homedir(), '.xibecode', 'sessions');
-    this.sessionsDir = baseDir || defaultDir;
+    const defaultDir = path.join(os.homedir(), '.xibecode');
+    this.baseDir = baseDir || defaultDir;
+  }
+
+  /** Root directory for all project-scoped sessions. */
+  private getProjectsDir(): string {
+    return path.join(this.baseDir, 'projects');
+  }
+
+  /** Directory for sessions belonging to a specific project (cwd). */
+  private getProjectDir(cwd: string): string {
+    return path.join(this.getProjectsDir(), sanitizePath(cwd));
   }
 
   /**
-   * Ensure the sessions directory exists.
+   * Ensure the project directory exists.
    */
-  private async ensureDir(): Promise<void> {
-    await fs.mkdir(this.sessionsDir, { recursive: true });
+  private async ensureProjectDir(cwd: string): Promise<void> {
+    await fs.mkdir(this.getProjectDir(cwd), { recursive: true });
   }
 
   /**
-   * Generate a stable path for a given session id.
+   * Generate a stable path for a given session id within its project dir.
    */
-  private getSessionPath(id: string): string {
-    return path.join(this.sessionsDir, `${id}.json`);
+  private getSessionPath(id: string, cwd: string): string {
+    return path.join(this.getProjectDir(cwd), `${id}.json`);
   }
 
   /**
@@ -63,7 +97,8 @@ export class SessionManager {
     cwd?: string;
     parentSessionId?: string;
   }): Promise<ChatSession> {
-    await this.ensureDir();
+    const cwd = options.cwd || process.cwd();
+    await this.ensureProjectDir(cwd);
 
     const now = new Date().toISOString();
     const id = this.generateId();
@@ -72,7 +107,7 @@ export class SessionManager {
       id,
       title: options.title?.trim() || 'Untitled Session',
       model: options.model,
-      cwd: options.cwd || process.cwd(),
+      cwd,
       parentSessionId: options.parentSessionId,
       created: now,
       updated: now,
@@ -85,15 +120,32 @@ export class SessionManager {
 
   /**
    * Load a full session by id.
+   * Searches across all project directories since the cwd is not always known.
    */
   async loadSession(id: string): Promise<ChatSession | null> {
+    // Try to find the session across all project directories
+    const projectsDir = this.getProjectsDir();
+    let projectDirs: string[];
     try {
-      const raw = await fs.readFile(this.getSessionPath(id), 'utf-8');
-      const data = JSON.parse(raw) as ChatSession;
-      return recoverConversation(data).session;
+      projectDirs = (await fs.readdir(projectsDir, { withFileTypes: true }))
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name);
     } catch {
       return null;
     }
+
+    for (const projectDir of projectDirs) {
+      const filePath = path.join(projectsDir, projectDir, `${id}.json`);
+      try {
+        const raw = await fs.readFile(filePath, 'utf-8');
+        const data = JSON.parse(raw) as ChatSession;
+        return recoverConversation(data).session;
+      } catch {
+        // Not in this directory, continue searching
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -156,29 +208,79 @@ export class SessionManager {
   }
 
   /**
-   * List all sessions (metadata only), sorted by most recently updated.
+   * List sessions for a specific project directory, sorted by most recently updated.
+   * If no cwd is provided, lists sessions across all projects.
    */
-  async listSessions(): Promise<SessionMetadata[]> {
-    await this.ensureDir();
+  async listSessions(cwd?: string): Promise<SessionMetadata[]> {
+    const metas: SessionMetadata[] = [];
 
-    let files: string[];
-    try {
-      files = await fs.readdir(this.sessionsDir);
-    } catch {
-      return [];
+    if (cwd) {
+      // List sessions for a specific project only
+      await this.collectSessionsFromDir(this.getProjectDir(cwd), metas);
+    } else {
+      // List sessions across all projects
+      const projectsDir = this.getProjectsDir();
+      let projectDirs: string[];
+      try {
+        projectDirs = (await fs.readdir(projectsDir, { withFileTypes: true }))
+          .filter((d) => d.isDirectory())
+          .map((d) => d.name);
+      } catch {
+        return [];
+      }
+
+      for (const projectDir of projectDirs) {
+        await this.collectSessionsFromDir(path.join(projectsDir, projectDir), metas);
+      }
     }
 
-    const metas: SessionMetadata[] = [];
+    metas.sort((a, b) => b.updated.localeCompare(a.updated));
+    return metas;
+  }
+
+  /**
+   * Delete a session permanently.
+   */
+  async deleteSession(id: string): Promise<boolean> {
+    const session = await this.loadSession(id);
+    if (!session) return false;
+
+    try {
+      await fs.unlink(this.getSessionPath(id, session.cwd));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Utility for callers that want to know where sessions live for a given project.
+   */
+  getSessionsDirectory(cwd?: string): string {
+    if (cwd) return this.getProjectDir(cwd);
+    return this.getProjectsDir();
+  }
+
+  // ─── Internal helpers ─────────────────────────────────────────
+
+  private async collectSessionsFromDir(dir: string, metas: SessionMetadata[]): Promise<void> {
+    let files: string[];
+    try {
+      files = await fs.readdir(dir);
+    } catch {
+      return;
+    }
+
     const jsonFiles = files.filter((file) => file.endsWith('.json'));
 
-    // Bounded concurrency (chunks of 20) to prevent EMFILE errors while speeding up IO
+    // Bounded concurrency (chunks of 20) to prevent EMFILE errors
     const CONCURRENCY_LIMIT = 20;
     for (let i = 0; i < jsonFiles.length; i += CONCURRENCY_LIMIT) {
       const chunk = jsonFiles.slice(i, i + CONCURRENCY_LIMIT);
 
       await Promise.all(
         chunk.map(async (file) => {
-          const fullPath = path.join(this.sessionsDir, file);
+          const fullPath = path.join(dir, file);
           try {
             const raw = await fs.readFile(fullPath, 'utf-8');
             const data = JSON.parse(raw) as ChatSession;
@@ -190,35 +292,11 @@ export class SessionManager {
         })
       );
     }
-
-    metas.sort((a, b) => b.updated.localeCompare(a.updated));
-    return metas;
   }
-
-  /**
-   * Delete a session permanently.
-   */
-  async deleteSession(id: string): Promise<boolean> {
-    try {
-      await fs.unlink(this.getSessionPath(id));
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Utility for callers that want to know where sessions live.
-   */
-  getSessionsDirectory(): string {
-    return this.sessionsDir;
-  }
-
-  // ─── Internal helpers ─────────────────────────────────────────
 
   private async writeSessionFile(session: ChatSession): Promise<void> {
-    await this.ensureDir();
-    const filePath = this.getSessionPath(session.id);
+    await this.ensureProjectDir(session.cwd);
+    const filePath = this.getSessionPath(session.id, session.cwd);
     const payload = JSON.stringify(session, null, 2);
     await fs.writeFile(filePath, payload, 'utf-8');
   }
@@ -264,4 +342,3 @@ export class SessionManager {
     return this.deriveTitleFromText(text, 'Untitled Session');
   }
 }
-
