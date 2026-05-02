@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 
 interface Props {
   toolName: string;
@@ -7,7 +7,7 @@ interface Props {
   timestamp: number;
 }
 
-export default function ToolCallCard({ toolName, toolInput, toolOutput }: Props) {
+const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutput }: Props) {
   const [open, setOpen] = useState(false);
   const done = toolOutput !== undefined;
   const inputStr = toolInput ? (typeof toolInput === 'string' ? toolInput : JSON.stringify(toolInput, null, 2)) : '';
@@ -42,4 +42,6 @@ export default function ToolCallCard({ toolName, toolInput, toolOutput }: Props)
       )}
     </div>
   );
-}
+});
+
+export default ToolCallCard;
