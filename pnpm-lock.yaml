@@ -76,8 +76,8 @@ importers:
         specifier: ^19.2.4
         version: 19.2.5
       xibecode-core:
-        specifier: workspace:*
-        version: link:../core
+        specifier: ^1.0.7
+        version: 1.0.7
     devDependencies:
       '@types/inquirer':
         specifier: ^9.0.9
@@ -130,6 +130,9 @@ importers:
       ts-morph:
         specifier: ^27.0.2
         version: 27.0.2
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
       zod:
         specifier: ^4.3.6
         version: 4.4.1
@@ -140,9 +143,6 @@ importers:
       '@types/node':
         specifier: ^20.10.0
         version: 20.19.39
-      typescript:
-        specifier: ^5.3.3
-        version: 5.9.3
       vitest:
         specifier: ^1.6.1
         version: 1.6.1(@types/node@20.19.39)(lightningcss@1.32.0)
@@ -3915,6 +3915,10 @@ packages:
 
   xibecode-core@1.0.5:
     resolution: {integrity: sha512-1CWOLh7roFMq0q7KDhRr9FMpdomsP4qa5FbeniBfB2gOX/Wg/VOClQtmyN2WkjynsyLFmgVYdhq0p03o12gDFQ==}
+    engines: {node: '>=18.0.0'}
+
+  xibecode-core@1.0.7:
+    resolution: {integrity: sha512-XvBc4E8iHKHWGuI51E7VVmcySntR0SWyjAfcLglF+Kk7LFUtRLvEe/wplCfRoCG3yehYhQX0H8aOQEpsllRNCw==}
     engines: {node: '>=18.0.0'}
 
   xmlbuilder@15.1.1:
@@ -7955,6 +7959,24 @@ snapshots:
       open: 10.2.0
       strip-ansi: 7.2.0
       ts-morph: 27.0.2
+      zod: 4.4.1
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - supports-color
+
+  xibecode-core@1.0.7:
+    dependencies:
+      '@anthropic-ai/sdk': 0.78.0(zod@4.4.1)
+      '@modelcontextprotocol/sdk': 1.29.0(zod@4.4.1)
+      diff: 5.2.2
+      dotenv: 16.6.1
+      fast-glob: 3.3.3
+      gray-matter: 4.0.3
+      node-fetch: 3.3.2
+      open: 10.2.0
+      strip-ansi: 7.2.0
+      ts-morph: 27.0.2
+      typescript: 5.9.3
       zod: 4.4.1
     transitivePeerDependencies:
       - '@cfworker/json-schema'
