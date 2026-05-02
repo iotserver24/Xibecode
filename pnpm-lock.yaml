@@ -31,8 +31,8 @@ importers:
   packages/cli:
     dependencies:
       '@anthropic-ai/sdk':
-        specifier: ^0.78.0
-        version: 0.78.0(zod@4.4.1)
+        specifier: ^0.92.0
+        version: 0.92.0(zod@4.4.1)
       chalk:
         specifier: ^4.1.2
         version: 4.1.2
@@ -101,11 +101,11 @@ importers:
   packages/core:
     dependencies:
       '@anthropic-ai/sdk':
-        specifier: ^0.78.0
-        version: 0.78.0(zod@4.4.1)
+        specifier: ^0.92.0
+        version: 0.92.0(zod@4.4.2)
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
-        version: 1.29.0(zod@4.4.1)
+        version: 1.29.0(zod@4.4.2)
       diff:
         specifier: ^5.1.0
         version: 5.2.2
@@ -134,8 +134,8 @@ importers:
         specifier: ^5.3.3
         version: 5.9.3
       zod:
-        specifier: ^4.3.6
-        version: 4.4.1
+        specifier: ^4.4.2
+        version: 4.4.2
     devDependencies:
       '@types/diff':
         specifier: ^5.0.8
@@ -226,6 +226,15 @@ packages:
 
   '@anthropic-ai/sdk@0.78.0':
     resolution: {integrity: sha512-PzQhR715td/m1UaaN5hHXjYB8Gl2lF9UVhrrGrZeysiF6Rb74Wc9GCB8hzLdzmQtBd1qe89F9OptgB9Za1Ib5w==}
+    hasBin: true
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
+
+  '@anthropic-ai/sdk@0.92.0':
+    resolution: {integrity: sha512-l653JFC83wCglH8H83t1xpgDurCyPyslYW1maPRdCsfuNuGbLvQjQ81sWd3Go3LWRm0jNspzAhuqAYV8r9joSw==}
     hasBin: true
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
@@ -3977,6 +3986,9 @@ packages:
   zod@4.4.1:
     resolution: {integrity: sha512-a6ENMBBGZBsnlSebQ/eKCguSBeGKSf4O7BPnqVPmYGtpBYI7VSqoVqw+QcB7kPRjbqPwhYTpFbVj/RqNz/CT0Q==}
 
+  zod@4.4.2:
+    resolution: {integrity: sha512-IynmDyxsEsb9RKzO3J9+4SxXnl2FTFSzNBaKKaMV6tsSk0rw9gYw9gs+JFCq/qk2LCZ78KDwyj+Z289TijSkUw==}
+
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
@@ -3996,6 +4008,24 @@ snapshots:
       json-schema-to-ts: 3.1.1
     optionalDependencies:
       zod: 4.4.1
+
+  '@anthropic-ai/sdk@0.78.0(zod@4.4.2)':
+    dependencies:
+      json-schema-to-ts: 3.1.1
+    optionalDependencies:
+      zod: 4.4.2
+
+  '@anthropic-ai/sdk@0.92.0(zod@4.4.1)':
+    dependencies:
+      json-schema-to-ts: 3.1.1
+    optionalDependencies:
+      zod: 4.4.1
+
+  '@anthropic-ai/sdk@0.92.0(zod@4.4.2)':
+    dependencies:
+      json-schema-to-ts: 3.1.1
+    optionalDependencies:
+      zod: 4.4.2
 
   '@babel/code-frame@7.29.0':
     dependencies:
@@ -4635,6 +4665,28 @@ snapshots:
       raw-body: 3.0.2
       zod: 4.4.1
       zod-to-json-schema: 3.25.2(zod@4.4.1)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@modelcontextprotocol/sdk@1.29.0(zod@4.4.2)':
+    dependencies:
+      '@hono/node-server': 1.19.10(hono@4.12.4)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.0.8
+      express: 5.2.1
+      express-rate-limit: 8.2.2(express@5.2.1)
+      hono: 4.12.4
+      jose: 6.2.3
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.1
+      raw-body: 3.0.2
+      zod: 4.4.2
+      zod-to-json-schema: 3.25.2(zod@4.4.2)
     transitivePeerDependencies:
       - supports-color
 
@@ -7949,8 +8001,8 @@ snapshots:
 
   xibecode-core@1.0.5:
     dependencies:
-      '@anthropic-ai/sdk': 0.78.0(zod@4.4.1)
-      '@modelcontextprotocol/sdk': 1.29.0(zod@4.4.1)
+      '@anthropic-ai/sdk': 0.78.0(zod@4.4.2)
+      '@modelcontextprotocol/sdk': 1.29.0(zod@4.4.2)
       diff: 5.2.2
       dotenv: 16.6.1
       fast-glob: 3.3.3
@@ -7959,7 +8011,7 @@ snapshots:
       open: 10.2.0
       strip-ansi: 7.2.0
       ts-morph: 27.0.2
-      zod: 4.4.1
+      zod: 4.4.2
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - supports-color
@@ -8031,6 +8083,12 @@ snapshots:
     dependencies:
       zod: 4.4.1
 
+  zod-to-json-schema@3.25.2(zod@4.4.2):
+    dependencies:
+      zod: 4.4.2
+
   zod@4.4.1: {}
+
+  zod@4.4.2: {}
 
   zwitch@2.0.4: {}
