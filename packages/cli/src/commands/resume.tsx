@@ -146,16 +146,16 @@ export async function resumeCommand(options: ResumeOptions): Promise<void> {
     return;
   }
 
-  const sessions = await sessionManager.listSessions();
+  const cwdSessions = await sessionManager.listSessions(process.cwd());
 
-  if (sessions.length === 0) {
-    console.log('No sessions found to resume.');
+  if (cwdSessions.length === 0) {
+    console.log(`No sessions found in ${process.cwd()}.`);
     console.log('\nStart a new session with: xibecode chat');
     process.exit(0);
     return;
   }
 
-  const selectedId = await showSessionPicker(sessions);
+  const selectedId = await showSessionPicker(cwdSessions);
 
   if (!selectedId) {
     console.log('Resume cancelled.');

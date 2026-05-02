@@ -76,8 +76,8 @@ importers:
         specifier: ^19.2.4
         version: 19.2.5
       xibecode-core:
-        specifier: ^1.0.8
-        version: 1.0.8
+        specifier: ^1.0.9
+        version: 1.0.9
     devDependencies:
       '@types/inquirer':
         specifier: ^9.0.9
@@ -3917,8 +3917,8 @@ packages:
     resolution: {integrity: sha512-1CWOLh7roFMq0q7KDhRr9FMpdomsP4qa5FbeniBfB2gOX/Wg/VOClQtmyN2WkjynsyLFmgVYdhq0p03o12gDFQ==}
     engines: {node: '>=18.0.0'}
 
-  xibecode-core@1.0.8:
-    resolution: {integrity: sha512-GAgVQ+A1uej+w+VqS6wi0O5JsoSFiTYG2buAxiWf/JqgBx0i18WqmQK6ujhs1Yb5JA/OPoO4lOTwvkfDso5uow==}
+  xibecode-core@1.0.9:
+    resolution: {integrity: sha512-YKoR/IUM+Qi5xi0eqKx3U2IPO8DkE7QCcM8uaax4vBTvy5QqOS8MOn9T494vJAJmaoYLbRB2weS2QatJoruGpA==}
     engines: {node: '>=18.0.0'}
 
   xmlbuilder@15.1.1:
@@ -7964,7 +7964,7 @@ snapshots:
       - '@cfworker/json-schema'
       - supports-color
 
-  xibecode-core@1.0.8:
+  xibecode-core@1.0.9:
     dependencies:
       '@anthropic-ai/sdk': 0.78.0(zod@4.4.1)
       '@modelcontextprotocol/sdk': 1.29.0(zod@4.4.1)
