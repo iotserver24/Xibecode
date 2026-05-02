@@ -80,6 +80,33 @@ export { SwarmOrchestrator, type SubtaskResult, DEFAULT_SWARM_MAX_PARALLEL } fro
 export { type PermissionMode, type ApprovalScope, type ToolPermissionContext, type ToolPermissionDecision, PermissionManager } from './permissions.js';
 export { PermissionStore } from './permission-store.js';
 
+// ─── Settings ──────────────────────────────────────────────────
+export { SettingsManager, type SettingsManagerOptions } from './settings/settings.js';
+export { type SettingsSchema, type SettingsSource, type SettingsSourceEntry, type PermissionSettings, type HookEvent as SettingsHookEvent, type HookMatcher, type HookConfig as SettingsHookConfig, type CommandHook, type PromptHook, type AgentHook, type HttpHook } from './settings/settings-types.js';
+export { mergeSettings, mergeSettingsStack } from './settings/settings-merge.js';
+
+// ─── Permission Rules ──────────────────────────────────────────
+export { PermissionRuleManager, type RuleEvaluationResult } from './permission-rules/permission-rules.js';
+export { parseRule, patternToRegex, type ParsedRule } from './permission-rules/rule-parser.js';
+export { evaluateRules, findMatchingRule, matchRule, parseRulesFromStrings, type PermissionRule, type RuleBehavior, type ToolCallInfo, type MatchResult } from './permission-rules/rule-matcher.js';
+
+// ─── Hooks ─────────────────────────────────────────────────────
+export { HooksManager } from './hooks/hooks.js';
+export { executeHook } from './hooks/hook-executor.js';
+export { validateHookConfig, validateHookMatcher, validateHooksConfig } from './hooks/hook-schema.js';
+export { type HookEvent, type HookConfig, type HookContext, type HookResult, type HookMatcher as HookMatcherType, type CommandHookConfig, type PromptHookConfig, type AgentHookConfig, type HttpHookConfig, type FunctionHookConfig, type RegisteredHook, type BaseHookConfig } from './hooks/hook-types.js';
+
+// ─── Auto-Memory ───────────────────────────────────────────────
+export { AutoMemoryManager } from './auto-memory/auto-memory.js';
+export { scanMemories, getMemoryDir, getMemoryEntrypoint, ensureMemoryDir, parseFrontmatter, serializeMemory } from './auto-memory/memory-scan.js';
+export { findRelevantMemories, formatMemoriesForContext as formatAutoMemoriesForContext } from './auto-memory/find-relevant.js';
+export { extractMemoriesFromTurn, writeExtractedMemories } from './auto-memory/extract-memories.js';
+export { runDreamConsolidation, shouldRunDream } from './auto-memory/dream.js';
+export { type AutoMemoryConfig, type MemoryFile, type MemoryFrontmatter, type MemoryType, type ExtractedMemory, type DreamConsolidationResult } from './auto-memory/memory-types.js';
+
+// ─── Microcompact ──────────────────────────────────────────────
+export { microcompact, estimateTokenCount, shouldAutoCompact, resetMicrocompactCircuitBreaker, type MicrocompactResult, type MicrocompactOptions } from './microcompact.js';
+
 // ─── History ───────────────────────────────────────────────────
 export { HistoryManager, type HistoryMessage, type SavedConversation, type ConversationSummary } from './history-manager.js';
 
