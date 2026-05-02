@@ -98,10 +98,22 @@ export class SessionManager {
 
   /**
    * Save an existing session (updates timestamp automatically).
+   * If the title is still the default placeholder, derives it from the
+   * first user message so sessions are never left unnamed.
    */
   async saveSession(session: ChatSession): Promise<void> {
+    let title = session.title;
+    if ((!title || title === 'Untitled Session') && session.messages.length > 0) {
+      const firstUserMsg = session.messages.find((m) => m.role === 'user');
+      if (firstUserMsg) {
+        const derived = this.deriveTitleFromMessage(firstUserMsg);
+        if (derived) title = derived;
+      }
+    }
+
     const updated: ChatSession = {
       ...session,
+      title,
       updated: new Date().toISOString(),
     };
     await this.writeSessionFile(updated);
@@ -109,6 +121,8 @@ export class SessionManager {
 
   /**
    * Update a session's messages and stats in one call.
+   * By default, derives the title from the first user message if it's
+   * still the placeholder "Untitled Session".
    */
   async saveMessagesAndStats(params: {
     id: string;
@@ -125,11 +139,15 @@ export class SessionManager {
       stats: params.stats ?? existing.stats,
     };
 
-    // Optionally derive title from the very first user message
-    if (params.titleFromFirstMessage && updated.messages.length > 0) {
-      const first = updated.messages[0];
-      if (first.role === 'user' && typeof first.content === 'string') {
-        updated.title = this.deriveTitleFromText(first.content, existing.title);
+    // Derive title from first user message (default: true)
+    const shouldDerive = params.titleFromFirstMessage !== false;
+    if (shouldDerive && (!updated.title || updated.title === 'Untitled Session') && updated.messages.length > 0) {
+      const first = updated.messages.find((m) => m.role === 'user');
+      if (first) {
+        const derived = this.deriveTitleFromMessage(first);
+        if (derived && derived !== 'Untitled Session') {
+          updated.title = derived;
+        }
       }
     }
 
@@ -216,6 +234,34 @@ export class SessionManager {
     if (!cleaned) return fallback;
     const maxLen = 80;
     return cleaned.length <= maxLen ? cleaned : cleaned.slice(0, maxLen - 1) + '…';
+  }
+
+  /**
+   * Derive a session title from a user message.
+   * Handles both plain-string and content-block-array message formats.
+   */
+  private deriveTitleFromMessage(message: MessageParam): string {
+    const content = message.content;
+    let text = '';
+
+    if (typeof content === 'string') {
+      text = content;
+    } else if (Array.isArray(content)) {
+      // Extract text from content blocks, skipping images/tool results
+      const textParts: string[] = [];
+      for (const block of content) {
+        if (typeof block === 'string') {
+          textParts.push(block);
+        } else if (block && typeof block === 'object' && 'type' in block) {
+          if (block.type === 'text' && 'text' in block && typeof block.text === 'string') {
+            textParts.push(block.text);
+          }
+        }
+      }
+      text = textParts.join(' ').trim();
+    }
+
+    return this.deriveTitleFromText(text, 'Untitled Session');
   }
 }
 

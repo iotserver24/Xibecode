@@ -193,6 +193,17 @@ export default function App() {
       }
     }
 
+    // Create a new session if we don't have one yet
+    if (!activeSessionId) {
+      try {
+        const model = await xibe.config.getModel();
+        const session = await xibe.session.create({ model, cwd: workingDir });
+        setActiveSessionId(session.id);
+      } catch {
+        // Session creation is non-fatal; chat continues without persistence
+      }
+    }
+
     const unsub = xibe.agent.onEvents(handleAgentEvents);
     try {
       await xibe.agent.sendMessage(content);
@@ -201,8 +212,22 @@ export default function App() {
     } finally {
       unsub();
       setIsRunning(false);
+      // Persist messages to session after agent finishes
+      if (activeSessionId) {
+        try {
+          const session = await xibe.session.load(activeSessionId);
+          if (session) {
+            const apiMessages = messages
+              .filter((m) => m.role === 'user' || m.role === 'assistant')
+              .map((m) => ({ role: m.role, content: m.content }));
+            await xibe.session.save({ ...session, messages: apiMessages });
+          }
+        } catch {
+          // Non-fatal
+        }
+      }
     }
-  }, [isInitialized, workingDir, modeState.current, handleAgentEvents]);
+  }, [isInitialized, workingDir, modeState.current, handleAgentEvents, activeSessionId, messages]);
 
   const handleModeSwitch = useCallback(async (mode: string, reason: string) => {
     await xibe.agent.switchMode(mode, reason);
