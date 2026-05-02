@@ -1,6 +1,6 @@
 {
   "name": "xibecode-core",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "XibeCode Core - AI agent engine with tool execution, MCP, memory, and multi-mode support",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

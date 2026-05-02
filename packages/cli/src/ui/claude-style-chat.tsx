@@ -2170,7 +2170,6 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
 
   if (!currentSessionId) {
     currentSession = await sessionManager.createSession({
-      title: 'Untitled Session',
       model,
       cwd: process.cwd(),
     });
