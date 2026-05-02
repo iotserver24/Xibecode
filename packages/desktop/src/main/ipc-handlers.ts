@@ -4,7 +4,7 @@ import { PreviewServer } from './preview-server.js';
 import { FileService } from './file-service.js';
 import { ShellService } from './shell-service.js';
 import type { AgentMode } from 'xibecode-core';
-import { PROVIDER_CONFIGS, type ProviderType } from 'xibecode-core';
+import { PROVIDER_CONFIGS, type ProviderType, SessionManager, type SessionMetadata, type ChatSession } from 'xibecode-core';
 import Conf from 'conf';
 import * as path from 'path';
 import * as os from 'os';
@@ -314,5 +314,28 @@ export function registerIpcHandlers(
     } catch {
       return ['default'];
     }
+  });
+
+  // ── Sessions ──────────────────────────────────────────────
+  const sessionManager = new SessionManager();
+
+  ipcMain.handle('session:list', async (): Promise<SessionMetadata[]> => {
+    return sessionManager.listSessions();
+  });
+
+  ipcMain.handle('session:create', async (_event, options: { title?: string; model: string; cwd?: string }): Promise<ChatSession> => {
+    return sessionManager.createSession(options);
+  });
+
+  ipcMain.handle('session:load', async (_event, id: string): Promise<ChatSession | null> => {
+    return sessionManager.loadSession(id);
+  });
+
+  ipcMain.handle('session:save', async (_event, session: ChatSession): Promise<void> => {
+    return sessionManager.saveSession(session);
+  });
+
+  ipcMain.handle('session:delete', async (_event, id: string): Promise<boolean> => {
+    return sessionManager.deleteSession(id);
   });
 }

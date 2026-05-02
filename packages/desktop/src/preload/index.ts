@@ -34,6 +34,16 @@ export interface ModeState {
   history: Array<{ mode: string; timestamp: number; reason?: string }>;
 }
 
+export interface SessionMetadata {
+  id: string;
+  title: string;
+  model: string;
+  cwd: string;
+  parentSessionId?: string;
+  created: string;
+  updated: string;
+}
+
 const api = {
   agent: {
     initialize: (config: {
@@ -121,6 +131,14 @@ const api = {
     fetchModels: (baseUrl?: string, apiKey?: string, profile?: string): Promise<string[]> => ipcRenderer.invoke('config:fetch-models', baseUrl, apiKey, profile),
     getProviders: (): Promise<Array<{ id: string; name: string; baseUrl: string; format: string; defaultModel: string }>> => ipcRenderer.invoke('config:get-providers'),
     listProfiles: (profile?: string): Promise<string[]> => ipcRenderer.invoke('config:list-profiles', profile),
+  },
+
+  session: {
+    list: (): Promise<SessionMetadata[]> => ipcRenderer.invoke('session:list'),
+    create: (options: { title?: string; model: string; cwd?: string }): Promise<any> => ipcRenderer.invoke('session:create', options),
+    load: (id: string): Promise<any | null> => ipcRenderer.invoke('session:load', id),
+    save: (session: any): Promise<void> => ipcRenderer.invoke('session:save', session),
+    delete: (id: string): Promise<boolean> => ipcRenderer.invoke('session:delete', id),
   },
 };
 
