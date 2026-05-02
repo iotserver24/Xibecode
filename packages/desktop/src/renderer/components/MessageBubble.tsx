@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -8,7 +9,7 @@ interface Props {
   timestamp: number;
 }
 
-export default function MessageBubble({ role, content, isStreaming }: Props) {
+const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }: Props) {
   const isUser = role === 'user';
 
   if (isUser) {
@@ -50,4 +51,6 @@ export default function MessageBubble({ role, content, isStreaming }: Props) {
       {isStreaming && <span className="inline-block h-3.5 w-0.5 animate-pulse rounded bg-xibe-accent ml-0.5" />}
     </div>
   );
-}
+});
+
+export default MessageBubble;

@@ -24,3 +24,6 @@
 **Learning:** Prop-drilling large state objects from Zustand to UI components mapping arrays (like `MessageItem`s array mapping) creates O(N) re-renders because every single component evaluates when the array maps changes.
 **Action:** Extract large state reads, such as mappings onto lists, and wrap mapping target component with `React.memo` to achieve O(1) targeted updates.
 
+## 2024-05-18 - [O(N) cascade re-renders in ChatPanel with React]
+**Learning:** Prop-drilling state and rendering lists (like ChatPanel rendering MessageBubble and ToolCallCard arrays) when state updates are extremely frequent (e.g., token streaming via Zustand or props) causes all list items to re-render constantly. This creates an O(N) re-render cascade for the entire message list, significantly degrading performance during streaming.
+**Action:** Always wrap list item components (e.g. `MessageBubble`, `ToolCallCard`) with `React.memo()` when rendering lists that undergo frequent partial updates (like streaming tokens appended to the last message). This prevents O(N) cascade re-renders, limiting updates to only the items that actually changed.
