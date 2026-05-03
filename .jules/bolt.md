@@ -27,3 +27,7 @@
 ## 2024-05-18 - [O(N) cascade re-renders in ChatPanel with React]
 **Learning:** Prop-drilling state and rendering lists (like ChatPanel rendering MessageBubble and ToolCallCard arrays) when state updates are extremely frequent (e.g., token streaming via Zustand or props) causes all list items to re-render constantly. This creates an O(N) re-render cascade for the entire message list, significantly degrading performance during streaming.
 **Action:** Always wrap list item components (e.g. `MessageBubble`, `ToolCallCard`) with `React.memo()` when rendering lists that undergo frequent partial updates (like streaming tokens appended to the last message). This prevents O(N) cascade re-renders, limiting updates to only the items that actually changed.
+
+## 2026-05-03 - [O(N) Cascade re-renders in Lists with State-Driven Hover]
+**Learning:** Prop-drilling or managing local interactive state (like `hoveredId` on `mouseenter`/`mouseleave`) within a list component mapping an array of items (like `ChatHistory` mapping `SessionItem`s) creates O(N) re-renders when interacting with any single item.
+**Action:** Always favor native CSS pseudo-classes like `:hover` or Tailwind's `group-hover` over interactive React state for visually toggling elements inside rendered lists, and wrap the parent list component with `React.memo` if it sits alongside frequently updating sibling states (like a timer or streaming tokens).
