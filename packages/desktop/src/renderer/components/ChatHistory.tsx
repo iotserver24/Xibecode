@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { Plus, MessageSquare, Trash2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -31,9 +31,8 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-export default function ChatHistory({ activeSessionId, onSelectSession, onNewChat }: ChatHistoryProps) {
+const ChatHistory = memo(function ChatHistory({ activeSessionId, onSelectSession, onNewChat }: ChatHistoryProps) {
   const [sessions, setSessions] = useState<SessionItem[]>([]);
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const list = await xibe.session.list();
@@ -93,8 +92,6 @@ export default function ChatHistory({ activeSessionId, onSelectSession, onNewCha
                 <button
                   key={s.id}
                   onClick={() => onSelectSession(s.id)}
-                  onMouseEnter={() => setHoveredId(s.id)}
-                  onMouseLeave={() => setHoveredId(null)}
                   className={cn(
                     "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-all duration-200 group relative",
                     activeSessionId === s.id
@@ -105,17 +102,17 @@ export default function ChatHistory({ activeSessionId, onSelectSession, onNewCha
                   <MessageSquare className={cn("h-3.5 w-3.5 shrink-0", activeSessionId === s.id ? "text-xibe-text" : "text-xibe-text-dim/40 group-hover:text-xibe-text-dim/70")} />
                   <span className="flex-1 truncate text-[12px] font-medium leading-tight">{s.title}</span>
 
-                  {hoveredId === s.id ? (
-                    <button
-                      onClick={(e) => handleDelete(e, s.id)}
-                      className="shrink-0 rounded p-1 text-xibe-text-dim/50 hover:text-xibe-error hover:bg-xibe-error/10 transition-colors animate-fade-in"
-                      title="Delete chat"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  ) : (
-                    <span className="shrink-0 text-[10px] text-xibe-text-dim/40 tabular-nums">{relativeTime(s.updated)}</span>
-                  )}
+                  {/* ⚡ Bolt: Used CSS group-hover instead of React state to toggle delete button visibility to prevent O(N) re-renders of the entire list on hover */}
+                  <span
+                    onClick={(e) => handleDelete(e, s.id)}
+                    className="shrink-0 rounded p-1 text-xibe-text-dim/50 hover:text-xibe-error hover:bg-xibe-error/10 transition-colors animate-fade-in hidden group-hover:block"
+                    title="Delete chat"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </span>
+
+                  {/* ⚡ Bolt: Hide timestamp on hover using group-hover to make room for delete button without React state overhead */}
+                  <span className="shrink-0 text-[10px] text-xibe-text-dim/40 tabular-nums block group-hover:hidden">{relativeTime(s.updated)}</span>
                 </button>
               ))}
             </div>
@@ -124,4 +121,6 @@ export default function ChatHistory({ activeSessionId, onSelectSession, onNewCha
       </div>
     </div>
   );
-}
+});
+
+export default ChatHistory;

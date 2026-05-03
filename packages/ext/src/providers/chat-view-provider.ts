@@ -142,10 +142,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   private async getParsedHistory() {
     const history = this.agentService.getHistory();
-    return Promise.all(history.map(async (m) => ({
-      ...m,
-      html: await marked.parse(m.content).catch(() => m.content)
-    })));
+    return Promise.all(history.map(async (m) => {
+      let html = m.content;
+      try {
+        const parsed = marked.parse(m.content);
+        html = parsed instanceof Promise ? await parsed : parsed;
+      } catch (e) {
+        html = m.content;
+      }
+      return { ...m, html };
+    }));
   }
 
   private postMessage(message: unknown): void {
