@@ -3,12 +3,13 @@
 ## Learned User Preferences
 
 - Always use **pnpm** as the package manager; fall back to bun only if pnpm is unavailable; never use npm directly for installs or scripts.
-- When doing a version release, bump `package.json` — all source files (`run.ts`, `run-pr.ts`, `config.ts`, `diagnostics.ts`) read the version dynamically via `createRequire(import.meta.url)('../../package.json')`.
+- When doing a version release, bump the relevant `package.json` — source files read the version dynamically via `createRequire(import.meta.url)('../../package.json')`.
 - After making code changes, always edit the file directly — do not describe what to change without applying it; after each edit, briefly explain what changed and why.
 - For Ink-based terminal UI (`xibecode chat` and related), follow the existing OpenClaude-aligned stack (`src/ink.ts`, `src/utils/tui-theme.ts`, themed components) and XibeCode branding instead of ad hoc raw Ink or chalk-only styling.
 - When building for release: run `pnpm run build`, then `git add`, `git commit`, `git push`, and `pnpm publish --access public` — all in one unattended sequence.
 - When a `git push` is rejected due to diverged branches, resolve via `git pull --rebase origin main` (not merge), fix any lockfile conflicts, then continue with `GIT_EDITOR=true git rebase --continue`.
 - Do not force-push (`--force`) without the user explicitly asking; use `--force-with-lease` if needed.
+- Do not publish packages to npm unless the user explicitly asks — the user has corrected the agent multiple times about unauthorized publishing.
 - Always pass `--access public` when publishing to npm (`pnpm publish --access public`).
 - Prefer non-interactive flags on all CLI commands (e.g. `--yes`, `-y`, `GIT_EDITOR=true`) so commands never hang waiting for input.
 - When explaining code, respond in plain language without emojis unless explicitly requested.
@@ -18,13 +19,15 @@
 ## Learned Workspace Facts
 
 - Project: **XibeCode** — an autonomous AI coding CLI tool (`xibecode`), published as an npm package at `xibecode`; repo path `/home/r3ap3reditz/codes/xibecode`; GitHub: `https://github.com/iotserver24/Xibecode`
+- Project is a **pnpm monorepo** with `packages/core` (agent engine, session/memory management), `packages/cli` (terminal UI), and `packages/desktop` (Electron desktop app). Core was separated from CLI to allow independent hosting and downstream consumers.
 - Primary package manager: **pnpm** with `pnpm-lock.yaml` at root. Build command: `pnpm run build` (TypeScript → `dist/`).
 - Version string is defined in **`package.json` only** — the single source of truth. Source files read it via `createRequire(import.meta.url)('../../package.json')` and reference `pkg.version`.
-- Agent modes are defined in `src/core/modes.ts` under `MODE_CONFIG`; each has `allowedCategories` controlling tool access. Agent mode `agent` must include `'network'` in `allowedCategories` so `fetch_url`, `web_search`, and skills-sh tools work.
+- Agent modes are defined in `packages/core/src/modes.ts` under `MODE_CONFIG`; each has `allowedCategories` controlling tool access. All modes (agent, plan, review) should allow `run_command`/`shell_command` operations; review and plan modes must not block command execution.
 - `xibecode run` must call `process.exit(0)` in the `finally` block (unless `--non-interactive`) to avoid hanging after task completion.
+- Sessions are stored in `~/.xibecode/sessions/{cwd-based-folder}/<session-id>.json`, scoped per working directory so `xibecode resume` shows only sessions from the current project.
 - The `site/` and `site/app/donate/` directories are excluded from git and added to `.cursorignore`; `openclaude/` is gitignored as local reference OpenClaude-style code and should not be committed.
 - `pnpm install --frozen-lockfile` in CI (and locally) requires the root `pnpm-lock.yaml` and any nested lockfiles used in workflows to match their `package.json` files; after dependency changes, run `pnpm install`, commit updated lockfiles, then push.
 - Embedded or sandboxed agent runs should treat the repository root as the working directory for file tools and relative paths; do not assume the checkout lives at `/workspace`, `/app`, or `/project`.
-- `run-pr` command (`src/commands/run-pr.ts`) requires `gh` CLI installed and authenticated (`gh auth login`) before use; it performs test verification (unless `--skip-tests`) with up to 2 self-correction retries and triggers CI security checks including `pnpm audit --audit-level=high`.
+- `run-pr` command (`packages/cli/src/commands/run-pr.ts`) requires `gh` CLI installed and authenticated (`gh auth login`) before use; it performs test verification (unless `--skip-tests`) with up to 2 self-correction retries and triggers CI security checks including `pnpm audit --audit-level=high`.
 - CLI supports config profiles (default profile + `--profile <name>` across commands) and includes `xibecode diagnostics` to generate a redacted Markdown diagnostics bundle.
 - **Playwright is not a dependency** of the CLI: no Chromium download on install. **`agent-browser` is not bundled** (optional global install on supported platforms); browser-oriented agent tools are stubbed with guidance to use `run_command` + `agent-browser`, MCP, or `fetch_url`. Playwright E2E belongs in the consumer repo if needed.
