@@ -122,10 +122,12 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
       align-self: center;
       font-size: 11px;
       color: var(--muted);
-      font-style: italic;
-      background: transparent;
-      border: none;
-      padding: 2px 0;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      border-radius: 8px;
+      max-width: 85%;
+      line-height: 1.5;
     }
     .msg.error {
       align-self: flex-start;
@@ -300,12 +302,57 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
     }
     .chip:hover { background: rgba(124,58,237,0.15); border-color: rgba(124,58,237,0.4); color: #c4b5fd; }
 
+    /* ── Slash command autocomplete ── */
+    .slash-dropdown {
+      display: none;
+      position: absolute;
+      bottom: 100%;
+      left: 12px;
+      right: 12px;
+      max-height: 260px;
+      overflow-y: auto;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.4);
+      z-index: 50;
+      padding: 4px;
+    }
+    .slash-dropdown.visible { display: block; }
+    .slash-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .slash-item:hover, .slash-item.selected {
+      background: rgba(124,58,237,0.12);
+    }
+    .slash-item-name {
+      font-weight: 600;
+      color: #c4b5fd;
+      font-size: 12px;
+      min-width: 70px;
+    }
+    .slash-item-desc {
+      color: var(--muted);
+      font-size: 11px;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     /* ── Input area ── */
     .input-wrap {
       padding: 10px 12px 12px;
       border-top: 1px solid var(--border);
       flex-shrink: 0;
       background: var(--surface);
+      position: relative;
     }
     .input-row {
       display: flex;
@@ -373,11 +420,12 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
     </div>
   </div>
   <div class="input-wrap">
+    <div class="slash-dropdown" id="slashDropdown"></div>
     <div class="input-row">
-      <textarea id="input" rows="1" placeholder="Ask XibeCode… (/ for commands)"></textarea>
-      <button id="sendBtn" title="Send">▶</button>
+      <textarea id="input" rows="1" placeholder="Ask XibeCode... (type / for commands)"></textarea>
+      <button id="sendBtn" title="Send">&#9654;</button>
     </div>
-    <div class="input-hint">Enter to send · Shift+Enter for newline · /help for commands</div>
+    <div class="input-hint">Enter to send &middot; Shift+Enter for newline &middot; / for commands</div>
   </div>
 
   <script nonce="${nonce}">
@@ -388,11 +436,78 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
     const sendBtn    = document.getElementById('sendBtn');
     const modelBadge = document.getElementById('modelBadge');
     const statusDot  = document.getElementById('statusDot');
+    const slashDropdown = document.getElementById('slashDropdown');
 
     let isRunning   = false;
     let streamingEl = null;
     let thinkingEl  = null;
     let currentToolId = null;
+    let slashCommands = [];
+    let slashSelectedIdx = -1;
+    let runStartTime = 0;
+    let elapsedInterval = null;
+    let lastModelLabel = '';
+
+    // ── Slash Command Autocomplete ──
+    function showSlashDropdown(filter) {
+      const q = (filter || '').toLowerCase();
+      const filtered = slashCommands.filter(c => c.name.toLowerCase().includes(q));
+      if (filtered.length === 0) { hideSlashDropdown(); return; }
+      slashSelectedIdx = -1;
+      let html = '';
+      filtered.forEach((c, i) => {
+        html += '<div class="slash-item" data-idx="' + i + '" data-cmd="' + escapeHtml(c.name) + '">';
+        html += '<span class="slash-item-name">' + escapeHtml(c.name) + '</span>';
+        html += '<span class="slash-item-desc">' + escapeHtml(c.description) + '</span>';
+        html += '</div>';
+      });
+      slashDropdown.innerHTML = html;
+      slashDropdown.classList.add('visible');
+
+      slashDropdown.querySelectorAll('.slash-item').forEach(el => {
+        el.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          const cmd = el.dataset.cmd;
+          inputEl.value = cmd + ' ';
+          hideSlashDropdown();
+          inputEl.focus();
+        });
+      });
+    }
+
+    function hideSlashDropdown() {
+      slashDropdown.classList.remove('visible');
+      slashSelectedIdx = -1;
+    }
+
+    function navigateSlash(e) {
+      const items = slashDropdown.querySelectorAll('.slash-item');
+      if (!items.length) return;
+      items.forEach(i => i.classList.remove('selected'));
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        slashSelectedIdx = (slashSelectedIdx + 1) % items.length;
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        slashSelectedIdx = (slashSelectedIdx - 1 + items.length) % items.length;
+      } else if (e.key === 'Tab' || e.key === 'Enter') {
+        e.preventDefault();
+        if (slashSelectedIdx >= 0 && slashSelectedIdx < items.length) {
+          const cmd = items[slashSelectedIdx].dataset.cmd;
+          inputEl.value = cmd + ' ';
+          hideSlashDropdown();
+        }
+        return;
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        hideSlashDropdown();
+        return;
+      }
+      if (slashSelectedIdx >= 0 && slashSelectedIdx < items.length) {
+        items[slashSelectedIdx].classList.add('selected');
+        items[slashSelectedIdx].scrollIntoView({ block: 'nearest' });
+      }
+    }
 
     // ── Send ──
     function send() {
@@ -400,9 +515,15 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
       if (!text || isRunning) return;
       inputEl.value = '';
       inputEl.style.height = 'auto';
+      hideSlashDropdown();
       hideWelcome();
-      addMessage('user', text);
-      vscode.postMessage({ command: 'sendMessage', text });
+      // Don't add user message for slash commands -- the extension handles display
+      if (text.startsWith('/')) {
+        vscode.postMessage({ command: 'sendMessage', text });
+      } else {
+        addMessage('user', text);
+        vscode.postMessage({ command: 'sendMessage', text });
+      }
     }
 
     sendBtn.addEventListener('click', () => {
@@ -415,11 +536,32 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
     });
 
     inputEl.addEventListener('keydown', (e) => {
+      // If slash dropdown is visible, handle navigation
+      if (slashDropdown.classList.contains('visible')) {
+        if (['ArrowDown', 'ArrowUp', 'Tab', 'Escape'].includes(e.key)) {
+          navigateSlash(e);
+          return;
+        }
+        if (e.key === 'Enter' && !e.shiftKey) {
+          if (slashSelectedIdx >= 0) {
+            navigateSlash(e);
+            return;
+          }
+        }
+      }
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     });
+
     inputEl.addEventListener('input', () => {
       inputEl.style.height = 'auto';
       inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
+
+      const val = inputEl.value;
+      if (val.startsWith('/')) {
+        showSlashDropdown(val);
+      } else {
+        hideSlashDropdown();
+      }
     });
 
     // ── Chip prompts ──
@@ -440,8 +582,13 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
       removeThinking();
       const div = document.createElement('div');
       div.className = 'msg ' + role;
-      if (html) div.innerHTML = html;
-      else div.textContent = content;
+      if (role === 'system' && html) {
+        div.innerHTML = html;
+      } else if (html) {
+        div.innerHTML = html;
+      } else {
+        div.textContent = content;
+      }
       messagesEl.appendChild(div);
       scrollEnd();
       return div;
@@ -453,10 +600,10 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
       div.className = 'tool-call';
       div.id = 'tc-' + Date.now();
       let h = '<div class="tool-header">';
-      h += '<span class="tool-icon">⚙</span>';
+      h += '<span class="tool-icon">&#9881;</span>';
       h += '<span class="tool-name">' + escapeHtml(name) + '</span>';
-      h += '<span class="tool-result-badge">✓ done</span>';
-      h += '<span class="tool-toggle">▼</span></div>';
+      h += '<span class="tool-result-badge">&#10003; done</span>';
+      h += '<span class="tool-toggle">&#9660;</span></div>';
       if (args) {
         h += '<div class="tool-args">' + escapeHtml(args) + '</div>';
       }
@@ -517,11 +664,21 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
 
     function setRunning(val) {
       isRunning = val;
-      sendBtn.textContent = val ? '■' : '▶';
+      sendBtn.textContent = val ? '\u25A0' : '\u25B6';
       sendBtn.classList.toggle('stop-mode', val);
       sendBtn.title = val ? 'Stop' : 'Send';
       statusDot.classList.toggle('running', val);
       inputEl.disabled = val;
+      if (val) {
+        runStartTime = Date.now();
+        elapsedInterval = setInterval(() => {
+          const secs = ((Date.now() - runStartTime) / 1000).toFixed(1);
+          modelBadge.textContent = secs + 's';
+        }, 100);
+      } else {
+        if (elapsedInterval) { clearInterval(elapsedInterval); elapsedInterval = null; }
+        modelBadge.textContent = lastModelLabel;
+      }
     }
 
     function scrollEnd() { messagesEl.scrollTop = messagesEl.scrollHeight; }
@@ -538,7 +695,12 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
       switch (msg.type) {
 
         case 'config':
-          modelBadge.textContent = msg.modelLabel || (msg.model || '—');
+          lastModelLabel = msg.modelLabel || (msg.model || '\u2014');
+          modelBadge.textContent = lastModelLabel;
+          break;
+
+        case 'slashCommands':
+          slashCommands = msg.commands || [];
           break;
 
         case 'history':
@@ -554,6 +716,11 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
         case 'userMessage':
           hideWelcome();
           addMessage('user', msg.text);
+          break;
+
+        case 'systemMessage':
+          hideWelcome();
+          addMessage('system', msg.content);
           break;
 
         case 'status':
@@ -597,7 +764,7 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
               break;
             case 'error':
               removeThinking();
-              addMessage('error', '❌ ' + (ev.data?.message || 'An error occurred.'));
+              addMessage('error', '\u274C ' + (ev.data?.message || 'An error occurred.'));
               setRunning(false);
               break;
             case 'complete': {
@@ -605,11 +772,15 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
               endStreaming();
               const d = ev.data || {};
               const parts = [];
+              if (d.duration) {
+                const secs = (d.duration / 1000).toFixed(1);
+                parts.push(secs + 's');
+              }
               if (d.iterations) parts.push(d.iterations + ' steps');
               if (d.toolCalls) parts.push(d.toolCalls + ' tools');
               if (d.filesChanged) parts.push(d.filesChanged + ' files changed');
               if (d.costLabel) parts.push(d.costLabel);
-              if (parts.length) addMessage('system', '✓ Done — ' + parts.join(' · '));
+              if (parts.length) addMessage('system', '\u2713 Done \u2014 ' + parts.join(' \u00B7 '));
               setRunning(false);
               break;
             }
@@ -623,16 +794,14 @@ export function getWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri
       const d = document.createElement('div');
       d.className = 'welcome';
       d.id = 'welcome';
-      d.innerHTML = \`
-        <div class="welcome-logo">XibeCode</div>
-        <p>Your AI coding agent.<br/>Ask me to write, fix, or refactor anything.</p>
-        <div class="welcome-chips">
-          <span class="chip" data-prompt="Explain this file">Explain file</span>
-          <span class="chip" data-prompt="Write tests for this code">Write tests</span>
-          <span class="chip" data-prompt="Find bugs in this file">Find bugs</span>
-          <span class="chip" data-prompt="/help">Commands</span>
-        </div>
-      \`;
+      d.innerHTML = '<div class="welcome-logo">XibeCode</div>'
+        + '<p>Your AI coding agent.<br/>Ask me to write, fix, or refactor anything.</p>'
+        + '<div class="welcome-chips">'
+        + '<span class="chip" data-prompt="Explain this file">Explain file</span>'
+        + '<span class="chip" data-prompt="Write tests for this code">Write tests</span>'
+        + '<span class="chip" data-prompt="Find bugs in this file">Find bugs</span>'
+        + '<span class="chip" data-prompt="/help">Commands</span>'
+        + '</div>';
       return d;
     }
 

@@ -145,8 +145,8 @@
         },
         "xibecode.model": {
           "type": "string",
-          "default": "claude-sonnet-4-20250514",
-          "description": "AI model to use",
+          "default": "claude-sonnet-4-6",
+          "description": "AI model to use (overridden by ~/.xibecode/profile-*.json if set)",
           "scope": "application"
         },
         "xibecode.provider": {
@@ -154,13 +154,33 @@
           "default": "anthropic",
           "enum": [
             "anthropic",
+            "routingrun",
+            "zenllm",
+            "zai",
             "openai",
+            "alibaba",
+            "kimi",
+            "grok",
             "deepseek",
-            "google",
             "openrouter",
-            "auto"
+            "google",
+            "groq"
           ],
-          "description": "AI provider / API format",
+          "enumDescriptions": [
+            "Anthropic (Claude)",
+            "Routing.run",
+            "zenllm.org",
+            "Zhipu AI (z.ai)",
+            "OpenAI (GPT)",
+            "Alibaba (Qwen)",
+            "Moonshot (Kimi)",
+            "Grok (xAI)",
+            "DeepSeek",
+            "OpenRouter",
+            "Google (Gemini)",
+            "Groq"
+          ],
+          "description": "AI provider / API format (overridden by ~/.xibecode/profile-*.json if set)",
           "scope": "application"
         },
         "xibecode.baseUrl": {
@@ -173,12 +193,6 @@
           "type": "number",
           "default": 150,
           "description": "Maximum agent iterations per task (0 = unlimited)",
-          "scope": "application"
-        },
-        "xibecode.autoApproveTools": {
-          "type": "boolean",
-          "default": false,
-          "description": "Auto-approve safe tool calls (read-only operations)",
           "scope": "application"
         }
       }

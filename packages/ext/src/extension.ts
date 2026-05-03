@@ -71,23 +71,83 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand('xibecode.selectModel', async () => {
-      const models = [
-        'claude-sonnet-4-20250514',
-        'claude-opus-4-20250514',
-        'claude-3-5-haiku-20241022',
-        'gpt-4o',
-        'gpt-4o-mini',
-        'deepseek-chat',
-        'deepseek-reasoner',
-      ];
-      const pick = await vscode.window.showQuickPick(models, {
-        title: 'XibeCode — Select Model',
-        placeHolder: 'Choose a model',
+      const provider = configService.getProvider();
+      const defaultModel = configService.getDefaultModelForProvider(provider);
+
+      // Build model list from provider defaults + common alternatives
+      const providerModels: Record<string, string[]> = {
+        anthropic: [
+          'claude-sonnet-4-6',
+          'claude-opus-4-20250514',
+          'claude-3-5-haiku-20241022',
+        ],
+        openai: [
+          'gpt-5.5',
+          'gpt-4o',
+          'gpt-4o-mini',
+        ],
+        deepseek: [
+          'deepseek-v4',
+          'deepseek-chat',
+          'deepseek-reasoner',
+        ],
+        google: [
+          'gemini-3.0-pro-preview',
+          'gemini-2.5-flash',
+        ],
+        openrouter: [
+          'anthropic/claude-sonnet-4-6',
+          'openai/gpt-5.5',
+        ],
+        grok: [
+          'grok-4-0709',
+        ],
+        kimi: [
+          'kimi-k2.6',
+        ],
+        alibaba: [
+          'qwen3.5-coder-plus',
+        ],
+        routingrun: [
+          'route/glm-5.1',
+        ],
+        zenllm: [
+          'zhipu/glm-5.1',
+        ],
+        zai: [
+          'glm-5.1',
+        ],
+        groq: [
+          'llama-3.3-70b-versatile',
+        ],
+      };
+
+      const models = providerModels[provider] || [defaultModel];
+      // Add a "type manually" option at the end
+      const items = [...models, '(type model ID manually…)'];
+
+      const pick = await vscode.window.showQuickPick(items, {
+        title: `XibeCode — Select Model (${provider})`,
+        placeHolder: `Default: ${defaultModel}`,
       });
-      if (pick) {
-        await configService.setModel(pick);
-        vscode.window.showInformationMessage(`XibeCode: Model set to ${pick}.`);
+
+      if (!pick) return;
+
+      let model: string;
+      if (pick === '(type model ID manually…)') {
+        const typed = await vscode.window.showInputBox({
+          title: 'XibeCode — Enter Model ID',
+          prompt: 'Enter the model identifier',
+          placeHolder: defaultModel,
+        });
+        if (!typed) return;
+        model = typed.trim();
+      } else {
+        model = pick;
       }
+
+      await configService.setModel(model);
+      vscode.window.showInformationMessage(`XibeCode: Model set to ${model}.`);
     }),
   );
 
