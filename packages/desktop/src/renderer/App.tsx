@@ -382,9 +382,11 @@ export default function App() {
       {/* Main body: left panel | chat | right panel */}
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
         {/* Left panel: Chat history + settings shortcut */}
-        {leftPanelOpen && (
-          <aside className="w-64 shrink-0 border-r border-xibe-border-subtle bg-xibe-surface flex flex-col transition-all duration-300 ease-in-out">
-            <div className="flex-1 min-h-0 overflow-y-auto p-2">
+        <aside
+          className="shrink-0 border-r border-xibe-border-subtle bg-xibe-surface flex flex-col overflow-hidden transition-[width] duration-200 ease-in-out"
+          style={{ width: leftPanelOpen ? 240 : 0 }}
+        >
+            <div className="flex-1 min-h-0 overflow-y-auto p-3">
               <ChatHistory
                 activeSessionId={activeSessionId}
                 onSelectSession={handleSelectSession}
@@ -402,7 +404,6 @@ export default function App() {
               </button>
             </div>
           </aside>
-        )}
 
         {/* Center: Chat */}
         <div className="flex-1 min-w-0">
@@ -426,16 +427,17 @@ export default function App() {
         </div>
 
         {/* Right panel: Tabbed (Web + Folder) */}
-        {rightPanelOpen && (
-          <div className="w-80 shrink-0 border-l border-xibe-border-subtle">
-            <TabbedRightPanel
-              workingDir={workingDir}
-              currentMode={modeState.current}
-              onModeSwitch={handleModeSwitch}
-              onClose={() => setRightPanelOpen(false)}
-            />
-          </div>
-        )}
+        <div
+          className="shrink-0 border-l border-xibe-border-subtle overflow-hidden transition-[width] duration-200 ease-in-out"
+          style={{ width: rightPanelOpen ? 320 : 0 }}
+        >
+          <TabbedRightPanel
+            workingDir={workingDir}
+            currentMode={modeState.current}
+            onModeSwitch={handleModeSwitch}
+            onClose={() => setRightPanelOpen(false)}
+          />
+        </div>
       </div>
 
       {/* Status bar */}

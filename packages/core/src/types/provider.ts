@@ -7,7 +7,7 @@
 export const PROVIDER_CONFIGS = {
   anthropic: {
     baseUrl: 'https://api.anthropic.com/v1',
-    defaultModel: 'claude-sonnet-4-6 ',
+    defaultModel: 'claude-sonnet-4-6',
     format: 'anthropic',
     envKey: 'ANTHROPIC_API_KEY',
     name: 'Anthropic'
@@ -70,7 +70,7 @@ export const PROVIDER_CONFIGS = {
   },
   openrouter: {
     baseUrl: 'https://openrouter.ai/api/v1',
-    defaultModel: 'anthropic/claude-sonnet-4-6 ',
+    defaultModel: 'anthropic/claude-sonnet-4-6',
     format: 'openai',
     envKey: 'OPENROUTER_API_KEY',
     name: 'OpenRouter'

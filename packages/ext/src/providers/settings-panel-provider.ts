@@ -4,6 +4,7 @@ import {
   listProfiles, getActiveProfile, setDefaultProfile,
   type XibeCodeConfig,
 } from '../services/xibecode-config-service';
+import { PROVIDER_CONFIGS } from 'xibecode-core';
 
 export class SettingsPanelProvider {
   private panel?: vscode.WebviewPanel;
@@ -39,6 +40,13 @@ export class SettingsPanelProvider {
         case 'save': {
           const updates: Partial<XibeCodeConfig> = msg.config;
           writeConfig(updates, msg.profile);
+          // Also sync to VS Code settings for compatibility
+          const vsCfg = vscode.workspace.getConfiguration('xibecode');
+          if (updates.apiKey) vsCfg.update('apiKey', updates.apiKey, vscode.ConfigurationTarget.Global);
+          if (updates.model) vsCfg.update('model', updates.model, vscode.ConfigurationTarget.Global);
+          if (updates.provider) vsCfg.update('provider', updates.provider, vscode.ConfigurationTarget.Global);
+          if (updates.baseUrl) vsCfg.update('baseUrl', updates.baseUrl, vscode.ConfigurationTarget.Global);
+          if (updates.maxIterations) vsCfg.update('maxIterations', updates.maxIterations, vscode.ConfigurationTarget.Global);
           vscode.window.showInformationMessage('XibeCode: Settings saved!');
           break;
         }
@@ -46,6 +54,8 @@ export class SettingsPanelProvider {
           const cfg = readConfig(msg.profile);
           delete cfg.apiKey;
           writeConfig(cfg, msg.profile);
+          const vsCfg = vscode.workspace.getConfiguration('xibecode');
+          vsCfg.update('apiKey', '', vscode.ConfigurationTarget.Global);
           this.panel?.webview.postMessage({ type: 'clearedKey' });
           vscode.window.showInformationMessage('XibeCode: API key cleared.');
           break;
@@ -69,7 +79,16 @@ export class SettingsPanelProvider {
           break;
         }
         case 'fetchModels': {
-          this.fetchModels(msg.baseUrl, msg.apiKey);
+          this.fetchModels(msg.baseUrl, msg.apiKey, msg.provider);
+          break;
+        }
+        case 'getDefaultBaseUrl': {
+          const provider = msg.provider as string;
+          const pCfg = (PROVIDER_CONFIGS as Record<string, { baseUrl: string }>)[provider];
+          this.panel?.webview.postMessage({
+            type: 'defaultBaseUrl',
+            baseUrl: pCfg?.baseUrl || '',
+          });
           break;
         }
       }
@@ -78,12 +97,23 @@ export class SettingsPanelProvider {
     this.panel.onDidDispose(() => { this.panel = undefined; });
   }
 
-  private async fetchModels(baseUrl: string, apiKey: string): Promise<void> {
+  private async fetchModels(baseUrl: string, apiKey: string, provider?: string): Promise<void> {
+    // If no base URL provided, use the provider default
+    let url = baseUrl;
+    if (!url && provider) {
+      const pCfg = (PROVIDER_CONFIGS as Record<string, { baseUrl: string }>)[provider];
+      if (pCfg) url = pCfg.baseUrl;
+    }
+    if (!url) {
+      this.panel?.webview.postMessage({ type: 'modelsError', message: 'No base URL available. Set a provider or custom base URL.' });
+      return;
+    }
+
     try {
-      const url = baseUrl.replace(/\/+$/, '') + '/models';
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      });
+      const fullUrl = url.replace(/\/+$/, '') + '/models';
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+      const res = await fetch(fullUrl, { headers });
       if (!res.ok) throw new Error(`GET /models → ${res.status}`);
       const json = await res.json() as { data?: { id?: string }[] };
       const models = (json.data ?? []).map((m) => m.id ?? '').filter(Boolean).sort();
@@ -246,25 +276,27 @@ export class SettingsPanelProvider {
         <label>Provider</label>
         <select id="provider">
           <option value="">auto-detect</option>
-          <option value="anthropic">anthropic</option>
-          <option value="openai">openai</option>
-          <option value="deepseek">deepseek</option>
-          <option value="google">google</option>
-          <option value="openrouter">openrouter</option>
-          <option value="grok">grok</option>
-          <option value="kimi">kimi</option>
-          <option value="zai">zai</option>
-          <option value="routingrun">routingrun</option>
-          <option value="zenllm">zenllm</option>
+          <option value="anthropic">Anthropic (Claude)</option>
+          <option value="routingrun">Routing.run</option>
+          <option value="zenllm">zenllm.org</option>
+          <option value="zai">Zhipu AI (z.ai)</option>
+          <option value="openai">OpenAI (GPT)</option>
+          <option value="alibaba">Alibaba (Qwen)</option>
+          <option value="kimi">Moonshot (Kimi)</option>
+          <option value="grok">Grok (xAI)</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="openrouter">OpenRouter</option>
+          <option value="google">Google (Gemini)</option>
+          <option value="groq">Groq</option>
         </select>
       </div>
       <div class="field">
         <label>Base URL <span style="font-weight:400;color:var(--vscode-descriptionForeground)">(optional)</span></label>
-        <input type="url" id="baseUrl" placeholder="https://api.anthropic.com"/>
+        <input type="url" id="baseUrl" placeholder="Auto-detected from provider"/>
       </div>
     </div>
     <div class="actions">
-      <button class="btn small secondary" onclick="fetchModels()">Fetch models from /models endpoint</button>
+      <button class="btn small secondary" onclick="fetchModels()">Fetch models from provider</button>
       <span class="status" id="fetchStatus"></span>
     </div>
   </div>
@@ -275,7 +307,7 @@ export class SettingsPanelProvider {
     <div class="field">
       <label>Default Model</label>
       <div class="input-row">
-        <input type="text" id="model" placeholder="claude-sonnet-4-5-20250929"/>
+        <input type="text" id="model" placeholder="claude-sonnet-4-6"/>
         <button class="btn small secondary" onclick="toggleModelList()">List ▾</button>
       </div>
       <div class="model-list" id="modelList"></div>
@@ -404,9 +436,10 @@ export class SettingsPanelProvider {
   function fetchModels(){
     const baseUrl = q('baseUrl').value.trim();
     const apiKey  = q('apiKey').value.trim();
-    if(!baseUrl||!apiKey){ toast('Set both Base URL and API Key first.'); return; }
+    const provider = q('provider').value;
+    if(!apiKey){ toast('Set an API Key first.'); return; }
     q('fetchStatus').textContent = 'Fetching…';
-    vscode.postMessage({ command:'fetchModels', baseUrl, apiKey });
+    vscode.postMessage({ command:'fetchModels', baseUrl, apiKey, provider });
   }
 
   function save(){

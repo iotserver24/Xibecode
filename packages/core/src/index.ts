@@ -11,9 +11,26 @@ export { PROVIDER_CONFIGS, type ProviderType } from './types/index.js';
 export { type MCPServerConfig, type MCPServersConfig, type MCPServerConfigLegacy } from './types/index.js';
 export { type ImageAttachment } from './types/index.js';
 export { type TodoStatus, type TodoItem, type TodoDocument } from './types/index.js';
+export {
+  type StreamEventType,
+  type StreamEvent,
+  type ThinkingEvent,
+  type TextDeltaEvent,
+  type ToolCallStartEvent,
+  type ToolCallEndEvent,
+  type ModeChangedEvent,
+  type WarningEvent,
+  type ErrorEvent,
+  type CompleteEvent,
+  type CancelledEvent,
+  type StreamOptions,
+} from './types/index.js';
 
 // ─── Agent ─────────────────────────────────────────────────────
 export { EnhancedAgent } from './agent.js';
+
+// ─── Agent Stream ───────────────────────────────────────────────
+export { AgentStream } from './agent-stream.js';
 
 // ─── Tools ─────────────────────────────────────────────────────
 export { CodingToolExecutor } from './tools.js';

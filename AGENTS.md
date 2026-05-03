@@ -10,6 +10,7 @@
 - When a `git push` is rejected due to diverged branches, resolve via `git pull --rebase origin main` (not merge), fix any lockfile conflicts, then continue with `GIT_EDITOR=true git rebase --continue`.
 - Do not force-push (`--force`) without the user explicitly asking; use `--force-with-lease` if needed.
 - Do not publish packages to npm unless the user explicitly asks — the user has corrected the agent multiple times about unauthorized publishing.
+- Do not use `workspace:*` protocol for inter-package dependencies in this monorepo — publish the updated package to npm first, then bump the version range in dependent packages. The user explicitly prefers npm-published versions over workspace links.
 - Always pass `--access public` when publishing to npm (`pnpm publish --access public`).
 - Prefer non-interactive flags on all CLI commands (e.g. `--yes`, `-y`, `GIT_EDITOR=true`) so commands never hang waiting for input.
 - When explaining code, respond in plain language without emojis unless explicitly requested.
@@ -31,3 +32,5 @@
 - `run-pr` command (`packages/cli/src/commands/run-pr.ts`) requires `gh` CLI installed and authenticated (`gh auth login`) before use; it performs test verification (unless `--skip-tests`) with up to 2 self-correction retries and triggers CI security checks including `pnpm audit --audit-level=high`.
 - CLI supports config profiles (default profile + `--profile <name>` across commands) and includes `xibecode diagnostics` to generate a redacted Markdown diagnostics bundle.
 - **Playwright is not a dependency** of the CLI: no Chromium download on install. **`agent-browser` is not bundled** (optional global install on supported platforms); browser-oriented agent tools are stubbed with guidance to use `run_command` + `agent-browser`, MCP, or `fetch_url`. Playwright E2E belongs in the consumer repo if needed.
+- The VS Code extension (`packages/ext`) has a **dual configuration system**: `ConfigService` reads from VS Code `settings.json` while `SettingsPanelProvider` writes to `~/.xibecode/profile-*.json` (CLI config files). These are disconnected — settings panel changes do not affect agent behavior. The extension's `ConfigService.getApiKey()` only checks `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` env vars, unlike the CLI's `ConfigManager` which checks 11 provider-specific env vars.
+- Extension features should **mirror CLI behavior** where applicable: `/setup` in the extension should ask the same prompts as CLI setup (API key, base URL with preset options, model selection via `/models`-like listing); the extension should display working time same as the CLI.

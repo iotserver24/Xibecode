@@ -9,6 +9,9 @@ import {
   MCPClientManager,
   NeuralMemory,
   SkillManager,
+  SessionManager,
+  AutoMemoryManager,
+  type ChatSession,
 } from 'xibecode-core';
 
 export interface AgentEvent {
@@ -23,6 +26,14 @@ export interface ChatMessage {
   toolCalls?: { name: string; input?: unknown; result?: unknown }[];
 }
 
+export interface SessionInfo {
+  id: string;
+  title: string;
+  model: string;
+  created: number;
+  updated: number;
+}
+
 /**
  * Manages the xibecode-core agent lifecycle inside VS Code.
  *
@@ -35,9 +46,23 @@ export class AgentService extends EventEmitter {
   private running = false;
   private abortController: AbortController | null = null;
   private history: ChatMessage[] = [];
+  private sessionManager: SessionManager;
+  private currentSessionId: string | null = null;
+  private memory: NeuralMemory | null = null;
+  private autoMemory: AutoMemoryManager | null = null;
+  private cwd: string;
+  private runStartTime: number = 0;
 
   constructor(private readonly configService: ConfigService) {
     super();
+    this.cwd = process.cwd();
+    this.sessionManager = new SessionManager(this.cwd);
+
+    // Set cwd from workspace if available
+    if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+      this.cwd = vscode.workspace.workspaceFolders[0].uri.fsPath;
+      this.sessionManager = new SessionManager(this.cwd);
+    }
   }
 
   isRunning(): boolean {
@@ -50,6 +75,119 @@ export class AgentService extends EventEmitter {
 
   clearHistory(): void {
     this.history = [];
+    this.currentSessionId = null;
+  }
+
+  getCurrentSessionId(): string | null {
+    return this.currentSessionId;
+  }
+
+  /**
+   * List available sessions for the current workspace.
+   */
+  async listSessions(): Promise<SessionInfo[]> {
+    try {
+      const sessions = await this.sessionManager.listSessions(this.cwd);
+      return sessions.map((s: any) => ({
+        id: s.id,
+        title: s.title || 'Untitled',
+        model: s.model || '',
+        created: typeof s.created === 'string' ? new Date(s.created).getTime() : (s.created || 0),
+        updated: typeof s.updated === 'string' ? new Date(s.updated).getTime() : (s.updated || 0),
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Resume a previous session.
+   */
+  async resumeSession(sessionId: string): Promise<boolean> {
+    try {
+      const session = await this.sessionManager.loadSession(sessionId);
+      if (!session) return false;
+
+      this.currentSessionId = sessionId;
+      this.history = (session.messages || [])
+        .filter((m: any) => m.role === 'user' || m.role === 'assistant')
+        .map((m: any) => ({
+          role: m.role as 'user' | 'assistant',
+          content: extractText(m.content),
+          timestamp: typeof m.created === 'number' ? m.created : Date.now(),
+        }))
+        .filter((m: any) => m.content.length > 0);
+
+      this.emit('sessionResumed', { sessionId, title: session.title });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Get auto-memories for the current project.
+   */
+  async getMemories(): Promise<string> {
+    if (!this.autoMemory) {
+      this.autoMemory = new AutoMemoryManager({ cwd: this.cwd });
+    }
+    try {
+      return await this.autoMemory.getContextMemories() || '';
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * Run dream consolidation on memories.
+   */
+  async dreamMemories(): Promise<string> {
+    try {
+      const { runDreamConsolidation } = await import('xibecode-core');
+      const result = await runDreamConsolidation({ cwd: this.cwd });
+      return `Dream done: ${result.created} created, ${result.merged} merged, ${result.pruned} pruned.`;
+    } catch {
+      return 'Dream consolidation failed.';
+    }
+  }
+
+  /**
+   * Initialize memory systems for the current workspace.
+   */
+  private async initMemory(): Promise<void> {
+    try {
+      this.memory = new NeuralMemory(this.cwd);
+      await this.memory.init().catch(() => {});
+    } catch {}
+
+    try {
+      this.autoMemory = new AutoMemoryManager({ cwd: this.cwd });
+    } catch {}
+  }
+
+  /**
+   * Save current session to disk.
+   */
+  private async saveSession(): Promise<void> {
+    if (!this.currentSessionId || this.history.length === 0) return;
+    try {
+      const messages = this.history.map((m) => ({
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp,
+      }));
+
+      await this.sessionManager.saveSession({
+        id: this.currentSessionId,
+        title: this.history[0]?.content?.slice(0, 60) || 'Untitled',
+        model: this.configService.getModel(),
+        cwd: this.cwd,
+        created: this.history[0]?.timestamp || Date.now(),
+        updated: Date.now(),
+        messages,
+      } as any);
+    } catch {}
   }
 
   /**
@@ -66,19 +204,25 @@ export class AgentService extends EventEmitter {
     if (!apiKey) {
       this.emit('event', {
         type: 'error',
-        data: { message: 'No API key configured. Run "XibeCode: Set API Key" first.' },
+        data: { message: 'No API key configured. Run "XibeCode: Set API Key" or set it in Settings.' },
       });
       return;
     }
 
     this.running = true;
     this.abortController = new AbortController();
+    this.runStartTime = Date.now();
     this.emit('status', 'running');
+
+    // Create a new session if we don't have one
+    if (!this.currentSessionId) {
+      this.currentSessionId = `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    }
 
     // Record user message
     this.history.push({ role: 'user', content: prompt, timestamp: Date.now() });
 
-    let cwd = process.cwd();
+    let cwd = this.cwd;
     const activeEditor = vscode.window.activeTextEditor;
     if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
       if (activeEditor) {
@@ -91,23 +235,31 @@ export class AgentService extends EventEmitter {
       const path = require('path');
       cwd = path.dirname(activeEditor.document.uri.fsPath);
     }
+
     const model = this.configService.getModel();
     const provider = this.configService.getProvider();
     const baseUrl = this.configService.getBaseUrl();
     const maxIterations = this.configService.getMaxIterations();
+    const verbose = this.configService.getDefaultVerbose();
 
     try {
+      // Initialize memory systems
+      await this.initMemory();
+
       // Initialize core components — mirrors CLI's run.ts setup
       const mcpClientManager = new MCPClientManager();
-      const memory = new NeuralMemory(cwd);
-      await memory.init().catch(() => {});
+
+      if (!this.memory) {
+        this.memory = new NeuralMemory(cwd);
+        await this.memory.init().catch(() => {});
+      }
 
       const skillManager = new SkillManager(cwd, apiKey, baseUrl, model, provider as any);
       await skillManager.loadSkills().catch(() => {});
 
       const toolExecutor = new CodingToolExecutor(cwd, {
         mcpClientManager,
-        memory,
+        memory: this.memory,
         skillManager,
       });
 
@@ -117,7 +269,7 @@ export class AgentService extends EventEmitter {
           baseUrl,
           model,
           maxIterations,
-          verbose: false,
+          verbose,
           provider: provider as any,
         },
         provider as any,
@@ -155,6 +307,7 @@ export class AgentService extends EventEmitter {
       await agent.run(prompt, toolExecutor.getTools(), toolExecutor);
 
       const stats = agent.getStats();
+      const duration = Date.now() - this.runStartTime;
 
       // Record assistant message
       this.history.push({
@@ -171,8 +324,27 @@ export class AgentService extends EventEmitter {
           toolCalls: stats.toolCalls,
           filesChanged: stats.filesChanged,
           costLabel: stats.costLabel,
+          duration,
         },
       });
+
+      // Extract memories from this turn
+      if (this.autoMemory) {
+        try {
+          const { extractMemoriesFromTurn, writeExtractedMemories } = await import('xibecode-core');
+          const msgs = this.history
+            .filter(m => m.role !== 'system')
+            .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+          const extracted = extractMemoriesFromTurn(msgs as any);
+          if (extracted && extracted.length > 0) {
+            await writeExtractedMemories(extracted, { cwd: this.cwd });
+          }
+        } catch {}
+      }
+
+      // Save session
+      await this.saveSession();
+
     } catch (err: any) {
       this.emit('event', {
         type: 'error',
@@ -196,4 +368,34 @@ export class AgentService extends EventEmitter {
     this.abort();
     this.removeAllListeners();
   }
+}
+
+/**
+ * Extract readable text from Anthropic API content format.
+ * Content can be a plain string or an array of content blocks:
+ *   [{ type: "text", text: "..." }, { type: "tool_use", name: "...", input: {...} }, ...]
+ */
+function extractText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    const parts: string[] = [];
+    for (const block of content) {
+      if (typeof block === 'string') {
+        parts.push(block);
+      } else if (block && typeof block === 'object') {
+        if (block.type === 'text' && typeof block.text === 'string') {
+          parts.push(block.text);
+        } else if (block.type === 'tool_use' && block.name) {
+          const input = block.input ? `\n${JSON.stringify(block.input, null, 2)}` : '';
+          parts.push(`[Tool: ${block.name}]${input}`);
+        } else if (block.type === 'tool_result' && block.content) {
+          const resultText = extractText(block.content);
+          if (resultText) parts.push(resultText);
+        }
+      }
+    }
+    return parts.join('\n');
+  }
+  if (content && typeof content === 'object') return JSON.stringify(content);
+  return '';
 }

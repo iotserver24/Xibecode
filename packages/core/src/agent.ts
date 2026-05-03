@@ -18,6 +18,7 @@ import {
   isAutoMemoryLoadEnabled,
 } from './utils/auto-memory.js';
 import type { ImageAttachment } from './types/index.js';
+import type { StreamEvent, StreamOptions } from './types/index.js';
 import { SettingsManager } from './settings/settings.js';
 import { PermissionRuleManager } from './permission-rules/permission-rules.js';
 import { HooksManager } from './hooks/hooks.js';
@@ -279,6 +280,66 @@ function compactLargeString(value: string, maxChars: number): string {
   const headLength = Math.ceil(available * 0.6);
   const tailLength = Math.floor(available * 0.4);
   return `${value.slice(0, headLength)}${marker}${value.slice(value.length - tailLength)}`;
+}
+
+// ─── Retry Helpers ───────────────────────────────────────────
+
+/** Classify an API error as retryable or fatal. */
+function isRetryableError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as any;
+
+  // Network-level errors: always retryable
+  const msg = String(e.message || '').toLowerCase();
+  if (msg.includes('econnreset') || msg.includes('econnrefused') || msg.includes('etimedout') ||
+      msg.includes('socket hang up') || msg.includes('network') || msg.includes('fetch failed') ||
+      msg.includes('inactivity timeout') || msg.includes('epipe')) {
+    return true;
+  }
+
+  // HTTP status-based: retry on 429 (rate limit), 500, 502, 503, 504
+  const status = e.status ?? e.statusCode ?? e.httpStatus;
+  if (typeof status === 'number') {
+    return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+  }
+
+  // API error with embedded status
+  if (e.error?.status) {
+    const s = e.error.status;
+    return s === 429 || s === 500 || s === 502 || s === 503 || s === 504;
+  }
+
+  // Overloaded / capacity errors from providers
+  if (msg.includes('overloaded') || msg.includes('capacity') || msg.includes('rate limit') ||
+      msg.includes('too many requests') || msg.includes('temporarily unavailable') ||
+      msg.includes('server error') || msg.includes('service unavailable')) {
+    return true;
+  }
+
+  return false;
+}
+
+/** Check if an error is a rate-limit (429) specifically, for longer backoff. */
+function isRateLimitError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as any;
+  const status = e.status ?? e.statusCode ?? e.httpStatus ?? e.error?.status;
+  if (status === 429) return true;
+  const msg = String(e.message || '').toLowerCase();
+  return msg.includes('rate limit') || msg.includes('too many requests');
+}
+
+/** Compute backoff delay with exponential increase and jitter.
+ *  @param attempt - 1-based attempt number
+ *  @param baseMs - base delay in ms (default 2000)
+ *  @param maxMs - cap in ms (default 30000)
+ */
+function retryDelayMs(attempt: number, baseMs = 2000, maxMs = 30000): number {
+  // Exponential: 2s, 4s, 8s, 16s, 30s, 30s, ...
+  const exp = Math.min(baseMs * Math.pow(2, attempt - 1), maxMs);
+  // Add jitter: random 0-25% of the exponential value
+  const jitter = Math.floor(exp * Math.random() * 0.25);
+  return exp + jitter;
 }
 
 // ─── Agent ────────────────────────────────────────────────────
@@ -723,9 +784,14 @@ export class EnhancedAgent extends EventEmitter {
       this.emit('thinking', { message: 'AI is thinking...' });
 
       const maxApiRetries = 5;
-      const retryDelayMs = 2000;
       let response: any;
       let streamed = false;
+
+      // Heartbeat: emit a thinking event every 30s while waiting for the API
+      // so the TUI watchdog doesn't kill the agent during long model responses.
+      const heartbeatInterval = setInterval(() => {
+        this.emit('thinking', { message: 'Still waiting for model response...' });
+      }, 30_000);
 
       try {
         // Tools are supported for both Anthropic and OpenAI-format models.
@@ -741,18 +807,39 @@ export class EnhancedAgent extends EventEmitter {
             if (opts?.signal?.aborted || this.isAbortError(apiError)) {
               throw apiError;
             }
+
+            const retryable = isRetryableError(apiError);
+            const rateLimit = isRateLimitError(apiError);
             this.emit('error', { message: 'API Error', error: apiError.message });
+
+            if (!retryable) {
+              // Non-retryable error (auth, bad request, etc.) — fail immediately
+              throw apiError;
+            }
+
             if (attempt < maxApiRetries) {
+              // Exponential backoff: longer for rate limits
+              const delay = rateLimit
+                ? retryDelayMs(attempt, 5000, 60000)  // 5s base, up to 60s for rate limits
+                : retryDelayMs(attempt, 2000, 30000);  // 2s base, up to 30s for other errors
+              const reason = rateLimit ? 'rate limited' : 'retryable error';
               this.emit('warning', {
-                message: `Retrying in ${retryDelayMs / 1000}s (attempt ${attempt}/${maxApiRetries})...`,
+                message: `${reason} — retrying in ${(delay / 1000).toFixed(1)}s (attempt ${attempt}/${maxApiRetries})...`,
               });
-              await new Promise((r) => setTimeout(r, retryDelayMs));
+              await new Promise((r) => setTimeout(r, delay));
             } else {
+              this.emit('warning', {
+                message: `Max retries (${maxApiRetries}) exceeded for retryable error.`,
+              });
               throw apiError;
             }
           }
         }
+      } finally {
+        clearInterval(heartbeatInterval);
+      }
 
+      try {
         if (!response) {
           throw new Error('API call failed after retries');
         }
@@ -1449,6 +1536,8 @@ export class EnhancedAgent extends EventEmitter {
     // Track abort state to handle errors during streaming
     let streamAborted = false;
     let abortHandler: (() => void) | undefined;
+    // Inactivity timer declared here so it's accessible in the catch cleanup
+    let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
 
     // ── Try streaming first (SSE) ─────────────────────────
     try {
@@ -1480,7 +1569,10 @@ export class EnhancedAgent extends EventEmitter {
         } catch {
           // ignore body read error
         }
-        throw new Error(errorMsg);
+        const error = new Error(errorMsg);
+        // Attach status for retry classification
+        (error as any).status = streamResponse.status;
+        throw error;
       }
 
       const body = streamResponse.body;
@@ -1499,10 +1591,13 @@ export class EnhancedAgent extends EventEmitter {
 
       // When the user cancels (Esc), node-fetch aborts the Readable stream and emits an
       // 'error' event. If no listener is attached, Node treats it as unhandled and crashes.
+      // Instead of re-throwing (which doesn't propagate from event handlers), we store the
+      // error and check it in the for-await loop, then destroy the stream to break the loop.
+      let streamBodyError: unknown = null;
       body.on('error', (err: unknown) => {
         if (isAbortError(err) || signal?.aborted || streamAborted) return;
-        // Re-throw non-abort errors so they can be caught by the outer try-catch
-        throw err;
+        streamBodyError = err;
+        (body as any).destroy();
       });
 
       let fullText = '';
@@ -1510,9 +1605,30 @@ export class EnhancedAgent extends EventEmitter {
       let hasEmittedStart = false;
       let buffer = '';
 
+      // Inactivity timeout: if no SSE chunk arrives for 120s, consider the connection dead.
+      // This prevents hanging forever when a provider silently drops the connection.
+      const STREAM_INACTIVITY_MS = 120_000;
+      let lastChunkAt = Date.now();
+      inactivityTimer = setTimeout(() => {
+        if (!streamAborted && !signal?.aborted) {
+          (body as any).destroy(new Error(`Stream inactivity timeout: no data for ${STREAM_INACTIVITY_MS / 1000}s`));
+        }
+      }, STREAM_INACTIVITY_MS);
+
+      const resetInactivityTimer = () => {
+        lastChunkAt = Date.now();
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(() => {
+          if (!streamAborted && !signal?.aborted) {
+            (body as any).destroy(new Error(`Stream inactivity timeout: no data for ${STREAM_INACTIVITY_MS / 1000}s`));
+          }
+        }, STREAM_INACTIVITY_MS);
+      };
+
       const textDecoder = new TextDecoder();
 
       for await (const value of body) {
+        resetInactivityTimer();
         buffer += typeof value === 'string' ? value : textDecoder.decode(value as Uint8Array, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
@@ -1578,6 +1694,18 @@ export class EnhancedAgent extends EventEmitter {
         this.emit('stream_end', {});
       }
 
+      // Clean up inactivity timer
+      if (inactivityTimer) {
+        clearTimeout(inactivityTimer);
+        inactivityTimer = null;
+      }
+
+      // If the stream body emitted a non-abort error, surface it now
+      // (throwing inside the 'error' handler doesn't propagate to for-await).
+      if (streamBodyError) {
+        throw streamBodyError;
+      }
+
       const content: ContentBlock[] = [];
       if (fullText) content.push({ type: 'text', text: fullText } as TextBlock);
       for (const tc of toolCallsAccum) {
@@ -1603,6 +1731,11 @@ export class EnhancedAgent extends EventEmitter {
       const message = { content: content.length ? content : [{ type: 'text', text: '' } as TextBlock] };
       return { message, streamed: hasEmittedStart };
     } catch (_streamError) {
+      // Clean up inactivity timer on error
+      if (inactivityTimer) {
+        clearTimeout(inactivityTimer);
+        inactivityTimer = null;
+      }
       // Clean up abort listener on error
       if (abortHandler) signal?.removeEventListener('abort', abortHandler);
 
@@ -1611,18 +1744,41 @@ export class EnhancedAgent extends EventEmitter {
       if (signal?.aborted || isAbortError(_streamError) || streamAborted) {
         throw _streamError;
       }
-      // ── Fallback to non-streaming ───────────────────────
+
+      // For retryable errors (network, timeout, 5xx), throw so the outer retry loop
+      // in run() can re-attempt with exponential backoff — don't fall back to
+      // non-streaming for these, as the issue is transient.
+      if (isRetryableError(_streamError)) {
+        throw _streamError;
+      }
+
+      // ── Fallback to non-streaming for non-retryable streaming errors ──
+      // (e.g. the provider simply doesn't support SSE, or returned a non-streamable error)
       let response: any;
       try {
-        response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.config.apiKey}`,
-          },
-          body: JSON.stringify(baseBody),
-          signal,
-        });
+        // Add a 120s timeout for the non-streaming request too
+        const nonStreamController = new AbortController();
+        const nonStreamTimeout = setTimeout(() => {
+          nonStreamController.abort();
+        }, 120_000);
+        // Also forward the parent signal if the user cancels
+        const parentAbortHandler = () => nonStreamController.abort();
+        signal?.addEventListener('abort', parentAbortHandler);
+
+        try {
+          response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${this.config.apiKey}`,
+            },
+            body: JSON.stringify(baseBody),
+            signal: nonStreamController.signal,
+          });
+        } finally {
+          clearTimeout(nonStreamTimeout);
+          signal?.removeEventListener('abort', parentAbortHandler);
+        }
       } catch (err: unknown) {
         if (signal?.aborted || isAbortError(err)) throw err;
         throw err;
@@ -1630,7 +1786,10 @@ export class EnhancedAgent extends EventEmitter {
 
       if (!response.ok) {
         const text = await response.text();
-        throw new Error(`OpenAI-compatible API error: ${response.status} ${text}`);
+        const error = new Error(`OpenAI-compatible API error: ${response.status} ${text}`);
+        // Attach status for retry classification
+        (error as any).status = response.status;
+        throw error;
       }
 
       const data: any = await response.json();
@@ -2089,6 +2248,139 @@ ${this.sessionMemory ? this.sessionMemory.getSummary() : ''}
 ${this.mindsetAdaptive ? `\n## Current reasoning mindset: ${this.currentMindset.toUpperCase()}\n${this.currentMindset === 'convergent' ? 'Focus on one solution; narrow options and commit. Use [[SET_MINDSET: divergent]] to explore alternatives, or [[SET_MINDSET: algorithmic]] for step-by-step.' : this.currentMindset === 'divergent' ? 'Explore alternatives; brainstorm. Use [[SET_MINDSET: convergent]] to narrow, or [[SET_MINDSET: algorithmic]] for step-by-step.' : 'Reason step-by-step; formal. Use [[SET_MINDSET: convergent]] to commit, or [[SET_MINDSET: divergent]] to explore.'}\n` : ''}
 ${this.contextHintFiles.length > 0 ? `\n## Suggested relevant files for this task\nPrioritize these when using get_context or read_file:\n${this.contextHintFiles.slice(0, 50).map(f => `- ${f}`).join('\n')}\n` : ''}
 ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
+  }
+
+  /**
+   * Stream agent events as an async generator.
+   *
+   * Provides a typed, ergonomic alternative to the EventEmitter-based
+   * `on('event', ...)` pattern. Use with `for await`:
+   *
+   * ```ts
+   * for await (const event of agent.stream(prompt, tools, executor)) {
+   *   if (event.type === 'text_delta') process.stdout.write(event.text);
+   *   if (event.type === 'complete') break;
+   * }
+   * ```
+   *
+   * Internally delegates to `run()` and translates the internal
+   * `AgentEvent` emissions into typed `StreamEvent` objects.
+   */
+  async *stream(
+    prompt: string,
+    tools: Tool[],
+    toolExecutor: any,
+    opts?: StreamOptions,
+  ): AsyncGenerator<StreamEvent, void, undefined> {
+    const pending: StreamEvent[] = [];
+    let resolveNext: ((value: IteratorResult<StreamEvent>) => void) | null = null;
+    let done = false;
+
+    const push = (event: StreamEvent) => {
+      if (done) return;
+      if (resolveNext) {
+        const r = resolveNext;
+        resolveNext = null;
+        r({ value: event, done: false });
+      } else {
+        pending.push(event);
+      }
+    };
+
+    const pull = (): Promise<IteratorResult<StreamEvent>> => {
+      if (pending.length > 0) {
+        return Promise.resolve({ value: pending.shift()!, done: false });
+      }
+      if (done) {
+        return Promise.resolve({ value: undefined, done: true } as IteratorResult<StreamEvent>);
+      }
+      return new Promise<IteratorResult<StreamEvent>>((r) => { resolveNext = r; });
+    };
+
+    // Translate internal AgentEvents into typed StreamEvents
+    const onEvent = (raw: { type: string; data: any }) => {
+      switch (raw.type) {
+        case 'thinking':
+          push({ type: 'thinking', message: raw.data?.message ?? 'Thinking...' });
+          break;
+        case 'stream_start':
+          // stream_start carries persona; text deltas follow
+          break;
+        case 'stream_text':
+          push({ type: 'text_delta', text: raw.data?.text ?? '', persona: raw.data?.persona });
+          break;
+        case 'stream_end':
+          // no-op; text_delta events cover the content
+          break;
+        case 'response':
+          push({ type: 'text_delta', text: raw.data?.text ?? '', persona: raw.data?.persona });
+          break;
+        case 'tool_call':
+          push({ type: 'tool_call_start', name: raw.data?.name ?? 'tool', input: raw.data?.input, index: raw.data?.index ?? 0 });
+          break;
+        case 'tool_result':
+          push({ type: 'tool_call_end', name: raw.data?.name ?? 'tool', result: raw.data?.result, success: raw.data?.success !== false, index: 0 });
+          break;
+        case 'mode_changed':
+          push({ type: 'mode_changed', from: raw.data?.from ?? '', to: raw.data?.to ?? '', reason: raw.data?.reason ?? '', auto: raw.data?.auto ?? false });
+          break;
+        case 'warning':
+          push({ type: 'warning', message: raw.data?.message ?? '' });
+          break;
+        case 'error':
+          push({ type: 'error', message: raw.data?.message ?? 'Unknown error', error: raw.data?.error });
+          break;
+        case 'complete':
+          push({
+            type: 'complete',
+            iterations: raw.data?.iterations ?? 0,
+            toolCalls: raw.data?.toolCalls ?? 0,
+            filesChanged: raw.data?.filesChanged ?? 0,
+            costLabel: raw.data?.costLabel,
+            inputTokens: raw.data?.inputTokens ?? 0,
+            outputTokens: raw.data?.outputTokens ?? 0,
+          });
+          break;
+      }
+    };
+
+    this.on('event', onEvent);
+
+    // Run the agent in the background; resolve the generator when done
+    const runPromise = this.run(prompt, tools, toolExecutor, {
+      images: opts?.images,
+      signal: opts?.signal,
+    }).then(() => {
+      done = true;
+      if (resolveNext) {
+        const r = resolveNext;
+        resolveNext = null;
+        r({ value: undefined, done: true } as IteratorResult<StreamEvent>);
+      }
+    }).catch((err: any) => {
+      if (opts?.signal?.aborted || this.isAbortError(err)) {
+        push({ type: 'cancelled', iterations: this.iterationCount, toolCalls: this.toolCallCount });
+      } else {
+        push({ type: 'error', message: err?.message ?? String(err) });
+      }
+      done = true;
+      if (resolveNext) {
+        const r = resolveNext;
+        resolveNext = null;
+        r({ value: undefined, done: true } as IteratorResult<StreamEvent>);
+      }
+    });
+
+    try {
+      while (!done || pending.length > 0) {
+        const result = await pull();
+        if (result.done) break;
+        yield result.value;
+      }
+    } finally {
+      this.off('event', onEvent);
+      await runPromise.catch(() => {});
+    }
   }
 
   getStats() {

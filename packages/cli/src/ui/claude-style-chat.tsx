@@ -438,13 +438,14 @@ function XibeCodeChatApp(props: {
   useEffect(() => {
     if (!isRunning) return;
     const id = setInterval(() => {
-      // Silent means: no visible output (tool_call/tool_result/stream_text/response) for 90s.
-      if (Date.now() - lastVisibleOutputAtRef.current > 90_000) {
+      // Silent means: no visible output (tool_call/tool_result/stream_text/response) for 180s.
+      // Some models (DeepSeek, etc.) can take a long time for their first token during complex tasks.
+      if (Date.now() - lastVisibleOutputAtRef.current > 180_000) {
         if (abortControllerRef.current && abortReasonRef.current === 'none') {
           abortReasonRef.current = 'watchdog';
           pushLine({
             type: 'info',
-            text: `No output for 90s — restarting (attempt ${Math.min(restartAttemptsRef.current + 1, 2)}/2)…`,
+            text: `No output for 180s — restarting (attempt ${Math.min(restartAttemptsRef.current + 1, 2)}/2)…`,
           });
           abortControllerRef.current.abort();
         }
@@ -2019,16 +2020,34 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
 
     activeAgent.removeAllListeners('event');
     let streamedBuffer = '';
+    let streamedLineEmitted = false;
+    let streamFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const flushStreamedBuffer = () => {
+      if (streamedBuffer.trim()) {
+        onLine({ type: 'assistant', text: streamedBuffer.trim() });
+        streamedBuffer = '';
+        streamedLineEmitted = false;
+      }
+    };
 
     activeAgent.on('event', (event: { type: string; data?: Record<string, unknown> }) => {
       switch (event.type) {
         case 'thinking':
+          // Flush any pending streamed text before showing thinking indicator
+          flushStreamedBuffer();
+          if (streamFlushTimer) { clearTimeout(streamFlushTimer); streamFlushTimer = null; }
+          // Thinking messages are visible output — reset the watchdog timer
+          opts?.onVisibleOutput?.();
           onLine({
             type: 'info',
             text: (event.data?.message as string) || 'Thinking…',
           });
           break;
         case 'tool_call': {
+          // Flush any pending streamed text before showing tool call
+          flushStreamedBuffer();
+          if (streamFlushTimer) { clearTimeout(streamFlushTimer); streamFlushTimer = null; }
           opts?.onVisibleOutput?.();
           const name = String(event.data?.name ?? 'tool');
           const input = event.data?.input;
@@ -2040,6 +2059,9 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
           break;
         }
         case 'tool_result': {
+          // Flush any pending streamed text before showing tool result
+          flushStreamedBuffer();
+          if (streamFlushTimer) { clearTimeout(streamFlushTimer); streamFlushTimer = null; }
           opts?.onVisibleOutput?.();
           const name = String(event.data?.name ?? 'tool');
           const result = event.data?.result;
@@ -2063,12 +2085,22 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
         case 'stream_text':
           opts?.onVisibleOutput?.();
           streamedBuffer += (event.data?.text as string) || '';
+          // Emit buffered text incrementally every ~500ms or when buffer gets large
+          // so the user sees real-time output instead of waiting for stream_end
+          if (!streamedLineEmitted || streamedBuffer.length > 500) {
+            flushStreamedBuffer();
+            streamedLineEmitted = true;
+          } else if (!streamFlushTimer) {
+            streamFlushTimer = setTimeout(() => {
+              streamFlushTimer = null;
+              flushStreamedBuffer();
+              streamedLineEmitted = true;
+            }, 500);
+          }
           break;
         case 'stream_end':
-          if (streamedBuffer.trim()) {
-            onLine({ type: 'assistant', text: streamedBuffer.trim() });
-          }
-          streamedBuffer = '';
+          if (streamFlushTimer) { clearTimeout(streamFlushTimer); streamFlushTimer = null; }
+          flushStreamedBuffer();
           break;
         case 'response':
           opts?.onVisibleOutput?.();

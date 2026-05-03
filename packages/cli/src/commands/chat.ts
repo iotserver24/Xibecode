@@ -8,7 +8,7 @@ import { SkillManager } from 'xibecode-core';
 import { builtInSkillsDir } from '../utils/built-in-skills-dir.js';
 import { MCPClientManager } from 'xibecode-core';
 import { CodingToolExecutor, NeuralMemory } from 'xibecode-core';
-import { EnhancedAgent } from 'xibecode-core';
+import { EnhancedAgent, AgentStream } from 'xibecode-core';
 import { SessionManager } from 'xibecode-core';
 
 interface ChatOptions {
@@ -62,41 +62,6 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
     process.stdout.write(line.endsWith('\n') ? line : line + '\n');
   };
 
-  const onEvent = (event: any) => {
-    switch (event.type) {
-      case 'thinking':
-        print(`[info] ${(event.data?.message as string) || 'Thinking…'}`);
-        break;
-      case 'tool_call':
-        print(`[tool] ${String(event.data?.name ?? 'tool')}`);
-        break;
-      case 'tool_result':
-        print(
-          `[tool_out] ${String(event.data?.name ?? 'tool')}: ${
-            event.data?.success === false ? 'error' : 'ok'
-          }`,
-        );
-        break;
-      case 'stream_start':
-        print('[assistant] ');
-        break;
-      case 'stream_text':
-        process.stdout.write(String(event.data?.text ?? ''));
-        break;
-      case 'stream_end':
-        process.stdout.write('\n');
-        break;
-      case 'response':
-        print(String(event.data?.text ?? ''));
-        break;
-      case 'error':
-        print(`[error] ${(event.data?.message as string) || (event.data?.error as string) || 'Unknown error'}`);
-        break;
-      default:
-        break;
-    }
-  };
-
   rl.prompt();
   for await (const line of rl) {
     const input = String(line ?? '').trim();
@@ -138,12 +103,38 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
       provider,
     );
 
-    agent.on('event', onEvent);
-    await agent.run(input, toolExecutor.getTools(), toolExecutor);
-    const stats = agent.getStats();
-    print(
-      `[done]` + (stats.costLabel ? ` cost ${stats.costLabel}` : ''),
-    );
+    const stream = new AgentStream(agent, input, toolExecutor.getTools(), toolExecutor);
+    let costLabel = '';
+    await stream.onEvent((event) => {
+      switch (event.type) {
+        case 'thinking':
+          print(`[info] ${event.message}`);
+          break;
+        case 'text_delta':
+          process.stdout.write(event.text);
+          break;
+        case 'tool_call_start':
+          print(`[tool] ${event.name}`);
+          break;
+        case 'tool_call_end':
+          print(`[tool_out] ${event.name}: ${event.success ? 'ok' : 'error'}`);
+          break;
+        case 'warning':
+          print(`[warn] ${event.message}`);
+          break;
+        case 'error':
+          print(`[error] ${event.message}`);
+          break;
+        case 'complete':
+          costLabel = event.costLabel ?? '';
+          break;
+        case 'cancelled':
+          print('[cancelled]');
+          break;
+      }
+    });
+    process.stdout.write('\n');
+    print(`[done]` + (costLabel ? ` cost ${costLabel}` : ''));
     rl.prompt();
   }
 }
