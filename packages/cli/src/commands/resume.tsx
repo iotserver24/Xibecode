@@ -9,6 +9,7 @@ import { renderAndRun } from '../interactiveHelpers.js';
 interface ResumeOptions {
   profile?: string;
   session?: string;
+  all?: boolean;
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -100,7 +101,7 @@ function SessionPicker(props: {
                 <Text color="subtle">
                   {'    '}
                   {formatRelativeTime(session.updated)} · {session.model} ·{' '}
-                  {session.id.slice(0, 20)}...
+                  {session.id.slice(0, 20)}...{session.cwd ? ` · ${session.cwd.split('/').slice(-2).join('/')}` : ''}
                 </Text>
               </Box>
             );
@@ -146,16 +147,18 @@ export async function resumeCommand(options: ResumeOptions): Promise<void> {
     return;
   }
 
-  const cwdSessions = await sessionManager.listSessions(process.cwd());
+  const sessions = options.all
+    ? await sessionManager.listSessions()
+    : await sessionManager.listSessions(process.cwd());
 
-  if (cwdSessions.length === 0) {
-    console.log(`No sessions found in ${process.cwd()}.`);
+  if (sessions.length === 0) {
+    console.log(options.all ? 'No sessions found.' : `No sessions found in ${process.cwd()}.`);
     console.log('\nStart a new session with: xibecode chat');
     process.exit(0);
     return;
   }
 
-  const selectedId = await showSessionPicker(cwdSessions);
+  const selectedId = await showSessionPicker(sessions);
 
   if (!selectedId) {
     console.log('Resume cancelled.');

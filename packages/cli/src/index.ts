@@ -9,6 +9,9 @@ import { configCommand } from './commands/config.js';
 import { mcpCommand } from './commands/mcp.js';
 import { diagnosticsCommand } from './commands/diagnostics.js';
 import { skillsCommand } from './commands/skills.js';
+import { settingsCommand } from './commands/settings.js';
+import { hooksCommand } from './commands/hooks.js';
+import { memoryCommand } from './commands/memory.js';
 import dotenv from 'dotenv';
 import { createRequire } from 'module';
 
@@ -89,8 +92,9 @@ program
   .description('Resume a previous chat session')
   .argument('[session-id]', 'Session ID to resume (optional - shows picker if not provided)')
   .option('--profile <name>', 'Config profile to use (default: configured default profile)')
-  .action((sessionId: string | undefined, options: { profile?: string }) => {
-    resumeCommand({ session: sessionId, profile: options.profile });
+  .option('--all', 'Show sessions from all projects, not just the current directory')
+  .action((sessionId: string | undefined, options: { profile?: string; all?: boolean }) => {
+    resumeCommand({ session: sessionId, profile: options.profile, all: options.all });
   });
 
 // Configuration
@@ -129,6 +133,27 @@ program
   .command('skills [action] [args...]')
   .description('List/search/show skills (built-in + .xibecode/skills)')
   .action((action: string | undefined, args: string[], options: any) => skillsCommand(action, args, options));
+
+// Settings management
+program
+  .command('settings [action] [args...]')
+  .description('Manage multi-source settings (list, get, set, sources, paths)')
+  .option('--profile <name>', 'Config profile to use')
+  .action((action: string | undefined, args: string[], options: any) => settingsCommand(action, args, options));
+
+// Hooks management
+program
+  .command('hooks [action] [args...]')
+  .description('Manage lifecycle hooks (list, add, remove, events)')
+  .option('--profile <name>', 'Config profile to use')
+  .action((action: string | undefined, args: string[], options: any) => hooksCommand(action, args, options));
+
+// Memory management
+program
+  .command('memory [action] [args...]')
+  .description('Manage project auto-memories (list, search, dream, path)')
+  .option('--profile <name>', 'Config profile to use')
+  .action((action: string | undefined, args: string[], options: any) => memoryCommand(action, args, options));
 
 // MCP Server Management
 const mcpCmd = program

@@ -18,6 +18,11 @@ import {
   isAutoMemoryLoadEnabled,
 } from './utils/auto-memory.js';
 import type { ImageAttachment } from './types/index.js';
+import { SettingsManager } from './settings/settings.js';
+import { PermissionRuleManager } from './permission-rules/permission-rules.js';
+import { HooksManager } from './hooks/hooks.js';
+import { AutoMemoryManager } from './auto-memory/auto-memory.js';
+import { microcompact, shouldAutoCompact, resetMicrocompactCircuitBreaker, estimateTokenCount } from './microcompact.js';
 
 /** Reasoning tier for hierarchical (AX-lite) behavior: strategic = plan only, tactical = per-step decisions, operational = tool use. */
 export type ReasoningTier = 'strategic' | 'tactical' | 'operational';
@@ -522,10 +527,10 @@ export class EnhancedAgent extends EventEmitter {
     this.memory.init().catch(console.error);
 
     // Initialize settings, permission rules, hooks, and auto-memory
-    this.settingsManager = new (require('./settings/settings.js') as any).SettingsManager();
-    this.ruleManager = new (require('./permission-rules/permission-rules.js') as any).PermissionRuleManager(this.settingsManager);
-    this.hooksManager = new (require('./hooks/hooks.js') as any).HooksManager(this.settingsManager);
-    this.autoMemManager = new (require('./auto-memory/auto-memory.js') as any).AutoMemoryManager({ cwd: process.cwd() });
+    this.settingsManager = new SettingsManager({ cwd: process.cwd() });
+    this.ruleManager = new PermissionRuleManager(this.settingsManager);
+    this.hooksManager = new HooksManager(this.settingsManager);
+    this.autoMemManager = new AutoMemoryManager({ cwd: process.cwd() });
 
     // Load settings and hooks asynchronously (non-blocking)
     this.initializeFeatures().catch(() => { /* non-fatal */ });
@@ -772,7 +777,6 @@ export class EnhancedAgent extends EventEmitter {
 
         // Try microcompact first (lighter weight)
         if (estimatedTokens > contextWindow - compactThreshold) {
-          const { microcompact, resetMicrocompactCircuitBreaker } = await import('./microcompact.js');
           const mcResult = microcompact({
             messages: this.messages,
             tokenCount: estimatedTokens,
