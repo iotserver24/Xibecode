@@ -1,7 +1,24 @@
 # XibeCode Documentation Progress Report
 
 > **Last Updated:** May 2026
-> **Status:** Phase 1 & 2 (Partial) Completed, Monorepo Migration Complete
+> **Status:** Phase 1 & 2 Complete, v1.1 Feature Docs Added
+
+## Update for v1.1 (May 2026)
+
+Five major new features were added to `xibecode-core` and exposed via CLI commands:
+
+- **Multi-Source Settings** — Layered configuration merging from user, project, local, and policy sources. CLI: `xc settings`.
+- **Lifecycle Hooks** — Register command, prompt, or HTTP hooks at 9 agent lifecycle events. CLI: `xc hooks`.
+- **Auto-Memory** — Automatic memory extraction, keyword-ranked context retrieval, and dream consolidation. CLI: `xc memory`.
+- **Permission Rules** — Fine-grained allow/deny/ask rules for tool execution via settings.
+- **Microcompact** — Lightweight context reduction with ephemeral marking before full compaction.
+
+Additional improvements:
+
+- **Smart Mode Switching** — Agent-initiated mode changes auto-approved.
+- **Project-Scoped Sessions** — Sessions stored per-project under `~/.xibecode/projects/<path>/`.
+
+New site docs created: `settings.mdx`, `hooks.mdx`, `memory.mdx`, `permissions.mdx`.
 
 ## Update for v1.0.4 (May 2026)
 
@@ -9,8 +26,6 @@ The project was restructured into a pnpm workspace monorepo:
 
 - **`packages/core/`** (`xibecode-core`) - AI agent engine published as a standalone npm package
 - **`packages/cli/`** (`xibecode`) - CLI interface depending on `xibecode-core`
-
-Documentation needs updating across all files to reflect the new structure. Root-level docs (ARCHITECTURE.md, CONTRIBUTING.md, etc.) still reference the old `src/` structure and need a full pass.
 
 ## Executive Summary
 
@@ -26,35 +41,6 @@ This report tracks the progress of the comprehensive documentation initiative fo
 | Skills | Root `skills/` | `packages/cli/skills/` |
 | Tests | Root `tests/` | Removed (broken imports, need recreation) |
 | WebUI | `src/webui/` | Removed entirely |
-
-### Key File Path Mappings
-
-| Old Path | New Path |
-|----------|----------|
-| `src/core/agent.ts` | `packages/core/src/agent.ts` |
-| `src/core/tools.ts` | `packages/core/src/tools.ts` |
-| `src/core/modes.ts` | `packages/core/src/modes.ts` |
-| `src/core/memory.ts` | `packages/core/src/memory.ts` |
-| `src/core/skills.ts` | `packages/core/src/skills.ts` |
-| `src/core/plugins.ts` | `packages/core/src/plugins.ts` |
-| `src/core/mcp-client.ts` | `packages/core/src/mcp-client.ts` |
-| `src/core/editor.ts` | `packages/core/src/editor.ts` |
-| `src/core/swarm.ts` | `packages/core/src/swarm.ts` |
-| `src/core/background-agent.ts` | `packages/core/src/background-agent.ts` |
-| `src/core/permissions.ts` | `packages/core/src/permissions.ts` |
-| `src/core/context.ts` | `packages/core/src/context.ts` |
-| `src/core/planMode.ts` | `packages/core/src/planMode.ts` |
-| `src/commands/run.ts` | `packages/cli/src/commands/run.ts` |
-| `src/commands/chat.ts` | `packages/cli/src/commands/chat.ts` |
-| `src/commands/config.ts` | `packages/cli/src/commands/config.ts` |
-| `src/commands/mcp.ts` | `packages/cli/src/commands/mcp.ts` |
-| `src/commands/run-pr.ts` | `packages/cli/src/commands/run-pr.ts` |
-| `src/ui/claude-style-chat.tsx` | `packages/cli/src/ui/claude-style-chat.tsx` |
-| `src/utils/config.ts` | `packages/cli/src/utils/config.ts` |
-| `src/utils/git.ts` | `packages/core/src/utils/git.ts` |
-| `src/utils/safety.ts` | `packages/core/src/utils/safety.ts` |
-| `skills/` | `packages/cli/skills/` |
-| `tests/` | Removed (needs recreation in packages) |
 
 ## Completed Tasks
 
@@ -85,27 +71,40 @@ This report tracks the progress of the comprehensive documentation initiative fo
 - [x] Rewrite README.md for monorepo
 - [x] Update docs/README.md for monorepo
 
+### v1.1 Feature Documentation
+
+- [x] Create site docs/settings.mdx for multi-source settings
+- [x] Create site docs/hooks.mdx for lifecycle hooks
+- [x] Create site docs/memory.mdx for auto-memory system
+- [x] Create site docs/permissions.mdx for permission rules
+- [x] Update site docs/index.mdx with v1.1 features
+- [x] Update site docs/configuration.mdx with new CLI commands
+- [x] Update site docs/quickstart.mdx with v1.1 features
+- [x] Update site content/docs/meta.json navigation
+- [x] Update root README.md with new features, commands, and exports
+- [x] Update docs/README.md with v1.1 feature details
+- [x] Rename docs/feature-priority file to generic name
+
 ## Pending Tasks
 
 ### High Priority
 
 1. **Update root-level docs for monorepo** - ARCHITECTURE.md, CONTRIBUTING.md, API_REFERENCE.md, CODING_STANDARDS.md all reference old `src/` paths
 2. **Create test suites in packages** - Old `tests/` directory was removed; new tests needed in `packages/core/tests/` and `packages/cli/tests/`
-3. **Update site documentation** - 11 MDX files reference old structure and WebUI
 
 ### Medium Priority
 
-4. **Create architecture deep dives** - `docs/architecture/`
-5. **Create API reference pages** - `docs/api/`
-6. **Create developer guides** - `docs/guides/`
-7. **Document agent.ts main loop** - `packages/core/src/agent.ts`
-8. **Document editor.ts editing strategies** - `packages/core/src/editor.ts`
+3. **Create architecture deep dives** - `docs/architecture/`
+4. **Create API reference pages** - `docs/api/`
+5. **Create developer guides** - `docs/guides/`
+6. **Document agent.ts main loop** - `packages/core/src/agent.ts`
+7. **Document editor.ts editing strategies** - `packages/core/src/editor.ts`
 
 ### Low Priority
 
-9. **Create persona documentation** - `docs/personas/`
-10. **Create code examples** - `docs/examples/`
-11. **Set up documentation automation** - Pre-commit hooks, CI for doc generation
+8. **Create persona documentation** - `docs/personas/`
+9. **Create code examples** - `docs/examples/`
+10. **Set up documentation automation** - Pre-commit hooks, CI for doc generation
 
 ## Success Metrics
 
@@ -118,36 +117,7 @@ This report tracks the progress of the comprehensive documentation initiative fo
 | Developer Guides | 0 | 0 | 6 |
 | Code Examples | 0 | 0 | 10+ |
 | Test Suites | 26 (broken) | 0 | Per-package |
-| Site Pages | 11 (outdated) | 11 (outdated) | 15+ |
-
-## Files Modified by Monorepo Migration
-
-### Moved to packages/core/src/
-
-All files from `src/core/`, `src/utils/git.ts`, `src/utils/safety.ts`, `src/utils/testRunner.ts`, `src/utils/at-references.ts`, `src/utils/auto-memory.ts`, `src/utils/mcp-servers-file.ts`, `src/utils/smithery.ts`, `src/tools/test-generator.ts`
-
-### Moved to packages/cli/src/
-
-All files from `src/commands/`, `src/ui/`, `src/components/`, `src/index.ts`, `src/ink.ts`, `src/interactiveHelpers.tsx`, `src/utils/config.ts`, `src/utils/tool-display.ts`, `src/utils/tui-theme.ts`, `src/utils/image-attachments.ts`, `src/utils/renderOptions.ts`, `src/utils/todoManager.ts`
-
-### Created
-
-- `pnpm-workspace.yaml`
-- `turbo.json`
-- `packages/core/package.json`, `packages/core/tsconfig.json`
-- `packages/cli/package.json`, `packages/cli/tsconfig.json`
-- `packages/core/src/index.ts` (public API barrel export)
-- `packages/core/src/types/` (extracted types: provider, mcp, todo, attachments)
-- `packages/cli/src/utils/built-in-skills-dir.ts`
-
-### Removed
-
-- `src/` directory (entire old source tree)
-- `dist/` directory (old build output)
-- `skills/` (moved to `packages/cli/skills/`)
-- `tests/` (broken imports, removed)
-- `screenshots/`, `e2e/`, `reports/` (obsolete)
-- WebUI (`src/webui/`, related commands)
+| Site Pages | 11 (outdated) | 15 (updated for v1.1) | 15+ |
 
 ---
 

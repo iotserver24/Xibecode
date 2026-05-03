@@ -106,6 +106,44 @@ xibecode config --show
 
 Options: `--set-key`, `--set-url`, `--set-model`, `--set-provider`, `--set-cost-mode`, `--set-economy-model`, `--show`, `--reset`, `--list-mcp-servers`, `--add-mcp-server`, `--remove-mcp-server`
 
+### `xibecode settings`
+
+Multi-source layered settings management.
+
+```bash
+xibecode settings list                    # Show fully merged settings
+xibecode settings get permissions.allow   # Get a specific key
+xibecode settings set agent.defaultMode plan  # Set a value
+xibecode settings sources                 # Show all settings sources
+xibecode settings paths                   # Show file paths
+```
+
+Settings are merged from four sources (highest priority first): policy, local, project, user.
+
+### `xibecode hooks`
+
+Lifecycle hooks management.
+
+```bash
+xibecode hooks list                       # Show all registered hooks
+xibecode hooks add PreToolUse command "audit.sh"  # Add a hook
+xibecode hooks remove PreToolUse 0        # Remove a hook
+xibecode hooks events                     # Show available events
+```
+
+9 lifecycle events: `SessionStart`, `SessionEnd`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `StopFailure`, `PreCompact`, `PostCompact`.
+
+### `xibecode memory`
+
+Auto-memory system management.
+
+```bash
+xibecode memory list                      # List all project memories
+xibecode memory search "auth flow"        # Search memories
+xibecode memory dream                     # Run dream consolidation
+xibecode memory path                      # Show memory directory
+```
+
 ### `xibecode mcp`
 
 MCP server management.
@@ -138,6 +176,12 @@ Generate a redacted diagnostics bundle for troubleshooting.
 - **50+ tools** - File I/O, code search, git, shell execution, web search, MCP, and more
 - **Smart context gathering** - Understands related files and imports
 - **Verified and line-based editing** - Reliable code modifications
+- **Multi-source settings** - Layered config from user, project, local, and policy sources
+- **Lifecycle hooks** - Run custom commands at 9 agent lifecycle events
+- **Auto-memory** - Persistent project memory with automatic extraction and dream consolidation
+- **Permission rules** - Fine-grained allow/deny/ask patterns for tool execution
+- **Context management** - Microcompaction and full compaction for long conversations
+- **Smart mode switching** - Agent-initiated mode transitions auto-approved
 - **Dry-run mode** - Preview changes safely before applying
 - **Git-aware workflows** - Checkpoints, reverts, `--changed-only`
 - **Test runner integration** - Auto-detects Vitest, Jest, pytest, Go test
@@ -145,8 +189,7 @@ Generate a redacted diagnostics bundle for troubleshooting.
 - **Skill system** - 40+ built-in skills + custom markdown skills + Smithery registry
 - **Swarm orchestration** - Parallel task execution with multiple workers
 - **Background tasks** - Run long tasks in detached processes
-- **Neural memory** - Persistent lesson learning across sessions
-- **Session-aware chat** - Persistent conversation history
+- **Session-aware chat** - Persistent conversation history with project-scoped storage
 - **Themed terminal UI** - Beautiful, customizable interface with Ink
 
 ## Agent Modes
@@ -225,6 +268,10 @@ const result = await agent.run('Create a hello world Express server');
 | `CodingToolExecutor` | Tool execution engine (50+ tools) |
 | `MCPClientManager` | MCP server connection management |
 | `NeuralMemory` | Persistent lesson learning system |
+| `AutoMemoryManager` | Auto-memory extraction, retrieval, and dream consolidation |
+| `SettingsManager` | Multi-source layered settings management |
+| `HooksManager` | Lifecycle hooks registration and execution |
+| `PermissionRuleManager` | Permission rule parsing, matching, and evaluation |
 | `SkillManager` | Built-in and custom skill loading |
 | `PluginManager` | Plugin system for extending tools |
 | `SessionManager` | Chat session persistence |
@@ -234,6 +281,8 @@ const result = await agent.run('Create a hello world Express server');
 | `FileEditor` | Multi-strategy file editing |
 | `PermissionManager` | Tool permission control |
 | `ContextManager` | Context window management |
+| `microcompact` | Lightweight context reduction |
+| `HOOK_EVENTS` | List of all 9 lifecycle hook events |
 | `PROVIDER_CONFIGS` | Provider configurations (anthropic, openai, google, groq, etc.) |
 
 ## Configuration
@@ -290,6 +339,28 @@ xibecode/
 │   │   │   ├── permissions.ts   # PermissionManager
 │   │   │   ├── context.ts       # ContextManager
 │   │   │   ├── planMode.ts      # Interactive planning
+│   │   │   ├── microcompact.ts  # Lightweight context reduction
+│   │   │   ├── settings/        # Multi-source settings system
+│   │   │   │   ├── settings-types.ts    # Settings schema and types
+│   │   │   │   ├── settings-merge.ts    # Deep merge logic
+│   │   │   │   ├── settings-sources.ts  # Source file loading
+│   │   │   │   └── settings.ts          # SettingsManager class
+│   │   │   ├── hooks/           # Lifecycle hooks system
+│   │   │   │   ├── hook-types.ts        # Hook event and config types
+│   │   │   │   ├── hook-schema.ts       # Hook validation
+│   │   │   │   ├── hook-executor.ts     # Hook execution engine
+│   │   │   │   └── hooks.ts             # HooksManager class
+│   │   │   ├── auto-memory/     # Auto-memory system
+│   │   │   │   ├── memory-types.ts      # Memory types and config
+│   │   │   │   ├── memory-scan.ts       # Memory file scanning
+│   │   │   │   ├── find-relevant.ts     # Relevance ranking
+│   │   │   │   ├── extract-memories.ts  # Automatic extraction
+│   │   │   │   ├── dream.ts             # Dream consolidation
+│   │   │   │   └── auto-memory.ts       # AutoMemoryManager class
+│   │   │   ├── permission-rules/  # Permission rules system
+│   │   │   │   ├── rule-parser.ts       # Rule string parsing
+│   │   │   │   ├── rule-matcher.ts      # Rule matching logic
+│   │   │   │   └── permission-rules.ts  # PermissionRuleManager class
 │   │   │   ├── types/           # Shared types (provider, mcp, todo, attachments)
 │   │   │   ├── utils/           # Core utilities (git, safety, testRunner, etc.)
 │   │   │   ├── mcp/             # MCP subsystem (config, oauth, resolve)
@@ -299,7 +370,7 @@ xibecode/
 │   │   └── tsconfig.json
 │   └── cli/                     # xibecode - CLI interface
 │       ├── src/
-│       │   ├── commands/        # CLI commands (run, chat, config, mcp, etc.)
+│       │   ├── commands/        # CLI commands (run, chat, config, settings, hooks, memory, etc.)
 │       │   ├── ui/              # Terminal UI (claude-style-chat, enhanced-tui, themes)
 │       │   ├── components/      # Ink components (AssistantMarkdown, design-system)
 │       │   ├── utils/           # CLI utilities (config, tool-display, tui-theme)

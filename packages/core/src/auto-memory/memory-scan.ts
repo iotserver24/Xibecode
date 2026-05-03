@@ -46,13 +46,16 @@ export function getMemoryEntrypoint(cwd?: string, baseDir?: string): string {
 
 /**
  * Scan the memory directory for all memory files.
+ * Also checks the project-local .xibecode/memory.md file.
  * Returns memories sorted by modification time (newest first).
  */
 export async function scanMemories(cwd?: string, baseDir?: string): Promise<MemoryScanResult> {
   const memoryDir = getMemoryDir(cwd, baseDir);
+  const resolvedCwd = cwd || process.cwd();
   const memories: MemoryFile[] = [];
   let totalScanned = 0;
 
+  // 1. Scan the auto-memory directory (~/.xibecode/projects/<cwd>/memory/)
   try {
     const entries = await fs.readdir(memoryDir, { withFileTypes: true });
 
@@ -79,6 +82,27 @@ export async function scanMemories(cwd?: string, baseDir?: string): Promise<Memo
     }
   } catch {
     // Memory directory doesn't exist yet
+  }
+
+  // 2. Also scan the project-local .xibecode/memory.md (used by update_memory tool)
+  const localMemoryDir = path.join(resolvedCwd, '.xibecode');
+  const localMemoryFile = path.join(localMemoryDir, 'memory.md');
+  try {
+    const stat = await fs.stat(localMemoryFile);
+    if (stat.isFile()) {
+      totalScanned++;
+      const raw = await fs.readFile(localMemoryFile, 'utf-8');
+      const { frontmatter, content } = parseFrontmatter(raw);
+      memories.push({
+        filename: 'memory.md',
+        path: localMemoryFile,
+        frontmatter: { ...frontmatter, source: frontmatter.source || 'manual' },
+        content,
+        mtime: stat.mtime,
+      });
+    }
+  } catch {
+    // No local memory file
   }
 
   // Sort by mtime, newest first
