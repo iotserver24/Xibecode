@@ -21,6 +21,7 @@ import { SPINNER_VERBS } from '../constants/spinnerVerbs.js';
 import { extractAtReferences, splitAtReferences } from 'xibecode-core';
 import { loadImageAttachment, mimeFromExtension, type ImageAttachment } from '../utils/image-attachments.js';
 import { SessionManager, type ChatSession } from 'xibecode-core';
+import { AutoMemoryManager, HooksManager, SettingsManager as CoreSettingsManager } from 'xibecode-core';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
 
 export type ChatOptions = {
@@ -124,7 +125,7 @@ const WORK_SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '�
 /** How fast to advance OpenClaude-style spinner verbs (ms) */
 const WORK_VERB_ROTATE_MS = 2400;
 
-const QUICK_HELP = ['/help', '/mode', '/format', '/model', '/setup', '/config', '/donate', '/sponsor', '/clear', '/exit'];
+const QUICK_HELP = ['/help', '/mode', '/format', '/model', '/setup', '/config', '/memory', '/hooks', '/donate', '/sponsor', '/clear', '/exit'];
 const CHAT_COMMANDS: Array<{ name: string; description: string }> = [
   { name: '/help', description: 'Show available shortcuts and usage hints' },
   { name: '/mode', description: 'Switch agent mode from an interactive picker' },
@@ -133,6 +134,8 @@ const CHAT_COMMANDS: Array<{ name: string; description: string }> = [
   { name: '/model', description: 'Fetch and switch available models for this provider' },
   { name: '/setup', description: 'Guided setup (set API key, then pick provider/model)' },
   { name: '/config', description: 'Show current config and quick config hints' },
+  { name: '/memory', description: 'Show auto-memories for this project' },
+  { name: '/hooks', description: 'Show registered lifecycle hooks' },
   { name: '/donate', description: 'Open the donation page in your browser' },
   { name: '/sponsor', description: 'Open the sponsorship page in your browser' },
   { name: '/exit', description: 'Exit the interactive chat session' },
@@ -258,6 +261,8 @@ function XibeCodeChatApp(props: {
   onSessionCreated?: (sessionId: string) => void;
   onMessagesUpdate?: (messages: MessageParam[]) => void;
   getCurrentMessages?: () => MessageParam[];
+  onMemoryCommand?: (subcmd: string, pushLine: (line: UiLine) => void) => void;
+  onHooksCommand?: (subcmd: string, pushLine: (line: UiLine) => void) => void;
 }) {
   const { exit } = useApp();
   const [input, setInput] = useState('');
@@ -758,6 +763,18 @@ function XibeCodeChatApp(props: {
 
       if (resolvedInput === '/setup') {
         startSetupWizard();
+        return;
+      }
+
+      if (resolvedInput === '/memory' || resolvedInput.startsWith('/memory ')) {
+        const subcmd = resolvedInput.replace('/memory', '').trim().toLowerCase();
+        props.onMemoryCommand?.(subcmd || 'list', pushLine);
+        return;
+      }
+
+      if (resolvedInput === '/hooks' || resolvedInput.startsWith('/hooks ')) {
+        const subcmd = resolvedInput.replace('/hooks', '').trim().toLowerCase();
+        props.onHooksCommand?.(subcmd || 'list', pushLine);
         return;
       }
 
@@ -2209,6 +2226,71 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
   };
 
   const root = createRoot({ exitOnCtrlC: true });
+
+  // ── Memory & Hooks slash-command handlers ──
+  const autoMemManager = new AutoMemoryManager({ cwd: process.cwd() });
+  const coreSettingsManager = new CoreSettingsManager({ cwd: process.cwd() });
+  const hooksMgr = new HooksManager(coreSettingsManager);
+  await hooksMgr.loadFromSettingsManager().catch(() => {});
+
+  const onMemoryCommand = (subcmd: string, pushLine: (line: UiLine) => void) => {
+    void (async () => {
+      try {
+        if (subcmd === 'list' || subcmd === '') {
+          const memories = await autoMemManager.listMemories();
+          if (memories.length === 0) {
+            pushLine({ type: 'info', text: 'No memories found for this project. Memories are auto-extracted as you chat.' });
+            return;
+          }
+          pushLine({ type: 'info', text: `Found ${memories.length} memory/memories:` });
+          for (const mem of memories.slice(0, 10)) {
+            const tags = mem.frontmatter.tags?.length ? ` [${mem.frontmatter.tags.join(', ')}]` : '';
+            pushLine({ type: 'info', text: `  ${mem.frontmatter.type}${tags}: ${mem.content.trim().slice(0, 80)}${mem.content.length > 80 ? '...' : ''}` });
+          }
+          if (memories.length > 10) {
+            pushLine({ type: 'info', text: `  ... and ${memories.length - 10} more. Use "xc memory list" to see all.` });
+          }
+        } else if (subcmd === 'dream') {
+          pushLine({ type: 'info', text: 'Running dream consolidation...' });
+          const result = await autoMemManager.dream();
+          pushLine({ type: 'info', text: `Dream complete: created=${result.created}, merged=${result.merged}, pruned=${result.pruned}` });
+        } else if (subcmd === 'path') {
+          pushLine({ type: 'info', text: `Memory dir: ${autoMemManager.getMemoryDir()}` });
+        } else {
+          pushLine({ type: 'info', text: 'Usage: /memory [list|dream|path]. Default: list' });
+        }
+      } catch (err: any) {
+        pushLine({ type: 'error', text: `Memory error: ${err?.message || err}` });
+      }
+    })();
+  };
+
+  const onHooksCommand = (subcmd: string, pushLine: (line: UiLine) => void) => {
+    const allHooks = hooksMgr.getAllHooks();
+    const flatList: Array<{ event: string; config: any; matcher?: string }> = [];
+    for (const [event, hooks] of allHooks) {
+      for (const hook of hooks) {
+        flatList.push({ event, config: hook.config, matcher: hook.matcher });
+      }
+    }
+
+    if (subcmd === 'list' || subcmd === '') {
+      if (flatList.length === 0) {
+        pushLine({ type: 'info', text: 'No hooks configured. Use "xc hooks add" or edit ~/.xibecode/settings.json' });
+        return;
+      }
+      pushLine({ type: 'info', text: `Registered hooks (${flatList.length}):` });
+      for (const hook of flatList.slice(0, 10)) {
+        const type = 'command' in hook.config ? 'command' : 'prompt' in hook.config ? 'prompt' : 'agent' in hook.config ? 'agent' : 'http' in hook.config ? 'http' : 'function';
+        const value = hook.config.command || hook.config.prompt || hook.config.agent || hook.config.http || hook.config.url || '(fn)';
+        const matcher = hook.matcher ? ` matcher="${hook.matcher}"` : '';
+        pushLine({ type: 'info', text: `  ${hook.event}${matcher} -> ${type}: ${value}` });
+      }
+    } else {
+      pushLine({ type: 'info', text: 'Usage: /hooks [list]. Default: list. Use "xc hooks" CLI for full management.' });
+    }
+  };
+
   try {
     await renderAndRun(
       root,
@@ -2238,6 +2320,8 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
         onSessionCreated={onSessionCreated}
         onMessagesUpdate={onMessagesUpdate}
         getCurrentMessages={() => activeAgent?.getMessages() ?? currentSession?.messages ?? []}
+        onMemoryCommand={onMemoryCommand}
+        onHooksCommand={onHooksCommand}
       />,
     );
   } finally {

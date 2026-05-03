@@ -94,7 +94,7 @@ export { evaluateRules, findMatchingRule, matchRule, parseRulesFromStrings, type
 export { HooksManager } from './hooks/hooks.js';
 export { executeHook } from './hooks/hook-executor.js';
 export { validateHookConfig, validateHookMatcher, validateHooksConfig } from './hooks/hook-schema.js';
-export { type HookEvent, type HookConfig, type HookContext, type HookResult, type HookMatcher as HookMatcherType, type CommandHookConfig, type PromptHookConfig, type AgentHookConfig, type HttpHookConfig, type FunctionHookConfig, type RegisteredHook, type BaseHookConfig } from './hooks/hook-types.js';
+export { type HookEvent, type HookConfig, type HookContext, type HookResult, type HookMatcher as HookMatcherType, type CommandHookConfig, type PromptHookConfig, type AgentHookConfig, type HttpHookConfig, type FunctionHookConfig, type RegisteredHook, type BaseHookConfig, HOOK_EVENTS } from './hooks/hook-types.js';
 
 // ─── Auto-Memory ───────────────────────────────────────────────
 export { AutoMemoryManager } from './auto-memory/auto-memory.js';
