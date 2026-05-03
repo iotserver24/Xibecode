@@ -17,12 +17,16 @@
     "lint": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "clsx": "^2.1.1",
     "conf": "^15.1.0",
+    "framer-motion": "^12.38.0",
     "highlight.js": "^11.11.1",
+    "lucide-react": "^1.14.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^9.0.3",
     "remark-gfm": "^4.0.0",
+    "tailwind-merge": "^3.5.0",
     "xibecode-core": "^1.0.5"
   },
   "devDependencies": {
@@ -32,9 +36,7 @@
     "@vitejs/plugin-react": "^4.4.1",
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.1.2",
-
     "electron": "^41.5.0",
-
     "electron-builder": "^26.0.12",
     "postcss": "^8.5.3",
     "tailwindcss": "^4.1.4",

@@ -14,8 +14,8 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
 
   if (isUser) {
     return (
-      <div className="flex justify-end animate-fade-in">
-        <div className="max-w-[80%] rounded-2xl bg-xibe-user-bubble px-4 py-2.5 text-sm leading-relaxed text-xibe-text whitespace-pre-wrap">
+      <div className="flex justify-end animate-fade-in w-full group">
+        <div className="max-w-[85%] sm:max-w-[75%] rounded-2xl rounded-tr-sm bg-xibe-surface-raised border border-xibe-border-subtle px-4 py-3 text-[15px] leading-relaxed text-xibe-text whitespace-pre-wrap shadow-sm">
           {content}
         </div>
       </div>
@@ -23,24 +23,27 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
   }
 
   return (
-    <div className="animate-fade-in">
-      <div className="prose prose-invert prose-sm max-w-none text-sm leading-relaxed
-        prose-p:my-2 prose-headings:my-3 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5
-        prose-pre:my-3 prose-blockquote:my-2 prose-a:text-xibe-brand-blue prose-a:no-underline hover:prose-a:underline
-        prose-strong:text-xibe-text prose-code:text-xibe-accent
-        prose-h1:text-base prose-h2:text-sm prose-h3:text-sm">
+    <div className="animate-fade-in flex flex-col w-full group">
+      <div className="prose prose-invert max-w-none text-[15px] leading-relaxed text-xibe-text
+        prose-p:my-3 prose-headings:my-4 prose-ul:my-3 prose-ol:my-3 prose-li:my-1
+        prose-pre:my-4 prose-pre:bg-transparent prose-pre:p-0
+        prose-blockquote:my-4 prose-blockquote:border-l-xibe-border-focus prose-blockquote:text-xibe-text-dim
+        prose-a:text-xibe-brand-blue prose-a:no-underline hover:prose-a:underline hover:prose-a:underline-offset-2
+        prose-strong:text-xibe-text prose-strong:font-semibold
+        prose-code:text-xibe-text-secondary prose-code:bg-xibe-surface-raised prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:font-medium prose-code:before:content-none prose-code:after:content-none
+        prose-h1:text-xl prose-h2:text-lg prose-h3:text-base prose-h1:font-semibold prose-h2:font-semibold prose-h3:font-semibold">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
             pre: ({ children }) => (
-              <pre className="overflow-x-auto rounded-lg bg-xibe-bg border border-xibe-border-subtle p-3 text-xs font-mono">{children}</pre>
+              <pre className="overflow-x-auto rounded-xl bg-xibe-bg border border-xibe-border-subtle p-4 text-[13px] font-mono leading-relaxed shadow-sm my-4">{children}</pre>
             ),
             code: ({ className, children }) => {
               const isInline = !className;
               return isInline ? (
-                <code className="rounded bg-xibe-surface-raised px-1 py-0.5 text-xs font-mono text-xibe-accent">{children}</code>
+                <code className="rounded-md bg-xibe-surface-raised border border-xibe-border-subtle/50 px-1.5 py-0.5 text-[13px] font-mono text-xibe-text-secondary">{children}</code>
               ) : (
-                <code className={`${className ?? ''} text-xs font-mono`}>{children}</code>
+                <code className={`${className ?? ''} text-[13px] font-mono`}>{children}</code>
               );
             },
           }}
@@ -48,7 +51,7 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
           {content}
         </ReactMarkdown>
       </div>
-      {isStreaming && <span className="inline-block h-3.5 w-0.5 animate-pulse rounded bg-xibe-accent ml-0.5" />}
+      {isStreaming && <span className="inline-block h-4 w-2 animate-pulse rounded-sm bg-xibe-text-dim/50 ml-1 mt-1" />}
     </div>
   );
 });

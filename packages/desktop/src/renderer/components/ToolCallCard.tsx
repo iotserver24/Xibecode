@@ -1,4 +1,6 @@
 import { useState, memo } from 'react';
+import { ChevronRight, Wrench, CheckCircle2, Loader2 } from 'lucide-react';
+import { cn } from '../lib/utils';
 
 interface Props {
   toolName: string;
@@ -14,28 +16,51 @@ const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutpu
   const outputStr = toolOutput ? (typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput, null, 2)) : '';
 
   return (
-    <div className="rounded-lg border border-xibe-border-subtle bg-xibe-surface/50 overflow-hidden animate-fade-in">
-      <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-xibe-surface-hover transition-colors">
-        <svg className={`h-3 w-3 shrink-0 transition-transform ${open ? 'rotate-90' : ''} text-xibe-text-dim`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-        <span className="font-mono text-xs text-xibe-brand-blue">{toolName}</span>
-        {done ? (
-          <span className="text-[10px] text-xibe-text-dim/40">done</span>
-        ) : (
-          <span className="text-[10px] text-xibe-accent/60">running</span>
-        )}
+    <div className="rounded-xl border border-xibe-border-subtle bg-xibe-bg overflow-hidden animate-fade-in my-3 shadow-sm group">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-xibe-surface-hover transition-colors"
+      >
+        <ChevronRight className={cn("h-4 w-4 shrink-0 transition-transform text-xibe-text-dim", open && "rotate-90")} />
+
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <Wrench className="h-3.5 w-3.5 text-xibe-text-dim/70 shrink-0" />
+          <span className="font-mono text-[13px] font-medium text-xibe-brand-blue truncate">{toolName}</span>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {done ? (
+            <div className="flex items-center gap-1 text-xibe-brand-green/80 bg-xibe-brand-green/10 px-2 py-0.5 rounded border border-xibe-brand-green/20">
+              <CheckCircle2 className="h-3 w-3" />
+              <span className="text-[10px] font-medium uppercase tracking-wider">Done</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 text-xibe-accent bg-xibe-accent/10 px-2 py-0.5 rounded border border-xibe-accent/20">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span className="text-[10px] font-medium uppercase tracking-wider">Running</span>
+            </div>
+          )}
+        </div>
       </button>
+
       {open && (
-        <div className="border-t border-xibe-border-subtle px-3 py-2 space-y-2 animate-fade-in">
+        <div className="border-t border-xibe-border-subtle px-4 py-3 space-y-4 animate-fade-in bg-xibe-surface/30">
           {inputStr && (
             <div>
-              <div className="mb-1 text-[10px] uppercase tracking-wider text-xibe-text-dim/30">Input</div>
-              <pre className="overflow-x-auto rounded-md bg-xibe-bg border border-xibe-border-subtle p-2 text-[11px] font-mono text-xibe-text-dim leading-relaxed">{inputStr}</pre>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-xibe-text-dim">Input</span>
+                <div className="h-px flex-1 bg-xibe-border-subtle/50" />
+              </div>
+              <pre className="overflow-x-auto rounded-lg bg-xibe-bg border border-xibe-border-subtle p-3 text-[12px] font-mono text-xibe-text leading-relaxed shadow-inner">{inputStr}</pre>
             </div>
           )}
           {outputStr && (
             <div>
-              <div className="mb-1 text-[10px] uppercase tracking-wider text-xibe-text-dim/30">Output</div>
-              <pre className="overflow-x-auto rounded-md bg-xibe-bg border border-xibe-border-subtle p-2 text-[11px] font-mono text-xibe-text-dim leading-relaxed max-h-48">{outputStr.length > 3000 ? outputStr.slice(0, 3000) + '\n...' : outputStr}</pre>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-xibe-text-dim">Output</span>
+                <div className="h-px flex-1 bg-xibe-border-subtle/50" />
+              </div>
+              <pre className="overflow-x-auto rounded-lg bg-xibe-bg border border-xibe-border-subtle p-3 text-[12px] font-mono text-xibe-text-secondary leading-relaxed max-h-64 shadow-inner">{outputStr.length > 5000 ? outputStr.slice(0, 5000) + '\n\n...[Output truncated]...' : outputStr}</pre>
             </div>
           )}
         </div>
