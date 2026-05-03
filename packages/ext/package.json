@@ -1,0 +1,208 @@
+{
+  "name": "xibecode-vscode",
+  "displayName": "XibeCode",
+  "description": "AI-powered autonomous coding assistant — XibeCode agent inside VS Code",
+  "version": "1.0.9",
+  "publisher": "iotserver24",
+  "license": "Apache-2.0",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iotserver24/xibecode"
+  },
+  "bugs": {
+    "url": "https://github.com/iotserver24/xibecode/issues"
+  },
+  "homepage": "https://github.com/iotserver24/xibecode#readme",
+  "engines": {
+    "vscode": "^1.85.0",
+    "node": ">=18.0.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Machine Learning",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "coding",
+    "assistant",
+    "autonomous",
+    "agent",
+    "xibecode"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:xibecode.chatView"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "xibecode",
+          "title": "XibeCode",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "xibecode": [
+        {
+          "type": "webview",
+          "id": "xibecode.chatView",
+          "name": "Chat"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "xibecode.openSettings",
+        "title": "XibeCode: Settings",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "xibecode.openChat",
+        "title": "XibeCode: Open Chat",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "xibecode.runTask",
+        "title": "XibeCode: Run Task"
+      },
+      {
+        "command": "xibecode.setApiKey",
+        "title": "XibeCode: Set API Key"
+      },
+      {
+        "command": "xibecode.selectModel",
+        "title": "XibeCode: Select Model"
+      },
+      {
+        "command": "xibecode.clearHistory",
+        "title": "XibeCode: Clear Chat History"
+      },
+      {
+        "command": "xibecode.explainSelection",
+        "title": "XibeCode: Explain Selection"
+      },
+      {
+        "command": "xibecode.refactorSelection",
+        "title": "XibeCode: Refactor Selection"
+      },
+      {
+        "command": "xibecode.addTests",
+        "title": "XibeCode: Generate Tests for Selection"
+      },
+      {
+        "command": "xibecode.fixDiagnostics",
+        "title": "XibeCode: Fix Diagnostics in File"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "xibecode.explainSelection",
+          "when": "editorHasSelection",
+          "group": "xibecode@1"
+        },
+        {
+          "command": "xibecode.refactorSelection",
+          "when": "editorHasSelection",
+          "group": "xibecode@2"
+        },
+        {
+          "command": "xibecode.addTests",
+          "when": "editorHasSelection",
+          "group": "xibecode@3"
+        },
+        {
+          "command": "xibecode.fixDiagnostics",
+          "group": "xibecode@4"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "xibecode.openSettings",
+          "when": "view == xibecode.chatView",
+          "group": "navigation"
+        },
+        {
+          "command": "xibecode.clearHistory",
+          "when": "view == xibecode.chatView",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "XibeCode",
+      "properties": {
+        "xibecode.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for the AI provider",
+          "scope": "application"
+        },
+        "xibecode.model": {
+          "type": "string",
+          "default": "claude-sonnet-4-20250514",
+          "description": "AI model to use",
+          "scope": "application"
+        },
+        "xibecode.provider": {
+          "type": "string",
+          "default": "anthropic",
+          "enum": [
+            "anthropic",
+            "openai",
+            "deepseek",
+            "google",
+            "openrouter",
+            "auto"
+          ],
+          "description": "AI provider / API format",
+          "scope": "application"
+        },
+        "xibecode.baseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Custom API base URL (leave empty for provider default)",
+          "scope": "application"
+        },
+        "xibecode.maxIterations": {
+          "type": "number",
+          "default": 150,
+          "description": "Maximum agent iterations per task (0 = unlimited)",
+          "scope": "application"
+        },
+        "xibecode.autoApproveTools": {
+          "type": "boolean",
+          "default": false,
+          "description": "Auto-approve safe tool calls (read-only operations)",
+          "scope": "application"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --target=node18 --sourcemap --define:import.meta.url=__importMetaUrl --banner:js=\"const __importMetaUrl=require('url').pathToFileURL(__filename).href;\" && node scripts/build-webview.mjs",
+    "dev": "pnpm run build --watch",
+    "clean": "rm -rf dist out",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "package": "pnpm run build && vsce package --no-dependencies",
+    "publish:vsce": "pnpm run build && vsce publish --no-dependencies"
+  },
+  "dependencies": {
+    "@types/marked": "^6.0.0",
+    "marked": "^11.2.0",
+    "xibecode-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.6.1"
+  }
+}
