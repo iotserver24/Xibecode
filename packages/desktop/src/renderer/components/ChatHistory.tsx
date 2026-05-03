@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Plus, MessageSquare, Trash2 } from 'lucide-react';
+import { cn } from '../lib/utils';
 
 interface SessionItem {
   id: string;
@@ -69,20 +71,23 @@ export default function ChatHistory({ activeSessionId, onSelectSession, onNewCha
       {/* New chat button */}
       <button
         onClick={onNewChat}
-        className="flex items-center gap-2 rounded-lg border border-xibe-border-subtle px-3 py-2 text-xs text-xibe-text-dim hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors mb-3"
+        className="flex items-center gap-2 rounded-lg border border-xibe-border-subtle bg-xibe-bg/50 px-3 py-2.5 text-xs font-medium text-xibe-text hover:bg-xibe-surface-hover hover:border-xibe-border transition-all shadow-sm mb-4"
       >
-        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+        <Plus className="h-4 w-4 text-xibe-accent" />
         New Chat
       </button>
 
       {/* Session list */}
-      <div className="flex-1 overflow-y-auto space-y-3 min-h-0">
+      <div className="flex-1 overflow-y-auto space-y-5 min-h-0 pr-1">
         {groups.length === 0 && (
-          <p className="text-[10px] text-xibe-text-dim/40 text-center py-4">No conversations yet</p>
+          <div className="flex flex-col items-center justify-center h-32 text-center">
+            <MessageSquare className="h-6 w-6 text-xibe-text-dim/20 mb-2" />
+            <p className="text-[11px] text-xibe-text-dim/60">No conversations yet</p>
+          </div>
         )}
         {groups.map((group) => (
           <div key={group.label}>
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-xibe-text-dim/40">{group.label}</div>
+            <div className="mb-2 px-1 text-[10px] font-bold uppercase tracking-widest text-xibe-text-dim/50">{group.label}</div>
             <div className="space-y-0.5">
               {group.items.map((s) => (
                 <button
@@ -90,23 +95,27 @@ export default function ChatHistory({ activeSessionId, onSelectSession, onNewCha
                   onClick={() => onSelectSession(s.id)}
                   onMouseEnter={() => setHoveredId(s.id)}
                   onMouseLeave={() => setHoveredId(null)}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors group ${
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-all duration-200 group relative",
                     activeSessionId === s.id
-                      ? 'bg-xibe-accent-muted text-xibe-text'
-                      : 'text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text'
-                  }`}
+                      ? "bg-xibe-surface-hover text-xibe-text before:absolute before:left-0 before:top-1/4 before:bottom-1/4 before:w-1 before:bg-xibe-accent before:rounded-r"
+                      : "text-xibe-text-secondary hover:bg-xibe-surface-hover/50 hover:text-xibe-text"
+                  )}
                 >
-                  <svg className="h-3 w-3 shrink-0 text-xibe-text-dim/30" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 011.037-.443 48.282 48.282 0 005.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" /></svg>
-                  <span className="flex-1 truncate text-[11px]">{s.title}</span>
-                  {hoveredId === s.id && (
+                  <MessageSquare className={cn("h-3.5 w-3.5 shrink-0", activeSessionId === s.id ? "text-xibe-text" : "text-xibe-text-dim/40 group-hover:text-xibe-text-dim/70")} />
+                  <span className="flex-1 truncate text-[12px] font-medium leading-tight">{s.title}</span>
+
+                  {hoveredId === s.id ? (
                     <button
                       onClick={(e) => handleDelete(e, s.id)}
-                      className="shrink-0 rounded p-0.5 text-xibe-text-dim/30 hover:text-xibe-error transition-colors"
+                      className="shrink-0 rounded p-1 text-xibe-text-dim/50 hover:text-xibe-error hover:bg-xibe-error/10 transition-colors animate-fade-in"
+                      title="Delete chat"
                     >
-                      <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
+                  ) : (
+                    <span className="shrink-0 text-[10px] text-xibe-text-dim/40 tabular-nums">{relativeTime(s.updated)}</span>
                   )}
-                  <span className="shrink-0 text-[9px] text-xibe-text-dim/25 tabular-nums">{relativeTime(s.updated)}</span>
                 </button>
               ))}
             </div>
