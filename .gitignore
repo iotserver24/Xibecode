@@ -57,10 +57,13 @@ tmp/
 # bun.lock
 # pnpm-lock.yaml
 
+# VS Code Extension build artifacts
+packages/ext/*.vsix
+packages/ext/dist/
+
 # Not part of the monorepo (local only)
 Skill-marketplace/
 site/
-extension/
 next/
 reports/
 screenshots/
