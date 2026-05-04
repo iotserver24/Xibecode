@@ -1,7 +1,15 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as diff from 'diff';
+import type { UUID } from 'crypto';
 import { sanitizePath } from './utils/safety.js';
+import {
+  createBackup as fhCreateBackup,
+  restoreBackup as fhRestoreBackup,
+  getBackupFileName,
+  resolveBackupPath,
+} from './file-history.js';
+import { generateUuid } from './transcript-types.js';
 
 export interface EditResult {
   success: boolean;
@@ -31,11 +39,11 @@ export interface VerifiedEdit {
 
 export class FileEditor {
   private workingDir: string;
-  private backupDir: string;
+  /** Tracks the next backup version number per file path. */
+  private fileVersions = new Map<string, number>();
 
   constructor(workingDir: string) {
     this.workingDir = workingDir;
-    this.backupDir = path.join(workingDir, '.xibecode_backups');
   }
 
   /**
@@ -341,7 +349,7 @@ export class FileEditor {
   }
 
   /**
-   * Revert file to backup
+   * Revert file to backup using the file-history checkpoint system.
    */
   async revertToBackup(filePath: string, backupIndex: number = 0): Promise<EditResult> {
     const resolved = this.resolveSafePath(filePath);
@@ -349,75 +357,75 @@ export class FileEditor {
       return { success: false, message: resolved.message };
     }
 
-    const backups = await this.listBackups(filePath);
-
-    if (backups.length === 0) {
-      return {
-        success: false,
-        message: `No backups found for ${filePath}`,
-      };
-    }
-
-    if (backupIndex >= backups.length) {
-      return {
-        success: false,
-        message: `Backup index ${backupIndex} not found (have ${backups.length} backups)`,
-      };
-    }
-
-    const backupPath = backups[backupIndex];
     const fullPath = resolved.fullPath;
+    const version = this.fileVersions.get(fullPath) ?? 1;
 
-    try {
-      const backupContent = await fs.readFile(backupPath, 'utf-8');
-      await fs.writeFile(fullPath, backupContent, 'utf-8');
-
-      return {
-        success: true,
-        message: `Successfully reverted ${filePath} to backup ${backupIndex}`,
-      };
-    } catch (error: any) {
+    // Walk backward from current version to find the requested backup
+    const targetVersion = version - backupIndex;
+    if (targetVersion < 1) {
       return {
         success: false,
-        message: `Failed to revert: ${error.message}`,
+        message: `Backup index ${backupIndex} not found (have ${version - 1} backups)`,
       };
     }
+
+    const backupFileName = getBackupFileName(fullPath, targetVersion);
+    const restored = await fhRestoreBackup(fullPath, backupFileName);
+
+    if (!restored) {
+      return {
+        success: false,
+        message: `No backup found for ${filePath} at version ${targetVersion}`,
+      };
+    }
+
+    return {
+      success: true,
+      message: `Successfully reverted ${filePath} to backup version ${targetVersion}`,
+    };
   }
 
   /**
-   * Create backup of file
+   * Create backup of file using the file-history checkpoint system.
+   * Uses copyFile for efficient kernel-level copy without reading into JS heap.
    */
   private async createBackup(filePath: string, content: string): Promise<void> {
-    await fs.mkdir(this.backupDir, { recursive: true });
+    const resolved = this.resolveSafePath(filePath);
+    if (!resolved.ok) return;
 
-    const timestamp = Date.now();
-    const backupName = `${filePath.replace(/[\/\\]/g, '_')}.${timestamp}.backup`;
-    const backupPath = path.join(this.backupDir, backupName);
+    const fullPath = resolved.fullPath;
+    const currentVersion = this.fileVersions.get(fullPath) ?? 0;
+    const nextVersion = currentVersion + 1;
 
-    await fs.writeFile(backupPath, content, 'utf-8');
+    // Create backup via file-history system (copyFile-based)
+    await fhCreateBackup(fullPath, nextVersion);
+    this.fileVersions.set(fullPath, nextVersion);
   }
 
   /**
-   * List backups for a file
+   * List backups for a file from the file-history system.
    */
   private async listBackups(filePath: string): Promise<string[]> {
-    try {
-      const backupPrefix = filePath.replace(/[\/\\]/g, '_');
-      const files = await fs.readdir(this.backupDir);
+    const resolved = this.resolveSafePath(filePath);
+    if (!resolved.ok) return [];
 
-      const backups = files
-        .filter(f => f.startsWith(backupPrefix) && f.endsWith('.backup'))
-        .sort((a, b) => {
-          const timeA = parseInt(a.split('.')[1]);
-          const timeB = parseInt(b.split('.')[1]);
-          return timeB - timeA; // Most recent first
-        })
-        .map(f => path.join(this.backupDir, f));
+    const fullPath = resolved.fullPath;
+    const version = this.fileVersions.get(fullPath) ?? 0;
+    const backupPaths: string[] = [];
 
-      return backups;
-    } catch {
-      return [];
+    // List backup files from newest to oldest
+    for (let v = version; v >= 1; v--) {
+      const backupFileName = getBackupFileName(fullPath, v);
+      const backupPath = resolveBackupPath(backupFileName);
+      try {
+        await fs.access(backupPath);
+        backupPaths.push(backupPath);
+      } catch {
+        // Backup doesn't exist — skip
+      }
     }
+
+    return backupPaths;
   }
 
   /**

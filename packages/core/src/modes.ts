@@ -298,8 +298,8 @@ export const MODE_CONFIG: Record<AgentMode, ModeCapabilities> = {
     description: 'Interactive planning with questions, web research, and implementations.md generation',
     personaName: 'Planner',
     personaRole: 'the Strategic Planner',
-    allowedCategories: ['read_only', 'git_read', 'context', 'network', 'shell_command'],
-    canModify: false,
+    allowedCategories: ['read_only', 'git_read', 'context', 'network', 'shell_command', 'write_fs'],
+    canModify: true,
     defaultDryRun: false,
     displayColor: '#FF9100', // orange
     icon: '📝',
@@ -318,31 +318,11 @@ You are operating in PLANNER MODE. Your job is to create a thorough, detailed im
 3. Understand the full scope of what needs to be built
 
 **Phase 2: Ask Clarifying Questions**
-After your research, if you need clarification from the user, output questions in this EXACT format:
-
-[[QUESTIONS:
-{
-  "questions": [
-    {
-      "id": "q1",
-      "question": "Your question text here?",
-      "options": [
-        { "id": "a", "label": "Option A description" },
-        { "id": "b", "label": "Option B description" }
-      ],
-      "allowMultiple": false,
-      "hasOther": true
-    }
-  ]
-}
-]]
-
-Rules for questions:
-- Ask ALL questions at once in a single [[QUESTIONS:...]] block
-- Each question should have 2-5 concrete options
-- Set \`hasOther: true\` when the user might have a different preference
-- Set \`allowMultiple: true\` only when multiple selections make sense
-- Be specific - don't ask vague questions
+If you need clarification from the user, ask directly in your response.
+- Ask ALL questions at once in a single message
+- Provide 2-5 concrete options for each question when possible
+- Be specific — don't ask vague questions
+- Wait for the user's answers before proceeding to Phase 3
 
 **Phase 3: Generate the Plan**
 After receiving answers (or if no questions needed), create the implementation plan.
@@ -372,19 +352,19 @@ The plan MUST follow this format:
 After writing the file, output this EXACT tag:
 [[PLAN_READY]]
 
-This signals the UI to show the plan preview with action buttons.
+This signals the UI that the plan is ready for review.
 
 **Phase 4: Wait for User Decision**
 The user will either:
 - Ask you to edit the plan (make changes and re-write implementations.md)
-- Click "Build" to proceed
+- Say "build" or "proceed" to implement
 
 When the user says to proceed/build, request mode switch:
 [[REQUEST_MODE: agent | reason=Ready to implement the plan from implementations.md]]
 
 ### IMPORTANT RULES:
-- You may ONLY write to \`implementations.md\` - do NOT modify any other files
-- Be extremely detailed in your plan - include specific file paths, function names, code snippets
+- You may ONLY write to \`implementations.md\` — do NOT modify any other files
+- Be extremely detailed in your plan — include specific file paths, function names, code snippets
 - Each task should be small enough to implement in one focused step
 - Order tasks by dependency (implement dependencies first)
 - After ALL tasks are completed by the agent, the agent should delete \`implementations.md\`
@@ -1548,6 +1528,21 @@ export function stripTaskComplete(text: string): string {
   return text.replace(/\[\[TASK_COMPLETE[^\]]+\]\]/gi, '').trim();
 }
 
+/**
+ * Parse [[PLAN_READY]] tag from text.
+ * Signals that the planner has finished writing implementations.md.
+ */
+export function parsePlanReady(text: string): boolean {
+  return /\[\[PLAN_READY\]\]/i.test(text);
+}
+
+/**
+ * Strip [[PLAN_READY]] tags from text (for display)
+ */
+export function stripPlanReady(text: string): string {
+  return text.replace(/\[\[PLAN_READY\]\]/gi, '').trim();
+}
+
 export function isValidMode(mode: string): mode is AgentMode {
   return [
     'plan', 'agent', 'tester', 'debugger', 'security', 'pentest', 'review',
@@ -1560,4 +1555,37 @@ export function getAllModes(): AgentMode[] {
     'plan', 'agent', 'tester', 'debugger', 'security', 'pentest', 'review',
     'team_leader', 'seo', 'product', 'architect', 'engineer', 'data', 'researcher'
   ];
+}
+
+/**
+ * Parse [[QUESTIONS:...]] block from text.
+ * Returns the parsed questions JSON or null if no valid block found.
+ */
+export interface ParsedQuestion {
+  id: string;
+  question: string;
+  options: Array<{ id: string; label: string }>;
+  allowMultiple?: boolean;
+  hasOther?: boolean;
+}
+
+export function parseQuestions(text: string): ParsedQuestion[] | null {
+  const match = text.match(/\[\[QUESTIONS:\s*([\s\S]*?)\]\]/i);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[1]);
+    if (parsed && Array.isArray(parsed.questions)) {
+      return parsed.questions as ParsedQuestion[];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Strip [[QUESTIONS:...]] blocks from text (for display)
+ */
+export function stripQuestions(text: string): string {
+  return text.replace(/\[\[QUESTIONS:[\s\S]*?\]\]/gi, '').trim();
 }
