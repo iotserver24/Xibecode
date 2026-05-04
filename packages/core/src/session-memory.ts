@@ -1,11 +1,19 @@
 /**
  * Persistent session memory for a single run (and optionally across runs).
  * Records tool attempts, failures, and "what we learned" to avoid repeating mistakes.
- * Used by the agent to inject a compact summary into the system prompt.
+ *
+ * Now uses JSONL transcript entries as the primary persistence mechanism.
+ * Falls back to the legacy `.xibecode/sessions/` directory for backward compat.
+ * When a transcript file is available, attempts and learnings are written as
+ * `attempt` and `learning` entry types in the JSONL, eliminating the need
+ * for separate session files.
  */
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import type { UUID } from 'crypto';
+import { generateUuid } from './transcript-types.js';
+import { getTranscriptWriter } from './transcript-writer.js';
 
 export interface AttemptRecord {
   tool: string;
@@ -26,8 +34,9 @@ const MAX_LEARNINGS_IN_SUMMARY = 5;
 const SUMMARY_FAILURE_CAP = 8;
 
 /**
- * Session memory: persists for the run and optionally to .xibecode/sessions/
- * so future runs can load "what we learned" and recent failures.
+ * Session memory: persists for the run and optionally to the JSONL transcript
+ * or legacy `.xibecode/sessions/` so future runs can load "what we learned"
+ * and recent failures.
  */
 export class SessionMemory {
   private sessionId: string;
@@ -35,6 +44,8 @@ export class SessionMemory {
   private attempts: AttemptRecord[] = [];
   private learnings: string[] = [];
   private persistDir: string;
+  /** If set, writes to JSONL transcript instead of separate files. */
+  private transcriptFilePath: string | null = null;
 
   constructor(
     private workingDir: string,
@@ -49,20 +60,63 @@ export class SessionMemory {
     return this.sessionId;
   }
 
+  /**
+   * Enable JSONL transcript persistence for this session memory.
+   * When set, attempts and learnings are written to the transcript file
+   * instead of separate `.xibecode/sessions/` files.
+   */
+  setTranscriptPath(filePath: string): void {
+    this.transcriptFilePath = filePath;
+  }
+
   /** Record a tool attempt (success or failure). */
   recordAttempt(tool: string, success: boolean, message?: string): void {
-    this.attempts.push({
+    const attempt: AttemptRecord = {
       tool,
       success,
       message: message && message.slice(0, 500),
       ts: Date.now(),
-    });
+    };
+    this.attempts.push(attempt);
+
+    // Write to transcript if available
+    if (this.transcriptFilePath) {
+      const writer = getTranscriptWriter();
+      writer.enqueueWrite(this.transcriptFilePath, {
+        type: 'attempt',
+        uuid: generateUuid(),
+        parentUuid: null,
+        timestamp: new Date(attempt.ts).toISOString(),
+        sessionId: this.sessionId,
+        tool: attempt.tool,
+        success: attempt.success,
+        message: attempt.message || '',
+      }).catch(() => {
+        // Non-fatal — transcript writes are best-effort
+      });
+    }
   }
 
   /** Record a short "what we learned" note (e.g. after a failure or retry). */
   recordLearning(summary: string): void {
     const s = summary.trim().slice(0, 500);
-    if (s) this.learnings.push(s);
+    if (!s) return;
+    this.learnings.push(s);
+
+    // Write to transcript if available
+    if (this.transcriptFilePath) {
+      const writer = getTranscriptWriter();
+      writer.enqueueWrite(this.transcriptFilePath, {
+        type: 'learning',
+        uuid: generateUuid(),
+        parentUuid: null,
+        timestamp: new Date().toISOString(),
+        sessionId: this.sessionId,
+        learning: s,
+      }).catch(() => {
+        // Non-fatal
+      });
+    }
   }
 
   /**
@@ -88,8 +142,17 @@ export class SessionMemory {
     return '\n## Session memory (this run)\n\n' + parts.join('\n\n') + '\n';
   }
 
-  /** Persist session to .xibecode/sessions/<sessionId>.json for optional cross-run loading. */
+  /** Persist session — uses transcript if available, otherwise legacy file. */
   async persist(): Promise<void> {
+    if (this.transcriptFilePath) {
+      // Transcript persistence is handled incrementally by recordAttempt/recordLearning.
+      // Just flush the writer to ensure everything is on disk.
+      const writer = getTranscriptWriter();
+      await writer.flush();
+      return;
+    }
+
+    // Legacy fallback: persist to .xibecode/sessions/<sessionId>.json
     try {
       await fs.mkdir(this.persistDir, { recursive: true });
       const data: SessionMemoryData = {
@@ -105,8 +168,27 @@ export class SessionMemory {
     }
   }
 
-  /** Load a previous session's learnings (e.g. last run) to prime this run. */
+  /** Load a previous session's learnings. Tries transcript first, then legacy. */
   async loadPreviousLearnings(limit: number = MAX_LEARNINGS_IN_SUMMARY): Promise<void> {
+    // Try to load from transcript entries (if a transcript path is set)
+    if (this.transcriptFilePath) {
+      try {
+        const { loadTranscriptFile } = await import('./transcript-reader.js');
+        const { entries } = await loadTranscriptFile(this.transcriptFilePath);
+        const learningEntries = entries.filter((e) => e.type === 'learning');
+        if (learningEntries.length > 0) {
+          const recentLearnings = learningEntries
+            .slice(-limit)
+            .map((e) => (e as { learning: string }).learning);
+          this.learnings.push(...recentLearnings);
+          return;
+        }
+      } catch {
+        // Fall through to legacy loading
+      }
+    }
+
+    // Legacy fallback: load from .xibecode/sessions/
     try {
       const entries = await fs.readdir(this.persistDir).catch(() => []);
       const jsonFiles = entries.filter(f => f.endsWith('.json')).sort().reverse();

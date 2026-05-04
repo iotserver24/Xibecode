@@ -4,10 +4,16 @@ import fetch from 'node-fetch';
 import { existsSync, readFileSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
+import { homedir } from 'os';
 import { EventEmitter } from 'events';
-import { AgentMode, MODE_CONFIG, ModeState, createModeState, transitionMode, ModeOrchestrator, parseModeRequest, stripModeRequests, parseTaskComplete, stripTaskComplete, ModeTransitionPolicy } from './modes.js';
+import { AgentMode, MODE_CONFIG, ModeState, createModeState, transitionMode, ModeOrchestrator, parseModeRequest, stripModeRequests, parseTaskComplete, stripTaskComplete, parsePlanReady, stripPlanReady, parseQuestions, stripQuestions, ModeTransitionPolicy } from './modes.js';
 import { NeuralMemory } from './memory.js';
 import { SessionMemory } from './session-memory.js';
+import type { UUID } from 'crypto';
+import { generateUuid, isTranscriptMessage } from './transcript-types.js';
+import type { Entry } from './transcript-types.js';
+import { getTranscriptWriter } from './transcript-writer.js';
+import { registerCleanup, setupGracefulShutdown } from './graceful-shutdown.js';
 import { PROVIDER_CONFIGS, ProviderType } from './types/index.js';
 import { PermissionManager } from './permissions.js';
 import { ToolOrchestrator, type ToolExecutionUpdate } from './tool-orchestrator.js';
@@ -70,7 +76,7 @@ export interface AgentConfig {
 }
 
 export interface AgentEvent {
-  type: 'thinking' | 'tool_call' | 'tool_result' | 'response' | 'error' | 'warning' | 'complete' | 'iteration' | 'stream_start' | 'stream_text' | 'stream_end' | 'mode_changed' | 'mode_change_requested';
+  type: 'thinking' | 'tool_call' | 'tool_result' | 'response' | 'error' | 'warning' | 'complete' | 'iteration' | 'stream_start' | 'stream_text' | 'stream_end' | 'mode_changed' | 'mode_change_requested' | 'plan_ready' | 'questions';
   data: any;
 }
 
@@ -372,11 +378,21 @@ export class EnhancedAgent extends EventEmitter {
   private contextHintFiles: string[] = [];
   private mindsetAdaptive: boolean = false;
   private currentMindset: ReasoningMindset = 'convergent';
+  /** Transcript session ID for JSONL persistence. */
+  private transcriptSessionId: string | null = null;
+  /** Transcript file path for JSONL persistence. */
+  private transcriptFilePath: string | null = null;
+  /** UUID of the last entry written to transcript (for parentUuid chain). */
+  private lastTranscriptUuid: UUID | null = null;
+  /** Whether transcript cleanup has been registered. */
+  private transcriptCleanupRegistered = false;
   private permissionManager: PermissionManager;
   private toolOrchestrator: ToolOrchestrator;
   private evidenceTrail: Array<{ kind: string; detail: string; ts: number }> = [];
   /** Tracks consecutive completion-gate rejections to avoid infinite nudge loops. */
   private completionGateRetries = 0;
+  /** Set to true when [[TASK_COMPLETE]] is detected so the loop breaks immediately. */
+  private taskCompletedFlag = false;
   private static readonly MAX_COMPLETION_GATE_RETRIES = 2;
   /** Settings manager for multi-source config */
   private settingsManager?: import('./settings/settings.js').SettingsManager;
@@ -669,6 +685,7 @@ export class EnhancedAgent extends EventEmitter {
     this.loopDetector.reset();
     this.evidenceTrail = [];
     this.completionGateRetries = 0;
+    this.taskCompletedFlag = false;
 
     this.autoMemoryMarkdownSection = '';
     if (isAutoMemoryLoadEnabled()) {
@@ -979,7 +996,7 @@ export class EnhancedAgent extends EventEmitter {
           // Check for task completion
           const taskComplete = parseTaskComplete(block.text);
           if (taskComplete) {
-            // Switch to review mode (team_leader temporarily disabled)
+            // Switch to review mode so the next user message starts in review context
             this.modeState = transitionMode(this.modeState, 'review', 'Task completed: ' + taskComplete.summary);
             this.permissionManager.setMode('review');
             this.emit('mode_changed', {
@@ -994,11 +1011,21 @@ export class EnhancedAgent extends EventEmitter {
               toolExecutor.setMode('review');
             }
 
-            // Add a system note to help reviewer mode understand what happened
-            this.messages.push({
-              role: 'user',
-              content: `[SYSTEM] Agent reported task completion:\nSummary: ${taskComplete.summary}\n\nSwitching to review mode. Review the summary and decide the next step.`
-            });
+            // Mark that the task completed so we break after displaying text.
+            // Do NOT push a system user message — that would cause another
+            // model call, generating an unwanted extra response.
+            this.taskCompletedFlag = true;
+          }
+
+          // Check for plan ready signal (planner finished writing implementations.md)
+          if (parsePlanReady(block.text)) {
+            this.emit('plan_ready', {});
+          }
+
+          // Check for structured questions from plan mode
+          const questions = parseQuestions(block.text);
+          if (questions) {
+            this.emit('questions', { questions });
           }
         }
 
@@ -1006,12 +1033,24 @@ export class EnhancedAgent extends EventEmitter {
         if (!streamed) {
           for (const block of textBlocks) {
             const cleanText = ThinkTagFilter.strip(block.text);
-            // Remove mode request and task complete tags for display
-            const displayText = stripTaskComplete(stripModeRequests(cleanText));
+            // Remove control tags from display output
+            const displayText = stripQuestions(stripPlanReady(stripTaskComplete(stripModeRequests(cleanText))));
             if (displayText) {
               this.emit('response', { text: displayText, persona: response.persona });
             }
           }
+        }
+
+        // If TASK_COMPLETE was detected, break immediately even if there are
+        // pending tool_use blocks (the model shouldn't mix them, but be safe).
+        if (this.taskCompletedFlag) {
+          this.emit('complete', {
+            iterations: this.iterationCount,
+            toolCalls: this.toolCallCount,
+            filesChanged: this.filesChanged.size,
+          });
+          this.onAgentComplete().catch(() => { /* non-fatal */ });
+          break;
         }
 
         // If no tools, we're done (unless run-pr-style strict completion requires TASK_COMPLETE)
@@ -1019,9 +1058,13 @@ export class EnhancedAgent extends EventEmitter {
           const hasTaskComplete = textBlocks.some((b) => parseTaskComplete(b.text) != null);
           const hasEvidence = this.hasRecentGroundedEvidence();
           if (this.shouldEnforceCompletionEvidence()) {
+            // In balanced mode, skip the gate when the agent hasn't made any
+            // tool calls — it just answered a question and the user can
+            // always send another message. Only nudge when the agent did
+            // work (toolCallCount > 0) but forgot to provide evidence.
             const needsTaskComplete =
               this.config.completionEvidenceMode === 'strict' || this.toolCallCount > 0;
-            if ((needsTaskComplete && !hasTaskComplete) || !hasEvidence) {
+            if (needsTaskComplete && ((!hasTaskComplete) || !hasEvidence)) {
               if (this.completionGateRetries >= EnhancedAgent.MAX_COMPLETION_GATE_RETRIES) {
                 // Give up nudging — finalize to avoid infinite loop
                 this.emit('warning', {
@@ -2404,9 +2447,22 @@ ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
   /**
    * Replace the internal conversation history.
    * Useful for restoring saved sessions or implementing undo/redo.
+   * Also updates the transcript chain's last UUID so new entries
+   * are linked to the restored conversation.
    */
   setMessages(messages: MessageParam[]) {
     this.messages = messages;
+  }
+
+  /**
+   * Restore messages from a transcript, continuing the parentUuid chain.
+   * Unlike setMessages, this also sets up the transcript writer state
+   * so subsequent writes are properly linked.
+   */
+  async restoreFromTranscript(sessionId: string, cwd: string, messages: MessageParam[], lastUuid?: UUID): Promise<void> {
+    this.initTranscript(sessionId, cwd);
+    this.messages = messages;
+    this.lastTranscriptUuid = lastUuid ?? null;
   }
 
   /**
@@ -2508,5 +2564,102 @@ ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
    */
   getRuleManager(): import('./permission-rules/permission-rules.js').PermissionRuleManager | undefined {
     return this.ruleManager;
+  }
+
+  // ─── Transcript Persistence ───────────────────────────────────
+
+  /**
+   * Initialize transcript persistence for this agent session.
+   * Sets up the JSONL file path and registers cleanup handlers.
+   *
+   * @param sessionId - UUID for this session
+   * @param cwd - Working directory (used to determine project path)
+   */
+  initTranscript(sessionId: string, cwd: string): void {
+    this.transcriptSessionId = sessionId;
+    const sanitizePathFn = (p: string) => p.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 60);
+    const projectsDir = join(homedir(), '.xibecode', 'projects');
+    this.transcriptFilePath = join(projectsDir, sanitizePathFn(cwd), `${sessionId}.jsonl`);
+
+    const writer = getTranscriptWriter();
+    writer.sessionFile = this.transcriptFilePath;
+
+    // Ensure graceful shutdown handlers are installed
+    setupGracefulShutdown();
+
+    // Register cleanup handler (only once per agent)
+    if (!this.transcriptCleanupRegistered) {
+      this.transcriptCleanupRegistered = true;
+      registerCleanup(async () => {
+        const w = getTranscriptWriter();
+        await w.flush();
+        try {
+          w.reAppendSessionMetadata();
+        } catch {
+          // Best-effort
+        }
+      });
+    }
+  }
+
+  /**
+   * Write a message to the transcript file immediately.
+   * Called by the chat loop for each user/assistant message.
+   */
+  private async writeToTranscript(role: 'user' | 'assistant' | 'system', message: MessageParam): Promise<void> {
+    if (!this.transcriptFilePath || !this.transcriptSessionId) return;
+
+    const entryUuid = generateUuid();
+    const entry: Entry = {
+      type: role,
+      uuid: entryUuid,
+      parentUuid: this.lastTranscriptUuid,
+      timestamp: new Date().toISOString(),
+      sessionId: this.transcriptSessionId,
+      message,
+    } as Entry;
+
+    this.lastTranscriptUuid = entryUuid;
+
+    const writer = getTranscriptWriter();
+    await writer.enqueueWrite(this.transcriptFilePath, entry);
+  }
+
+  /**
+   * Write a user message to the transcript.
+   * Can be called externally when a user submits a prompt.
+   */
+  async transcriptUserMessage(message: MessageParam): Promise<void> {
+    await this.writeToTranscript('user', message);
+  }
+
+  /**
+   * Write an assistant message to the transcript.
+   * Called after each agent turn completes.
+   */
+  async transcriptAssistantMessage(message: MessageParam): Promise<void> {
+    await this.writeToTranscript('assistant', message);
+  }
+
+  /**
+   * Get the transcript session ID, if transcript persistence is enabled.
+   */
+  getTranscriptSessionId(): string | null {
+    return this.transcriptSessionId;
+  }
+
+  /**
+   * Get the transcript file path, if transcript persistence is enabled.
+   */
+  getTranscriptFilePath(): string | null {
+    return this.transcriptFilePath;
+  }
+
+  /**
+   * Flush pending transcript writes to disk.
+   */
+  async flushTranscript(): Promise<void> {
+    const writer = getTranscriptWriter();
+    await writer.flush();
   }
 }

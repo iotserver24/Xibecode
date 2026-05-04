@@ -63,6 +63,11 @@ export {
   stripModeRequests,
   parseTaskComplete,
   stripTaskComplete,
+  parsePlanReady,
+  stripPlanReady,
+  parseQuestions,
+  stripQuestions,
+  type ParsedQuestion,
   getToolCategory,
 } from './modes.js';
 
@@ -79,6 +84,17 @@ export { type XibeCodePlugin, PluginManager, examplePlugin } from './plugins.js'
 export { SessionManager, type ChatSession, type SessionMetadata } from './session-manager.js';
 export { SessionBridge, type BridgeMessage } from './session-bridge.js';
 export { SessionMemory } from './session-memory.js';
+
+// ─── Transcript ────────────────────────────────────────────────
+export { TranscriptWriter, getTranscriptWriter, appendEntryToFile } from './transcript-writer.js';
+export { loadTranscriptFile, findMainConversationTip, buildConversationChain, loadMessagesFromJsonlPath, listSessionsLite, readHeadAndTail, readFileTailSync, loadSessionMetadata } from './transcript-reader.js';
+export { type Entry, type TranscriptMessage, type MetadataEntry, type UserTranscriptEntry, type AssistantTranscriptEntry, type SystemTranscriptEntry, type AttachmentTranscriptEntry, type SummaryTranscriptEntry, type CustomTitleTranscriptEntry, type TagTranscriptEntry, type LastPromptTranscriptEntry, type CompactBoundaryTranscriptEntry, type FileHistorySnapshotEntry, type SessionMetaTranscriptEntry, type FileHistoryBackupRef, type FileHistorySnapshot, type SessionInfo, type LiteSessionFile, isTranscriptMessage, isChainParticipant, isMetadataEntry, validateUuid, generateUuid, extractJsonStringField, extractLastJsonStringField } from './transcript-types.js';
+export { recoverConversationV2, assertResumeMessageSize, ResumeTranscriptTooLargeError, type TurnInterruptionState, type DeserializeResult } from './conversation-recovery-v2.js';
+export { registerCleanup, runCleanupFunctions, gracefulShutdown, gracefulShutdownSync, setupGracefulShutdown, isShuttingDown } from './graceful-shutdown.js';
+export { FileEditor, type EditResult, type SearchReplaceEdit, type LineRangeEdit, type VerifiedEdit } from './editor.js';
+
+// ─── File History ───────────────────────────────────────────────
+export { createBackup as fhCreateBackup, restoreBackup as fhRestoreBackup, fileHistoryTrackEdit, fileHistoryCanRestore, fileHistoryRestore, createFileHistoryState, getBackupFileName, getFileHistoryDir, type FileHistoryState, type DiffStats } from './file-history.js';
 
 // ─── Plan ──────────────────────────────────────────────────────
 export { PlanMode, type PlanResult } from './planMode.js';
@@ -127,8 +143,7 @@ export { microcompact, estimateTokenCount, shouldAutoCompact, resetMicrocompactC
 // ─── History ───────────────────────────────────────────────────
 export { HistoryManager, type HistoryMessage, type SavedConversation, type ConversationSummary } from './history-manager.js';
 
-// ─── Editor ────────────────────────────────────────────────────
-export { FileEditor, type EditResult, type SearchReplaceEdit, type LineRangeEdit, type VerifiedEdit } from './editor.js';
+// ─── Editor (re-exported under Transcript section above) ───────
 
 // ─── Background Agent ──────────────────────────────────────────
 export { BackgroundAgentManager, type BackgroundTask } from './background-agent.js';

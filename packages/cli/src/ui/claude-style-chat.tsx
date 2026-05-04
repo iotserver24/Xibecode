@@ -2020,14 +2020,12 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
 
     activeAgent.removeAllListeners('event');
     let streamedBuffer = '';
-    let streamedLineEmitted = false;
     let streamFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
     const flushStreamedBuffer = () => {
       if (streamedBuffer.trim()) {
         onLine({ type: 'assistant', text: streamedBuffer.trim() });
         streamedBuffer = '';
-        streamedLineEmitted = false;
       }
     };
 
@@ -2085,17 +2083,18 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
         case 'stream_text':
           opts?.onVisibleOutput?.();
           streamedBuffer += (event.data?.text as string) || '';
-          // Emit buffered text incrementally every ~500ms or when buffer gets large
-          // so the user sees real-time output instead of waiting for stream_end
-          if (!streamedLineEmitted || streamedBuffer.length > 500) {
+          // Accumulate streamed text and flush periodically or when buffer is large.
+          // Use a longer interval (2s) to batch more text into fewer "XibeCode:" blocks,
+          // reducing the fragmented multi-prefix display seen with fast models.
+          if (streamedBuffer.length > 1500) {
+            // Large buffer — flush immediately to avoid memory buildup
+            if (streamFlushTimer) { clearTimeout(streamFlushTimer); streamFlushTimer = null; }
             flushStreamedBuffer();
-            streamedLineEmitted = true;
           } else if (!streamFlushTimer) {
             streamFlushTimer = setTimeout(() => {
               streamFlushTimer = null;
               flushStreamedBuffer();
-              streamedLineEmitted = true;
-            }, 500);
+            }, 2000);
           }
           break;
         case 'stream_end':
@@ -2128,6 +2127,27 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
           }
           break;
         }
+        case 'plan_ready':
+          onLine({
+            type: 'info',
+            text: 'Plan written to implementations.md. Say "build" to implement it, or ask for edits.',
+          });
+          break;
+        case 'questions': {
+          const qs = event.data?.questions as Array<{ id: string; question: string; options?: Array<{ id: string; label: string }>; allowMultiple?: boolean }> | undefined;
+          if (qs && qs.length > 0) {
+            const formatted = qs.map((q: { id: string; question: string; options?: Array<{ id: string; label: string }>; allowMultiple?: boolean }, i: number) => {
+              const header = `${i + 1}. ${q.question}${q.allowMultiple ? ' (select all that apply)' : ''}`;
+              if (q.options && q.options.length > 0) {
+                const opts = q.options.map((o: { id: string; label: string }) => `   ${o.id}) ${o.label}`).join('\n');
+                return `${header}\n${opts}`;
+              }
+              return header;
+            }).join('\n');
+            onLine({ type: 'info', text: `Questions:\n${formatted}\n(Type your answers to continue)` });
+          }
+          break;
+        }
         default:
           break;
       }
@@ -2137,6 +2157,24 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
       images: opts?.images,
       signal: opts?.signal,
     });
+
+    // Write the latest messages to the transcript incrementally.
+    // The agent's run() method appends to this.messages; we persist
+    // the user prompt and assistant response as separate transcript entries.
+    const latestMessages = activeAgent.getMessages();
+    if (latestMessages.length > 0) {
+      // Write the user prompt that triggered this turn
+      const userMsg = latestMessages[latestMessages.length - 2];
+      if (userMsg?.role === 'user') {
+        await activeAgent.transcriptUserMessage(userMsg);
+      }
+      // Write the assistant response
+      const assistantMsg = latestMessages[latestMessages.length - 1];
+      if (assistantMsg?.role === 'assistant') {
+        await activeAgent.transcriptAssistantMessage(assistantMsg);
+      }
+    }
+
     await onMessagesUpdate(activeAgent.getMessages());
     activeMode = activeAgent.getMode();
     toolExecutor.setMode(activeMode);
@@ -2223,12 +2261,25 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
       cwd: process.cwd(),
     });
     currentSessionId = currentSession.id;
+    // Initialize transcript persistence for the agent
+    activeAgent?.initTranscript(currentSessionId, process.cwd());
     if (options.initialMessages && options.initialMessages.length > 0) {
       currentSession.messages = options.initialMessages as MessageParam[];
-      await sessionManager.saveSession(currentSession);
+      // Write initial messages to transcript
+      for (const msg of options.initialMessages) {
+        if (msg.role === 'user') {
+          await activeAgent?.transcriptUserMessage(msg as MessageParam);
+        } else if (msg.role === 'assistant') {
+          await activeAgent?.transcriptAssistantMessage(msg as MessageParam);
+        }
+      }
     }
   } else {
     currentSession = await sessionManager.loadSession(currentSessionId);
+    // Initialize transcript persistence for resumed session
+    if (currentSession) {
+      activeAgent?.initTranscript(currentSessionId, currentSession.cwd);
+    }
   }
 
   if (currentSession?.messages?.length) {
@@ -2239,6 +2290,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
 
   const onSessionCreated = (sessionId: string) => {
     currentSessionId = sessionId;
+    activeAgent?.initTranscript(sessionId, process.cwd());
   };
 
   const onMessagesUpdate = async (messages: MessageParam[]) => {
@@ -2253,7 +2305,15 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
           }
         }
       }
-      await sessionManager.saveSession(currentSession);
+      // Use JSONL transcript persistence instead of monolithic JSON save.
+      // Each message was already written to the transcript incrementally
+      // via transcriptUserMessage/transcriptAssistantMessage in the chat loop.
+      // Here we just update the title metadata.
+      try {
+        await sessionManager.saveSession(currentSession);
+      } catch {
+        // Transcript writes are best-effort; don't block the chat loop
+      }
     }
   };
 

@@ -1,15 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useApp, useInput, createRoot } from '../ink.js';
 import TextInput from 'ink-text-input';
-import { SessionManager, type SessionMetadata, type ChatSession } from 'xibecode-core';
+import { SessionManager, type SessionMetadata, type ChatSession, loadMessagesFromJsonlPath, loadTranscriptFile, findMainConversationTip, buildConversationChain, recoverConversationV2, type TurnInterruptionState } from 'xibecode-core';
 import { launchClaudeStyleChat } from '../ui/claude-style-chat.js';
 import { ConfigManager, type ProviderType } from '../utils/config.js';
 import { renderAndRun } from '../interactiveHelpers.js';
+import * as path from 'path';
+import * as os from 'os';
 
 interface ResumeOptions {
   profile?: string;
   session?: string;
   all?: boolean;
+  /** Resume into a new session (fork) instead of continuing the original. */
+  forkSession?: boolean;
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -143,7 +147,7 @@ export async function resumeCommand(options: ResumeOptions): Promise<void> {
       console.error(`Session not found: ${options.session}`);
       process.exit(1);
     }
-    await resumeSession(session, config, options.profile);
+    await resumeSession(session, config, options.profile, options.forkSession);
     return;
   }
 
@@ -173,13 +177,14 @@ export async function resumeCommand(options: ResumeOptions): Promise<void> {
     return;
   }
 
-  await resumeSession(session, config, options.profile);
+  await resumeSession(session, config, options.profile, options.forkSession);
 }
 
 async function resumeSession(
   session: ChatSession,
   config: ConfigManager,
   profile?: string,
+  forkSession?: boolean,
 ): Promise<void> {
   console.log(`\nResuming session: ${session.title}`);
   console.log(`Session ID: ${session.id}`);
@@ -196,10 +201,40 @@ async function resumeSession(
   const baseUrl = config.getBaseUrl();
   const provider = config.get('provider') as ProviderType | undefined;
 
-  const initialMessages = session.messages.map((msg) => ({
+  // Try to load from JSONL transcript for enhanced recovery
+  let messages = session.messages;
+  let interruptionState: TurnInterruptionState = { kind: 'none' };
+
+  try {
+    const sanitizedCwd = session.cwd.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 60);
+    const jsonlPath = path.join(
+      os.homedir(), '.xibecode', 'projects', sanitizedCwd, `${session.id}.jsonl`,
+    );
+
+    const { byUuid, leafUuids, entries } = await loadTranscriptFile(jsonlPath);
+    const tip = findMainConversationTip(byUuid, leafUuids);
+
+    if (tip) {
+      const chain = buildConversationChain(byUuid, tip);
+      const recovered = recoverConversationV2(chain);
+      messages = recovered.messages;
+      interruptionState = recovered.turnInterruptionState;
+
+      if (recovered.wasInterrupted) {
+        console.log('Session was interrupted mid-turn. Auto-continuing...');
+      }
+    }
+  } catch {
+    // JSONL transcript not available — use the legacy session messages
+  }
+
+  const initialMessages = messages.map((msg) => ({
     role: msg.role,
     content: msg.content,
   }));
+
+  // When forking, use a new session ID; otherwise reuse the original
+  const sessionId = forkSession ? undefined : session.id;
 
   await launchClaudeStyleChat({
     model: session.model,
@@ -207,7 +242,7 @@ async function resumeSession(
     apiKey,
     provider,
     profile,
-    sessionId: session.id,
+    sessionId,
     initialMessages,
   });
 }
