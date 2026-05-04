@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 
 interface FileExplorerProps {
   workingDir: string;
@@ -32,7 +32,8 @@ function color(name: string, dir: boolean): string {
   return 'text-xibe-text-dim';
 }
 
-function Row({ node, depth, open, kids, onToggle }: { node: FileEntry; depth: number; open: boolean; kids?: FileEntry[]; onToggle: (n: FileEntry) => void }) {
+/* ⚡ Bolt: Memoized Row component to prevent O(N) re-renders of the file tree on timer ticks */
+const Row = memo(function Row({ node, depth, open, kids, onToggle }: { node: FileEntry; depth: number; open: boolean; kids?: FileEntry[]; onToggle: (n: FileEntry) => void }) {
   return (
     <div>
       <button onClick={() => onToggle(node)} className="flex w-full items-center gap-1.5 rounded-md px-2 py-[2px] text-left hover:bg-xibe-surface-hover transition-colors group" style={{ paddingLeft: `${depth * 14 + 8}px` }}>
@@ -49,9 +50,9 @@ function Row({ node, depth, open, kids, onToggle }: { node: FileEntry; depth: nu
       {open && node.isDirectory && kids?.map((c) => <Row key={c.path} node={c} depth={depth + 1} open={false} onToggle={onToggle} />)}
     </div>
   );
-}
+});
 
-export default function FileExplorer({ workingDir }: FileExplorerProps) {
+export default memo(function FileExplorer({ workingDir }: FileExplorerProps) {
   const [tree, setTree] = useState<FileEntry[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -63,16 +64,18 @@ export default function FileExplorer({ workingDir }: FileExplorerProps) {
 
   useEffect(() => { load(workingDir).then(setTree); }, [workingDir, load]);
 
-  const toggle = async (node: FileEntry) => {
+  const toggle = useCallback(async (node: FileEntry) => {
     if (!node.isDirectory) return;
-    const next = new Set(expanded);
-    next.has(node.path) ? next.delete(node.path) : next.add(node.path);
-    setExpanded(next);
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(node.path) ? next.delete(node.path) : next.add(node.path);
+      return next;
+    });
     if (!node.loaded) {
       const children = await load(node.path);
       setTree((prev) => update(prev, node.path, { children, loaded: true }));
     }
-  };
+  }, [load]);
 
   return (
     <div>
@@ -82,4 +85,4 @@ export default function FileExplorer({ workingDir }: FileExplorerProps) {
       </div>
     </div>
   );
-}
+});
