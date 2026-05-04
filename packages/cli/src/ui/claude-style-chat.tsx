@@ -13,7 +13,7 @@ import { CodingToolExecutor, NeuralMemory } from 'xibecode-core';
 import { MCPClientManager } from 'xibecode-core';
 import { SkillManager } from 'xibecode-core';
 import { builtInSkillsDir } from '../utils/built-in-skills-dir.js';
-import { AgentMode, ENABLED_MODES, MODE_CONFIG } from 'xibecode-core';
+import { AgentMode, ENABLED_MODES, MODE_CONFIG, type ParsedQuestion } from 'xibecode-core';
 import { renderAndRun } from '../interactiveHelpers.js';
 import { AssistantMarkdown } from '../components/AssistantMarkdown.js';
 import { formatToolArgs, formatToolOutcome, formatRunSwarmDetailLines } from '../utils/tool-display.js';
@@ -254,6 +254,7 @@ function XibeCodeChatApp(props: {
   onUiLine?: (line: UiLine) => void;
   registerUiSink?: (sink: (line: UiLine) => void) => void;
   registerModeSink?: (sink: (mode: AgentMode) => void) => void;
+  registerQuestionsSink?: (sink: (questions: ParsedQuestion[]) => void) => void;
   loadModels: () => Promise<string[]>;
   onModelChange: (nextModel: string) => Promise<void>;
   onModeChange: (nextMode: AgentMode) => Promise<void>;
@@ -322,6 +323,16 @@ function XibeCodeChatApp(props: {
   const [configCostModePickerOpen, setConfigCostModePickerOpen] = useState(false);
   const [configCostModeIndex, setConfigCostModeIndex] = useState(0);
 
+  // Interactive questions state for plan mode
+  type QuestionsState = {
+    questions: ParsedQuestion[];
+    currentIndex: number;
+    answers: Record<string, string>;
+    selectedOptionIndex: number;  // which option row is highlighted by arrows
+    isTypingCustom: boolean;      // true when user selected "type yourself"
+  } | null;
+  const [questionsState, setQuestionsState] = useState<QuestionsState>(null);
+
   const [workSpinnerFrame, setWorkSpinnerFrame] = useState(0);
   const [workVerbIndex, setWorkVerbIndex] = useState(0);
   const nextLineIdRef = useRef(1);
@@ -378,6 +389,12 @@ function XibeCodeChatApp(props: {
   useEffect(() => {
     props.registerModeSink?.((nextMode: AgentMode) => {
       setActiveMode(nextMode);
+    });
+  }, [props]);
+
+  useEffect(() => {
+    props.registerQuestionsSink?.((qs: ParsedQuestion[]) => {
+      setQuestionsState({ questions: qs, currentIndex: 0, answers: {}, selectedOptionIndex: 0, isTypingCustom: false });
     });
   }, [props]);
 
@@ -591,10 +608,91 @@ function XibeCodeChatApp(props: {
     [activeMode, props, pushLine],
   );
 
+  const applyQuestionAnswer = useCallback(
+    async (state: NonNullable<QuestionsState>, answer: string) => {
+      const { questions, currentIndex, answers } = state;
+      const currentQ = questions[currentIndex];
+      const newAnswers = { ...answers, [currentQ.id]: answer };
+      const nextIndex = currentIndex + 1;
+
+      if (nextIndex < questions.length) {
+        // More questions - advance with reset selection
+        setQuestionsState({
+          questions,
+          currentIndex: nextIndex,
+          answers: newAnswers,
+          selectedOptionIndex: 0,
+          isTypingCustom: false,
+        });
+        setInput('');
+        pushLine({ type: 'info', text: `  ${currentIndex + 1}. ${currentQ.question} → ${answer}` });
+      } else {
+        // All questions answered - submit
+        setQuestionsState(null);
+        setInput('');
+        pushLine({ type: 'info', text: `  ${currentIndex + 1}. ${currentQ.question} → ${answer}` });
+
+        const answersText = questions
+          .map((q, i) => `${i + 1}. ${q.question}\n   Answer: ${newAnswers[q.id] || '(skipped)'}`)
+          .join('\n');
+        pushLine({ type: 'info', text: 'Answers submitted. Continuing...' });
+
+        const answersPrompt = `Here are my answers to your questions:\n\n${answersText}`;
+        currentPromptRef.current = answersPrompt;
+        abortReasonRef.current = 'none';
+        lastVisibleOutputAtRef.current = Date.now();
+        abortControllerRef.current = new AbortController();
+
+        pushLine({ type: 'user', text: answersPrompt });
+        sessionMessagesRef.current.push({ role: 'user', content: answersPrompt });
+        setIsRunning(true);
+        try {
+          const startedAt = Date.now();
+          const stats = await props.runPrompt(answersPrompt, pushLine, {
+            signal: abortControllerRef.current.signal,
+            onVisibleOutput: () => {
+              lastVisibleOutputAtRef.current = Date.now();
+            },
+          });
+          const elapsedMs = Date.now() - startedAt;
+          const seconds = (elapsedMs / 1000).toFixed(1);
+          pushLine({
+            type: 'info',
+            text: `Done in ${seconds}s` + (stats.costLabel ? ` · cost ${stats.costLabel}` : ''),
+          });
+        } finally {
+          abortControllerRef.current = null;
+          currentPromptRef.current = null;
+          setIsRunning(false);
+        }
+      }
+    },
+    [props, pushLine],
+  );
+
+  // Called from useInput when a question option is selected via arrows+Enter
+  const handleQuestionAnswer = useCallback(
+    (state: NonNullable<QuestionsState>, answer: string) => {
+      applyQuestionAnswer(state, answer);
+    },
+    [applyQuestionAnswer],
+  );
+
   const onSubmit = useCallback(
     async (value: string) => {
       const trimmed = value.trim();
       if (!trimmed) return;
+
+      // Handle custom-typing mode for questions (Enter after typing custom answer)
+      if (questionsState && questionsState.isTypingCustom) {
+        await applyQuestionAnswer(questionsState, trimmed);
+        return;
+      }
+
+      // If questions are active but not in typing mode, ignore (use arrows + Enter)
+      if (questionsState) {
+        return;
+      }
 
       if (isRunning) {
         queuedPromptRef.current = trimmed;
@@ -1037,6 +1135,73 @@ function XibeCodeChatApp(props: {
     if (key.ctrl && inputKey === 'c') {
       exit();
       return;
+    }
+
+    // Interactive questions: arrow key navigation
+    if (questionsState && !questionsState.isTypingCustom) {
+      const q = questionsState.questions[questionsState.currentIndex];
+      const totalOptions = q.options.length + (q.hasOther !== false ? 1 : 0);
+      if (key.upArrow) {
+        setQuestionsState({
+          ...questionsState,
+          selectedOptionIndex: questionsState.selectedOptionIndex <= 0
+            ? totalOptions - 1
+            : questionsState.selectedOptionIndex - 1,
+        });
+        return;
+      }
+      if (key.downArrow) {
+        setQuestionsState({
+          ...questionsState,
+          selectedOptionIndex: questionsState.selectedOptionIndex >= totalOptions - 1
+            ? 0
+            : questionsState.selectedOptionIndex + 1,
+        });
+        return;
+      }
+      // Enter on a highlighted option: if "type yourself" is selected, switch to typing mode
+      if (key.return) {
+        const idx = questionsState.selectedOptionIndex;
+        const isOtherOption = idx === q.options.length && q.hasOther !== false;
+        if (isOtherOption) {
+          setQuestionsState({ ...questionsState, isTypingCustom: true });
+          setInput('');
+          return;
+        }
+        // Picked a concrete option — resolve and submit
+        if (idx < q.options.length) {
+          const answer = q.options[idx].label;
+          handleQuestionAnswer(questionsState, answer);
+          return;
+        }
+      }
+      // Escape to cancel questions
+      if (key.escape) {
+        setQuestionsState(null);
+        pushLine({ type: 'info', text: 'Questions cancelled.' });
+        return;
+      }
+      // If not a special key and not typing custom, ignore (user must use arrows + Enter)
+      if (!key.return && !key.escape && !key.upArrow && !key.downArrow && !key.ctrl && !key.meta) {
+        return;
+      }
+    }
+
+    // If in custom-typing mode for a question, handle Enter to submit
+    if (questionsState && questionsState.isTypingCustom) {
+      if (key.return) {
+        const answer = input.trim();
+        if (!answer) return;
+        handleQuestionAnswer(questionsState, answer);
+        return;
+      }
+      if (key.escape) {
+        // Go back to option selection
+        setQuestionsState({ ...questionsState, isTypingCustom: false });
+        setInput('');
+        return;
+      }
+      // Let normal TextInput handle typing — don't intercept
     }
 
     if (isRunning && key.escape) {
@@ -1574,13 +1739,88 @@ function XibeCodeChatApp(props: {
           </Text>
         </Box>
       )}
-      <Box marginTop={1} borderStyle="round" borderColor="claude" paddingX={1}>
-        <Text color="claude">{'> '}</Text>
+      {questionsState && (() => {
+        const { questions, currentIndex, selectedOptionIndex, isTypingCustom } = questionsState;
+        const q = questions[currentIndex];
+        const optLetters = 'abcdefghij';
+        const totalOptions = q.options.length + (q.hasOther !== false ? 1 : 0);
+
+        if (isTypingCustom) {
+          return (
+            <Box
+              marginTop={1}
+              borderStyle="round"
+              borderColor="green"
+              flexDirection="column"
+              paddingX={1}
+            >
+              <Text bold color="green">
+                Question {currentIndex + 1}/{questions.length} — Type your answer
+              </Text>
+              <Text color="text">{q.question}</Text>
+              <Text color="inactive" dimColor>Press Esc to go back to options</Text>
+            </Box>
+          );
+        }
+
+        return (
+          <Box
+            marginTop={1}
+            borderStyle="round"
+            borderColor="yellow"
+            flexDirection="column"
+            paddingX={1}
+          >
+            <Text bold color="yellow">
+              Question {currentIndex + 1}/{questions.length}
+            </Text>
+            <Text color="text">{q.question}{q.allowMultiple ? ' (select all that apply)' : ''}</Text>
+            <Box flexDirection="column" marginTop={1}>
+              {q.options.map((o, j) => {
+                const isSelected = j === selectedOptionIndex;
+                return (
+                  <Text key={o.id}>
+                    <Text bold color={isSelected ? 'green' : 'inactive'}>
+                      {isSelected ? ' ▸ ' : '   '}
+                    </Text>
+                    <Text bold color={isSelected ? 'green' : 'yellow'}>
+                      {optLetters[j]})
+                    </Text>
+                    <Text color={isSelected ? 'green' : 'text'}> {o.label}</Text>
+                  </Text>
+                );
+              })}
+              {q.hasOther !== false && (() => {
+                const otherIdx = q.options.length;
+                const isSelected = otherIdx === selectedOptionIndex;
+                return (
+                  <Text>
+                    <Text bold color={isSelected ? 'green' : 'inactive'}>
+                      {isSelected ? ' ▸ ' : '   '}
+                    </Text>
+                    <Text bold color={isSelected ? 'green' : 'yellow'}>
+                      {optLetters[otherIdx]})
+                    </Text>
+                    <Text color={isSelected ? 'green' : 'inactive'}> type yourself</Text>
+                  </Text>
+                );
+              })()}
+            </Box>
+            <Text color="inactive" dimColor>↑/↓ to navigate, Enter to select, Esc to cancel</Text>
+          </Box>
+        );
+      })()}
+      <Box marginTop={1} borderStyle="round" borderColor={questionsState ? (questionsState.isTypingCustom ? 'green' : 'yellow') : 'claude'} paddingX={1}>
+        <Text color={questionsState ? (questionsState.isTypingCustom ? 'green' : 'yellow') : 'claude'}>{'> '}</Text>
         <TextInput
           value={input}
           onChange={setInput}
           onSubmit={onSubmit}
-          placeholder={isRunning ? 'Waiting for response…' : 'Message XibeCode…'}
+          placeholder={questionsState
+            ? questionsState.isTypingCustom
+              ? `Type your answer for Q${questionsState.currentIndex + 1} and press Enter`
+              : `Use ↑/↓ and Enter to pick an option (Q${questionsState.currentIndex + 1}/${questionsState.questions.length})`
+            : isRunning ? 'Waiting for response…' : 'Message XibeCode…'}
         />
       </Box>
       {isSlashMode && (
@@ -2134,20 +2374,10 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
           });
           break;
         case 'questions': {
-          const qs = event.data?.questions as Array<{ id: string; question: string; options?: Array<{ id: string; label: string }>; allowMultiple?: boolean; hasOther?: boolean }> | undefined;
+          const qs = event.data?.questions as ParsedQuestion[] | undefined;
           if (qs && qs.length > 0) {
-            const formatted = qs.map((q, i) => {
-              const header = `${i + 1}. ${q.question}${q.allowMultiple ? ' (select all that apply)' : ''}`;
-              if (q.options && q.options.length > 0) {
-                const optLetters = 'abcdefghij';
-                const opts = q.options.map((o, j) => `   ${optLetters[j]}) ${o.label}`).join('\n');
-                const other = q.hasOther !== false ? `\n   ${optLetters[q.options.length]}) type yourself` : '';
-                return `${header}\n${opts}${other}`;
-              }
-              return `${header}\n   Type your answer`;
-            }).join('\n\n');
-            onLine({ type: 'info', text: formatted });
-            onLine({ type: 'info', text: 'Type your answers (e.g. "1a 2b" or "1 my answer 2a")' });
+            // Push questions to the UI component via the sink
+            questionsSink?.(qs);
           }
           break;
         }
@@ -2231,6 +2461,12 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
   let modeSink: ((mode: AgentMode) => void) | null = null;
   const registerModeSink = (sink: (mode: AgentMode) => void) => {
     modeSink = sink;
+  };
+
+  // Sink for pushing interactive questions from the agent to the UI component.
+  let questionsSink: ((questions: ParsedQuestion[]) => void) | null = null;
+  const registerQuestionsSink = (sink: (questions: ParsedQuestion[]) => void) => {
+    questionsSink = sink;
   };
 
   const formatUnknownError = (err: unknown): string => {
@@ -2408,6 +2644,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
         onUiLine={appendLogLine}
         registerUiSink={registerUiSink}
         registerModeSink={registerModeSink}
+        registerQuestionsSink={registerQuestionsSink}
         loadModels={loadModels}
         onModelChange={onModelChange}
         onModeChange={onModeChange}
