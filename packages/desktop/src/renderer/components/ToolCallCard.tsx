@@ -16,10 +16,10 @@ const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutpu
   const outputStr = toolOutput ? (typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput, null, 2)) : '';
 
   return (
-    <div className="rounded-xl border border-xibe-border-subtle bg-xibe-bg overflow-hidden animate-fade-in my-3 shadow-sm group">
+    <div className="rounded-xl border border-xibe-border-subtle overflow-hidden animate-fade-in my-3 group">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-xibe-surface-hover transition-colors"
+        className="flex w-full items-center gap-3 px-3 py-1.5 text-left hover:bg-xibe-surface-hover transition-colors"
       >
         <ChevronRight className={cn("h-4 w-4 shrink-0 transition-transform text-xibe-text-dim", open && "rotate-90")} />
 

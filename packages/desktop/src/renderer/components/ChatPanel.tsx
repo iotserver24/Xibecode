@@ -186,7 +186,7 @@ export default function ChatPanel({
           )}
 
           {/* Floating Pill input */}
-          <div className="relative flex items-end rounded-2xl border border-xibe-border-subtle bg-xibe-surface/80 backdrop-blur shadow-sm focus-within:border-xibe-border focus-within:bg-xibe-surface focus-within:ring-1 focus-within:ring-xibe-border transition-all duration-200">
+          <div className="relative flex items-end rounded-2xl bg-xibe-surface transition-all duration-200">
             <textarea
               ref={inputRef}
               value={input}

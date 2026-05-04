@@ -332,7 +332,7 @@ export default function App() {
   return (
     <div className="flex h-screen flex-col bg-xibe-bg text-xibe-text font-sans overflow-hidden">
       {/* Header */}
-      <header className="flex h-12 items-center justify-between px-3 border-b border-xibe-border-subtle shrink-0 bg-xibe-bg z-10">
+      <header className="flex h-12 items-center justify-between px-3 shrink-0 bg-xibe-bg z-10">
         <div className="flex items-center gap-3">
           <button
             onClick={() => setLeftPanelOpen((v) => !v)}
