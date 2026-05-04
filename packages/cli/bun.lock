@@ -20,7 +20,7 @@
         "open": "^10.0.0",
         "ora": "^5.4.1",
         "react": "^19.2.4",
-        "xibecode-core": "^1.1.1",
+        "xibecode-core": "^1.2.2",
       },
       "devDependencies": {
         "@types/inquirer": "^9.0.9",
@@ -813,7 +813,7 @@
 
     "wsl-utils": ["wsl-utils@0.1.0", "", { "dependencies": { "is-wsl": "^3.1.0" } }, "sha512-h3Fbisa2nKGPxCpm89Hk33lBLsnaGBvctQopaBSOW/uIs6FTe1ATyAnKFJrzVs9vpGdsTe73WF3V4lIsk4Gacw=="],
 
-    "xibecode-core": ["xibecode-core@1.1.1", "", { "dependencies": { "@anthropic-ai/sdk": "^0.78.0", "@modelcontextprotocol/sdk": "^1.29.0", "diff": "^5.1.0", "dotenv": "^16.3.1", "fast-glob": "^3.3.3", "gray-matter": "^4.0.3", "node-fetch": "^3.3.2", "open": "^10.0.0", "strip-ansi": "^7.1.0", "ts-morph": "^27.0.2", "typescript": "^5.3.3", "zod": "^4.3.6" } }, "sha512-y5jNxgKLjpPi6bKNAfKMOPAG/DftEmuBLeeh2jETmx88ExIYrv/xYZOzVMTOkgbdqzXkK5r/C0HXRdJFguLAhg=="],
+    "xibecode-core": ["xibecode-core@1.2.2", "", { "dependencies": { "@anthropic-ai/sdk": "^0.78.0", "@modelcontextprotocol/sdk": "^1.29.0", "diff": "^5.1.0", "dotenv": "^16.3.1", "fast-glob": "^3.3.3", "gray-matter": "^4.0.3", "node-fetch": "^3.3.2", "open": "^10.0.0", "strip-ansi": "^7.1.0", "ts-morph": "^27.0.2", "typescript": "^5.3.3", "zod": "^4.3.6" } }, "sha512-XSwwBfzicSxzmMtNuwDdiQKVkAzB7eq6P/9AeWsBYoRWmUsUeeosUJb6ujz40WLCTCY7IJ6biVwiP/yfPVNM0Q=="],
 
     "y18n": ["y18n@5.0.8", "", {}, "sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA=="],
 
