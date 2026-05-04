@@ -2134,17 +2134,20 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
           });
           break;
         case 'questions': {
-          const qs = event.data?.questions as Array<{ id: string; question: string; options?: Array<{ id: string; label: string }>; allowMultiple?: boolean }> | undefined;
+          const qs = event.data?.questions as Array<{ id: string; question: string; options?: Array<{ id: string; label: string }>; allowMultiple?: boolean; hasOther?: boolean }> | undefined;
           if (qs && qs.length > 0) {
-            const formatted = qs.map((q: { id: string; question: string; options?: Array<{ id: string; label: string }>; allowMultiple?: boolean }, i: number) => {
+            const formatted = qs.map((q, i) => {
               const header = `${i + 1}. ${q.question}${q.allowMultiple ? ' (select all that apply)' : ''}`;
               if (q.options && q.options.length > 0) {
-                const opts = q.options.map((o: { id: string; label: string }) => `   ${o.id}) ${o.label}`).join('\n');
-                return `${header}\n${opts}`;
+                const optLetters = 'abcdefghij';
+                const opts = q.options.map((o, j) => `   ${optLetters[j]}) ${o.label}`).join('\n');
+                const other = q.hasOther !== false ? `\n   ${optLetters[q.options.length]}) type yourself` : '';
+                return `${header}\n${opts}${other}`;
               }
-              return header;
-            }).join('\n');
-            onLine({ type: 'info', text: `Questions:\n${formatted}\n(Type your answers to continue)` });
+              return `${header}\n   Type your answer`;
+            }).join('\n\n');
+            onLine({ type: 'info', text: formatted });
+            onLine({ type: 'info', text: 'Type your answers (e.g. "1a 2b" or "1 my answer 2a")' });
           }
           break;
         }
