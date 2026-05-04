@@ -393,6 +393,8 @@ export class EnhancedAgent extends EventEmitter {
   private completionGateRetries = 0;
   /** Set to true when [[TASK_COMPLETE]] is detected so the loop breaks immediately. */
   private taskCompletedFlag = false;
+  /** Set to true when [[QUESTIONS:...]] is detected so the loop pauses for user answers. */
+  private questionsPendingFlag = false;
   private static readonly MAX_COMPLETION_GATE_RETRIES = 2;
   /** Settings manager for multi-source config */
   private settingsManager?: import('./settings/settings.js').SettingsManager;
@@ -686,6 +688,7 @@ export class EnhancedAgent extends EventEmitter {
     this.evidenceTrail = [];
     this.completionGateRetries = 0;
     this.taskCompletedFlag = false;
+    this.questionsPendingFlag = false;
 
     this.autoMemoryMarkdownSection = '';
     if (isAutoMemoryLoadEnabled()) {
@@ -1026,6 +1029,7 @@ export class EnhancedAgent extends EventEmitter {
           const questions = parseQuestions(block.text);
           if (questions) {
             this.emit('questions', { questions });
+            this.questionsPendingFlag = true;
           }
         }
 
@@ -1050,6 +1054,18 @@ export class EnhancedAgent extends EventEmitter {
             filesChanged: this.filesChanged.size,
           });
           this.onAgentComplete().catch(() => { /* non-fatal */ });
+          break;
+        }
+
+        // If questions were detected, pause the loop so the user can answer.
+        // The chat UI will present the questions, collect answers, and then
+        // call run() again with the user's answers injected as a message.
+        if (this.questionsPendingFlag) {
+          this.emit('complete', {
+            iterations: this.iterationCount,
+            toolCalls: this.toolCallCount,
+            filesChanged: this.filesChanged.size,
+          });
           break;
         }
 
