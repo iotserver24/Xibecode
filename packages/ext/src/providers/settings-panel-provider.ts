@@ -473,9 +473,14 @@ export class SettingsPanelProvider {
 
     // Update profile dropdown
     const sel = q('profileSelect');
-    sel.innerHTML = profiles.map(p=>
-      '<option value="'+p+'"'+(p===profile?' selected':'')+'>'+p+'</option>'
-    ).join('');
+    sel.innerHTML = '';
+    profiles.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p;
+      opt.textContent = p;
+      if (p === profile) opt.selected = true;
+      sel.appendChild(opt);
+    });
 
     // Apply fields
     q('apiKey').value            = '';   // never pre-fill the real key
@@ -511,9 +516,14 @@ export class SettingsPanelProvider {
         fetchedModels = msg.models;
         q('fetchStatus').textContent = msg.models.length+' models loaded';
         const list = q('modelList');
-        list.innerHTML = msg.models.map(m=>
-          '<div class="model-item" onclick="pickModel(\''+m+'\')">'+m+'</div>'
-        ).join('');
+        list.innerHTML = '';
+        msg.models.forEach(m => {
+          const item = document.createElement('div');
+          item.className = 'model-item';
+          item.textContent = m;
+          item.onclick = () => pickModel(m);
+          list.appendChild(item);
+        });
         list.classList.add('visible');
         break;
       }
