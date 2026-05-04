@@ -31,3 +31,7 @@
 ## 2026-05-03 - [O(N) Cascade re-renders in Lists with State-Driven Hover]
 **Learning:** Prop-drilling or managing local interactive state (like `hoveredId` on `mouseenter`/`mouseleave`) within a list component mapping an array of items (like `ChatHistory` mapping `SessionItem`s) creates O(N) re-renders when interacting with any single item.
 **Action:** Always favor native CSS pseudo-classes like `:hover` or Tailwind's `group-hover` over interactive React state for visually toggling elements inside rendered lists, and wrap the parent list component with `React.memo` if it sits alongside frequently updating sibling states (like a timer or streaming tokens).
+
+## 2024-05-04 - Unnecessary Timer Re-renders
+**Learning:** App.tsx has a 250ms setInterval updating state (runElapsed) while the agent is running, which forces the entire app tree (including large lists in FileExplorer and ChatPanel) to re-render 4 times a second.
+**Action:** Always wrap large list components and recursive tree components (like FileExplorer's Row) in React.memo() when they are descendants of a component with high-frequency state updates. Also use useMemo for mapping large lists (like chat messages) to prevent unnecessary VDOM recreation.
