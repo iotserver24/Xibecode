@@ -15,7 +15,7 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
   if (isUser) {
     return (
       <div className="flex justify-end animate-fade-in w-full group">
-        <div className="max-w-[85%] sm:max-w-[75%] rounded-2xl rounded-tr-sm bg-xibe-surface-raised border border-xibe-border-subtle px-4 py-3 text-[15px] leading-relaxed text-xibe-text whitespace-pre-wrap shadow-sm">
+        <div className="max-w-[85%] sm:max-w-[75%] rounded-2xl rounded-tr-sm bg-xibe-surface px-4 py-3 text-[15px] leading-relaxed text-xibe-text whitespace-pre-wrap">
           {content}
         </div>
       </div>
@@ -30,7 +30,7 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
         prose-blockquote:my-4 prose-blockquote:border-l-xibe-border-focus prose-blockquote:text-xibe-text-dim
         prose-a:text-xibe-brand-blue prose-a:no-underline hover:prose-a:underline hover:prose-a:underline-offset-2
         prose-strong:text-xibe-text prose-strong:font-semibold
-        prose-code:text-xibe-text-secondary prose-code:bg-xibe-surface-raised prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:font-medium prose-code:before:content-none prose-code:after:content-none
+        prose-code:text-xibe-text-secondary prose-code:bg-xibe-surface/50 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:font-medium prose-code:before:content-none prose-code:after:content-none
         prose-h1:text-xl prose-h2:text-lg prose-h3:text-base prose-h1:font-semibold prose-h2:font-semibold prose-h3:font-semibold">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
