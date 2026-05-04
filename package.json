@@ -1,7 +1,7 @@
 {
   "name": "xibecode-monorepo",
   "private": true,
-  "version": "1.0.4",
+  "version": "1.2.2",
   "description": "XibeCode monorepo - AI-powered autonomous coding assistant",
   "type": "module",
   "scripts": {
