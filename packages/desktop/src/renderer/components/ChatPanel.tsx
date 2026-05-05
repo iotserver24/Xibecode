@@ -126,9 +126,9 @@ export default function ChatPanel({
                       <button
                         key={q.text}
                         onClick={() => onSendMessage(q.text)}
-                        className="group flex items-center gap-3 rounded-2xl border border-xibe-border-subtle bg-xibe-surface/50 px-4 py-3 text-sm text-xibe-text-secondary hover:bg-xibe-surface-hover hover:border-xibe-border hover:text-xibe-text transition-all"
+                        className="group flex items-center gap-3 rounded-xl border border-xibe-border-subtle bg-transparent px-4 py-3 text-sm text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-all"
                       >
-                        <div className="bg-xibe-bg rounded-lg p-1.5 border border-xibe-border-subtle group-hover:border-xibe-border transition-colors">
+                        <div className="rounded-lg p-1 transition-colors">
                           {q.icon}
                         </div>
                         {q.text}
@@ -171,11 +171,11 @@ export default function ChatPanel({
       </div>
 
       {/* Input area */}
-      <div className="shrink-0 px-4 pb-6 pt-2 bg-gradient-to-t from-xibe-bg via-xibe-bg to-transparent">
+      <div className="shrink-0 px-4 pb-6 pt-2 bg-xibe-bg">
         <div className="mx-auto max-w-3xl relative">
           {/* Command dropdown above input */}
           {isSlashMode && filteredCmds.length > 0 && (
-            <div className="absolute bottom-full mb-2 w-full rounded-xl border border-xibe-border-subtle bg-xibe-surface/95 backdrop-blur-md shadow-lg overflow-hidden animate-slide-up z-20">
+            <div className="absolute bottom-full mb-2 w-full rounded-xl border border-xibe-border-subtle bg-xibe-surface overflow-hidden animate-slide-up z-20">
               {filteredCmds.slice(0, 6).map((cmd, i) => (
                 <button key={cmd.name} onClick={() => { setInput(cmd.name + ' '); inputRef.current?.focus(); }} className={`flex w-full items-center justify-between px-4 py-2.5 text-left text-sm transition-colors ${i === selectedCmd ? 'bg-xibe-surface-hover text-xibe-text' : 'text-xibe-text-secondary hover:bg-xibe-surface-hover/50'}`}>
                   <span className="font-mono font-medium text-xibe-text">{cmd.name}</span>
@@ -186,7 +186,7 @@ export default function ChatPanel({
           )}
 
           {/* Floating Pill input */}
-          <div className="relative flex items-end rounded-2xl bg-xibe-surface transition-all duration-200">
+          <div className="relative flex items-end rounded-xl bg-xibe-surface transition-all duration-200">
             <textarea
               ref={inputRef}
               value={input}
@@ -207,7 +207,7 @@ export default function ChatPanel({
             <button
               onClick={submit}
               disabled={isRunning || !input.trim()}
-              className="absolute right-2 bottom-2 h-9 w-9 rounded-xl bg-xibe-surface-raised border border-xibe-border-subtle flex items-center justify-center text-xibe-text hover:bg-xibe-text hover:text-xibe-bg disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
+              className="absolute right-2 bottom-2 h-9 w-9 rounded-lg bg-xibe-text text-xibe-bg flex items-center justify-center hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
             >
               <Send className="h-4 w-4 ml-0.5" />
             </button>
