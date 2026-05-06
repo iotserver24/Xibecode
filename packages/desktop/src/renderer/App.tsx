@@ -53,7 +53,6 @@ export default function App() {
   const [showSetup, setShowSetup] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [spinnerVerb, setSpinnerVerb] = useState('');
-  const [runElapsed, setRunElapsed] = useState(0);
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [costMode, setCostMode] = useState('normal');
@@ -83,13 +82,6 @@ export default function App() {
       setCostMode(cm || 'normal');
     })();
   }, []);
-
-  useEffect(() => {
-    if (!isRunning) { setRunElapsed(0); return; }
-    const start = Date.now();
-    const id = setInterval(() => setRunElapsed(Date.now() - start), 250);
-    return () => clearInterval(id);
-  }, [isRunning]);
 
   useEffect(() => {
     if (!isRunning) return;
@@ -413,7 +405,6 @@ export default function App() {
             onCommand={handleCommand}
             isRunning={isRunning}
             spinnerVerb={spinnerVerb}
-            runElapsed={runElapsed}
             activeModel={activeModel}
             activeProvider={activeProvider}
             wireFormat={wireFormat}
@@ -446,7 +437,6 @@ export default function App() {
         workingDir={workingDir}
         isRunning={isRunning}
         spinnerVerb={spinnerVerb}
-        runElapsed={runElapsed}
         activeModel={activeModel}
         activeProvider={activeProvider}
         wireFormat={wireFormat}

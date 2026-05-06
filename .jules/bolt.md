@@ -39,3 +39,7 @@
 ## 2024-05-18 - [O(N) VDOM Recreation in ChatPanel with React]
 **Learning:** Even if list item components (like `MessageBubble` and `ToolCallCard`) are memoized using `React.memo()`, mapping over a large array of messages inside the render cycle of a component that receives high-frequency prop updates (like `runElapsed` from a 250ms `setInterval`) still creates O(N) evaluations and recreates VDOM elements. This adds significant garbage collection overhead and reduces responsiveness.
 **Action:** Always wrap the array mapping logic (`messages.map(...)`) itself with `useMemo` in parent components to completely prevent the O(N) iteration and VDOM element recreation on unrelated state changes.
+
+## 2026-05-18 - [Top-Level Timer State Anti-Pattern]
+**Learning:** Storing high-frequency update state like `runElapsed` (e.g. from a 250ms `setInterval`) in top-level components (like `App.tsx`) causes massive O(N) cascade re-renders across the entire application tree, negatively affecting performance during runtime.
+**Action:** Extract high-frequency timer states into custom hooks (like `useRunElapsed`) and use them in small, dedicated leaf components wrapped with `React.memo()`. This confines re-renders specifically to the elements that display the changing value, protecting the rest of the application tree.

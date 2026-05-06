@@ -1,10 +1,17 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, memo } from 'react';
 import { Send, Terminal, Zap, BookOpen } from 'lucide-react';
 import type { ChatMessage } from '../App';
 import type { ModeState } from '../../preload/index';
 import MessageBubble from './MessageBubble';
 import ToolCallCard from './ToolCallCard';
 import { cn } from '../lib/utils';
+import { useRunElapsed } from '../hooks/useRunElapsed';
+
+const ChatPanelTimer = memo(function ChatPanelTimer({ isRunning }: { isRunning: boolean }) {
+  const runElapsed = useRunElapsed(isRunning);
+  if (runElapsed <= 0) return null;
+  return <span className="text-xibe-text-dim/40 tabular-nums">({(runElapsed / 1000).toFixed(1)}s)</span>;
+});
 
 const CHAT_COMMANDS = [
   { name: '/help', description: 'Show available shortcuts' },
@@ -31,7 +38,6 @@ interface ChatPanelProps {
   onCommand: (cmd: string, arg?: string) => void;
   isRunning: boolean;
   spinnerVerb: string;
-  runElapsed: number;
   activeModel: string;
   activeProvider: string;
   wireFormat: string;
@@ -44,7 +50,7 @@ interface ChatPanelProps {
 }
 
 export default function ChatPanel({
-  messages, onSendMessage, onCommand, isRunning, spinnerVerb, runElapsed,
+  messages, onSendMessage, onCommand, isRunning, spinnerVerb,
   activeModel, activeProvider, wireFormat, appVersion, needsSetup, onOpenSetup, onOpenCommandPalette,
   modeState, onModeSwitch,
 }: ChatPanelProps) {
@@ -167,7 +173,7 @@ export default function ChatPanel({
                   <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-bounce" style={{ animationDelay: '300ms' }} />
                 </div>
                 <span className="ml-1">{spinnerVerb}</span>
-                {runElapsed > 0 && <span className="text-xibe-text-dim/40 tabular-nums">({(runElapsed / 1000).toFixed(1)}s)</span>}
+                <ChatPanelTimer isRunning={isRunning} />
               </div>
             )}
             <div ref={bottomRef} className="h-2" />
