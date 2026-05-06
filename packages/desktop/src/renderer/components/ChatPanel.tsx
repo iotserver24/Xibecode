@@ -176,13 +176,13 @@ export default function ChatPanel({
       </div>
 
       {/* Input area */}
-      <div className="shrink-0 px-4 pb-6 pt-2 bg-gradient-to-t from-xibe-bg via-xibe-bg to-transparent">
+      <div className="shrink-0 px-4 pb-6 pt-2 bg-xibe-bg">
         <div className="mx-auto max-w-3xl relative">
           {/* Command dropdown above input */}
           {isSlashMode && filteredCmds.length > 0 && (
-            <div className="absolute bottom-full mb-2 w-full rounded-xl border border-xibe-border-subtle bg-xibe-surface/95 backdrop-blur-md shadow-lg overflow-hidden animate-slide-up z-20">
+            <div className="absolute bottom-full mb-2 w-full rounded-lg border border-xibe-border bg-xibe-surface shadow-none overflow-hidden animate-slide-up z-20">
               {filteredCmds.slice(0, 6).map((cmd, i) => (
-                <button key={cmd.name} onClick={() => { setInput(cmd.name + ' '); inputRef.current?.focus(); }} className={`flex w-full items-center justify-between px-4 py-2.5 text-left text-sm transition-colors ${i === selectedCmd ? 'bg-xibe-surface-hover text-xibe-text' : 'text-xibe-text-secondary hover:bg-xibe-surface-hover/50'}`}>
+                <button key={cmd.name} onClick={() => { setInput(cmd.name + ' '); inputRef.current?.focus(); }} className={`flex w-full items-center justify-between px-4 py-2 text-left text-sm transition-colors ${i === selectedCmd ? 'bg-xibe-surface-hover text-xibe-text' : 'text-xibe-text-secondary hover:bg-xibe-surface-hover/50'}`}>
                   <span className="font-mono font-medium text-xibe-text">{cmd.name}</span>
                   <span className="text-xs text-xibe-text-dim truncate ml-4">{cmd.description}</span>
                 </button>
@@ -190,8 +190,8 @@ export default function ChatPanel({
             </div>
           )}
 
-          {/* Floating Pill input */}
-          <div className="relative flex items-end rounded-2xl bg-xibe-surface transition-all duration-200">
+          {/* Input Box */}
+          <div className="relative flex items-end rounded-lg bg-xibe-surface border border-xibe-border focus-within:border-xibe-border-focus transition-colors duration-200">
             <textarea
               ref={inputRef}
               value={input}
@@ -205,21 +205,21 @@ export default function ChatPanel({
               placeholder={isRunning ? 'Thinking...' : 'Ask anything or type / for commands'}
               disabled={isRunning}
               rows={1}
-              className="flex-1 resize-none bg-transparent pl-4 pr-12 py-3.5 text-[15px] leading-relaxed text-xibe-text placeholder-xibe-text-dim/50 focus:outline-none disabled:opacity-40"
-              style={{ minHeight: '52px', maxHeight: '400px' }}
+              className="flex-1 resize-none bg-transparent pl-4 pr-12 py-3 text-[14px] leading-relaxed text-xibe-text placeholder-xibe-text-dim/50 focus:outline-none disabled:opacity-40"
+              style={{ minHeight: '44px', maxHeight: '400px' }}
               onInput={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 400) + 'px'; }}
             />
             <button
               onClick={submit}
               disabled={isRunning || !input.trim()}
-              className="absolute right-2 bottom-2 h-9 w-9 rounded-xl bg-xibe-surface-raised border border-xibe-border-subtle flex items-center justify-center text-xibe-text hover:bg-xibe-text hover:text-xibe-bg disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
+              className="absolute right-2 bottom-1.5 h-8 w-8 rounded bg-xibe-surface-raised flex items-center justify-center text-xibe-text-secondary hover:bg-xibe-text hover:text-xibe-bg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
-              <Send className="h-4 w-4 ml-0.5" />
+              <Send className="h-4 w-4" />
             </button>
           </div>
           <div className="mt-2 text-center">
             <p className="text-[11px] font-medium text-xibe-text-dim/40">
-              <span className="hidden sm:inline">Use <kbd className="font-sans px-1 rounded border border-xibe-border-subtle bg-xibe-surface-raised/50">Enter</kbd> to send, <kbd className="font-sans px-1 rounded border border-xibe-border-subtle bg-xibe-surface-raised/50">Shift + Enter</kbd> for new line</span>
+              <span className="hidden sm:inline">Use <kbd className="font-sans px-1 rounded bg-xibe-surface-raised/50">Enter</kbd> to send, <kbd className="font-sans px-1 rounded bg-xibe-surface-raised/50">Shift + Enter</kbd> for new line</span>
             </p>
           </div>
         </div>

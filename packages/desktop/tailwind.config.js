@@ -5,16 +5,16 @@ export default {
     extend: {
       colors: {
         xibe: {
-          bg: '#0D0D12',
-          surface: '#16161D',
-          border: '#2A2A35',
-          muted: '#6b7280',
-          text: '#E2E2E9',
-          accent: '#3B82F6',
-          'accent-dim': '#2563EB',
-          warning: '#F59E0B',
-          error: '#EF4444',
-          info: '#0EA5E9',
+          bg: '#09090b',
+          surface: '#18181b',
+          border: '#3f3f46',
+          muted: '#71717a',
+          text: '#fafafa',
+          accent: '#f4f4f5',
+          'accent-dim': '#e4e4e7',
+          warning: '#a1a1aa',
+          error: '#f87171',
+          info: '#a1a1aa',
         },
       },
       fontFamily: {
