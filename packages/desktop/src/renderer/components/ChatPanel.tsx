@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Send, Terminal, Zap, BookOpen } from 'lucide-react';
 import type { ChatMessage } from '../App';
 import type { ModeState } from '../../preload/index';
@@ -79,6 +79,23 @@ export default function ChatPanel({
     if (inputRef.current) inputRef.current.style.height = 'auto';
   };
 
+  // ⚡ Bolt: Memoize the mapping of messages to prevent O(N) VDOM recreation on frequent timer ticks (e.g. runElapsed)
+  const renderedMessages = useMemo(() => {
+    return messages.map((msg) =>
+      msg.role === 'tool' && msg.toolName ? (
+        <ToolCallCard key={msg.id} toolName={msg.toolName} toolInput={msg.toolInput} toolOutput={msg.toolOutput} timestamp={msg.timestamp} />
+      ) : msg.role === 'info' ? (
+        <div key={msg.id} className="flex justify-center py-2">
+          <span className="text-[11px] font-medium text-xibe-text-dim bg-xibe-surface px-3 py-1 rounded-full border border-xibe-border-subtle">{msg.content}</span>
+        </div>
+      ) : msg.role === 'error' ? (
+        <div key={msg.id} className="text-sm text-xibe-error bg-xibe-error/10 border border-xibe-error/20 rounded-xl px-4 py-3 shadow-sm">{msg.content}</div>
+      ) : (
+        <MessageBubble key={msg.id} role={msg.role as 'user' | 'assistant'} content={msg.content} isStreaming={msg.isStreaming} timestamp={msg.timestamp} />
+      ),
+    );
+  }, [messages]);
+
   return (
     <div className="flex flex-1 flex-col min-h-0">
       {/* Messages area */}
@@ -141,19 +158,7 @@ export default function ChatPanel({
           </div>
         ) : (
           <div className="mx-auto max-w-3xl px-4 py-8 space-y-6">
-            {messages.map((msg) =>
-              msg.role === 'tool' && msg.toolName ? (
-                <ToolCallCard key={msg.id} toolName={msg.toolName} toolInput={msg.toolInput} toolOutput={msg.toolOutput} timestamp={msg.timestamp} />
-              ) : msg.role === 'info' ? (
-                <div key={msg.id} className="flex justify-center py-2">
-                  <span className="text-[11px] font-medium text-xibe-text-dim bg-xibe-surface px-3 py-1 rounded-full border border-xibe-border-subtle">{msg.content}</span>
-                </div>
-              ) : msg.role === 'error' ? (
-                <div key={msg.id} className="text-sm text-xibe-error bg-xibe-error/10 border border-xibe-error/20 rounded-xl px-4 py-3 shadow-sm">{msg.content}</div>
-              ) : (
-                <MessageBubble key={msg.id} role={msg.role as 'user' | 'assistant'} content={msg.content} isStreaming={msg.isStreaming} timestamp={msg.timestamp} />
-              ),
-            )}
+            {renderedMessages}
             {isRunning && (
               <div className="flex items-center gap-2 text-xs text-xibe-text-dim animate-fade-in pl-2">
                 <div className="flex gap-1">
