@@ -35,3 +35,7 @@
 ## 2024-05-04 - Unnecessary Timer Re-renders
 **Learning:** App.tsx has a 250ms setInterval updating state (runElapsed) while the agent is running, which forces the entire app tree (including large lists in FileExplorer and ChatPanel) to re-render 4 times a second.
 **Action:** Always wrap large list components and recursive tree components (like FileExplorer's Row) in React.memo() when they are descendants of a component with high-frequency state updates. Also use useMemo for mapping large lists (like chat messages) to prevent unnecessary VDOM recreation.
+
+## 2024-05-18 - [O(N) VDOM Recreation in ChatPanel with React]
+**Learning:** Even if list item components (like `MessageBubble` and `ToolCallCard`) are memoized using `React.memo()`, mapping over a large array of messages inside the render cycle of a component that receives high-frequency prop updates (like `runElapsed` from a 250ms `setInterval`) still creates O(N) evaluations and recreates VDOM elements. This adds significant garbage collection overhead and reduces responsiveness.
+**Action:** Always wrap the array mapping logic (`messages.map(...)`) itself with `useMemo` in parent components to completely prevent the O(N) iteration and VDOM element recreation on unrelated state changes.
