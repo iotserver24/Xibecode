@@ -1,9 +1,22 @@
+import { memo } from 'react';
+import { useRunElapsed } from '../hooks/useRunElapsed';
+
+const StatusBarTimer = memo(function StatusBarTimer({ isRunning }: { isRunning: boolean }) {
+  const runElapsed = useRunElapsed(isRunning);
+  if (!isRunning) return null;
+  return (
+    <>
+      <span className="text-xibe-border">|</span>
+      <span className="tabular-nums">{(runElapsed / 1000).toFixed(1)}s</span>
+    </>
+  );
+});
+
 interface Props {
   mode: string;
   workingDir: string;
   isRunning: boolean;
   spinnerVerb: string;
-  runElapsed: number;
   activeModel: string;
   activeProvider: string;
   wireFormat: string;
@@ -20,7 +33,7 @@ const MODE_COLORS: Record<string, string> = {
   engineer: 'bg-green-400', data: 'bg-cyan-400', researcher: 'bg-pink-300',
 };
 
-export default function StatusBar({ mode, workingDir, isRunning, spinnerVerb, runElapsed, activeModel, activeProvider, wireFormat, costMode, onToggleSidebar, onTogglePreview }: Props) {
+export default function StatusBar({ mode, workingDir, isRunning, spinnerVerb, activeModel, activeProvider, wireFormat, costMode, onToggleSidebar, onTogglePreview }: Props) {
   const dot = MODE_COLORS[mode] ?? 'bg-zinc-400';
 
   return (
@@ -43,8 +56,7 @@ export default function StatusBar({ mode, workingDir, isRunning, spinnerVerb, ru
           <>
             <span className="text-xibe-border">|</span>
             <span className="text-xibe-brand-blue">{spinnerVerb}</span>
-            <span className="text-xibe-border">|</span>
-            <span className="tabular-nums">{(runElapsed / 1000).toFixed(1)}s</span>
+            <StatusBarTimer isRunning={isRunning} />
           </>
         )}
       </div>
