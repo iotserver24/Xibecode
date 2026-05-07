@@ -5,13 +5,13 @@ export default {
     extend: {
       colors: {
         xibe: {
-          bg: '#0D0D12',
-          surface: '#16161D',
-          border: '#2A2A35',
-          muted: '#6b7280',
-          text: '#E2E2E9',
-          accent: '#3B82F6',
-          'accent-dim': '#2563EB',
+          bg: '#09090b',
+          surface: '#18181b',
+          border: '#27272a',
+          muted: '#71717a',
+          text: '#fafafa',
+          accent: '#fafafa',
+          'accent-dim': '#a1a1aa',
           warning: '#F59E0B',
           error: '#EF4444',
           info: '#0EA5E9',
