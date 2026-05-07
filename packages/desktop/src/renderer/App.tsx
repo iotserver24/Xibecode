@@ -97,13 +97,22 @@ export default function App() {
   const handleAgentEvents = useCallback((batch: HostedAgentEvent[]) => {
     setMessages((prev) => {
       const updated = [...prev];
+
+      // ⚡ Bolt: Helper to find the last item matching a condition without O(N) array allocation or forward scanning
+      const findLastIndex = (predicate: (m: ChatMessage) => boolean) => {
+        for (let i = updated.length - 1; i >= 0; i--) {
+          if (predicate(updated[i])) return i;
+        }
+        return -1;
+      };
+
       for (const event of batch) {
         const d = event.data as any;
         switch (event.type) {
           case 'stream_text': {
             const text = d?.text ?? '';
             if (!text) break;
-            const last = updated.findIndex((m) => m.role === 'assistant' && m.isStreaming);
+            const last = findLastIndex((m) => m.role === 'assistant' && !!m.isStreaming);
             if (last >= 0) updated[last] = { ...updated[last], content: updated[last].content + text };
             else updated.push({ id: uid(), role: 'assistant', content: text, timestamp: event.timestamp, isStreaming: true });
             break;
@@ -111,13 +120,13 @@ export default function App() {
           case 'response': {
             const text = d?.text ?? '';
             if (!text) break;
-            const last = updated.findIndex((m) => m.role === 'assistant' && m.isStreaming);
+            const last = findLastIndex((m) => m.role === 'assistant' && !!m.isStreaming);
             if (last >= 0) updated[last] = { ...updated[last], content: updated[last].content + text };
             else updated.push({ id: uid(), role: 'assistant', content: text, timestamp: event.timestamp, isStreaming: true });
             break;
           }
           case 'stream_end': {
-            const last = updated.findIndex((m) => m.role === 'assistant' && m.isStreaming);
+            const last = findLastIndex((m) => m.role === 'assistant' && !!m.isStreaming);
             if (last >= 0) updated[last] = { ...updated[last], isStreaming: false };
             break;
           }
@@ -126,15 +135,14 @@ export default function App() {
             break;
           }
           case 'tool_result': {
-            const idx = [...updated].reverse().findIndex((m) => m.role === 'tool' && m.toolName && !m.toolOutput);
-            if (idx >= 0) {
-              const i = updated.length - 1 - idx;
-              updated[i] = { ...updated[i], toolOutput: d, content: typeof d === 'string' ? d : JSON.stringify(d, null, 2) };
+            const last = findLastIndex((m) => m.role === 'tool' && !!m.toolName && !m.toolOutput);
+            if (last >= 0) {
+              updated[last] = { ...updated[last], toolOutput: d, content: typeof d === 'string' ? d : JSON.stringify(d, null, 2) };
             }
             break;
           }
           case 'complete': {
-            const last = updated.findIndex((m) => m.role === 'assistant' && m.isStreaming);
+            const last = findLastIndex((m) => m.role === 'assistant' && !!m.isStreaming);
             if (last >= 0) updated[last] = { ...updated[last], isStreaming: false };
             setIsRunning(false);
             break;

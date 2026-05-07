@@ -43,3 +43,6 @@
 ## 2026-05-18 - [Top-Level Timer State Anti-Pattern]
 **Learning:** Storing high-frequency update state like `runElapsed` (e.g. from a 250ms `setInterval`) in top-level components (like `App.tsx`) causes massive O(N) cascade re-renders across the entire application tree, negatively affecting performance during runtime.
 **Action:** Extract high-frequency timer states into custom hooks (like `useRunElapsed`) and use them in small, dedicated leaf components wrapped with `React.memo()`. This confines re-renders specifically to the elements that display the changing value, protecting the rest of the application tree.
+## 2025-05-07 - Array Copying and Scanning in High-Frequency Streams
+**Learning:** Using `[...array].reverse().findIndex()` inside a high-frequency stream handler (like `handleAgentEvents` processing `tool_result`) creates an O(N) array allocation overhead per event, leading to garbage collection spikes. Similarly, using `findIndex` to search for the *last* element (which is usually at the end) results in unnecessary O(N) traversal.
+**Action:** Always implement and use a reverse `for` loop (`findLastIndex`) instead of array copies or forward searches when looking for the most recent active element in an append-only list updated by high-frequency events.
