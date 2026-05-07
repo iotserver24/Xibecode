@@ -90,8 +90,8 @@ export default function SetupWizard({ onComplete, onClose }: Props) {
   const inputCls = "w-full rounded-lg border border-xibe-border bg-xibe-surface-raised px-4 py-2.5 text-sm text-xibe-text placeholder-xibe-text-dim/40 focus:border-xibe-border-focus focus:ring-1 focus:ring-xibe-accent/30 focus:outline-none transition-all";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-xl border border-xibe-border bg-xibe-surface shadow-2xl animate-slide-up">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md">
+      <div className="w-full max-w-md rounded-xl border border-xibe-border bg-xibe-surface shadow-lg animate-slide-up">
         <div className="px-6 pt-6 pb-4">
           <div className="flex items-center justify-between mb-4">
             <div>

@@ -176,7 +176,7 @@ export default function ChatPanel({
       </div>
 
       {/* Input area */}
-      <div className="shrink-0 px-4 pb-6 pt-2 bg-gradient-to-t from-xibe-bg via-xibe-bg to-transparent">
+      <div className="shrink-0 px-4 pb-6 pt-2">
         <div className="mx-auto max-w-3xl relative">
           {/* Command dropdown above input */}
           {isSlashMode && filteredCmds.length > 0 && (
@@ -191,7 +191,7 @@ export default function ChatPanel({
           )}
 
           {/* Floating Pill input */}
-          <div className="relative flex items-end rounded-2xl bg-xibe-surface transition-all duration-200">
+          <div className="relative flex items-end rounded-lg bg-xibe-bg border border-xibe-border-subtle focus-within:border-xibe-border focus-within:ring-1 focus-within:ring-xibe-border transition-all duration-200">
             <textarea
               ref={inputRef}
               value={input}
@@ -212,7 +212,7 @@ export default function ChatPanel({
             <button
               onClick={submit}
               disabled={isRunning || !input.trim()}
-              className="absolute right-2 bottom-2 h-9 w-9 rounded-xl bg-xibe-surface-raised border border-xibe-border-subtle flex items-center justify-center text-xibe-text hover:bg-xibe-text hover:text-xibe-bg disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
+              className="absolute right-2 bottom-2 h-9 w-9 rounded-lg bg-transparent flex items-center justify-center text-xibe-text hover:bg-xibe-surface-hover disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
             >
               <Send className="h-4 w-4 ml-0.5" />
             </button>
