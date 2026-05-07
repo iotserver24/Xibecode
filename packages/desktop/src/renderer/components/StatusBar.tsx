@@ -24,7 +24,7 @@ export default function StatusBar({ mode, workingDir, isRunning, spinnerVerb, ru
   const dot = MODE_COLORS[mode] ?? 'bg-zinc-400';
 
   return (
-    <footer className="flex h-6 items-center justify-between border-t border-xibe-border-subtle bg-xibe-surface px-3 text-[10px] text-xibe-text-dim font-mono">
+    <footer className="flex h-6 items-center justify-between bg-xibe-bg border-t border-xibe-border-subtle/50 px-3 text-[10px] text-xibe-text-dim font-mono">
       <div className="flex items-center gap-2">
         <button onClick={onToggleSidebar} className="hover:text-xibe-text transition-colors" title="Toggle sidebar">
           <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" /></svg>

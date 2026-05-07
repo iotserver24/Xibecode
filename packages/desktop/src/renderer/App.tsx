@@ -350,7 +350,7 @@ export default function App() {
           <div className="h-4 w-px bg-xibe-border-subtle mx-1" />
           <button
             onClick={() => setSettingsOpen(true)}
-            className="flex items-center gap-1.5 rounded-full border border-xibe-border-subtle bg-xibe-surface px-2.5 py-1 text-xs text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors"
+            className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors"
           >
             <span className="truncate max-w-[150px]">{activeModel.split('/').pop() || 'No model'}</span>
           </button>
@@ -383,7 +383,7 @@ export default function App() {
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
         {/* Left panel: Chat history + settings shortcut */}
         <aside
-          className="shrink-0 border-r border-xibe-border-subtle bg-xibe-surface flex flex-col overflow-hidden transition-[width] duration-200 ease-in-out"
+          className="shrink-0 bg-xibe-bg flex flex-col overflow-hidden transition-[width] duration-200 ease-in-out"
           style={{ width: leftPanelOpen ? 240 : 0 }}
         >
             <div className="flex-1 min-h-0 overflow-y-auto p-3">
@@ -428,7 +428,7 @@ export default function App() {
 
         {/* Right panel: Tabbed (Web + Folder) */}
         <div
-          className="shrink-0 border-l border-xibe-border-subtle overflow-hidden transition-[width] duration-200 ease-in-out"
+          className="shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out"
           style={{ width: rightPanelOpen ? 320 : 0 }}
         >
           <TabbedRightPanel

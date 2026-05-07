@@ -70,7 +70,7 @@ const ChatHistory = memo(function ChatHistory({ activeSessionId, onSelectSession
       {/* New chat button */}
       <button
         onClick={onNewChat}
-        className="flex items-center gap-2 rounded-lg border border-xibe-border-subtle bg-xibe-bg/50 px-3 py-2.5 text-xs font-medium text-xibe-text hover:bg-xibe-surface-hover hover:border-xibe-border transition-all shadow-sm mb-4"
+        className="flex items-center gap-2 rounded-lg bg-xibe-surface px-3 py-2.5 text-xs font-medium text-xibe-text hover:bg-xibe-surface-hover transition-all mb-4"
       >
         <Plus className="h-4 w-4 text-xibe-accent" />
         New Chat
@@ -95,7 +95,7 @@ const ChatHistory = memo(function ChatHistory({ activeSessionId, onSelectSession
                   className={cn(
                     "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-all duration-200 group relative",
                     activeSessionId === s.id
-                      ? "bg-xibe-surface-hover text-xibe-text before:absolute before:left-0 before:top-1/4 before:bottom-1/4 before:w-1 before:bg-xibe-accent before:rounded-r"
+                      ? "text-xibe-text font-semibold before:absolute before:left-0 before:top-1/4 before:bottom-1/4 before:w-1 before:bg-xibe-text before:rounded-r"
                       : "text-xibe-text-secondary hover:bg-xibe-surface-hover/50 hover:text-xibe-text"
                   )}
                 >
