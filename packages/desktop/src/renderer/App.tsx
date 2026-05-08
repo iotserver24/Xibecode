@@ -386,7 +386,7 @@ export default function App() {
               />
             </div>
             {/* Settings shortcut at bottom */}
-            <div className="shrink-0 border-t border-xibe-border-subtle p-2">
+            <div className="shrink-0 p-2">
               <button
                 onClick={() => setSettingsOpen(true)}
                 className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors"
