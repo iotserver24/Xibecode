@@ -129,10 +129,10 @@ export default function ChatPanel({
                         key={m.id}
                         onClick={() => onModeSwitch(m.id, `Switched to ${m.label}`)}
                         className={cn(
-                          "rounded-full px-4 py-1.5 text-xs font-medium transition-all duration-200",
+                          "rounded-full px-4 py-1.5 text-xs font-medium transition-colors duration-200",
                           modeState.current === m.id
-                            ? "bg-xibe-surface-raised text-xibe-text border border-xibe-border shadow-sm"
-                            : "text-xibe-text-dim hover:text-xibe-text hover:bg-xibe-surface border border-transparent"
+                            ? "bg-xibe-surface-raised text-xibe-text"
+                            : "text-xibe-text-dim hover:text-xibe-text hover:bg-xibe-surface"
                         )}
                       >
                         {m.label}
@@ -141,17 +141,17 @@ export default function ChatPanel({
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
                     {[
-                      { text: 'Build a REST API', icon: <Zap className="h-4 w-4 text-xibe-warning" /> },
-                      { text: 'Fix a bug', icon: <BookOpen className="h-4 w-4 text-xibe-brand-blue" /> },
-                      { text: 'Set up a project', icon: <Terminal className="h-4 w-4 text-xibe-accent" /> },
-                      { text: 'Write unit tests', icon: <BookOpen className="h-4 w-4 text-xibe-brand-purple" /> }
+                      { text: 'Build a REST API', icon: <Zap className="h-4 w-4 text-xibe-text-dim" /> },
+                      { text: 'Fix a bug', icon: <BookOpen className="h-4 w-4 text-xibe-text-dim" /> },
+                      { text: 'Set up a project', icon: <Terminal className="h-4 w-4 text-xibe-text-dim" /> },
+                      { text: 'Write unit tests', icon: <BookOpen className="h-4 w-4 text-xibe-text-dim" /> }
                     ].map((q) => (
                       <button
                         key={q.text}
                         onClick={() => onSendMessage(q.text)}
-                        className="group flex items-center gap-3 rounded-2xl border border-xibe-border-subtle bg-xibe-surface/50 px-4 py-3 text-sm text-xibe-text-secondary hover:bg-xibe-surface-hover hover:border-xibe-border hover:text-xibe-text transition-all"
+                        className="group flex items-center gap-3 rounded-2xl bg-xibe-surface px-4 py-3 text-sm text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors"
                       >
-                        <div className="bg-xibe-bg rounded-lg p-1.5 border border-xibe-border-subtle group-hover:border-xibe-border transition-colors">
+                        <div className="rounded-lg p-1.5 text-xibe-text-dim group-hover:text-xibe-text transition-colors">
                           {q.icon}
                         </div>
                         {q.text}
@@ -197,7 +197,7 @@ export default function ChatPanel({
           )}
 
           {/* Floating Pill input */}
-          <div className="relative flex items-end rounded-lg bg-xibe-bg border border-xibe-border-subtle focus-within:border-xibe-border focus-within:ring-1 focus-within:ring-xibe-border transition-all duration-200">
+          <div className="relative flex items-end rounded-xl bg-xibe-surface transition-colors duration-200 focus-within:bg-xibe-surface-raised">
             <textarea
               ref={inputRef}
               value={input}
