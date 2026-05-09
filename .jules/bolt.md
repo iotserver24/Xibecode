@@ -53,3 +53,7 @@
 ## 2026-05-19 - Bounded Concurrency for Candidate List Loading
 **Learning:** Sequential execution of array map statements doing file stats calls (`listCandidateFiles`) for reading candidates is slow and creates I/O bottlenecks.
 **Action:** Process bounded concurrent calls to the file system using chunking strategies like `Promise.all` with slicing.
+
+## 2024-05-09 - Avoid O(N) array allocation in loops
+**Learning:** Using `[...updated].reverse().findIndex(...)` in frequent event callbacks (like stream_text in React) forces O(N) memory allocation and O(N) forward searching each tick, causing major garbage collection pauses. `findLastIndex` is not supported on ES2022 output targets.
+**Action:** Replace functional backwards searches that depend on clones with traditional reverse `for` loops to find items instantly in O(1) time without allocations.
