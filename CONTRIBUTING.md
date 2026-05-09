@@ -81,6 +81,9 @@ If you're new to contributing:
 git clone https://github.com/YOUR_USERNAME/xibecode.git
 cd xibecode
 
+# Optional: keep a local OpenClaude-style reference tree in `openclaude/` for UI/API comparison.
+# That directory is listed in `.gitignore`; never commit it or register it as a submodule/gitlink.
+
 # Add upstream remote
 git remote add upstream https://github.com/iotserver24/xibecode.git
 ```
