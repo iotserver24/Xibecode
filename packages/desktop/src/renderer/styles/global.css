@@ -1,27 +1,27 @@
 @import "tailwindcss";
 
 @theme {
-  --color-xibe-bg: #09090b;
-  --color-xibe-surface: #18181b;
-  --color-xibe-surface-raised: #27272a;
-  --color-xibe-surface-hover: #27272a;
-  --color-xibe-border: #27272a;
-  --color-xibe-border-subtle: #18181b;
-  --color-xibe-border-focus: #3f3f46;
-  --color-xibe-muted: #71717a;
-  --color-xibe-text: #fafafa;
-  --color-xibe-text-secondary: #a1a1aa;
-  --color-xibe-text-dim: #71717a;
-  --color-xibe-accent: #fafafa;
+  --color-xibe-bg: #1e1e1e; /* vscode default dark */
+  --color-xibe-surface: #252526;
+  --color-xibe-surface-raised: #2d2d2d;
+  --color-xibe-surface-hover: #2a2d2e;
+  --color-xibe-border: #3c3c3c;
+  --color-xibe-border-subtle: #2d2d2d;
+  --color-xibe-border-focus: #007fd4;
+  --color-xibe-muted: #858585;
+  --color-xibe-text: #cccccc;
+  --color-xibe-text-secondary: #969696;
+  --color-xibe-text-dim: #858585;
+  --color-xibe-accent: #ffffff;
   --color-xibe-accent-hover: #e4e4e7;
-  --color-xibe-accent-muted: rgba(244, 244, 245, 0.15);
+  --color-xibe-accent-muted: rgba(244, 244, 245, 0.1);
   --color-xibe-brand-blue: #60A5FA;
   --color-xibe-brand-green: #34D399;
   --color-xibe-brand-orange: #FBBF24;
   --color-xibe-brand-purple: #A78BFA;
   --color-xibe-brand-red: #F87171;
   --color-xibe-suggestion: #93C5FD;
-  --color-xibe-user-bubble: #27272a;
+  --color-xibe-user-bubble: transparent;
   --color-xibe-warning: #F59E0B;
   --color-xibe-error: #EF4444;
   --color-xibe-info: #0EA5E9;
@@ -48,16 +48,16 @@ body {
   line-height: 1.6;
 }
 
-::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #27272a; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+::-webkit-scrollbar-thumb { background: #424242; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #4f4f4f; }
 
-::selection { background: rgba(250, 250, 250, 0.2); color: #fff; }
+::selection { background: rgba(0, 127, 212, 0.4); color: #fff; }
 pre, code { font-family: var(--font-mono); }
 
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slide-up { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes pulse-dot { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
 
-*:focus-visible { outline: 2px solid var(--color-xibe-border-focus); outline-offset: -2px; border-radius: 4px; }
+*:focus-visible { outline: none; box-shadow: 0 0 0 1px var(--color-xibe-border-focus); border-radius: 4px; }
