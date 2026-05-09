@@ -52,12 +52,24 @@ export function formatToolArgs(toolName: string, rawInput: unknown): string {
     }
     case 'read_multiple_files':
       return truncate(joinPaths(p.paths, 4) ?? '', MAX_ARG);
+    case 'revert_file': {
+      const mid = typeof p.message_id === 'string' ? p.message_id.trim() : '';
+      if (mid) {
+        const short = mid.length <= 12 ? mid : `${mid.slice(0, 8)}…`;
+        return truncate(`snapshot ${short}`, MAX_ARG);
+      }
+      const fp = typeof p.path === 'string' ? p.path : '';
+      const idx = p.snapshot_index;
+      if (fp && typeof idx === 'number') {
+        return truncate(`${fp} (index ${idx})`, MAX_ARG);
+      }
+      return truncate(fp, MAX_ARG);
+    }
     case 'write_file':
     case 'edit_file':
     case 'edit_lines':
     case 'verified_edit':
     case 'delete_file':
-    case 'revert_file':
     case 'insert_at_line':
       return truncate(typeof p.path === 'string' ? p.path : '', MAX_ARG);
     case 'list_directory':
@@ -257,8 +269,15 @@ export function formatToolOutcome(toolName: string, rawResult: unknown, success:
     case 'move_file':
     case 'delete_file':
     case 'create_directory':
-    case 'revert_file':
       return 'ok';
+    case 'revert_file': {
+      const changed = Array.isArray(r.files_changed) ? r.files_changed.length : 0;
+      if (changed > 0) {
+        return truncate(`${changed} file(s) rewound`, MAX_ERR);
+      }
+      const msg = typeof r.message === 'string' ? r.message : '';
+      return truncate(msg || 'ok', MAX_ERR);
+    }
     case 'delegate_subtask':
       return typeof r.status === 'string' ? r.status : 'done';
     case 'run_swarm': {

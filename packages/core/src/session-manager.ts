@@ -21,7 +21,7 @@ import type { UUID } from 'crypto';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
 import { recoverConversation } from './conversation-recovery.js';
 import { recoverConversationV2 } from './conversation-recovery-v2.js';
-import type { Entry } from './transcript-types.js';
+import type { Entry, FileHistorySnapshotEntry } from './transcript-types.js';
 import { generateUuid, validateUuid, isTranscriptMessage, extractJsonStringField, extractLastJsonStringField } from './transcript-types.js';
 import {
   loadTranscriptFile,
@@ -309,6 +309,41 @@ export class SessionManager {
 
     metas.sort((a, b) => b.updated.localeCompare(a.updated));
     return metas;
+  }
+
+  /**
+   * Load file-history snapshot metadata entries for a session.
+   */
+  async loadFileHistorySnapshots(id: string): Promise<FileHistorySnapshotEntry[]> {
+    const projectsDir = this.getProjectsDir();
+    let projectDirs: string[];
+    try {
+      projectDirs = (await fs.readdir(projectsDir, { withFileTypes: true }))
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name);
+    } catch {
+      return [];
+    }
+
+    for (const projectDir of projectDirs) {
+      const jsonlPath = path.join(projectsDir, projectDir, `${id}.jsonl`);
+      try {
+        await fs.access(jsonlPath);
+      } catch {
+        continue;
+      }
+
+      try {
+        const { entries } = await loadTranscriptFile(jsonlPath);
+        return entries
+          .filter((entry): entry is FileHistorySnapshotEntry => entry.type === 'file-history-snapshot')
+          .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+      } catch {
+        return [];
+      }
+    }
+
+    return [];
   }
 
   /**

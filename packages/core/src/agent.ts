@@ -10,7 +10,7 @@ import { AgentMode, MODE_CONFIG, ModeState, createModeState, transitionMode, Mod
 import { NeuralMemory } from './memory.js';
 import { SessionMemory } from './session-memory.js';
 import type { UUID } from 'crypto';
-import { generateUuid, isTranscriptMessage } from './transcript-types.js';
+import { generateUuid, isTranscriptMessage, type FileHistorySnapshot } from './transcript-types.js';
 import type { Entry } from './transcript-types.js';
 import { getTranscriptWriter } from './transcript-writer.js';
 import { registerCleanup, setupGracefulShutdown } from './graceful-shutdown.js';
@@ -386,6 +386,10 @@ export class EnhancedAgent extends EventEmitter {
   private lastTranscriptUuid: UUID | null = null;
   /** Whether transcript cleanup has been registered. */
   private transcriptCleanupRegistered = false;
+  /** Pending assistant transcript UUID for the active run turn. */
+  private pendingAssistantTranscriptUuid: UUID | null = null;
+  /** The current tool executor used by run(), for file-history snapshot finalization. */
+  private activeToolExecutor: any | null = null;
   private permissionManager: PermissionManager;
   private toolOrchestrator: ToolOrchestrator;
   private evidenceTrail: Array<{ kind: string; detail: string; ts: number }> = [];
@@ -689,6 +693,17 @@ export class EnhancedAgent extends EventEmitter {
     this.completionGateRetries = 0;
     this.taskCompletedFlag = false;
     this.questionsPendingFlag = false;
+    this.activeToolExecutor = toolExecutor;
+    this.pendingAssistantTranscriptUuid = generateUuid();
+
+    if (this.pendingAssistantTranscriptUuid) {
+      if (typeof toolExecutor?.setActiveFileHistoryMessageId === 'function') {
+        toolExecutor.setActiveFileHistoryMessageId(this.pendingAssistantTranscriptUuid);
+      }
+      if (typeof toolExecutor?.ensureFileHistoryInitialized === 'function') {
+        await toolExecutor.ensureFileHistoryInitialized(this.pendingAssistantTranscriptUuid);
+      }
+    }
 
     this.autoMemoryMarkdownSection = '';
     if (isAutoMemoryLoadEnabled()) {
@@ -2622,39 +2637,72 @@ ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
    * Write a message to the transcript file immediately.
    * Called by the chat loop for each user/assistant message.
    */
-  private async writeToTranscript(role: 'user' | 'assistant' | 'system', message: MessageParam): Promise<void> {
-    if (!this.transcriptFilePath || !this.transcriptSessionId) return;
+  private async writeToTranscript(
+    role: 'user' | 'assistant' | 'system',
+    message: MessageParam,
+    entryUuid?: UUID,
+  ): Promise<UUID | null> {
+    if (!this.transcriptFilePath || !this.transcriptSessionId) return null;
 
-    const entryUuid = generateUuid();
+    const resolvedEntryUuid = entryUuid ?? generateUuid();
     const entry: Entry = {
       type: role,
-      uuid: entryUuid,
+      uuid: resolvedEntryUuid,
       parentUuid: this.lastTranscriptUuid,
       timestamp: new Date().toISOString(),
       sessionId: this.transcriptSessionId,
       message,
     } as Entry;
 
-    this.lastTranscriptUuid = entryUuid;
+    this.lastTranscriptUuid = resolvedEntryUuid;
 
     const writer = getTranscriptWriter();
     await writer.enqueueWrite(this.transcriptFilePath, entry);
+    return resolvedEntryUuid;
   }
 
   /**
    * Write a user message to the transcript.
    * Can be called externally when a user submits a prompt.
    */
-  async transcriptUserMessage(message: MessageParam): Promise<void> {
-    await this.writeToTranscript('user', message);
+  async transcriptUserMessage(message: MessageParam): Promise<UUID | null> {
+    return this.writeToTranscript('user', message);
   }
 
   /**
    * Write an assistant message to the transcript.
    * Called after each agent turn completes.
    */
-  async transcriptAssistantMessage(message: MessageParam): Promise<void> {
-    await this.writeToTranscript('assistant', message);
+  async transcriptAssistantMessage(message: MessageParam): Promise<UUID | null> {
+    const assistantUuid = this.pendingAssistantTranscriptUuid ?? generateUuid();
+
+    let snapshot: FileHistorySnapshot | undefined;
+    if (typeof this.activeToolExecutor?.finalizeFileHistorySnapshot === 'function') {
+      snapshot = await this.activeToolExecutor.finalizeFileHistorySnapshot(assistantUuid);
+    }
+
+    const writtenUuid = await this.writeToTranscript('assistant', message, assistantUuid);
+
+    if (
+      writtenUuid &&
+      snapshot &&
+      this.transcriptFilePath &&
+      this.transcriptSessionId
+    ) {
+      const writer = getTranscriptWriter();
+      await writer.enqueueWrite(this.transcriptFilePath, {
+        type: 'file-history-snapshot',
+        uuid: generateUuid(),
+        parentUuid: null,
+        timestamp: new Date().toISOString(),
+        sessionId: this.transcriptSessionId,
+        messageId: snapshot.messageId,
+        trackedFileBackups: snapshot.trackedFileBackups,
+      } as Entry);
+    }
+
+    this.pendingAssistantTranscriptUuid = null;
+    return writtenUuid;
   }
 
   /**

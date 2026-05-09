@@ -1,58 +1,27 @@
 /**
- * File-level checkpoint system for tracking edits and enabling restore.
+
  *
- * Replaces the old `.xibecode_backups/` directory with a centralized
- * `~/.xibecode/file-history/` store that uses deterministic naming
- * (`{hash}@v{N}`) to avoid redundant backups of the same file version.
- *
- * Snapshots are recorded in the JSONL transcript as `file-history-snapshot`
- * entries, allowing resume to restore the file history state.
- *
- * @module file-history
+ * Flow:
+ * - `fileHistoryTrackEdit` records pre-edit file state into the latest snapshot.
+ * - `fileHistoryMakeSnapshot` appends a message-linked snapshot at turn boundaries.
+ * - `fileHistoryRewind` restores filesystem state to a snapshot by message id.
  */
 
 import { createHash } from 'crypto';
 import type { UUID } from 'crypto';
-import { chmod, copyFile, mkdir, readFile, stat, unlink, writeFile } from 'fs/promises';
-import { dirname, join } from 'path';
+import type { Stats } from 'fs';
+import { chmod, copyFile, mkdir, readFile, stat, unlink } from 'fs/promises';
 import * as os from 'os';
-import type { FileHistoryBackupRef, FileHistorySnapshot } from './transcript-types.js';
+import { dirname, isAbsolute, join, resolve } from 'path';
+import type {
+  FileHistoryBackupRef,
+  FileHistorySnapshot,
+  FileHistorySnapshotEntry,
+} from './transcript-types.js';
 
-// ─── Constants ──────────────────────────────────────────────────
-
-/** Maximum number of snapshots to retain in memory. */
 const MAX_SNAPSHOTS = 100;
 
-// ─── Backup Path Resolution ─────────────────────────────────────
-
-/** Get the root directory for file history backups. */
-export function getFileHistoryDir(): string {
-  return join(os.homedir(), '.xibecode', 'file-history');
-}
-
-/**
- * Compute a deterministic backup file name from the original file path
- * and version number. Uses a hash of the original path to create a
- * filesystem-safe and unique name.
- *
- * Format: `{pathHash}@v{version}`
- */
-export function getBackupFileName(filePath: string, version: number): string {
-  const pathHash = hashFilePath(filePath);
-  return `${pathHash}@v${version}`;
-}
-
-/** Resolve a backup file name to its full path in the file-history directory. */
-export function resolveBackupPath(backupFileName: string): string {
-  return join(getFileHistoryDir(), backupFileName);
-}
-
-/** Hash a file path for deterministic backup naming. */
-function hashFilePath(filePath: string): string {
-  return createHash('sha256').update(filePath).digest('hex').slice(0, 16);
-}
-
-// ─── File History State ─────────────────────────────────────────
+type BackupFileName = string | null;
 
 export type FileHistoryState = {
   snapshots: FileHistorySnapshot[];
@@ -60,7 +29,29 @@ export type FileHistoryState = {
   snapshotSequence: number;
 };
 
-/** Create an empty file history state. */
+export type DiffStats = {
+  filesChanged?: string[];
+  insertions: number;
+  deletions: number;
+} | undefined;
+
+export function fileHistoryEnabled(): boolean {
+  return process.env.XIBECODE_DISABLE_FILE_CHECKPOINTING !== '1';
+}
+
+export function getFileHistoryDir(): string {
+  return join(os.homedir(), '.xibecode', 'file-history');
+}
+
+export function getBackupFileName(filePath: string, version: number): string {
+  const pathHash = createHash('sha256').update(filePath).digest('hex').slice(0, 16);
+  return `${pathHash}@v${version}`;
+}
+
+export function resolveBackupPath(backupFileName: string): string {
+  return join(getFileHistoryDir(), backupFileName);
+}
+
 export function createFileHistoryState(): FileHistoryState {
   return {
     snapshots: [],
@@ -69,16 +60,10 @@ export function createFileHistoryState(): FileHistoryState {
   };
 }
 
-// ─── Backup Creation ────────────────────────────────────────────
+export function normalizeTrackingPath(workingDir: string, filePath: string): string {
+  return isAbsolute(filePath) ? filePath : resolve(workingDir, filePath);
+}
 
-/**
- * Create a backup of a file at a given version.
- * Uses copyFile for efficient kernel-level copy without reading into JS heap.
- *
- * @param filePath - Path to the file to back up
- * @param version - Version number for the backup
- * @returns Backup reference with file name and metadata
- */
 export async function createBackup(
   filePath: string | null,
   version: number,
@@ -90,16 +75,13 @@ export async function createBackup(
   const backupFileName = getBackupFileName(filePath, version);
   const backupPath = resolveBackupPath(backupFileName);
 
-  // Stat first: if the source is missing, record a null backup
-  let srcStats;
+  let srcStats: Stats;
   try {
     srcStats = await stat(filePath);
   } catch {
     return { backupFileName: null, version, backupTime: new Date().toISOString() };
   }
 
-  // copyFile preserves content without reading the whole file into the JS heap.
-  // Lazy mkdir: 99% of calls hit the fast path (directory already exists).
   try {
     await copyFile(filePath, backupPath);
   } catch {
@@ -107,11 +89,10 @@ export async function createBackup(
     await copyFile(filePath, backupPath);
   }
 
-  // Preserve file permissions on the backup
   try {
     await chmod(backupPath, srcStats.mode);
   } catch {
-    // Permissions may not be changeable on some filesystems — non-fatal
+    // non-fatal on some filesystems
   }
 
   return {
@@ -121,28 +102,17 @@ export async function createBackup(
   };
 }
 
-// ─── Backup Restoration ─────────────────────────────────────────
-
-/**
- * Restore a file from its backup.
- *
- * @param filePath - Destination path to restore to
- * @param backupFileName - Name of the backup file in the file-history directory
- */
 export async function restoreBackup(
   filePath: string,
   backupFileName: string,
 ): Promise<boolean> {
   const backupPath = resolveBackupPath(backupFileName);
-
-  // Stat first: if the backup is missing, bail
   try {
     await stat(backupPath);
   } catch {
     return false;
   }
 
-  // Lazy mkdir for destination
   try {
     await copyFile(backupPath, filePath);
   } catch {
@@ -153,149 +123,184 @@ export async function restoreBackup(
   return true;
 }
 
-// ─── Track Edit ─────────────────────────────────────────────────
-
-/**
- * Track a file edit by creating a backup of its current contents (if necessary).
- * This must be called BEFORE the file is actually edited, so we can save
- * its contents before the change.
- *
- * Creates a v1 backup on the first edit of a file. Subsequent edits only
- * create new backups if the file has changed since the last backup.
- *
- * @param state - Current file history state (mutated in place)
- * @param updateState - Callback to persist state changes
- * @param filePath - Path to the file being edited
- * @param messageId - UUID of the associated message
- */
 export async function fileHistoryTrackEdit(
-  state: FileHistoryState,
+  _state: FileHistoryState,
   updateState: (updater: (prev: FileHistoryState) => FileHistoryState) => void,
   filePath: string,
-  messageId: UUID,
+  _messageId: UUID,
 ): Promise<void> {
-  const existingBackup = state.trackedFiles.has(filePath)
-    ? getExistingBackupForFile(state, filePath)
-    : null;
+  if (!fileHistoryEnabled()) return;
 
-  let backup: FileHistoryBackupRef;
+  let captured: FileHistoryState | undefined;
+  updateState((state) => {
+    captured = state;
+    return state;
+  });
+  if (!captured) return;
 
-  if (!existingBackup) {
-    // First edit of this file — create v1 backup
-    backup = await createBackup(filePath, 1);
-  } else {
-    // File was tracked before — check if it changed since last backup
-    const lastBackupPath = existingBackup.backupFileName
-      ? resolveBackupPath(existingBackup.backupFileName)
-      : null;
+  const lastSnapshot = captured.snapshots.at(-1);
+  if (!lastSnapshot) return;
 
-    if (lastBackupPath) {
-      const changed = await hasFileChanged(filePath, lastBackupPath);
-      if (!changed) {
-        // File hasn't changed since last backup — no new backup needed
-        backup = existingBackup;
-      } else {
-        // File changed — create new version backup
-        backup = await createBackup(filePath, existingBackup.version + 1);
-      }
-    } else {
-      // Previous backup was null (file didn't exist) — create v1
-      backup = await createBackup(filePath, 1);
-    }
+  if (lastSnapshot.trackedFileBackups[filePath]) {
+    return;
   }
 
-  // Update state
-  updateState((prev) => {
-    const newTrackedFiles = new Set(prev.trackedFiles);
-    newTrackedFiles.add(filePath);
+  const backup = await createBackup(filePath, 1);
 
-    // Update the latest snapshot with the new backup info
-    const newSnapshots = [...prev.snapshots];
-    const currentSnapshot: FileHistorySnapshot = {
-      messageId,
+  updateState((state) => {
+    const latest = state.snapshots.at(-1);
+    if (!latest || latest.trackedFileBackups[filePath]) {
+      return state;
+    }
+
+    const updatedLatest: FileHistorySnapshot = {
+      ...latest,
       trackedFileBackups: {
+        ...latest.trackedFileBackups,
         [filePath]: backup,
       },
-      timestamp: new Date(),
     };
 
-    // Merge with previous snapshot's tracked files
-    if (newSnapshots.length > 0) {
-      const lastSnapshot = newSnapshots[newSnapshots.length - 1];
-      currentSnapshot.trackedFileBackups = {
-        ...lastSnapshot.trackedFileBackups,
-        [filePath]: backup,
-      };
-    }
+    const snapshots = state.snapshots.slice();
+    snapshots[snapshots.length - 1] = updatedLatest;
 
-    newSnapshots.push(currentSnapshot);
-
-    // Evict old snapshots if we exceed the limit
-    while (newSnapshots.length > MAX_SNAPSHOTS) {
-      newSnapshots.shift();
-    }
+    const trackedFiles = state.trackedFiles.has(filePath)
+      ? state.trackedFiles
+      : new Set(state.trackedFiles).add(filePath);
 
     return {
-      snapshots: newSnapshots,
-      trackedFiles: newTrackedFiles,
-      snapshotSequence: prev.snapshotSequence + 1,
+      ...state,
+      snapshots,
+      trackedFiles,
     };
   });
 }
 
-/**
- * Get the existing backup reference for a file from the most recent snapshot.
- */
-function getExistingBackupForFile(
-  state: FileHistoryState,
-  filePath: string,
-): FileHistoryBackupRef | null {
-  // Walk snapshots in reverse to find the most recent backup for this file
-  for (let i = state.snapshots.length - 1; i >= 0; i--) {
-    const snapshot = state.snapshots[i];
-    if (snapshot.trackedFileBackups[filePath]) {
-      return snapshot.trackedFileBackups[filePath];
+export async function fileHistoryMakeSnapshot(
+  updateState: (updater: (prev: FileHistoryState) => FileHistoryState) => void,
+  messageId: UUID,
+): Promise<FileHistorySnapshot | undefined> {
+  if (!fileHistoryEnabled()) return undefined;
+
+  let captured: FileHistoryState | undefined;
+  updateState((state) => {
+    captured = state;
+    return state;
+  });
+  if (!captured) return undefined;
+
+  const trackedFileBackups: Record<string, FileHistoryBackupRef> = {};
+  const mostRecentSnapshot = captured.snapshots.at(-1);
+
+  if (mostRecentSnapshot) {
+    await Promise.all(
+      Array.from(captured.trackedFiles, async (trackingPath) => {
+        const latestBackup = mostRecentSnapshot.trackedFileBackups[trackingPath];
+        const nextVersion = latestBackup ? latestBackup.version + 1 : 1;
+
+        let fileStats: Stats | undefined;
+        try {
+          fileStats = await stat(trackingPath);
+        } catch {
+          fileStats = undefined;
+        }
+
+        if (!fileStats) {
+          trackedFileBackups[trackingPath] = {
+            backupFileName: null,
+            version: nextVersion,
+            backupTime: new Date().toISOString(),
+          };
+          return;
+        }
+
+        if (
+          latestBackup &&
+          latestBackup.backupFileName !== null &&
+          !(await checkOriginFileChanged(
+            trackingPath,
+            latestBackup.backupFileName,
+            fileStats,
+          ))
+        ) {
+          trackedFileBackups[trackingPath] = latestBackup;
+          return;
+        }
+
+        trackedFileBackups[trackingPath] = await createBackup(trackingPath, nextVersion);
+      }),
+    );
+  }
+
+  let createdSnapshot: FileHistorySnapshot | undefined;
+  updateState((state) => {
+    const lastSnapshot = state.snapshots.at(-1);
+    if (lastSnapshot) {
+      for (const trackingPath of state.trackedFiles) {
+        if (trackingPath in trackedFileBackups) continue;
+        const inherited = lastSnapshot.trackedFileBackups[trackingPath];
+        if (inherited) trackedFileBackups[trackingPath] = inherited;
+      }
+    }
+
+    const newSnapshot: FileHistorySnapshot = {
+      messageId,
+      trackedFileBackups,
+      timestamp: new Date(),
+    };
+
+    const allSnapshots = [...state.snapshots, newSnapshot];
+    const snapshots =
+      allSnapshots.length > MAX_SNAPSHOTS
+        ? allSnapshots.slice(-MAX_SNAPSHOTS)
+        : allSnapshots;
+
+    createdSnapshot = newSnapshot;
+    return {
+      ...state,
+      snapshots,
+      snapshotSequence: (state.snapshotSequence ?? 0) + 1,
+    };
+  });
+
+  return createdSnapshot;
+}
+
+export async function fileHistoryRewind(
+  updateState: (updater: (prev: FileHistoryState) => FileHistoryState) => void,
+  messageId: UUID,
+): Promise<string[]> {
+  if (!fileHistoryEnabled()) return [];
+
+  let captured: FileHistoryState | undefined;
+  updateState((state) => {
+    captured = state;
+    return state;
+  });
+  if (!captured) return [];
+
+  let targetSnapshot: FileHistorySnapshot | undefined;
+  for (let i = captured.snapshots.length - 1; i >= 0; i--) {
+    if (captured.snapshots[i]?.messageId === messageId) {
+      targetSnapshot = captured.snapshots[i];
+      break;
     }
   }
-  return null;
-}
-
-/**
- * Compare a file against its backup to see if it has changed.
- */
-async function hasFileChanged(filePath: string, backupPath: string): Promise<boolean> {
-  try {
-    const [currentContent, backupContent] = await Promise.all([
-      readFile(filePath, 'utf-8'),
-      readFile(backupPath, 'utf-8'),
-    ]);
-    return currentContent !== backupContent;
-  } catch {
-    // If either file can't be read, assume it changed
-    return true;
+  if (!targetSnapshot) {
+    throw new Error('The selected snapshot was not found');
   }
+
+  return applySnapshot(captured, targetSnapshot);
 }
 
-// ─── Restore from Snapshot ──────────────────────────────────────
-
-/**
- * Check if a file can be restored from a snapshot.
- */
 export function fileHistoryCanRestore(
   state: FileHistoryState,
-  filePath: string,
+  messageId: UUID,
 ): boolean {
-  return getExistingBackupForFile(state, filePath)?.backupFileName !== null;
+  if (!fileHistoryEnabled()) return false;
+  return state.snapshots.some((snapshot) => snapshot.messageId === messageId);
 }
 
-/**
- * Restore a file to its state at a specific snapshot.
- *
- * @param state - Current file history state
- * @param filePath - Path to the file to restore
- * @param snapshotIndex - Index of the snapshot to restore from (0 = oldest, -1 = most recent)
- * @returns true if restoration succeeded
- */
 export async function fileHistoryRestore(
   state: FileHistoryState,
   filePath: string,
@@ -303,23 +308,138 @@ export async function fileHistoryRestore(
 ): Promise<boolean> {
   const resolvedIndex =
     snapshotIndex < 0 ? state.snapshots.length + snapshotIndex : snapshotIndex;
-
   if (resolvedIndex < 0 || resolvedIndex >= state.snapshots.length) return false;
 
   const snapshot = state.snapshots[resolvedIndex];
   const backup = snapshot.trackedFileBackups[filePath];
-
   if (!backup || !backup.backupFileName) return false;
 
   return restoreBackup(filePath, backup.backupFileName);
 }
 
-// ─── State Serialization for Transcript ─────────────────────────
+export function fileHistoryRestoreStateFromEntries(
+  entries: FileHistorySnapshotEntry[],
+): FileHistoryState {
+  const snapshots: FileHistorySnapshot[] = entries.map((entry) => ({
+    messageId: entry.messageId,
+    trackedFileBackups: entry.trackedFileBackups,
+    timestamp: new Date(entry.timestamp),
+  }));
 
-/**
- * Serialize file history state for embedding in a transcript entry.
- * Converts Sets to arrays for JSON compatibility.
- */
+  const trackedFiles = new Set<string>();
+  for (const snapshot of snapshots) {
+    for (const trackedPath of Object.keys(snapshot.trackedFileBackups)) {
+      trackedFiles.add(trackedPath);
+    }
+  }
+
+  return {
+    snapshots,
+    trackedFiles,
+    snapshotSequence: snapshots.length,
+  };
+}
+
+async function applySnapshot(
+  state: FileHistoryState,
+  targetSnapshot: FileHistorySnapshot,
+): Promise<string[]> {
+  const filesChanged: string[] = [];
+  for (const trackingPath of state.trackedFiles) {
+    const targetBackup = targetSnapshot.trackedFileBackups[trackingPath];
+    const backupFileName: BackupFileName | undefined = targetBackup
+      ? targetBackup.backupFileName
+      : getBackupFileNameFirstVersion(trackingPath, state);
+
+    if (backupFileName === undefined) {
+      continue;
+    }
+
+    if (backupFileName === null) {
+      try {
+        await unlink(trackingPath);
+        filesChanged.push(trackingPath);
+      } catch {
+        // file already absent
+      }
+      continue;
+    }
+
+    if (await checkOriginFileChanged(trackingPath, backupFileName)) {
+      await restoreBackup(trackingPath, backupFileName);
+      filesChanged.push(trackingPath);
+    }
+  }
+
+  return filesChanged;
+}
+
+function getBackupFileNameFirstVersion(
+  trackingPath: string,
+  state: FileHistoryState,
+): BackupFileName | undefined {
+  for (const snapshot of state.snapshots) {
+    const backup = snapshot.trackedFileBackups[trackingPath];
+    if (backup) return backup.backupFileName;
+  }
+  return undefined;
+}
+
+export async function checkOriginFileChanged(
+  originalFile: string,
+  backupFileName: string,
+  originalStatsHint?: Stats,
+): Promise<boolean> {
+  const backupPath = resolveBackupPath(backupFileName);
+
+  let originalStats: Stats | null = originalStatsHint ?? null;
+  if (!originalStats) {
+    try {
+      originalStats = await stat(originalFile);
+    } catch {
+      originalStats = null;
+    }
+  }
+
+  let backupStats: Stats | null = null;
+  try {
+    backupStats = await stat(backupPath);
+  } catch {
+    backupStats = null;
+  }
+
+  return compareStatsAndContent(originalStats, backupStats, async () => {
+    try {
+      const [originalContent, backupContent] = await Promise.all([
+        readFile(originalFile, 'utf-8'),
+        readFile(backupPath, 'utf-8'),
+      ]);
+      return originalContent !== backupContent;
+    } catch {
+      return true;
+    }
+  });
+}
+
+async function compareStatsAndContent(
+  originalStats: Stats | null,
+  backupStats: Stats | null,
+  compareContent: () => Promise<boolean>,
+): Promise<boolean> {
+  if ((originalStats === null) !== (backupStats === null)) return true;
+  if (originalStats === null || backupStats === null) return false;
+
+  if (
+    originalStats.mode !== backupStats.mode ||
+    originalStats.size !== backupStats.size
+  ) {
+    return true;
+  }
+
+  if (originalStats.mtimeMs < backupStats.mtimeMs) return false;
+  return compareContent();
+}
+
 export function serializeFileHistoryState(state: FileHistoryState): {
   snapshots: Array<{
     messageId: string;
@@ -329,30 +449,27 @@ export function serializeFileHistoryState(state: FileHistoryState): {
   snapshotSequence: number;
 } {
   return {
-    snapshots: state.snapshots.map((s) => ({
-      messageId: s.messageId,
-      trackedFileBackups: s.trackedFileBackups,
-      timestamp: s.timestamp.toISOString(),
+    snapshots: state.snapshots.map((snapshot) => ({
+      messageId: snapshot.messageId,
+      trackedFileBackups: snapshot.trackedFileBackups,
+      timestamp: snapshot.timestamp.toISOString(),
     })),
     snapshotSequence: state.snapshotSequence,
   };
 }
 
-/**
- * Restore file history state from a serialized transcript entry.
- */
 export function deserializeFileHistoryState(
   data: ReturnType<typeof serializeFileHistoryState>,
 ): FileHistoryState {
   const trackedFiles = new Set<string>();
-  const snapshots: FileHistorySnapshot[] = data.snapshots.map((s) => {
-    for (const path of Object.keys(s.trackedFileBackups)) {
-      trackedFiles.add(path);
+  const snapshots: FileHistorySnapshot[] = data.snapshots.map((snapshot) => {
+    for (const trackedPath of Object.keys(snapshot.trackedFileBackups)) {
+      trackedFiles.add(trackedPath);
     }
     return {
-      messageId: s.messageId as UUID,
-      trackedFileBackups: s.trackedFileBackups,
-      timestamp: new Date(s.timestamp),
+      messageId: snapshot.messageId as UUID,
+      trackedFileBackups: snapshot.trackedFileBackups,
+      timestamp: new Date(snapshot.timestamp),
     };
   });
 
@@ -363,28 +480,17 @@ export function deserializeFileHistoryState(
   };
 }
 
-// ─── Diff Stats ─────────────────────────────────────────────────
-
-export type DiffStats = {
-  filesChanged?: string[];
-  insertions: number;
-  deletions: number;
-} | undefined;
-
-/**
- * Compute diff stats between two snapshots.
- * Compares the tracked file backup versions to identify changes.
- */
 export function computeDiffStats(
   state: FileHistoryState,
   fromSnapshotIndex: number,
   toSnapshotIndex: number,
 ): DiffStats {
-  if (fromSnapshotIndex < 0 || toSnapshotIndex >= state.snapshots.length) return undefined;
+  if (fromSnapshotIndex < 0 || toSnapshotIndex >= state.snapshots.length) {
+    return undefined;
+  }
 
   const fromSnapshot = state.snapshots[fromSnapshotIndex];
   const toSnapshot = state.snapshots[toSnapshotIndex];
-
   if (!fromSnapshot || !toSnapshot) return undefined;
 
   const changedFiles: string[] = [];
@@ -396,13 +502,12 @@ export function computeDiffStats(
   for (const file of allFiles) {
     const fromBackup = fromSnapshot.trackedFileBackups[file];
     const toBackup = toSnapshot.trackedFileBackups[file];
-
     if (!fromBackup && toBackup) {
-      changedFiles.push(file); // New file
+      changedFiles.push(file);
     } else if (fromBackup && !toBackup) {
-      changedFiles.push(file); // Deleted file
+      changedFiles.push(file);
     } else if (fromBackup && toBackup && fromBackup.version !== toBackup.version) {
-      changedFiles.push(file); // Modified file
+      changedFiles.push(file);
     }
   }
 

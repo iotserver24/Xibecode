@@ -11,11 +11,13 @@ import {
   createBackup,
   restoreBackup,
   getBackupFileName,
-  getFileHistoryDir,
   createFileHistoryState,
   fileHistoryTrackEdit,
+  fileHistoryMakeSnapshot,
+  fileHistoryRewind,
   fileHistoryCanRestore,
   fileHistoryRestore,
+  checkOriginFileChanged,
   serializeFileHistoryState,
   deserializeFileHistoryState,
 } from './file-history.js';
@@ -103,7 +105,9 @@ describe('FileHistoryState', () => {
       currentState = updater(currentState);
     };
 
-    await fileHistoryTrackEdit(currentState, updateState, filePath, generateUuid() as UUID);
+    const seedMessageId = generateUuid() as UUID;
+    await fileHistoryMakeSnapshot(updateState, seedMessageId);
+    await fileHistoryTrackEdit(currentState, updateState, filePath, seedMessageId);
 
     expect(currentState.trackedFiles.has(filePath)).toBe(true);
     expect(currentState.snapshots.length).toBe(1);
@@ -119,12 +123,14 @@ describe('FileHistoryState', () => {
       currentState = updater(currentState);
     };
 
-    await fileHistoryTrackEdit(currentState, updateState, filePath, generateUuid() as UUID);
+    const messageId = generateUuid() as UUID;
+    await fileHistoryMakeSnapshot(updateState, messageId);
+    await fileHistoryTrackEdit(currentState, updateState, filePath, messageId);
 
-    expect(fileHistoryCanRestore(currentState, filePath)).toBe(true);
+    expect(fileHistoryCanRestore(currentState, messageId)).toBe(true);
   });
 
-  it('should not create duplicate backups for unchanged files', async () => {
+  it('should not create duplicate versions for unchanged files on snapshot', async () => {
     const state = createFileHistoryState();
     const filePath = path.join(tmpDir, 'unchanged.txt');
     await fs.writeFile(filePath, 'same content', 'utf-8');
@@ -134,13 +140,50 @@ describe('FileHistoryState', () => {
       currentState = updater(currentState);
     };
 
-    // Track the same file twice without modifying it
-    await fileHistoryTrackEdit(currentState, updateState, filePath, generateUuid() as UUID);
-    await fileHistoryTrackEdit(currentState, updateState, filePath, generateUuid() as UUID);
+    const m1 = generateUuid() as UUID;
+    const m2 = generateUuid() as UUID;
+    await fileHistoryMakeSnapshot(updateState, m1);
+    await fileHistoryTrackEdit(currentState, updateState, filePath, m1);
+    await fileHistoryMakeSnapshot(updateState, m2);
 
-    // Should still have version 1 (no new backup created for unchanged file)
-    const backup = currentState.snapshots[currentState.snapshots.length - 1]?.trackedFileBackups[filePath];
+    const backup = currentState.snapshots.at(-1)?.trackedFileBackups[filePath];
     expect(backup?.version).toBe(1);
+  });
+
+  it('should rewind to target snapshot', async () => {
+    const state = createFileHistoryState();
+    const filePath = path.join(tmpDir, 'rewind.txt');
+    await fs.writeFile(filePath, 'before', 'utf-8');
+
+    let currentState = state;
+    const updateState = (updater: (prev: typeof state) => typeof state) => {
+      currentState = updater(currentState);
+    };
+
+    const start = generateUuid() as UUID;
+    const end = generateUuid() as UUID;
+    await fileHistoryMakeSnapshot(updateState, start);
+    await fileHistoryTrackEdit(currentState, updateState, filePath, start);
+    await fs.writeFile(filePath, 'after', 'utf-8');
+    await fileHistoryMakeSnapshot(updateState, end);
+
+    await fileHistoryRewind(updateState, start);
+    const content = await fs.readFile(filePath, 'utf-8');
+    expect(content).toBe('before');
+  });
+
+  it('should detect change against backup', async () => {
+    const filePath = path.join(tmpDir, 'diff-check.txt');
+    await fs.writeFile(filePath, 'v1', 'utf-8');
+    const backup = await createBackup(filePath, 1);
+    expect(backup.backupFileName).not.toBeNull();
+
+    const unchanged = await checkOriginFileChanged(filePath, backup.backupFileName!);
+    expect(unchanged).toBe(false);
+
+    await fs.writeFile(filePath, 'v2', 'utf-8');
+    const changed = await checkOriginFileChanged(filePath, backup.backupFileName!);
+    expect(changed).toBe(true);
   });
 });
 

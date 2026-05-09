@@ -80,8 +80,8 @@ importers:
         specifier: ^19.2.4
         version: 19.2.5
       xibecode-core:
-        specifier: ^1.2.2
-        version: 1.2.2(@cfworker/json-schema@4.1.1)
+        specifier: ^1.3.2
+        version: 1.3.2(@cfworker/json-schema@4.1.1)
     devDependencies:
       '@types/inquirer':
         specifier: ^9.0.9
@@ -184,8 +184,8 @@ importers:
         specifier: ^3.5.0
         version: 3.5.0
       xibecode-core:
-        specifier: ^1.2.0
-        version: 1.2.0(@cfworker/json-schema@4.1.1)
+        specifier: ^1.3.2
+        version: 1.3.2(@cfworker/json-schema@4.1.1)
     devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4.2.4
@@ -236,8 +236,8 @@ importers:
         specifier: ^11.2.0
         version: 11.2.0
       xibecode-core:
-        specifier: workspace:*
-        version: link:../core
+        specifier: ^1.3.2
+        version: 1.3.2(@cfworker/json-schema@4.1.1)
     devDependencies:
       '@types/node':
         specifier: ^20.10.0
@@ -4024,12 +4024,8 @@ packages:
     resolution: {integrity: sha512-h3Fbisa2nKGPxCpm89Hk33lBLsnaGBvctQopaBSOW/uIs6FTe1ATyAnKFJrzVs9vpGdsTe73WF3V4lIsk4Gacw==}
     engines: {node: '>=18'}
 
-  xibecode-core@1.2.0:
-    resolution: {integrity: sha512-CWyL8QTuFFBpgXPul5b6hVYRB8OZl0qtROxi6uEkEWr2SPoDrJaeADfPAtjNN8SHMTbnVCeBomEyTZnwpZ63Yw==}
-    engines: {node: '>=18.0.0'}
-
-  xibecode-core@1.2.2:
-    resolution: {integrity: sha512-XSwwBfzicSxzmMtNuwDdiQKVkAzB7eq6P/9AeWsBYoRWmUsUeeosUJb6ujz40WLCTCY7IJ6biVwiP/yfPVNM0Q==}
+  xibecode-core@1.3.2:
+    resolution: {integrity: sha512-ypA6BW7h+J+L2LBNOhebDWxjBAq63SfJlHiTArJA6iLUcT2nrnzOQcEO04ZdsdSX80dS5ETQ7h6scXnqMBXcxQ==}
     engines: {node: '>=18.0.0'}
 
   xmlbuilder@15.1.1:
@@ -8113,25 +8109,7 @@ snapshots:
     dependencies:
       is-wsl: 3.1.1
 
-  xibecode-core@1.2.0(@cfworker/json-schema@4.1.1):
-    dependencies:
-      '@anthropic-ai/sdk': 0.78.0(zod@4.4.1)
-      '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.1)
-      diff: 5.2.2
-      dotenv: 16.6.1
-      fast-glob: 3.3.3
-      gray-matter: 4.0.3
-      node-fetch: 3.3.2
-      open: 10.2.0
-      strip-ansi: 7.2.0
-      ts-morph: 27.0.2
-      typescript: 5.9.3
-      zod: 4.4.1
-    transitivePeerDependencies:
-      - '@cfworker/json-schema'
-      - supports-color
-
-  xibecode-core@1.2.2(@cfworker/json-schema@4.1.1):
+  xibecode-core@1.3.2(@cfworker/json-schema@4.1.1):
     dependencies:
       '@anthropic-ai/sdk': 0.78.0(zod@4.4.1)
       '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.1)

@@ -2518,6 +2518,10 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     // Initialize transcript persistence for resumed session
     if (currentSession) {
       activeAgent?.initTranscript(currentSessionId, currentSession.cwd);
+      const fileHistorySnapshots = await sessionManager.loadFileHistorySnapshots(currentSessionId);
+      if (fileHistorySnapshots.length > 0) {
+        toolExecutor.restoreFileHistorySnapshots(fileHistorySnapshots);
+      }
     }
   }
 

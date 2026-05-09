@@ -3,6 +3,7 @@ import * as path from 'path';
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
+import type { UUID } from 'crypto';
 import { ContextManager } from './context.js';
 import { AgentMode, MODE_CONFIG, getToolCategory, isToolAllowed, isValidMode } from './modes.js';
 import { FileEditor } from './editor.js';
@@ -23,6 +24,15 @@ import { ConflictSolver } from './conflict-solver.js';
 import { SwarmOrchestrator } from './swarm.js';
 import { PermissionManager, type ApprovalScope, type PermissionMode } from './permissions.js';
 import { McpOAuthFlowManager } from './mcp/oauth-flow.js';
+import {
+  createFileHistoryState,
+  fileHistoryMakeSnapshot,
+  fileHistoryRewind,
+  fileHistoryRestore,
+  fileHistoryTrackEdit,
+  type FileHistoryState,
+} from './file-history.js';
+import type { FileHistorySnapshot, FileHistorySnapshotEntry } from './transcript-types.js';
 
 const execAsync = promisify(exec);
 
@@ -145,6 +155,8 @@ export class CodingToolExecutor implements ToolExecutor {
   /** Session-scoped tools synthesized by the agent (meta-agent). Execution is sandboxed via run_command. */
   private dynamicTools = new Map<string, { description: string; script: string }>();
   private mcpOAuth = new McpOAuthFlowManager();
+  private fileHistoryState: FileHistoryState = createFileHistoryState();
+  private activeFileHistoryMessageId: UUID | null = null;
 
   /**
    * Creates a new CodingToolExecutor instance
@@ -187,11 +199,16 @@ export class CodingToolExecutor implements ToolExecutor {
       memory?: NeuralMemory;
       skillManager?: SkillManager; // Optional for compatibility, but recommended
       permissionManager?: PermissionManager;
+      initialFileHistoryState?: FileHistoryState;
     }
   ) {
     this.workingDir = workingDir;
     this.contextManager = new ContextManager(workingDir);
-    this.fileEditor = new FileEditor(workingDir);
+    this.fileEditor = new FileEditor(workingDir, {
+      beforeMutate: async (fullPath: string) => {
+        await this.trackFileEditBeforeMutation(fullPath);
+      },
+    });
     this.gitUtils = new GitUtils(workingDir);
     this.testRunner = new TestRunnerDetector(workingDir);
     this.safetyChecker = new SafetyChecker();
@@ -209,6 +226,51 @@ export class CodingToolExecutor implements ToolExecutor {
     this.dryRun = options?.dryRun || false;
     this.testCommandOverride = options?.testCommandOverride;
     this.permissionManager = options?.permissionManager ?? new PermissionManager(this.currentMode);
+    this.fileHistoryState = options?.initialFileHistoryState ?? createFileHistoryState();
+  }
+
+  private updateFileHistoryState = (
+    updater: (prev: FileHistoryState) => FileHistoryState,
+  ): void => {
+    this.fileHistoryState = updater(this.fileHistoryState);
+  };
+
+  setActiveFileHistoryMessageId(messageId: UUID): void {
+    this.activeFileHistoryMessageId = messageId;
+  }
+
+  async ensureFileHistoryInitialized(messageId: UUID): Promise<void> {
+    if (this.fileHistoryState.snapshots.length > 0) return;
+    this.activeFileHistoryMessageId = messageId;
+    await fileHistoryMakeSnapshot(this.updateFileHistoryState, messageId);
+  }
+
+  async finalizeFileHistorySnapshot(messageId: UUID): Promise<FileHistorySnapshot | undefined> {
+    this.activeFileHistoryMessageId = messageId;
+    return fileHistoryMakeSnapshot(this.updateFileHistoryState, messageId);
+  }
+
+  getFileHistoryState(): FileHistoryState {
+    return this.fileHistoryState;
+  }
+
+  restoreFileHistorySnapshots(entries: FileHistorySnapshotEntry[]): void {
+    const snapshots: FileHistorySnapshot[] = entries.map((entry) => ({
+      messageId: entry.messageId,
+      trackedFileBackups: entry.trackedFileBackups,
+      timestamp: new Date(entry.timestamp),
+    }));
+    const trackedFiles = new Set<string>();
+    for (const snapshot of snapshots) {
+      for (const trackedPath of Object.keys(snapshot.trackedFileBackups)) {
+        trackedFiles.add(trackedPath);
+      }
+    }
+    this.fileHistoryState = {
+      snapshots,
+      trackedFiles,
+      snapshotSequence: snapshots.length,
+    };
   }
 
   private currentMode: AgentMode = 'agent';
@@ -549,10 +611,14 @@ export class CodingToolExecutor implements ToolExecutor {
       }
 
       case 'revert_file': {
-        if (!p.path || typeof p.path !== 'string') {
-          return { error: true, success: false, message: 'Missing required parameter: path (string)' };
+        if (typeof p.message_id !== 'string' && typeof p.path !== 'string') {
+          return {
+            error: true,
+            success: false,
+            message: 'Missing required parameter: message_id (string UUID) or path (string with snapshot_index)',
+          };
         }
-        return this.revertFile(p.path, p.backup_index);
+        return this.revertFile(p.message_id, p.path, p.snapshot_index, p.backup_index);
       }
 
       case 'run_tests': {
@@ -1332,20 +1398,28 @@ export class CodingToolExecutor implements ToolExecutor {
       },
       {
         name: 'revert_file',
-        description: 'Revert a file to a previous backup. Backups are created automatically on edits.',
+        description: 'Rewind tracked workspace files to a snapshot message id, or restore one file from snapshot_index.',
         input_schema: {
           type: 'object',
           properties: {
+            message_id: {
+              type: 'string',
+              description: 'Snapshot message UUID to rewind tracked files to (preferred).',
+            },
             path: {
               type: 'string',
-              description: 'File path to revert',
+              description: 'Optional file path for single-file restore mode.',
+            },
+            snapshot_index: {
+              type: 'number',
+              description: 'Snapshot index for single-file restore mode (0 = oldest, -1 = latest).',
             },
             backup_index: {
               type: 'number',
-              description: 'Backup index (0 = most recent, default: 0)',
+              description: 'Deprecated legacy option; ignored when message_id is provided.',
             },
           },
-          required: ['path'],
+          required: [],
         },
       },
       {
@@ -1921,6 +1995,23 @@ export class CodingToolExecutor implements ToolExecutor {
     return result.path;
   }
 
+  private async trackFileEditBeforeMutation(fullPath: string): Promise<void> {
+    const messageId = this.activeFileHistoryMessageId;
+    if (!messageId) return;
+    try {
+      const stats = await fs.stat(fullPath);
+      if (stats.isDirectory()) return;
+    } catch {
+      // Missing path is fine; fileHistoryTrackEdit records null backup.
+    }
+    await fileHistoryTrackEdit(
+      this.fileHistoryState,
+      this.updateFileHistoryState,
+      fullPath,
+      messageId,
+    );
+  }
+
   /**
    * Read file contents
    *
@@ -2050,6 +2141,7 @@ export class CodingToolExecutor implements ToolExecutor {
     }
 
     try {
+      await this.trackFileEditBeforeMutation(fullPath);
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
       await fs.writeFile(fullPath, content, 'utf-8');
       const lines = content.split('\n').length;
@@ -2376,6 +2468,7 @@ export class CodingToolExecutor implements ToolExecutor {
     }
 
     try {
+      await this.trackFileEditBeforeMutation(fullPath);
       const stats = await fs.stat(fullPath);
       if (stats.isDirectory()) {
         await fs.rm(fullPath, { recursive: true, force: true });
@@ -2402,6 +2495,8 @@ export class CodingToolExecutor implements ToolExecutor {
     const sourcePath = this.resolvePath(source);
     const destPath = this.resolvePath(destination);
     try {
+      await this.trackFileEditBeforeMutation(sourcePath);
+      await this.trackFileEditBeforeMutation(destPath);
       await fs.rename(sourcePath, destPath);
       return { success: true, source, destination };
     } catch (error: any) {
@@ -2427,9 +2522,54 @@ export class CodingToolExecutor implements ToolExecutor {
     }
   }
 
-  private async revertFile(filePath: string, backupIndex: number = 0): Promise<any> {
-    const result = await this.fileEditor.revertToBackup(filePath, backupIndex);
-    return result;
+  private async revertFile(
+    messageId?: string,
+    filePath?: string,
+    snapshotIndex: number = -1,
+    _backupIndex: number = 0,
+  ): Promise<any> {
+    if (typeof messageId === 'string') {
+      try {
+        const changedFiles = await fileHistoryRewind(
+          this.updateFileHistoryState,
+          messageId as UUID,
+        );
+        return {
+          success: true,
+          message: `Rewound tracked files to snapshot ${messageId}`,
+          files_changed: changedFiles,
+        };
+      } catch (error: any) {
+        return {
+          error: true,
+          success: false,
+          message: `Failed to rewind to snapshot ${messageId}: ${error.message}`,
+        };
+      }
+    }
+
+    if (typeof filePath !== 'string') {
+      return {
+        error: true,
+        success: false,
+        message: 'revert_file requires message_id or path with snapshot_index',
+      };
+    }
+
+    const fullPath = this.resolvePath(filePath);
+    const restored = await fileHistoryRestore(this.fileHistoryState, fullPath, snapshotIndex);
+    if (!restored) {
+      return {
+        error: true,
+        success: false,
+        message: `No file-history snapshot found for ${filePath} at index ${snapshotIndex}`,
+      };
+    }
+
+    return {
+      success: true,
+      message: `Restored ${filePath} from snapshot index ${snapshotIndex}`,
+    };
   }
 
   // ── Test Runner Methods ──

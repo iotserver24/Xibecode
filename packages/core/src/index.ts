@@ -94,7 +94,7 @@ export { registerCleanup, runCleanupFunctions, gracefulShutdown, gracefulShutdow
 export { FileEditor, type EditResult, type SearchReplaceEdit, type LineRangeEdit, type VerifiedEdit } from './editor.js';
 
 // ─── File History ───────────────────────────────────────────────
-export { createBackup as fhCreateBackup, restoreBackup as fhRestoreBackup, fileHistoryTrackEdit, fileHistoryCanRestore, fileHistoryRestore, createFileHistoryState, getBackupFileName, getFileHistoryDir, type FileHistoryState, type DiffStats } from './file-history.js';
+export { createBackup as fhCreateBackup, restoreBackup as fhRestoreBackup, fileHistoryTrackEdit, fileHistoryMakeSnapshot, fileHistoryRewind, fileHistoryCanRestore, fileHistoryRestore, createFileHistoryState, normalizeTrackingPath, checkOriginFileChanged, getBackupFileName, getFileHistoryDir, type FileHistoryState, type DiffStats } from './file-history.js';
 
 // ─── Plan ──────────────────────────────────────────────────────
 export { PlanMode, type PlanResult } from './planMode.js';

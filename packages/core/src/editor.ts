@@ -1,15 +1,6 @@
 import * as fs from 'fs/promises';
-import * as path from 'path';
 import * as diff from 'diff';
-import type { UUID } from 'crypto';
 import { sanitizePath } from './utils/safety.js';
-import {
-  createBackup as fhCreateBackup,
-  restoreBackup as fhRestoreBackup,
-  getBackupFileName,
-  resolveBackupPath,
-} from './file-history.js';
-import { generateUuid } from './transcript-types.js';
 
 export interface EditResult {
   success: boolean;
@@ -37,13 +28,17 @@ export interface VerifiedEdit {
   newContent: string;
 }
 
+export interface FileHistoryCallbacks {
+  beforeMutate?: (fullPath: string) => Promise<void>;
+}
+
 export class FileEditor {
   private workingDir: string;
-  /** Tracks the next backup version number per file path. */
-  private fileVersions = new Map<string, number>();
+  private fileHistoryCallbacks: FileHistoryCallbacks;
 
-  constructor(workingDir: string) {
+  constructor(workingDir: string, fileHistoryCallbacks: FileHistoryCallbacks = {}) {
     this.workingDir = workingDir;
+    this.fileHistoryCallbacks = fileHistoryCallbacks;
   }
 
   /**
@@ -97,8 +92,7 @@ export class FileEditor {
         ? content.replaceAll(edit.search, edit.replace)
         : content.replace(edit.search, edit.replace);
 
-      // Create backup
-      await this.createBackup(filePath, content);
+      await this.trackEditBeforeWrite(fullPath);
 
       // Write new content
       await fs.writeFile(fullPath, newContent, 'utf-8');
@@ -143,8 +137,7 @@ export class FileEditor {
         };
       }
 
-      // Create backup
-      await this.createBackup(filePath, content);
+      await this.trackEditBeforeWrite(fullPath);
 
       // Replace lines
       const newLines = [
@@ -223,8 +216,7 @@ export class FileEditor {
         };
       }
 
-      // Content verified — proceed with edit
-      await this.createBackup(filePath, content);
+      await this.trackEditBeforeWrite(fullPath);
 
       const newLines = [
         ...lines.slice(0, edit.startLine - 1),
@@ -275,8 +267,7 @@ export class FileEditor {
         };
       }
 
-      // Create backup
-      await this.createBackup(filePath, originalContent);
+      await this.trackEditBeforeWrite(fullPath);
 
       // Insert content
       lines.splice(line - 1, 0, content);
@@ -311,8 +302,7 @@ export class FileEditor {
     try {
       const content = await fs.readFile(fullPath, 'utf-8');
 
-      // Create backup
-      await this.createBackup(filePath, content);
+      await this.trackEditBeforeWrite(fullPath);
 
       // Apply patch
       const patches = diff.parsePatch(patch);
@@ -349,83 +339,18 @@ export class FileEditor {
   }
 
   /**
-   * Revert file to backup using the file-history checkpoint system.
+   * Revert is handled by workspace-level snapshot rewind in CodingToolExecutor.
    */
-  async revertToBackup(filePath: string, backupIndex: number = 0): Promise<EditResult> {
-    const resolved = this.resolveSafePath(filePath);
-    if (!resolved.ok) {
-      return { success: false, message: resolved.message };
-    }
-
-    const fullPath = resolved.fullPath;
-    const version = this.fileVersions.get(fullPath) ?? 1;
-
-    // Walk backward from current version to find the requested backup
-    const targetVersion = version - backupIndex;
-    if (targetVersion < 1) {
-      return {
-        success: false,
-        message: `Backup index ${backupIndex} not found (have ${version - 1} backups)`,
-      };
-    }
-
-    const backupFileName = getBackupFileName(fullPath, targetVersion);
-    const restored = await fhRestoreBackup(fullPath, backupFileName);
-
-    if (!restored) {
-      return {
-        success: false,
-        message: `No backup found for ${filePath} at version ${targetVersion}`,
-      };
-    }
-
+  async revertToBackup(_filePath: string, _backupIndex: number = 0): Promise<EditResult> {
     return {
-      success: true,
-      message: `Successfully reverted ${filePath} to backup version ${targetVersion}`,
+      success: false,
+      message: 'revertToBackup is deprecated; use revert_file with message_id snapshots.',
     };
   }
 
-  /**
-   * Create backup of file using the file-history checkpoint system.
-   * Uses copyFile for efficient kernel-level copy without reading into JS heap.
-   */
-  private async createBackup(filePath: string, content: string): Promise<void> {
-    const resolved = this.resolveSafePath(filePath);
-    if (!resolved.ok) return;
-
-    const fullPath = resolved.fullPath;
-    const currentVersion = this.fileVersions.get(fullPath) ?? 0;
-    const nextVersion = currentVersion + 1;
-
-    // Create backup via file-history system (copyFile-based)
-    await fhCreateBackup(fullPath, nextVersion);
-    this.fileVersions.set(fullPath, nextVersion);
-  }
-
-  /**
-   * List backups for a file from the file-history system.
-   */
-  private async listBackups(filePath: string): Promise<string[]> {
-    const resolved = this.resolveSafePath(filePath);
-    if (!resolved.ok) return [];
-
-    const fullPath = resolved.fullPath;
-    const version = this.fileVersions.get(fullPath) ?? 0;
-    const backupPaths: string[] = [];
-
-    // List backup files from newest to oldest
-    for (let v = version; v >= 1; v--) {
-      const backupFileName = getBackupFileName(fullPath, v);
-      const backupPath = resolveBackupPath(backupFileName);
-      try {
-        await fs.access(backupPath);
-        backupPaths.push(backupPath);
-      } catch {
-        // Backup doesn't exist — skip
-      }
-    }
-
-    return backupPaths;
+  private async trackEditBeforeWrite(fullPath: string): Promise<void> {
+    if (!this.fileHistoryCallbacks.beforeMutate) return;
+    await this.fileHistoryCallbacks.beforeMutate(fullPath);
   }
 
   /**
