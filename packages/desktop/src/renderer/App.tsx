@@ -397,8 +397,8 @@ export default function App() {
             </div>
           </aside>
 
-        {/* Center: Chat */}
-        <div className="flex-1 min-w-0">
+        {/* Center: Chat — flex column + min-h-0 so ChatPanel flex-1 / scroll region get a real height */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <ChatPanel
             messages={messages}
             onSendMessage={handleSendMessage}

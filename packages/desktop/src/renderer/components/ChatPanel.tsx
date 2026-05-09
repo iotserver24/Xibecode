@@ -32,6 +32,10 @@ const MODES = [
   { id: 'review', label: 'Review' },
 ];
 
+/** Center column: outer row centers the inner max-width block (reliable inside nested flex). */
+const CHAT_GUTTER = 'flex w-full justify-center px-4 sm:px-6';
+const CHAT_WIDTH = 'w-full min-w-0 max-w-3xl';
+
 interface ChatPanelProps {
   messages: ChatMessage[];
   onSendMessage: (content: string) => void;
@@ -103,12 +107,12 @@ export default function ChatPanel({
   }, [messages]);
 
   return (
-    <div className="flex flex-1 flex-col min-h-0">
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto scroll-smooth">
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* Messages area — min-h-0 lets this shrink so the composer stays at the bottom without overlapping */}
+      <div className="min-h-0 flex-1 overflow-y-auto scroll-smooth">
         {messages.length === 0 ? (
-          <div className="flex h-full items-center justify-center px-4">
-            <div className="text-center max-w-xl animate-fade-in w-full">
+          <div className={`min-h-full ${CHAT_GUTTER}`}>
+            <div className={`${CHAT_WIDTH} animate-fade-in flex min-h-full flex-col items-center justify-center text-center`}>
               <div className="mb-8">
                 <div className="mx-auto w-12 h-12 bg-xibe-surface-raised rounded-2xl flex items-center justify-center mb-4 border border-xibe-border-subtle shadow-sm">
                   <Terminal className="h-6 w-6 text-xibe-text" />
@@ -122,7 +126,7 @@ export default function ChatPanel({
                   Complete Setup
                 </button>
               ) : (
-                <div className="space-y-4 max-w-2xl mx-auto">
+                <div className="w-full max-w-2xl space-y-4">
                   <div className="flex justify-center gap-2 mb-6">
                     {MODES.map((m) => (
                       <button
@@ -163,27 +167,29 @@ export default function ChatPanel({
             </div>
           </div>
         ) : (
-          <div className="mx-auto max-w-3xl px-4 py-8 space-y-6">
-            {renderedMessages}
-            {isRunning && (
-              <div className="flex items-center gap-2 text-xs text-xibe-text-dim animate-fade-in pl-2">
-                <div className="flex gap-1">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-bounce" style={{ animationDelay: '300ms' }} />
+          <div className={CHAT_GUTTER}>
+            <div className={`${CHAT_WIDTH} space-y-6 py-8`}>
+              {renderedMessages}
+              {isRunning && (
+                <div className="flex items-center gap-2 text-xs text-xibe-text-dim animate-fade-in pl-2">
+                  <div className="flex gap-1">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                  <span className="ml-1">{spinnerVerb}</span>
+                  <ChatPanelTimer isRunning={isRunning} />
                 </div>
-                <span className="ml-1">{spinnerVerb}</span>
-                <ChatPanelTimer isRunning={isRunning} />
-              </div>
-            )}
-            <div ref={bottomRef} className="h-2" />
+              )}
+              <div ref={bottomRef} className="h-2" />
+            </div>
           </div>
         )}
       </div>
 
-      {/* Input area */}
-      <div className="shrink-0 px-4 pb-6 pt-2">
-        <div className="mx-auto max-w-3xl relative">
+      {/* Input area — same centered column as transcript */}
+      <div className={`shrink-0 pb-6 pt-2 ${CHAT_GUTTER}`}>
+        <div className={`relative ${CHAT_WIDTH}`}>
           {/* Command dropdown above input */}
           {isSlashMode && filteredCmds.length > 0 && (
             <div className="absolute bottom-full mb-2 w-full rounded-xl border border-xibe-border-subtle bg-xibe-surface/95 backdrop-blur-md shadow-lg overflow-hidden animate-slide-up z-20">
