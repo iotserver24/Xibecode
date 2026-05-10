@@ -116,7 +116,8 @@ export async function getNpmLatestVersion(options?: {
   }
 }
 
-const CHANGELOG_URL = 'https://github.com/iotserver24/xibecode/blob/main/CHANGELOG.md';
+/** Where users read release context without a separate publishing workflow. */
+export const NPM_PACKAGE_PAGE = 'https://www.npmjs.com/package/xibecode';
 
 /**
  * If registry has a newer version than current, print a short notice to stderr (non-blocking UX).
@@ -143,7 +144,7 @@ export async function maybePrintUpdateNotice(
     console.error(
       yellow(`Update available: ${latest}`) + dim(` (you have ${currentVersion})`),
     );
-    console.error(dim(`Changelog: ${CHANGELOG_URL}`));
+    console.error(dim(`npm package: ${NPM_PACKAGE_PAGE}`));
     console.error(dim('Upgrade: pnpm add -g xibecode@latest  |  npm i -g xibecode@latest'));
     console.error(dim('Disable notices: XIBECODE_DISABLE_UPDATE_CHECK=1'));
     console.error('');
@@ -151,5 +152,3 @@ export async function maybePrintUpdateNotice(
     // ignore — offline / registry errors should never block chat
   }
 }
-
-export { CHANGELOG_URL };
