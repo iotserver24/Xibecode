@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { randomUUID } from 'node:crypto';
 import { posix as pathPosix } from 'node:path';
 import { URL } from 'node:url';
-import { Sandbox as E2BSandbox } from '@e2b/code-interpreter';
+import { Sandbox } from 'e2b';
 
 type SandboxLike = {
   sandboxId?: string;
@@ -11,7 +11,7 @@ type SandboxLike = {
   commands?: {
     run: (command: string, opts?: Record<string, unknown>) => Promise<Record<string, unknown>>;
   };
-  kill?: () => Promise<void>;
+  kill?: (opts?: { requestTimeoutMs?: number }) => Promise<void>;
   close?: () => Promise<void>;
 };
 
@@ -52,13 +52,15 @@ type MoveRequest = {
   destination: string;
 };
 
-const Sandbox = E2BSandbox as unknown as {
-  create: (options?: Record<string, unknown>) => Promise<SandboxLike>;
-};
-
 const port = Number(process.env.PORT || 8787);
 const authToken = process.env.XIBECODE_GATEWAY_TOKEN?.trim() || '';
 const sandboxTemplate = process.env.XIBECODE_E2B_TEMPLATE?.trim() || '';
+/** Inactivity window (ms) before lifecycle action; default 15m. E2B SDK default is 5m.
+ * After timeout with lifecycle `pause`, sandbox pauses (not killed) and auto-resumes on next SDK/HTTP activity. */
+const sandboxTimeoutMs = Math.max(
+  60_000,
+  Number(process.env.XIBECODE_E2B_SANDBOX_TIMEOUT_MS || 15 * 60 * 1000),
+);
 const previewDomain = process.env.XIBECODE_E2B_PREVIEW_DOMAIN?.trim() || 'e2b.dev';
 const maxExportBytes = Math.max(
   1,
@@ -144,12 +146,16 @@ async function createSession(input: { sessionId?: string; cwd?: string; strategy
     return existing;
   }
 
-  const createOptions: Record<string, unknown> = {};
-  if (sandboxTemplate) {
-    createOptions.template = sandboxTemplate;
-  }
+  const createOptions = {
+    ...(sandboxTemplate ? { template: sandboxTemplate } : {}),
+    timeoutMs: sandboxTimeoutMs,
+    lifecycle: {
+      onTimeout: 'pause' as const,
+      autoResume: true,
+    },
+  };
 
-  const sandbox = await Sandbox.create(createOptions);
+  const sandbox = (await Sandbox.create(createOptions)) as unknown as SandboxLike;
   const sandboxId = sandbox.sandboxId || randomUUID();
   const strategy = input.strategy?.trim() === 'sandbox_full' ? 'sandbox_full' : 'host_only';
   const requestedWorkspaceRoot = input.workspaceRoot?.trim() || input.cwd?.trim() || defaultWorkspaceRoot;
