@@ -20,6 +20,7 @@ import { builtInSkillsDir } from '../utils/built-in-skills-dir.js';
 import chalk from 'chalk';
 import { attachRemoteExecution, codingToolExecutorRemoteOptions, remoteToolWorkspaceRootForAgent, resolveRemoteExecutionConfig } from '../utils/remote-execution.js';
 import { syncWorkspaceToSandbox } from '../utils/sandbox-sync.js';
+import { withCloudWorkspaceSyncSpinner } from '../utils/cloud-sync-feedback.js';
 
 interface RunOptions {
   file?: string;
@@ -89,15 +90,15 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
     : parsedIterations;
   const remoteExecution = resolveRemoteExecutionConfig(config, process.cwd());
   if (remoteExecution?.strategy === 'sandbox_full') {
-    ui.info('Syncing workspace to E2B sandbox...');
-    const syncResult = await syncWorkspaceToSandbox(remoteExecution, process.cwd(), {
-      maxMb: config.getSandboxSyncMaxMb(),
-      excludeGlobs: config.getSandboxSyncExcludeGlobs(),
-      workspaceRoot: remoteExecution.workspaceRoot,
-      respectGitignore: config.getSandboxSyncRespectGitignore(),
-    });
+    const syncResult = await withCloudWorkspaceSyncSpinner(() =>
+      syncWorkspaceToSandbox(remoteExecution, process.cwd(), {
+        maxMb: config.getSandboxSyncMaxMb(),
+        excludeGlobs: config.getSandboxSyncExcludeGlobs(),
+        workspaceRoot: remoteExecution.workspaceRoot,
+        respectGitignore: config.getSandboxSyncRespectGitignore(),
+      }),
+    );
     remoteExecution.sessionId = syncResult.sessionId;
-    ui.info(`Sandbox sync complete (${Math.ceil(syncResult.bytes / 1024)}KB uploaded).`);
   }
 
   // Diagnostic — always print resolved config so misconfiguration is obvious

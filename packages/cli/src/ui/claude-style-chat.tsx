@@ -31,6 +31,7 @@ import {
   resolveRemoteExecutionConfig,
 } from '../utils/remote-execution.js';
 import { syncWorkspaceToSandbox } from '../utils/sandbox-sync.js';
+import { withCloudWorkspaceSyncSpinner } from '../utils/cloud-sync-feedback.js';
 
 export type ChatOptions = {
   model?: string;
@@ -2161,12 +2162,14 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
   await memory.init().catch(() => { });
   const remoteExecution = resolveRemoteExecutionConfig(config, process.cwd());
   if (remoteExecution?.strategy === 'sandbox_full') {
-    const syncResult = await syncWorkspaceToSandbox(remoteExecution, process.cwd(), {
-      maxMb: config.getSandboxSyncMaxMb(),
-      excludeGlobs: config.getSandboxSyncExcludeGlobs(),
-      workspaceRoot: remoteExecution.workspaceRoot,
-      respectGitignore: config.getSandboxSyncRespectGitignore(),
-    });
+    const syncResult = await withCloudWorkspaceSyncSpinner(() =>
+      syncWorkspaceToSandbox(remoteExecution, process.cwd(), {
+        maxMb: config.getSandboxSyncMaxMb(),
+        excludeGlobs: config.getSandboxSyncExcludeGlobs(),
+        workspaceRoot: remoteExecution.workspaceRoot,
+        respectGitignore: config.getSandboxSyncRespectGitignore(),
+      }),
+    );
     remoteExecution.sessionId = syncResult.sessionId;
   }
   const runtimeStatus = getRuntimeStatusLabel(config);

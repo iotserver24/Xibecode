@@ -18,6 +18,7 @@ import {
   resolveRemoteExecutionConfig,
 } from '../utils/remote-execution.js';
 import { syncWorkspaceToSandbox } from '../utils/sandbox-sync.js';
+import { withCloudWorkspaceSyncSpinner } from '../utils/cloud-sync-feedback.js';
 
 interface ChatOptions {
   model?: string;
@@ -48,12 +49,14 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
   const provider = (options.provider as any) || config.get('provider');
   const remoteExecution = resolveRemoteExecutionConfig(config, process.cwd());
   if (remoteExecution?.strategy === 'sandbox_full') {
-    const syncResult = await syncWorkspaceToSandbox(remoteExecution, process.cwd(), {
-      maxMb: config.getSandboxSyncMaxMb(),
-      excludeGlobs: config.getSandboxSyncExcludeGlobs(),
-      workspaceRoot: remoteExecution.workspaceRoot,
-      respectGitignore: config.getSandboxSyncRespectGitignore(),
-    });
+    const syncResult = await withCloudWorkspaceSyncSpinner(() =>
+      syncWorkspaceToSandbox(remoteExecution, process.cwd(), {
+        maxMb: config.getSandboxSyncMaxMb(),
+        excludeGlobs: config.getSandboxSyncExcludeGlobs(),
+        workspaceRoot: remoteExecution.workspaceRoot,
+        respectGitignore: config.getSandboxSyncRespectGitignore(),
+      }),
+    );
     remoteExecution.sessionId = syncResult.sessionId;
   }
 

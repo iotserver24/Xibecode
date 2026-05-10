@@ -88,7 +88,9 @@ program
 
 program
   .command('cloud')
-  .description('Interactive chat with E2B cloud execution (forces sandbox mode e2b for this process)')
+  .description(
+    'Interactive chat with E2B cloud execution (forces e2b for this process). With sandbox_full, uploads a tarball of your project first.',
+  )
   .option('-m, --model <model>', 'AI model to use')
   .option('-b, --base-url <url>', 'Custom API base URL')
   .option('-k, --api-key <key>', 'API key (overrides config)')
@@ -240,8 +242,9 @@ mcpCmd
   .description('Authenticate with Smithery')
   .action(() => mcpCommand('login', []));
 
-// Launch chat if no command provided
+// Launch chat if no command provided (stay local unless user set a subcommand like `cloud`)
 if (!process.argv.slice(2).length) {
+  process.env.XIBECODE_SANDBOX_MODE = 'local';
   chatCommand({});
 } else {
   program.parse();

@@ -17,6 +17,7 @@ import chalk from 'chalk';
 import fetch from 'node-fetch';
 import { attachRemoteExecution, codingToolExecutorRemoteOptions, remoteToolWorkspaceRootForAgent, resolveRemoteExecutionConfig } from '../utils/remote-execution.js';
 import { syncWorkspaceToSandbox } from '../utils/sandbox-sync.js';
+import { withCloudWorkspaceSyncSpinner } from '../utils/cloud-sync-feedback.js';
 
 const pkg = createRequire(import.meta.url)('../../package.json');
 import Anthropic from '@anthropic-ai/sdk';
@@ -334,15 +335,15 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
     : 'NOT SET';
   const remoteExecution = resolveRemoteExecutionConfig(config, cwd);
   if (remoteExecution?.strategy === 'sandbox_full') {
-    ui.info('Syncing workspace to E2B sandbox...');
-    const syncResult = await syncWorkspaceToSandbox(remoteExecution, cwd, {
-      maxMb: config.getSandboxSyncMaxMb(),
-      excludeGlobs: config.getSandboxSyncExcludeGlobs(),
-      workspaceRoot: remoteExecution.workspaceRoot,
-      respectGitignore: config.getSandboxSyncRespectGitignore(),
-    });
+    const syncResult = await withCloudWorkspaceSyncSpinner(() =>
+      syncWorkspaceToSandbox(remoteExecution, cwd, {
+        maxMb: config.getSandboxSyncMaxMb(),
+        excludeGlobs: config.getSandboxSyncExcludeGlobs(),
+        workspaceRoot: remoteExecution.workspaceRoot,
+        respectGitignore: config.getSandboxSyncRespectGitignore(),
+      }),
+    );
     remoteExecution.sessionId = syncResult.sessionId;
-    ui.info(`Sandbox sync complete (${Math.ceil(syncResult.bytes / 1024)}KB uploaded).`);
   }
   console.log(chalk.dim('  cost mode ') + chalk.cyan(useEconomy ? 'economy' : 'normal'));
   console.log(chalk.dim('  provider  ') + chalk.cyan(provider ?? 'auto-detect'));
