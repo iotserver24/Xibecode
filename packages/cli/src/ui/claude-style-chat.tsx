@@ -193,7 +193,7 @@ const CHAT_COMMANDS: Array<{ name: string; description: string }> = [
   { name: '/config', description: 'Show current config and quick config hints' },
   { name: '/memory', description: 'Show auto-memories for this project' },
   { name: '/hooks', description: 'Show registered lifecycle hooks' },
-  { name: '/cpull', description: 'Pull current cloud sandbox changes locally (supports --apply)' },
+  { name: '/cpull', description: 'Pull sandbox workspace; /cpull --apply merges only new/changed files (use --full to replace all)' },
   { name: '/commit', description: 'Stage all changes and commit (auto message or custom text)' },
   { name: '/donate', description: 'Open the donation page in your browser' },
   { name: '/sponsor', description: 'Open the sponsorship page in your browser' },
@@ -2814,12 +2814,17 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     const tokens = argsRaw ? argsRaw.split(/\s+/).filter(Boolean) : [];
     let apply = false;
     let force = false;
+    let full = false;
     let output: string | undefined;
 
     for (let i = 0; i < tokens.length; i += 1) {
       const token = tokens[i];
       if (token === '--apply') {
         apply = true;
+        continue;
+      }
+      if (token === '--full') {
+        full = true;
         continue;
       }
       if (token === '--force') {
@@ -2829,19 +2834,20 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
       if (token === '--output') {
         const next = tokens[i + 1];
         if (!next || next.startsWith('--')) {
-          throw new Error('Usage: /cpull [--apply] [--force] [--output <path>]');
+          throw new Error('Usage: /cpull [--apply] [--full] [--force] [--output <path>]');
         }
         output = next;
         i += 1;
         continue;
       }
-      throw new Error(`Unknown /cpull option "${token}". Usage: /cpull [--apply] [--force] [--output <path>]`);
+      throw new Error(`Unknown /cpull option "${token}". Usage: /cpull [--apply] [--full] [--force] [--output <path>]`);
     }
 
     await cloudPullCommand({
       profile: options.profile,
       session: sessionId,
       apply,
+      full,
       force,
       output,
       onStatus: (text) => pushLine({ type: 'info', text }),

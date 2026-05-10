@@ -141,7 +141,12 @@ cloudCmd
   .option('--profile <name>', 'Config profile to use (default: configured default profile)')
   .option('--session <id>', 'Sandbox session ID to pull from')
   .option('--output <path>', 'Destination directory (default: .xibecode/sandbox-pull-<timestamp>)')
-  .option('--apply', 'Extract directly into current working directory', false)
+  .option('--apply', 'Merge sandbox files into current working directory', false)
+  .option(
+    '--full',
+    'With --apply, extract the full archive over cwd (all files). Default --apply only writes new/changed files.',
+    false,
+  )
   .option('--force', 'Allow extracting into a non-empty destination directory', false)
   .action(async (options: Parameters<typeof cloudPullCommand>[0]) => {
     await cloudPullCommand(options);
