@@ -13,6 +13,7 @@ export interface CloudPullOptions {
   output?: string;
   apply?: boolean;
   force?: boolean;
+  onStatus?: (line: string) => void;
 }
 
 function timestampLabel(): string {
@@ -48,6 +49,10 @@ async function extractTarGz(archivePath: string, targetDir: string): Promise<voi
 }
 
 export async function cloudPullCommand(options: CloudPullOptions): Promise<void> {
+  const log = options.onStatus ?? ((line: string) => console.log(line));
+  const formatInfo = (line: string) => (options.onStatus ? line : chalk.cyan(line));
+  const formatSuccess = (line: string) => (options.onStatus ? line : chalk.green(line));
+  const formatHint = (line: string) => (options.onStatus ? line : chalk.dim(line));
   const config = new ConfigManager(options.profile);
   process.env.XIBECODE_SANDBOX_MODE = 'e2b';
   const remoteExecution = resolveRemoteExecutionConfig(config, process.cwd());
@@ -70,7 +75,7 @@ export async function cloudPullCommand(options: CloudPullOptions): Promise<void>
     );
 
   await ensureEmptyDir(targetDir, Boolean(options.force || options.apply));
-  console.log(chalk.cyan(`Pulling sandbox workspace from session ${sessionId}...`));
+  log(formatInfo(`Pulling sandbox workspace from session ${sessionId}...`));
   const archive = await downloadSandboxExportArchive(remoteExecution, sessionId);
 
   const tempArchivePath = path.join(os.tmpdir(), `xibecode-sandbox-pull-${Date.now()}.tar.gz`);
@@ -82,9 +87,9 @@ export async function cloudPullCommand(options: CloudPullOptions): Promise<void>
   }
 
   if (options.apply) {
-    console.log(chalk.green(`Applied sandbox workspace into ${targetDir}`));
+    log(formatSuccess(`Applied sandbox workspace into ${targetDir}`));
   } else {
-    console.log(chalk.green(`Downloaded sandbox workspace to ${targetDir}`));
-    console.log(chalk.dim('Review and copy files locally when ready.'));
+    log(formatSuccess(`Downloaded sandbox workspace to ${targetDir}`));
+    log(formatHint('Review and copy files locally when ready.'));
   }
 }

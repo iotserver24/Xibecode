@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRequire } from 'module';
+import { spawn } from 'child_process';
 import TextInput from 'ink-text-input';
 import { Box, Static, Text, createRoot, useApp, useInput } from '../ink.js';
 import * as fs from 'fs/promises';
@@ -23,6 +24,7 @@ import { loadImageAttachment, mimeFromExtension, type ImageAttachment } from '..
 import { SessionManager, type ChatSession } from 'xibecode-core';
 import { AutoMemoryManager, HooksManager, SettingsManager as CoreSettingsManager } from 'xibecode-core';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
+import { cloudPullCommand } from '../commands/cloud-pull.js';
 import {
   attachRemoteExecution,
   codingToolExecutorRemoteOptions,
@@ -55,6 +57,50 @@ function isAbortLikeError(err: unknown): boolean {
     anyErr.type === 'aborted' ||
     String(anyErr.message || '').toLowerCase().includes('aborted')
   );
+}
+
+async function runCommandCapture(
+  command: string,
+  args: string[],
+  cwd: string = process.cwd(),
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on('error', (error) => {
+      stderr += error.message;
+      resolve({ code: 1, stdout, stderr });
+    });
+    child.on('close', (code) => {
+      resolve({ code: code ?? 0, stdout, stderr });
+    });
+  });
+}
+
+function buildAutoCommitMessage(stagedFiles: string[], shortstat: string): string {
+  const docsOnly = stagedFiles.length > 0
+    && stagedFiles.every((file) =>
+      /\.(md|mdx|txt|rst)$/i.test(file) || file.toLowerCase().includes('docs'),
+    );
+  const type = docsOnly ? 'docs' : 'chore';
+  if (stagedFiles.length === 1) {
+    return `${type}: update ${stagedFiles[0]}`;
+  }
+  if (stagedFiles.length === 0) {
+    return `${type}: update project files`;
+  }
+  const stat = shortstat.trim();
+  return `${type}: update ${stagedFiles.length} files${stat ? ` (${stat})` : ''}`;
 }
 
 type UiLineType = 'user' | 'assistant' | 'tool' | 'tool_out' | 'info' | 'error';
@@ -136,7 +182,7 @@ const WORK_SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '�
 /** How fast to advance OpenClaude-style spinner verbs (ms) */
 const WORK_VERB_ROTATE_MS = 2400;
 
-const QUICK_HELP = ['/help', '/mode', '/format', '/model', '/setup', '/config', '/memory', '/hooks', '/donate', '/sponsor', '/clear', '/exit'];
+const QUICK_HELP = ['/help', '/mode', '/format', '/model', '/setup', '/config', '/memory', '/hooks', '/cpull', '/commit', '/donate', '/sponsor', '/clear', '/exit'];
 const CHAT_COMMANDS: Array<{ name: string; description: string }> = [
   { name: '/help', description: 'Show available shortcuts and usage hints' },
   { name: '/mode', description: 'Switch agent mode from an interactive picker' },
@@ -147,6 +193,8 @@ const CHAT_COMMANDS: Array<{ name: string; description: string }> = [
   { name: '/config', description: 'Show current config and quick config hints' },
   { name: '/memory', description: 'Show auto-memories for this project' },
   { name: '/hooks', description: 'Show registered lifecycle hooks' },
+  { name: '/cpull', description: 'Pull current cloud sandbox changes locally (supports --apply)' },
+  { name: '/commit', description: 'Stage all changes and commit (auto message or custom text)' },
   { name: '/donate', description: 'Open the donation page in your browser' },
   { name: '/sponsor', description: 'Open the sponsorship page in your browser' },
   { name: '/exit', description: 'Exit the interactive chat session' },
@@ -280,6 +328,8 @@ function XibeCodeChatApp(props: {
   getCurrentMessages?: () => MessageParam[];
   onMemoryCommand?: (subcmd: string, pushLine: (line: UiLine) => void) => void;
   onHooksCommand?: (subcmd: string, pushLine: (line: UiLine) => void) => void;
+  onCloudPullCommand?: (argsRaw: string, pushLine: (line: UiLine) => void) => Promise<void>;
+  onCommitCommand?: (messageRaw: string, pushLine: (line: UiLine) => void) => Promise<void>;
 }) {
   const { exit } = useApp();
   const [input, setInput] = useState('');
@@ -367,11 +417,14 @@ function XibeCodeChatApp(props: {
     ];
 
     if (sessionIdRef.current) {
+      const hasHistory = Boolean(initialMessagesRef.current && initialMessagesRef.current.length > 0);
       base.push({
         kind: 'line',
         id: nextLineIdRef.current++,
         type: 'info',
-        text: `Resumed session: ${sessionIdRef.current}`,
+        text: hasHistory
+          ? `Resumed session: ${sessionIdRef.current}`
+          : `Session: ${sessionIdRef.current}`,
       });
     }
 
@@ -898,6 +951,44 @@ function XibeCodeChatApp(props: {
       if (resolvedInput === '/hooks' || resolvedInput.startsWith('/hooks ')) {
         const subcmd = resolvedInput.replace('/hooks', '').trim().toLowerCase();
         props.onHooksCommand?.(subcmd || 'list', pushLine);
+        return;
+      }
+
+      if (resolvedInput === '/cpull' || resolvedInput.startsWith('/cpull ')) {
+        if (!props.onCloudPullCommand) {
+          pushLine({
+            type: 'error',
+            text: '/cpull is only available for cloud sandbox_full sessions.',
+          });
+          return;
+        }
+        const argsRaw = resolvedInput.replace(/^\/cpull\s*/i, '').trim();
+        try {
+          await props.onCloudPullCommand(argsRaw, pushLine);
+        } catch (error: unknown) {
+          const message =
+            error instanceof Error ? error.message : 'Failed to pull cloud workspace';
+          pushLine({ type: 'error', text: message });
+        }
+        return;
+      }
+
+      if (resolvedInput === '/commit' || resolvedInput.startsWith('/commit ')) {
+        if (!props.onCommitCommand) {
+          pushLine({
+            type: 'error',
+            text: '/commit is unavailable in this chat session.',
+          });
+          return;
+        }
+        const messageRaw = resolvedInput.replace(/^\/commit\s*/i, '').trim();
+        try {
+          await props.onCommitCommand(messageRaw, pushLine);
+        } catch (error: unknown) {
+          const message =
+            error instanceof Error ? error.message : 'Failed to create git commit';
+          pushLine({ type: 'error', text: message });
+        }
         return;
       }
 
@@ -2708,6 +2799,101 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     }
   };
 
+  const onCloudPullCommand = async (
+    argsRaw: string,
+    pushLine: (line: UiLine) => void,
+  ): Promise<void> => {
+    if (!remoteExecution || remoteExecution.strategy !== 'sandbox_full') {
+      throw new Error('/cpull is available only in cloud sandbox_full mode.');
+    }
+    const sessionId = remoteExecution.sessionId?.trim();
+    if (!sessionId) {
+      throw new Error('No cloud session id found. Start with "xc cloud" before using /cpull.');
+    }
+
+    const tokens = argsRaw ? argsRaw.split(/\s+/).filter(Boolean) : [];
+    let apply = false;
+    let force = false;
+    let output: string | undefined;
+
+    for (let i = 0; i < tokens.length; i += 1) {
+      const token = tokens[i];
+      if (token === '--apply') {
+        apply = true;
+        continue;
+      }
+      if (token === '--force') {
+        force = true;
+        continue;
+      }
+      if (token === '--output') {
+        const next = tokens[i + 1];
+        if (!next || next.startsWith('--')) {
+          throw new Error('Usage: /cpull [--apply] [--force] [--output <path>]');
+        }
+        output = next;
+        i += 1;
+        continue;
+      }
+      throw new Error(`Unknown /cpull option "${token}". Usage: /cpull [--apply] [--force] [--output <path>]`);
+    }
+
+    await cloudPullCommand({
+      profile: options.profile,
+      session: sessionId,
+      apply,
+      force,
+      output,
+      onStatus: (text) => pushLine({ type: 'info', text }),
+    });
+  };
+
+  const onCommitCommand = async (
+    messageRaw: string,
+    pushLine: (line: UiLine) => void,
+  ): Promise<void> => {
+    pushLine({ type: 'info', text: 'Staging files with git add .' });
+    const addResult = await runCommandCapture('git', ['add', '.']);
+    if (addResult.code !== 0) {
+      throw new Error(`git add failed: ${(addResult.stderr || addResult.stdout || 'unknown error').trim()}`);
+    }
+
+    const stagedResult = await runCommandCapture('git', ['diff', '--cached', '--name-only']);
+    if (stagedResult.code !== 0) {
+      throw new Error(`Failed to inspect staged files: ${(stagedResult.stderr || stagedResult.stdout || 'unknown error').trim()}`);
+    }
+    const stagedFiles = stagedResult.stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (stagedFiles.length === 0) {
+      pushLine({ type: 'info', text: 'No staged changes found after git add.' });
+      return;
+    }
+
+    let commitMessage = messageRaw.trim();
+    if (!commitMessage) {
+      const statResult = await runCommandCapture('git', ['diff', '--cached', '--shortstat']);
+      const shortstat = statResult.code === 0 ? statResult.stdout : '';
+      commitMessage = buildAutoCommitMessage(stagedFiles, shortstat);
+      pushLine({ type: 'info', text: `Auto commit message: ${commitMessage}` });
+    }
+
+    const commitResult = await runCommandCapture('git', ['commit', '-m', commitMessage]);
+    if (commitResult.code !== 0) {
+      throw new Error((commitResult.stderr || commitResult.stdout || 'git commit failed').trim());
+    }
+
+    const firstLine = (commitResult.stdout || commitResult.stderr)
+      .split('\n')
+      .map((line) => line.trim())
+      .find(Boolean);
+    pushLine({
+      type: 'info',
+      text: firstLine ? `Commit created: ${firstLine}` : `Commit created with message: ${commitMessage}`,
+    });
+  };
+
   try {
     await renderAndRun(
       root,
@@ -2745,6 +2931,8 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
         getCurrentMessages={() => activeAgent?.getMessages() ?? currentSession?.messages ?? []}
         onMemoryCommand={onMemoryCommand}
         onHooksCommand={onHooksCommand}
+        onCloudPullCommand={onCloudPullCommand}
+        onCommitCommand={onCommitCommand}
       />,
     );
   } finally {

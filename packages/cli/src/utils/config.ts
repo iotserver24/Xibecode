@@ -14,8 +14,10 @@ export { PROVIDER_CONFIGS, type ProviderType, type MCPServerConfig, type MCPServ
  *   2) xibecode config profile values
  *   3) these default env values (publisher-controlled)
  */
-const DEFAULT_SANDBOX_GATEWAY_URL = process.env.XIBECODE_DEFAULT_SANDBOX_GATEWAY_URL?.trim() || '';
-const DEFAULT_SANDBOX_AUTH_TOKEN = process.env.XIBECODE_DEFAULT_SANDBOX_AUTH_TOKEN?.trim() || '';
+const DEFAULT_SANDBOX_GATEWAY_URL =
+  process.env.XIBECODE_DEFAULT_SANDBOX_GATEWAY_URL?.trim() || 'https://cloud.xibeai.in';
+const DEFAULT_SANDBOX_AUTH_TOKEN =
+  process.env.XIBECODE_DEFAULT_SANDBOX_AUTH_TOKEN?.trim() || 'Xibecode';
 
 export interface XibeCodeConfig {
   apiKey?: string;
