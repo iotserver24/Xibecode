@@ -35,6 +35,7 @@ export { AgentStream } from './agent-stream.js';
 // ─── Tools ─────────────────────────────────────────────────────
 export { CodingToolExecutor } from './tools.js';
 export { type RemoteExecutionConfig, RemoteExecutionClient } from './remote-execution.js';
+export { RemoteWorkspaceClient } from './remote-workspace-client.js';
 
 // ─── MCP ───────────────────────────────────────────────────────
 export { MCPClientManager } from './mcp-client.js';

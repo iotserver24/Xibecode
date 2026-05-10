@@ -548,12 +548,17 @@ pnpm --filter @xibecode/e2b-gateway dev
 xibecode config --set-sandbox-mode e2b
 xibecode config --set-sandbox-gateway-url "http://localhost:8787"
 xibecode config --set-sandbox-auth-token "your-team-shared-token"
-xibecode config --set-sandbox-session-strategy host_only
+xibecode config --set-sandbox-session-strategy sandbox_full
+xibecode config --set-sandbox-sync-max-mb 50
+xibecode config --set-sandbox-sync-exclude ".git,node_modules,.xibecode,dist,build,.env,.env.*"
 ```
 
 Notes:
-- `host_only` means `run_command` executes in E2B, while file tools (`read_file`, `write_file`, `edit_file`) still operate on your local checkout.
+- `host_only` means only `run_command` executes in E2B; file tools still operate on your local checkout.
+- `sandbox_full` uploads a compressed workspace tarball to the gateway (`local_push`) and runs file + shell operations in E2B.
+- Upload routes are intended for authenticated machine clients and may be blocked by strict Cloudflare Browser Integrity/WAF rules. If you keep orange-cloud proxying, add a scoped rule for your gateway hostname and API paths.
 - Never distribute `E2B_API_KEY` to end users. Only distribute gateway URL + gateway token.
+- For a custom template, see `sandbox/e2b-template/Dockerfile` and set `XIBECODE_E2B_TEMPLATE` on the gateway.
 
 ---
 

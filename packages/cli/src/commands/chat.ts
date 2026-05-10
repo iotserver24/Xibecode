@@ -15,6 +15,7 @@ import {
   resolveRemoteExecutionConfig,
   getRuntimeStatusLabel,
 } from '../utils/remote-execution.js';
+import { syncWorkspaceToSandbox } from '../utils/sandbox-sync.js';
 
 interface ChatOptions {
   model?: string;
@@ -44,6 +45,14 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
   const baseUrl = options.baseUrl || config.getBaseUrl();
   const provider = (options.provider as any) || config.get('provider');
   const remoteExecution = resolveRemoteExecutionConfig(config, process.cwd());
+  if (remoteExecution?.strategy === 'sandbox_full') {
+    const syncResult = await syncWorkspaceToSandbox(remoteExecution, process.cwd(), {
+      maxMb: config.getSandboxSyncMaxMb(),
+      excludeGlobs: config.getSandboxSyncExcludeGlobs(),
+      workspaceRoot: remoteExecution.workspaceRoot,
+    });
+    remoteExecution.sessionId = syncResult.sessionId;
+  }
 
   const skillManager = new SkillManager(process.cwd(), apiKey, baseUrl, model, provider, builtInSkillsDir);
   await skillManager.loadSkills();

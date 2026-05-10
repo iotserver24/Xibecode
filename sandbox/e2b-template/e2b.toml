@@ -1,0 +1,15 @@
+# This is a config for E2B sandbox template.
+# You can use template ID (9piviazh0jkh5kzb93jd) or template name (xibecode-full-sandbox) to create a sandbox:
+
+# Python SDK
+# from e2b import Sandbox, AsyncSandbox
+# sandbox = Sandbox.create("xibecode-full-sandbox") # Sync sandbox
+# sandbox = await AsyncSandbox.create("xibecode-full-sandbox") # Async sandbox
+
+# JS SDK
+# import { Sandbox } from 'e2b'
+# const sandbox = await Sandbox.create('xibecode-full-sandbox')
+
+dockerfile = "Dockerfile"
+template_name = "xibecode-full-sandbox"
+template_id = "9piviazh0jkh5kzb93jd"

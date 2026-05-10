@@ -25,6 +25,7 @@ import { SwarmOrchestrator } from './swarm.js';
 import { PermissionManager, type ApprovalScope, type PermissionMode } from './permissions.js';
 import { McpOAuthFlowManager } from './mcp/oauth-flow.js';
 import { RemoteExecutionClient, type RemoteExecutionConfig } from './remote-execution.js';
+import { RemoteWorkspaceClient } from './remote-workspace-client.js';
 import {
   createFileHistoryState,
   fileHistoryMakeSnapshot,
@@ -168,6 +169,8 @@ export class CodingToolExecutor implements ToolExecutor {
   private testCommandOverride?: string;
   private permissionManager: PermissionManager;
   private remoteExecutionClient?: RemoteExecutionClient;
+  private remoteWorkspaceClient?: RemoteWorkspaceClient;
+  private remoteExecutionStrategy: 'host_only' | 'sandbox_full' = 'host_only';
   /** Session-scoped tools synthesized by the agent (meta-agent). Execution is sandboxed via run_command. */
   private dynamicTools = new Map<string, { description: string; script: string }>();
   private mcpOAuth = new McpOAuthFlowManager();
@@ -245,7 +248,16 @@ export class CodingToolExecutor implements ToolExecutor {
     this.permissionManager = options?.permissionManager ?? new PermissionManager(this.currentMode);
     this.fileHistoryState = options?.initialFileHistoryState ?? createFileHistoryState();
     if (options?.remoteExecution?.gatewayUrl) {
-      this.remoteExecutionClient = new RemoteExecutionClient(options.remoteExecution);
+      const sharedSessionId = options.remoteExecution.sessionId;
+      const sharedConfig: RemoteExecutionConfig = {
+        ...options.remoteExecution,
+        sessionId: sharedSessionId,
+      };
+      this.remoteExecutionClient = new RemoteExecutionClient(sharedConfig);
+      this.remoteExecutionStrategy = sharedConfig.strategy || 'host_only';
+      if (this.remoteExecutionStrategy === 'sandbox_full') {
+        this.remoteWorkspaceClient = new RemoteWorkspaceClient(sharedConfig);
+      }
     }
   }
 
@@ -631,6 +643,13 @@ export class CodingToolExecutor implements ToolExecutor {
       }
 
       case 'revert_file': {
+        if (this.isSandboxFullMode()) {
+          return {
+            error: true,
+            success: false,
+            message: 'revert_file is currently unavailable in sandbox_full mode.',
+          };
+        }
         if (typeof p.message_id !== 'string' && typeof p.path !== 'string') {
           return {
             error: true,
@@ -2017,6 +2036,10 @@ export class CodingToolExecutor implements ToolExecutor {
   }
 
   private async trackFileEditBeforeMutation(fullPath: string): Promise<void> {
+    if (this.remoteExecutionStrategy === 'sandbox_full') {
+      // In full sandbox mode, file mutations happen remotely.
+      return;
+    }
     const messageId = this.activeFileHistoryMessageId;
     if (!messageId) return;
     try {
@@ -2031,6 +2054,19 @@ export class CodingToolExecutor implements ToolExecutor {
       fullPath,
       messageId,
     );
+  }
+
+  private isSandboxFullMode(): boolean {
+    return this.remoteExecutionStrategy === 'sandbox_full' && Boolean(this.remoteWorkspaceClient);
+  }
+
+  private async readRemoteFullFile(filePath: string): Promise<string> {
+    if (!this.remoteWorkspaceClient) return '';
+    const result = await this.remoteWorkspaceClient.readFile(filePath);
+    if (result?.error || result?.success === false) {
+      throw new Error(String(result?.message || `Failed to read ${filePath}`));
+    }
+    return String(result?.content ?? '');
   }
 
   /**
@@ -2067,6 +2103,13 @@ export class CodingToolExecutor implements ToolExecutor {
    * @since 0.1.0
    */
   private async readFile(filePath: string, startLine?: number, endLine?: number): Promise<any> {
+    if (this.isSandboxFullMode()) {
+      try {
+        return await this.remoteWorkspaceClient!.readFile(filePath, startLine, endLine);
+      } catch (error: any) {
+        return { error: true, success: false, message: `Failed to read ${filePath}: ${error.message}` };
+      }
+    }
     const fullPath = this.resolvePath(filePath);
     const ext = path.extname(filePath).toLowerCase();
 
@@ -2168,6 +2211,24 @@ export class CodingToolExecutor implements ToolExecutor {
    * @since 0.1.0
    */
   private async writeFile(filePath: string, content: string): Promise<any> {
+    if (this.isSandboxFullMode()) {
+      if (this.dryRun) {
+        const lines = content.split('\n').length;
+        return {
+          success: true,
+          dryRun: true,
+          path: filePath,
+          lines,
+          size: content.length,
+          message: `[DRY RUN] Would write ${lines} lines to ${filePath}`,
+        };
+      }
+      try {
+        return await this.remoteWorkspaceClient!.writeFile(filePath, content);
+      } catch (error: any) {
+        return { error: true, success: false, message: `Failed to write ${filePath}: ${error.message}` };
+      }
+    }
     const fullPath = this.resolvePath(filePath);
 
     if (this.dryRun) {
@@ -2240,6 +2301,23 @@ export class CodingToolExecutor implements ToolExecutor {
    * @since 0.1.0
    */
   private async editFile(filePath: string, search: string, replace: string, all?: boolean): Promise<any> {
+    if (this.isSandboxFullMode()) {
+      try {
+        const current = await this.readRemoteFullFile(filePath);
+        const occurrences = (current.match(new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+        if (occurrences === 0) {
+          return { success: false, error: true, message: `Search string not found in ${filePath}` };
+        }
+        if (!all && occurrences > 1) {
+          return { success: false, error: true, message: `Search string appears ${occurrences} times. Please be more specific or use all:true` };
+        }
+        const updated = all ? current.replaceAll(search, replace) : current.replace(search, replace);
+        await this.remoteWorkspaceClient!.writeFile(filePath, updated);
+        return { success: true, message: `Successfully edited ${filePath}` };
+      } catch (error: any) {
+        return { error: true, success: false, message: `Failed to edit ${filePath}: ${error.message}` };
+      }
+    }
     if (this.dryRun) {
       return {
         success: true,
@@ -2254,6 +2332,28 @@ export class CodingToolExecutor implements ToolExecutor {
   }
 
   private async editLines(filePath: string, startLine: number, endLine: number, newContent: string): Promise<any> {
+    if (this.isSandboxFullMode()) {
+      try {
+        const current = await this.readRemoteFullFile(filePath);
+        const lines = current.split('\n');
+        if (startLine < 1 || endLine > lines.length || startLine > endLine) {
+          return {
+            success: false,
+            error: true,
+            message: `Invalid line range: ${startLine}-${endLine} (file has ${lines.length} lines)`,
+          };
+        }
+        const next = [
+          ...lines.slice(0, startLine - 1),
+          ...newContent.split('\n'),
+          ...lines.slice(endLine),
+        ].join('\n');
+        await this.remoteWorkspaceClient!.writeFile(filePath, next);
+        return { success: true, message: `Successfully edited lines ${startLine}-${endLine} in ${filePath}` };
+      } catch (error: any) {
+        return { error: true, success: false, message: `Failed to edit ${filePath}: ${error.message}` };
+      }
+    }
     if (this.dryRun) {
       const lines = newContent.split('\n').length;
       return {
@@ -2269,6 +2369,38 @@ export class CodingToolExecutor implements ToolExecutor {
   }
 
   private async verifiedEditFile(filePath: string, startLine: number, endLine: number, oldContent: string, newContent: string): Promise<any> {
+    if (this.isSandboxFullMode()) {
+      try {
+        const current = await this.readRemoteFullFile(filePath);
+        const lines = current.split('\n');
+        if (startLine < 1 || endLine > lines.length || startLine > endLine) {
+          return {
+            success: false,
+            error: true,
+            message: `Invalid line range: ${startLine}-${endLine} (file has ${lines.length} lines)`,
+          };
+        }
+        const actual = lines.slice(startLine - 1, endLine).join('\n');
+        const normalize = (s: string) => s.split('\n').map((line) => line.trimEnd()).join('\n').trim();
+        if (normalize(actual) !== normalize(oldContent)) {
+          return {
+            success: false,
+            error: true,
+            message: `Content mismatch at lines ${startLine}-${endLine}. Re-read the file and retry.`,
+            actual_content: actual,
+          };
+        }
+        const next = [
+          ...lines.slice(0, startLine - 1),
+          ...newContent.split('\n'),
+          ...lines.slice(endLine),
+        ].join('\n');
+        await this.remoteWorkspaceClient!.writeFile(filePath, next);
+        return { success: true, message: `Successfully verified and edited lines ${startLine}-${endLine} in ${filePath}` };
+      } catch (error: any) {
+        return { error: true, success: false, message: `Failed to edit ${filePath}: ${error.message}` };
+      }
+    }
     if (this.dryRun) {
       return {
         success: true,
@@ -2283,6 +2415,28 @@ export class CodingToolExecutor implements ToolExecutor {
   }
 
   private async insertAtLine(filePath: string, line: number, content: string): Promise<any> {
+    if (this.isSandboxFullMode()) {
+      try {
+        const current = await this.readRemoteFullFile(filePath);
+        const lines = current.split('\n');
+        if (line < 1 || line > lines.length + 1) {
+          return {
+            success: false,
+            error: true,
+            message: `Invalid line number: ${line} (file has ${lines.length} lines)`,
+          };
+        }
+        const next = [
+          ...lines.slice(0, line - 1),
+          ...content.split('\n'),
+          ...lines.slice(line - 1),
+        ].join('\n');
+        await this.remoteWorkspaceClient!.writeFile(filePath, next);
+        return { success: true, message: `Successfully inserted content at line ${line} in ${filePath}` };
+      } catch (error: any) {
+        return { error: true, success: false, message: `Failed to edit ${filePath}: ${error.message}` };
+      }
+    }
     if (this.dryRun) {
       const lines = content.split('\n').length;
       return {
@@ -2298,6 +2452,13 @@ export class CodingToolExecutor implements ToolExecutor {
   }
 
   private async listDirectory(dirPath: string): Promise<any> {
+    if (this.isSandboxFullMode()) {
+      try {
+        return await this.remoteWorkspaceClient!.listDirectory(dirPath);
+      } catch (error: any) {
+        return { error: true, success: false, message: `Failed to list directory ${dirPath}: ${error.message}` };
+      }
+    }
     const fullPath = this.resolvePath(dirPath);
     try {
       const entries = await fs.readdir(fullPath, { withFileTypes: true });
@@ -2405,9 +2566,17 @@ export class CodingToolExecutor implements ToolExecutor {
   private async runCommand(command: string, cwd?: string, input?: string, timeout?: number, maxOutputChars?: number): Promise<any> {
     if (this.remoteExecutionClient) {
       const outputLimit = Math.max(1000, maxOutputChars ?? DEFAULT_COMMAND_OUTPUT_CHARS);
+      let remoteCwd: string | undefined;
+      if (cwd) {
+        remoteCwd = this.isSandboxFullMode() ? cwd : this.resolvePath(cwd);
+      } else if (this.isSandboxFullMode()) {
+        remoteCwd = this.remoteExecutionClient.getWorkspaceRoot();
+      } else {
+        remoteCwd = this.workingDir;
+      }
       const result = await this.remoteExecutionClient.runCommand({
         command,
-        cwd: cwd ? this.resolvePath(cwd) : this.workingDir,
+        cwd: remoteCwd,
         input,
         timeout,
         maxOutputChars: outputLimit,
@@ -2498,6 +2667,13 @@ export class CodingToolExecutor implements ToolExecutor {
   }
 
   private async createDirectory(dirPath: string): Promise<any> {
+    if (this.isSandboxFullMode()) {
+      try {
+        return await this.remoteWorkspaceClient!.createDirectory(dirPath);
+      } catch (error: any) {
+        return { error: true, success: false, message: `Failed to create directory ${dirPath}: ${error.message}` };
+      }
+    }
     const fullPath = this.resolvePath(dirPath);
     try {
       await fs.mkdir(fullPath, { recursive: true });
@@ -2508,6 +2684,21 @@ export class CodingToolExecutor implements ToolExecutor {
   }
 
   private async deleteFile(filePath: string): Promise<any> {
+    if (this.isSandboxFullMode()) {
+      if (this.dryRun) {
+        return {
+          success: true,
+          dryRun: true,
+          path: filePath,
+          message: `[DRY RUN] Would delete ${filePath}`,
+        };
+      }
+      try {
+        return await this.remoteWorkspaceClient!.deleteFile(filePath);
+      } catch (error: any) {
+        return { error: true, success: false, message: `Failed to delete ${filePath}: ${error.message}` };
+      }
+    }
     const fullPath = this.resolvePath(filePath);
 
     if (this.dryRun) {
@@ -2545,6 +2736,22 @@ export class CodingToolExecutor implements ToolExecutor {
   }
 
   private async moveFile(source: string, destination: string): Promise<any> {
+    if (this.isSandboxFullMode()) {
+      if (this.dryRun) {
+        return {
+          success: true,
+          dryRun: true,
+          source,
+          destination,
+          message: `[DRY RUN] Would move ${source} to ${destination}`,
+        };
+      }
+      try {
+        return await this.remoteWorkspaceClient!.moveFile(source, destination);
+      } catch (error: any) {
+        return { error: true, success: false, message: `Failed to move ${source}: ${error.message}` };
+      }
+    }
     if (this.dryRun) {
       return {
         success: true,
@@ -2568,6 +2775,28 @@ export class CodingToolExecutor implements ToolExecutor {
   }
 
   private async getContext(files: string[]): Promise<any> {
+    if (this.isSandboxFullMode()) {
+      try {
+        const fileResults = await Promise.all(
+          files.map(async (filePath) => {
+            const file = await this.readFile(filePath);
+            return {
+              path: filePath,
+              lines: Number(file?.lines ?? 0),
+              language: path.extname(filePath).replace('.', '') || 'text',
+              size: Number(file?.size ?? String(file?.content ?? '').length),
+            };
+          }),
+        );
+        return {
+          files: fileResults,
+          totalFiles: fileResults.length,
+          estimatedTokens: fileResults.reduce((sum, item) => sum + Math.ceil((item.size || 0) / 4), 0),
+        };
+      } catch (error: any) {
+        return { error: true, success: false, message: `Failed to get context: ${error.message}` };
+      }
+    }
     try {
       const context = await this.contextManager.buildContext(files);
       return {
@@ -2640,6 +2869,38 @@ export class CodingToolExecutor implements ToolExecutor {
   private lastTestResult: any = null;
 
   private async runTests(customCommand?: string, cwd?: string): Promise<any> {
+    if (this.isSandboxFullMode()) {
+      const command = customCommand || this.testCommandOverride || 'pnpm test';
+      const result = await this.runCommand(command, cwd, undefined, 300);
+      this.lastTestResult = {
+        success: result.success,
+        exitCode: result.exitCode,
+        output: result.stdout,
+        errors: result.stderr,
+        duration: undefined,
+        runner: 'remote',
+        command,
+        packageManager: 'pnpm',
+        testsRun: undefined,
+        testsPassed: undefined,
+        testsFailed: undefined,
+        failures: [],
+      };
+      return {
+        success: result.success,
+        runner: 'remote',
+        command,
+        packageManager: 'pnpm',
+        duration: undefined,
+        testsRun: undefined,
+        testsPassed: undefined,
+        testsFailed: undefined,
+        exitCode: result.exitCode,
+        output: result.stdout,
+        errors: result.stderr,
+        failures: [],
+      };
+    }
     try {
       // Detect test runner and command
       const testInfo = await this.testRunner.detectTestRunner(
@@ -2841,6 +3102,18 @@ export class CodingToolExecutor implements ToolExecutor {
   // ── Git Methods ──
 
   private async getGitStatus(): Promise<any> {
+    if (this.isSandboxFullMode()) {
+      const result = await this.runCommand('git status --porcelain=v1 -b');
+      if (!result.success) {
+        return { error: true, success: false, message: `Failed to get git status: ${result.stderr || 'unknown error'}` };
+      }
+      const lines = String(result.stdout || '').split('\n').filter(Boolean);
+      return {
+        success: true,
+        branch: lines[0] || '',
+        raw: lines,
+      };
+    }
     try {
       const status = await this.gitUtils.getStatus();
       return {
@@ -2857,6 +3130,17 @@ export class CodingToolExecutor implements ToolExecutor {
   }
 
   private async getGitDiffSummary(target?: string): Promise<any> {
+    if (this.isSandboxFullMode()) {
+      const cmd = target ? `git diff --stat ${target}` : 'git diff --stat';
+      const result = await this.runCommand(cmd);
+      if (!result.success) {
+        return { error: true, success: false, message: `Failed to get diff summary: ${result.stderr || 'unknown error'}` };
+      }
+      return {
+        success: true,
+        summary: String(result.stdout || '').trim(),
+      };
+    }
     try {
       const summary = await this.gitUtils.getDiffSummary(target);
       return {
@@ -2873,6 +3157,22 @@ export class CodingToolExecutor implements ToolExecutor {
   }
 
   private async getGitChangedFiles(target?: string): Promise<any> {
+    if (this.isSandboxFullMode()) {
+      const cmd = target ? `git diff --name-only ${target}` : 'git diff --name-only';
+      const result = await this.runCommand(cmd);
+      if (!result.success) {
+        return { error: true, success: false, message: `Failed to get changed files: ${result.stderr || 'unknown error'}` };
+      }
+      const files = String(result.stdout || '')
+        .split('\n')
+        .map((file) => file.trim())
+        .filter(Boolean);
+      return {
+        success: true,
+        files,
+        count: files.length,
+      };
+    }
     try {
       const files = target
         ? await this.gitUtils.getChangedFilesSince(target)

@@ -4,8 +4,9 @@ export type RemoteExecutionConfig = {
   gatewayUrl: string;
   authToken?: string;
   sessionId?: string;
-  strategy?: 'host_only';
+  strategy?: 'host_only' | 'sandbox_full';
   cwd?: string;
+  workspaceRoot?: string;
 };
 
 export type RemoteExecutionRequest = {
@@ -19,8 +20,9 @@ export type RemoteExecutionRequest = {
 export class RemoteExecutionClient {
   private readonly gatewayUrl: string;
   private readonly authToken?: string;
-  private readonly strategy: 'host_only';
+  private readonly strategy: 'host_only' | 'sandbox_full';
   private readonly cwd?: string;
+  private workspaceRoot?: string;
   private sessionId: string;
   private initialized = false;
 
@@ -30,10 +32,19 @@ export class RemoteExecutionClient {
     this.sessionId = config.sessionId || randomUUID();
     this.strategy = config.strategy || 'host_only';
     this.cwd = config.cwd;
+    this.workspaceRoot = config.workspaceRoot?.trim() || undefined;
   }
 
   getSessionId(): string {
     return this.sessionId;
+  }
+
+  getStrategy(): 'host_only' | 'sandbox_full' {
+    return this.strategy;
+  }
+
+  getWorkspaceRoot(): string | undefined {
+    return this.workspaceRoot;
   }
 
   private getHeaders(): Record<string, string> {
@@ -63,6 +74,7 @@ export class RemoteExecutionClient {
         sessionId: this.sessionId,
         cwd: this.cwd,
         strategy: this.strategy,
+        workspaceRoot: this.workspaceRoot,
       }),
     });
     const payload = await this.parseJson(response);
@@ -72,6 +84,9 @@ export class RemoteExecutionClient {
     }
     if (typeof payload?.sessionId === 'string' && payload.sessionId.trim()) {
       this.sessionId = payload.sessionId.trim();
+    }
+    if (typeof payload?.workspaceRoot === 'string' && payload.workspaceRoot.trim()) {
+      this.workspaceRoot = payload.workspaceRoot.trim();
     }
     this.initialized = true;
   }
@@ -123,6 +138,7 @@ export class RemoteExecutionClient {
         timedOut: Boolean(payload?.timedOut),
         platform: String(payload?.platform ?? 'e2b'),
         sessionId: this.sessionId,
+        workspaceRoot: this.workspaceRoot,
       };
     } catch (error: any) {
       const aborted = error?.name === 'AbortError';
@@ -137,6 +153,7 @@ export class RemoteExecutionClient {
         timedOut: aborted,
         platform: 'e2b',
         sessionId: this.sessionId,
+        workspaceRoot: this.workspaceRoot,
       };
     } finally {
       clearTimeout(abortTimer);

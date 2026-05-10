@@ -16,7 +16,11 @@
 - If you use the new E2B integration with a **backend-held key**, keep `E2B_API_KEY` only on your gateway service (for example `packages/e2b-gateway`).
 - Do **not** store `E2B_API_KEY` in CLI profile JSON or pass it to end users.
 - The CLI should only hold a gateway URL and optional gateway auth token (`sandboxGatewayUrl`, `sandboxAuthToken`).
-- Current sandbox strategy is `host_only`: command execution is remote, but file-edit tools still mutate the local workspace. Use isolated repos/worktrees for untrusted tasks.
+- `host_only`: command execution is remote, but file-edit tools still mutate the local workspace.
+- `sandbox_full`: the CLI uploads a compressed workspace tarball (`local_push`) and file/shell operations run in E2B.
+- Treat `sandbox_full` upload payloads as sensitive: exclude `.env*`, credentials, and build artifacts you do not need.
+- Set explicit upload size caps in CLI (`sandboxSyncMaxMb`) and keep gateway auth enabled.
+- If the gateway is behind Cloudflare orange-cloud proxying, allow machine clients on upload routes (`/sessions/*/sync`) via scoped WAF/Bot/BIC rules.
 
 ## Input validation
 

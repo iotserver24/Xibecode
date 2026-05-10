@@ -16,6 +16,7 @@ import { builtInSkillsDir } from '../utils/built-in-skills-dir.js';
 import chalk from 'chalk';
 import fetch from 'node-fetch';
 import { attachRemoteExecution, resolveRemoteExecutionConfig } from '../utils/remote-execution.js';
+import { syncWorkspaceToSandbox } from '../utils/sandbox-sync.js';
 
 const pkg = createRequire(import.meta.url)('../../package.json');
 import Anthropic from '@anthropic-ai/sdk';
@@ -332,6 +333,16 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
     ? apiKey.slice(0, 8) + '...' + apiKey.slice(-4)
     : 'NOT SET';
   const remoteExecution = resolveRemoteExecutionConfig(config, cwd);
+  if (remoteExecution?.strategy === 'sandbox_full') {
+    ui.info('Syncing workspace to E2B sandbox...');
+    const syncResult = await syncWorkspaceToSandbox(remoteExecution, cwd, {
+      maxMb: config.getSandboxSyncMaxMb(),
+      excludeGlobs: config.getSandboxSyncExcludeGlobs(),
+      workspaceRoot: remoteExecution.workspaceRoot,
+    });
+    remoteExecution.sessionId = syncResult.sessionId;
+    ui.info(`Sandbox sync complete (${Math.ceil(syncResult.bytes / 1024)}KB uploaded).`);
+  }
   console.log(chalk.dim('  cost mode ') + chalk.cyan(useEconomy ? 'economy' : 'normal'));
   console.log(chalk.dim('  provider  ') + chalk.cyan(provider ?? 'auto-detect'));
   console.log(chalk.dim('  model     ') + chalk.cyan(model));
@@ -339,7 +350,11 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
   console.log(chalk.dim('  api key   ') + chalk.cyan(maskedKey));
   if (remoteExecution) {
     console.log(chalk.dim('  runtime   ') + chalk.cyan(`cloud via ${remoteExecution.gatewayUrl}`));
-    console.log(chalk.dim('  sandbox   ') + chalk.cyan('host_only (file edits stay local)'));
+    const sandboxLabel =
+      remoteExecution.strategy === 'sandbox_full'
+        ? 'full (workspace synced to E2B)'
+        : 'host_only (file edits stay local)';
+    console.log(chalk.dim('  sandbox   ') + chalk.cyan(sandboxLabel));
   } else {
     console.log(chalk.dim('  runtime   ') + chalk.cyan('local'));
   }

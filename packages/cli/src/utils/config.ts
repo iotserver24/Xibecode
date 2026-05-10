@@ -62,8 +62,12 @@ export interface XibeCodeConfig {
   sandboxGatewayUrl?: string;
   /** Optional gateway bearer token (not the E2B API key) */
   sandboxAuthToken?: string;
-  /** File execution strategy in sandbox mode. host_only keeps file tools local. */
-  sandboxSessionStrategy?: 'host_only';
+  /** File execution strategy in sandbox mode. */
+  sandboxSessionStrategy?: 'host_only' | 'sandbox_full';
+  /** Max compressed workspace size (MB) allowed for sandbox_full local_push sync. */
+  sandboxSyncMaxMb?: number;
+  /** Comma-separated globs to exclude during sandbox_full local_push sync. */
+  sandboxSyncExcludeGlobs?: string;
 }
 
 type XibeCodeMetaConfig = {
@@ -122,6 +126,8 @@ export class ConfigManager {
         usePkgStyleContext: false,
         sandboxMode: 'local',
         sandboxSessionStrategy: 'host_only',
+        sandboxSyncMaxMb: 50,
+        sandboxSyncExcludeGlobs: '.git,node_modules,.xibecode,dist,build,.next,.turbo,.env,.env.*',
       },
     });
   }
@@ -327,9 +333,22 @@ export class ConfigManager {
     return process.env.XIBECODE_SANDBOX_AUTH_TOKEN || this.get('sandboxAuthToken');
   }
 
-  getSandboxSessionStrategy(): 'host_only' {
+  getSandboxSessionStrategy(): 'host_only' | 'sandbox_full' {
     const strategy = (process.env.XIBECODE_SANDBOX_STRATEGY || this.get('sandboxSessionStrategy') || 'host_only').toLowerCase();
-    return strategy === 'host_only' ? 'host_only' : 'host_only';
+    return strategy === 'sandbox_full' ? 'sandbox_full' : 'host_only';
+  }
+
+  getSandboxSyncMaxMb(): number {
+    const value = Number(process.env.XIBECODE_SANDBOX_SYNC_MAX_MB || this.get('sandboxSyncMaxMb') || 50);
+    return Number.isFinite(value) && value > 0 ? value : 50;
+  }
+
+  getSandboxSyncExcludeGlobs(): string[] {
+    const raw = process.env.XIBECODE_SANDBOX_SYNC_EXCLUDE || this.get('sandboxSyncExcludeGlobs') || '';
+    return String(raw)
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
   }
 
   /**
@@ -464,6 +483,8 @@ export class ConfigManager {
       'Sandbox Gateway URL': this.getSandboxGatewayUrl() || 'Not set',
       'Sandbox Auth Token': this.getSandboxAuthToken() ? 'set' : 'Not set',
       'Sandbox Session Strategy': this.getSandboxSessionStrategy(),
+      'Sandbox Sync Max MB': this.getSandboxSyncMaxMb().toString(),
+      'Sandbox Sync Excludes': this.getSandboxSyncExcludeGlobs().join(', ') || 'Not set',
       'Default Profile': this.getDefaultProfile(),
       'Config Path': this.getConfigPath(),
     };

@@ -38,6 +38,8 @@ interface ConfigOptions {
   setSandboxGatewayUrl?: string;
   setSandboxAuthToken?: string;
   setSandboxSessionStrategy?: string;
+  setSandboxSyncMaxMb?: string;
+  setSandboxSyncExclude?: string;
   show?: boolean;
   reset?: boolean;
   listMcpServers?: boolean;
@@ -73,7 +75,9 @@ export async function configCommand(options: ConfigOptions) {
     console.log(chalk.cyan('  xibecode config --set-sandbox-mode <local|e2b>'));
     console.log(chalk.cyan('  xibecode config --set-sandbox-gateway-url <url>'));
     console.log(chalk.cyan('  xibecode config --set-sandbox-auth-token <token>'));
-    console.log(chalk.cyan('  xibecode config --set-sandbox-session-strategy <host_only>'));
+    console.log(chalk.cyan('  xibecode config --set-sandbox-session-strategy <host_only|sandbox_full>'));
+    console.log(chalk.cyan('  xibecode config --set-sandbox-sync-max-mb <number>'));
+    console.log(chalk.cyan('  xibecode config --set-sandbox-sync-exclude <csv_globs>'));
     console.log(chalk.cyan('  xibecode config --list-mcp-servers'));
     console.log(chalk.cyan('  xibecode config --list-profiles'));
     console.log(chalk.cyan('  xibecode config --set-default-profile <name>'));
@@ -187,12 +191,29 @@ export async function configCommand(options: ConfigOptions) {
 
   if (options.setSandboxSessionStrategy) {
     const strategy = options.setSandboxSessionStrategy.toLowerCase();
-    if (strategy !== 'host_only') {
-      ui.error(`Invalid sandbox session strategy "${options.setSandboxSessionStrategy}". Use: host_only`);
+    if (strategy !== 'host_only' && strategy !== 'sandbox_full') {
+      ui.error(`Invalid sandbox session strategy "${options.setSandboxSessionStrategy}". Use: host_only or sandbox_full`);
       process.exit(1);
     }
-    config.set('sandboxSessionStrategy', 'host_only');
-    ui.success('Sandbox session strategy set to: host_only');
+    config.set('sandboxSessionStrategy', strategy as 'host_only' | 'sandbox_full');
+    ui.success(`Sandbox session strategy set to: ${strategy}`);
+    return;
+  }
+
+  if (options.setSandboxSyncMaxMb) {
+    const maxMb = Number(options.setSandboxSyncMaxMb);
+    if (!Number.isFinite(maxMb) || maxMb <= 0) {
+      ui.error(`Invalid sandbox sync max MB "${options.setSandboxSyncMaxMb}". Use a positive number.`);
+      process.exit(1);
+    }
+    config.set('sandboxSyncMaxMb', maxMb);
+    ui.success(`Sandbox sync max size set to: ${maxMb}MB`);
+    return;
+  }
+
+  if (options.setSandboxSyncExclude !== undefined) {
+    config.set('sandboxSyncExcludeGlobs', options.setSandboxSyncExclude);
+    ui.success('Sandbox sync exclude globs updated.');
     return;
   }
 

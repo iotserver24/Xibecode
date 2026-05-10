@@ -28,6 +28,7 @@ import {
   getRuntimeStatusLabel,
   resolveRemoteExecutionConfig,
 } from '../utils/remote-execution.js';
+import { syncWorkspaceToSandbox } from '../utils/sandbox-sync.js';
 
 export type ChatOptions = {
   model?: string;
@@ -239,6 +240,7 @@ function XibeCodeChatApp(props: {
   initialMode: AgentMode;
   provider?: ProviderType;
   runtimeStatus: 'local' | 'cloud';
+  sandboxLabel?: string;
   baseUrl?: string;
   needsFirstRunSetup?: boolean;
   defaultModel: string;
@@ -1709,6 +1711,9 @@ function XibeCodeChatApp(props: {
                   <Text color="claude">/help</Text>
                   <Text color="inactive"> to begin</Text>
                 </Box>
+                {props.sandboxLabel ? (
+                  <Text color="inactive">sandbox: {props.sandboxLabel}</Text>
+                ) : null}
                 <Text color="inactive">
                   xibecode <Text color="claude">v{APP_VERSION}</Text>
                 </Text>
@@ -2153,7 +2158,21 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
   const memory = new NeuralMemory(process.cwd());
   await memory.init().catch(() => { });
   const remoteExecution = resolveRemoteExecutionConfig(config, process.cwd());
+  if (remoteExecution?.strategy === 'sandbox_full') {
+    const syncResult = await syncWorkspaceToSandbox(remoteExecution, process.cwd(), {
+      maxMb: config.getSandboxSyncMaxMb(),
+      excludeGlobs: config.getSandboxSyncExcludeGlobs(),
+      workspaceRoot: remoteExecution.workspaceRoot,
+    });
+    remoteExecution.sessionId = syncResult.sessionId;
+  }
   const runtimeStatus = getRuntimeStatusLabel(config);
+  const sandboxLabel =
+    remoteExecution?.strategy === 'sandbox_full'
+      ? 'full (workspace synced to E2B)'
+      : remoteExecution
+        ? 'host_only (file edits stay local)'
+        : undefined;
   const toolExecutor = new CodingToolExecutor(process.cwd(), {
     mcpClientManager,
     skillManager,
@@ -2667,6 +2686,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
         initialMode={activeMode}
         provider={provider}
         runtimeStatus={runtimeStatus}
+        sandboxLabel={sandboxLabel}
         baseUrl={baseUrl}
         needsFirstRunSetup={needsFirstRunSetup}
         defaultModel={model}
