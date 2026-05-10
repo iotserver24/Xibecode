@@ -21,6 +21,7 @@ import {
 import { syncWorkspaceToSandbox } from '../utils/sandbox-sync.js';
 import { withCloudWorkspaceSyncSpinner } from '../utils/cloud-sync-feedback.js';
 import { getCloudRuntimeHint } from '../utils/cloud-runtime-hints.js';
+import { maybePrintUpdateNotice } from '../utils/npm-update-notice.js';
 
 interface ChatOptions {
   model?: string;
@@ -182,6 +183,10 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
 
 export async function chatCommand(options: ChatOptions) {
   try {
+    const require = createRequire(import.meta.url);
+    const pkg = require('../../package.json') as { version?: string };
+    await maybePrintUpdateNotice(pkg.version ?? '0.0.0');
+
     if (options.session) {
       const sessionManager = new SessionManager();
       const session = await sessionManager.loadSession(options.session);

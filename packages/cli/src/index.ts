@@ -13,6 +13,7 @@ import { skillsCommand } from './commands/skills.js';
 import { settingsCommand } from './commands/settings.js';
 import { hooksCommand } from './commands/hooks.js';
 import { memoryCommand } from './commands/memory.js';
+import { whatsNewCommand } from './commands/whats-new.js';
 import { resolveSessionBySandboxId } from './utils/cloud-gateway.js';
 import { ConfigManager } from './utils/config.js';
 import { resolveRemoteExecutionConfig } from './utils/remote-execution.js';
@@ -224,6 +225,14 @@ program
   .description('Manage project auto-memories (list, search, dream, path)')
   .option('--profile <name>', 'Config profile to use')
   .action((action: string | undefined, args: string[], options: any) => memoryCommand(action, args, options));
+
+program
+  .command('whats-new')
+  .alias('changelog')
+  .description('Compare your CLI version to npm and show the changelog link')
+  .action(async () => {
+    await whatsNewCommand();
+  });
 
 // MCP Server Management
 const mcpCmd = program

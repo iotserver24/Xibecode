@@ -56,6 +56,11 @@ pnpm run build
 npm link
 ```
 
+### New releases
+
+- Run **`xibecode whats-new`** (alias **`xibecode changelog`**) to see your installed version vs the latest on npm and open the [CHANGELOG](https://github.com/iotserver24/xibecode/blob/main/CHANGELOG.md).
+- When you start **`xibecode`** or **`xibecode chat`**, the CLI may print a short notice if a newer version is on npm (check is cached; set **`XIBECODE_DISABLE_UPDATE_CHECK=1`** to turn it off).
+
 ## Requirements
 
 - Node.js 18+
