@@ -2,6 +2,12 @@
 
 All notable changes to XibeCode will be documented in this file.
 
+## [1.3.7] - 2026-05-10
+
+### CLI (`xibecode`)
+
+- **1.3.7** republish: npm does not allow reusing version **1.3.6** after it was unpublished; this release is the same code path with a clean build (test sources excluded from `dist/` via `tsconfig`).
+
 ## [1.3.6] - 2026-05-10
 
 ### CLI (`xibecode`)
