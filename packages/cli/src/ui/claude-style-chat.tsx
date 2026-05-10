@@ -1696,8 +1696,8 @@ function XibeCodeChatApp(props: {
                   </Text>
                 </Box>
                 <Box marginTop={1}>
-                  <Text color="suggestion">◈ cloud</Text>
-                  <Text color="inactive">  Ready — type </Text>
+                  <Text color="suggestion">◈local</Text>
+                  <Text color="inactive">Ready  -  type </Text>
                   <Text color="claude">/help</Text>
                   <Text color="inactive"> to begin</Text>
                 </Box>
