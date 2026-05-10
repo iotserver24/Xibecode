@@ -10,7 +10,7 @@
 - When a `git push` is rejected due to diverged branches, resolve via `git pull --rebase origin main` (not merge), fix any lockfile conflicts, then continue with `GIT_EDITOR=true git rebase --continue`.
 - Do not force-push (`--force`) without the user explicitly asking; use `--force-with-lease` if needed.
 - Do not publish packages to npm unless the user explicitly asks — the user has corrected the agent multiple times about unauthorized publishing. When publishing, always use `pnpm publish --access public`.
-- Do not use `workspace:*` protocol for inter-package dependencies in this monorepo — publish the updated package to npm first, then bump the version range in dependent packages. The user explicitly prefers npm-published versions over workspace links.
+- Do not use `workspace:*` / `workspace:^` for **`xibecode-core`** in **CLI, desktop, or extension** packages — use a semver range on npm (e.g. `^1.3.6`): publish `xibecode-core` first, then bump the range in dependents. The user explicitly prefers npm-published versions over workspace links for core.
 - Prefer non-interactive flags on all CLI commands (e.g. `--yes`, `-y`, `GIT_EDITOR=true`) so commands never hang waiting for input.
 - For `xibecode run-pr`, PR descriptions should include detailed per-file change rationale plus verification details (test command + pass/fail + duration) and any self-correction retries; for commits, use conventional commits style (`feat:`, `fix:`, `chore:`, etc.).
 - For agent-driven **interactive questions in the chat TUI**, present each question with **numbered options**, an explicit **custom / type-yourself** choice, and support **arrow-key selection** (then confirm/send) so choices are scannable without parsing long prose.
