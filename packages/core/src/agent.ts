@@ -1351,6 +1351,51 @@ export class EnhancedAgent extends EventEmitter {
     }
   }
 
+  private parseBase64DataUrl(dataUrl: string): { mediaType: string; data: string } | null {
+    const match = /^data:([^;]+);base64,(.+)$/i.exec(dataUrl);
+    if (!match) return null;
+    return {
+      mediaType: match[1],
+      data: match[2],
+    };
+  }
+
+  private normalizeAnthropicUserBlocks(blocks: ContentBlock[]): any[] {
+    const normalized: any[] = [];
+    for (const block of blocks as any[]) {
+      if (block?.type === 'image_url' && typeof block.image_url?.url === 'string') {
+        const parsed = this.parseBase64DataUrl(block.image_url.url);
+        if (!parsed) continue;
+        normalized.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: parsed.mediaType,
+            data: parsed.data,
+          },
+        });
+        continue;
+      }
+      normalized.push(block);
+    }
+    return normalized;
+  }
+
+  private buildAnthropicMessages(): MessageParam[] {
+    const normalizedMessages: MessageParam[] = [];
+    for (const msg of this.messages) {
+      if (msg.role !== 'user' || !Array.isArray(msg.content)) {
+        normalizedMessages.push(msg);
+        continue;
+      }
+      normalizedMessages.push({
+        ...msg,
+        content: this.normalizeAnthropicUserBlocks(msg.content as ContentBlock[]) as any,
+      });
+    }
+    return normalizedMessages;
+  }
+
   /**
    * Call the model with streaming (fallback to non-streaming).
    */
@@ -1388,7 +1433,7 @@ export class EnhancedAgent extends EventEmitter {
     const params: any = {
       model: this.getModelForTier(),
       max_tokens: 8192,
-      messages: this.messages,
+      messages: this.buildAnthropicMessages(),
       system: this.getSystemPrompt(),
     };
 
@@ -1411,7 +1456,7 @@ export class EnhancedAgent extends EventEmitter {
         color: currentModeConfig.displayColor,
       };
 
-      const stream = this.client.messages.stream(params);
+      const stream = (this.client.messages as any).stream(params, { signal });
 
       stream.on('text', (chunk: string) => {
         const filtered = this.thinkFilter.push(chunk);
@@ -1444,7 +1489,7 @@ export class EnhancedAgent extends EventEmitter {
     } catch (_streamError) {
       // ── Fallback to non-streaming ──
       try {
-        const message = await this.client.messages.create(params);
+        const message = await (this.client.messages as any).create(params, { signal });
         const currentModeConfig = MODE_CONFIG[this.modeState.current];
         const persona = {
           name: currentModeConfig.personaName,
@@ -1927,6 +1972,12 @@ Working directory: ${process.cwd()}
 - The canonical project root is the **Working directory** above. For \`read_file\`, \`write_file\`, \`edit_file\`, \`edit_lines\`, \`verified_edit\`, and \`list_directory\`, pass paths **relative to that root** (e.g. \`src/index.ts\`, \`package.json\`).
 - Do **not** assume the repo lives at \`/workspace\`, \`/app\`, \`/project\`, or similar unless that path is literally the printed working directory.
 - For \`run_command\`, omit \`cwd\` or set it to \`.\` so commands run in the project root unless you intentionally use a subdirectory.
+
+## Images and vision
+- You only receive **image pixels** when the **user's message includes the image path** (e.g. \`dog.jpg\` or \`@dog.jpg\`). Follow-up questions like "what's in the image?" do **not** reattach files unless the path appears again.
+- \`read_file\` on image extensions does **not** let you see the picture — it returns a short notice, not pixels. Do not claim you visually inspected an image via \`read_file\`.
+- **Filenames are not facts about image content.** \`dog.jpg\` may show anything; \`car.jpg\` may be an animal; extensions like \`.hjpg\` are not standard. Answering "what's in the image" or picking "the dog file" from **basename alone** is an unsupported guess—say you need vision (user message with that path) or shell-based image analysis, and do not pretend the name proves the subject.
+- If the user asks about a picture without naming it, use \`search_files\` / \`glob\` patterns to list candidates, then ask them to **repeat the exact filename in their next message** (or \`@path\`) so vision applies.
 
 ${this.defaultSkillsPrompt ? `${this.defaultSkillsPrompt}\n\n` : ''}
 ## Core Principles

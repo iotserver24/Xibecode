@@ -18,7 +18,7 @@ import { renderAndRun } from '../interactiveHelpers.js';
 import { AssistantMarkdown } from '../components/AssistantMarkdown.js';
 import { formatToolArgs, formatToolOutcome, formatRunSwarmDetailLines } from '../utils/tool-display.js';
 import { SPINNER_VERBS } from '../constants/spinnerVerbs.js';
-import { extractAtReferences, splitAtReferences } from 'xibecode-core';
+import { collectImageReferencesForPrompt } from 'xibecode-core';
 import { loadImageAttachment, mimeFromExtension, type ImageAttachment } from '../utils/image-attachments.js';
 import { SessionManager, type ChatSession } from 'xibecode-core';
 import { AutoMemoryManager, HooksManager, SettingsManager as CoreSettingsManager } from 'xibecode-core';
@@ -837,6 +837,12 @@ function XibeCodeChatApp(props: {
             type: 'info',
             text: 'Press Ctrl+C to quit. Type any prompt and XibeCode will run agent mode.',
           },
+          {
+            kind: 'line',
+            id: nextLineIdRef.current++,
+            type: 'info',
+            text: 'Vision: mention an image path (e.g. boot.jpg or assets/photo.png) or use @path so the model receives pixels (when a matching file exists).',
+          },
         ]);
         return;
       }
@@ -991,8 +997,10 @@ function XibeCodeChatApp(props: {
         setIsRunning(true);
         try {
           const startedAt = Date.now();
-          const refs = extractAtReferences(prompt, process.cwd());
-          const { image: imageRefs } = splitAtReferences(refs);
+          const { imageRefs, explicitAtImagePaths } = collectImageReferencesForPrompt(
+            prompt,
+            process.cwd(),
+          );
           const images: ImageAttachment[] = [];
           for (const ref of imageRefs) {
             try {
@@ -1002,8 +1010,18 @@ function XibeCodeChatApp(props: {
               images.push(attachment);
             } catch (err: unknown) {
               const message = err instanceof Error ? err.message : 'Failed to load image';
-              pushLine({ type: 'error', text: message });
+              if (explicitAtImagePaths.has(ref.resolvedPath)) {
+                pushLine({ type: 'error', text: message });
+              }
+              // Implicit path mentions: skip silently if file missing (avoid noise for figurative ".png" etc.)
             }
+          }
+
+          if (images.length > 0) {
+            pushLine({
+              type: 'info',
+              text: `Including ${images.length} image(s) in this message for the model (vision).`,
+            });
           }
 
           const stats = await props.runPrompt(prompt, pushLine, {
@@ -1036,35 +1054,31 @@ function XibeCodeChatApp(props: {
       restartAttemptsRef.current = 0;
       let promptToRun: string | null = resolvedInput;
       while (promptToRun) {
+        const activePrompt: string = promptToRun;
+        promptToRun = null;
         try {
-          await runOne(promptToRun);
-          break;
+          await runOne(activePrompt);
         } catch (err: unknown) {
           if (isAbortError(err) && abortReasonRef.current === 'watchdog') {
             restartAttemptsRef.current += 1;
             if (restartAttemptsRef.current <= 2) {
               // Restart same prompt
+              promptToRun = activePrompt;
               continue;
             }
             pushLine({ type: 'error', text: 'Restart limit reached (2). Stopping.' });
-            break;
-          }
-          if (isAbortError(err) && abortReasonRef.current === 'user') {
+          } else if (isAbortError(err) && abortReasonRef.current === 'user') {
             pushLine({ type: 'info', text: 'Cancelled.' });
-            break;
-          }
-          const message = err instanceof Error ? err.message : 'Unknown error';
-          pushLine({ type: 'error', text: message });
-          break;
-        } finally {
-          // If a message was queued during this run, send it next.
-          if (!isRunning && queuedPromptRef.current) {
-            const q = queuedPromptRef.current;
-            queuedPromptRef.current = null;
-            promptToRun = q;
           } else {
-            promptToRun = null;
+            const message = err instanceof Error ? err.message : 'Unknown error';
+            pushLine({ type: 'error', text: message });
           }
+        }
+
+        // If a message was queued during this run, send it next.
+        if (!promptToRun && queuedPromptRef.current) {
+          promptToRun = queuedPromptRef.current;
+          queuedPromptRef.current = null;
         }
       }
     },
@@ -1137,6 +1151,18 @@ function XibeCodeChatApp(props: {
       return;
     }
 
+    // During an active run, Esc always means "abort run" (takes priority over question UI).
+    if (isRunning && key.escape) {
+      if (questionsState) {
+        setQuestionsState(null);
+      }
+      if (abortControllerRef.current && abortReasonRef.current === 'none') {
+        abortReasonRef.current = 'user';
+        abortControllerRef.current.abort();
+      }
+      return;
+    }
+
     // Interactive questions: arrow key navigation
     if (questionsState && !questionsState.isTypingCustom) {
       const q = questionsState.questions[questionsState.currentIndex];
@@ -1202,14 +1228,6 @@ function XibeCodeChatApp(props: {
         return;
       }
       // Let normal TextInput handle typing — don't intercept
-    }
-
-    if (isRunning && key.escape) {
-      if (abortControllerRef.current && abortReasonRef.current === 'none') {
-        abortReasonRef.current = 'user';
-        abortControllerRef.current.abort();
-      }
-      return;
     }
 
     if (configMenuOpen && !isRunning) {

@@ -38,6 +38,20 @@ const execAsync = promisify(exec);
 
 const DEFAULT_COMMAND_OUTPUT_CHARS = 20000;
 
+/** Raster types: read_file must not decode as UTF-8 (misleading "lines" of binary). */
+const READ_FILE_SKIP_RASTER_IMAGE_EXTS = new Set([
+  '.avif',
+  '.bmp',
+  '.gif',
+  '.heic',
+  '.heif',
+  '.ico',
+  '.jpeg',
+  '.jpg',
+  '.png',
+  '.webp',
+]);
+
 function compactCommandOutput(value: string, maxChars: number): { output: string; truncated: boolean; originalLength: number } {
   if (value.length <= maxChars) {
     return { output: value, truncated: false, originalLength: value.length };
@@ -1043,7 +1057,8 @@ export class CodingToolExecutor implements ToolExecutor {
     const coreTools: Tool[] = [
       {
         name: 'read_file',
-        description: 'Read file contents. For large files, can read specific line ranges to avoid token limits. Always use this before editing files.',
+        description:
+          'Read text file contents. For large files, can read specific line ranges to avoid token limits. Always use this before editing text files. Do NOT use this to "view" images (.png, .jpg, etc.) — it cannot decode pixels; use a user message that names the image path for vision, or run_command for metadata (file, identify).',
         input_schema: {
           type: 'object',
           properties: {
@@ -2047,7 +2062,28 @@ export class CodingToolExecutor implements ToolExecutor {
    */
   private async readFile(filePath: string, startLine?: number, endLine?: number): Promise<any> {
     const fullPath = this.resolvePath(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+
     try {
+      const st = await fs.stat(fullPath);
+      if (!st.isFile()) {
+        return { error: true, success: false, message: `Not a file: ${filePath}` };
+      }
+
+      if (READ_FILE_SKIP_RASTER_IMAGE_EXTS.has(ext)) {
+        const base = path.basename(filePath);
+        return {
+          path: filePath,
+          content:
+            `This path is a binary image (${ext.slice(1) || 'image'}). read_file only handles text — it does not expose pixels to you.\n\n` +
+            `To analyze what the image shows, ask the user to send a message that **includes this path** (e.g. ${base} or @${base}) so the CLI attaches it for vision/multimodal. ` +
+            `For dimensions or format only, use run_command with file(1), identify, etc.`,
+          lines: 3,
+          binary_image: true,
+          size_bytes: st.size,
+        };
+      }
+
       const content = await fs.readFile(fullPath, 'utf-8');
 
       if (startLine !== undefined && endLine !== undefined) {

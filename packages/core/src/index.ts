@@ -158,7 +158,12 @@ export { type RiskLevel, type RiskAssessment, SafetyChecker, sanitizePath, sanit
 export { GitUtils } from './utils/git.js';
 export { TestRunnerDetector } from './utils/testRunner.js';
 export { MCPServersFileManager } from './utils/mcp-servers-file.js';
-export { extractAtReferences, splitAtReferences } from './utils/at-references.js';
+export {
+  collectImageReferencesForPrompt,
+  extractAtReferences,
+  extractImplicitImagePaths,
+  splitAtReferences,
+} from './utils/at-references.js';
 export { SmitheryClient } from './utils/smithery.js';
 export { autoLoadProjectMemories, formatMemoriesForContext, type LoadedMemory, type ProjectMemoryContext } from './utils/auto-memory.js';
 export { TodoManager } from './utils/todoManager.js';
