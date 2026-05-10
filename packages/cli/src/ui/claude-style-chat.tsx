@@ -23,6 +23,11 @@ import { loadImageAttachment, mimeFromExtension, type ImageAttachment } from '..
 import { SessionManager, type ChatSession } from 'xibecode-core';
 import { AutoMemoryManager, HooksManager, SettingsManager as CoreSettingsManager } from 'xibecode-core';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
+import {
+  attachRemoteExecution,
+  getRuntimeStatusLabel,
+  resolveRemoteExecutionConfig,
+} from '../utils/remote-execution.js';
 
 export type ChatOptions = {
   model?: string;
@@ -233,6 +238,7 @@ function XibeCodeChatApp(props: {
   model: string;
   initialMode: AgentMode;
   provider?: ProviderType;
+  runtimeStatus: 'local' | 'cloud';
   baseUrl?: string;
   needsFirstRunSetup?: boolean;
   defaultModel: string;
@@ -519,11 +525,13 @@ function XibeCodeChatApp(props: {
     const provider = (config.get('provider') as ProviderType | undefined) ?? undefined;
     const model = config.getModel(costMode === 'economy');
     const baseUrl = config.getBaseUrl();
+    const sandboxMode = config.getSandboxMode();
+    const sandboxGateway = config.getSandboxGatewayUrl();
     const requestFormat =
       (config.get('requestFormat') as RequestWireFormat | undefined) ?? 'auto';
     pushLine({
       type: 'info',
-      text: `Config: apiKey=${apiKeyPresent ? 'set' : 'missing'} | provider=${provider || 'auto'} | model=${model || '(none)'} | costMode=${costMode} | baseUrl=${baseUrl || '(default)'} | format=${requestFormat}`,
+      text: `Config: apiKey=${apiKeyPresent ? 'set' : 'missing'} | provider=${provider || 'auto'} | model=${model || '(none)'} | costMode=${costMode} | baseUrl=${baseUrl || '(default)'} | format=${requestFormat} | runtime=${sandboxMode}${sandboxGateway ? ` @ ${sandboxGateway}` : ''}`,
     });
   }, [props.profile, pushLine]);
 
@@ -1696,8 +1704,8 @@ function XibeCodeChatApp(props: {
                   </Text>
                 </Box>
                 <Box marginTop={1}>
-                  <Text color="suggestion">◈local</Text>
-                  <Text color="inactive">Ready  -  type </Text>
+                  <Text color="suggestion">{props.runtimeStatus}:</Text>
+                  <Text color="inactive"> Ready  -  type </Text>
                   <Text color="claude">/help</Text>
                   <Text color="inactive"> to begin</Text>
                 </Box>
@@ -2144,7 +2152,14 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
   const mcpClientManager = new MCPClientManager();
   const memory = new NeuralMemory(process.cwd());
   await memory.init().catch(() => { });
-  const toolExecutor = new CodingToolExecutor(process.cwd(), { mcpClientManager, skillManager, memory });
+  const remoteExecution = resolveRemoteExecutionConfig(config, process.cwd());
+  const runtimeStatus = getRuntimeStatusLabel(config);
+  const toolExecutor = new CodingToolExecutor(process.cwd(), {
+    mcpClientManager,
+    skillManager,
+    memory,
+  });
+  attachRemoteExecution(toolExecutor, remoteExecution);
   let wireFormat: RequestWireFormat = config.get('requestFormat') ?? 'auto';
   const customProviderFormat = config.get('customProviderFormat');
   const createAgentForModel = (modelName: string, creds: { apiKey: string; baseUrl?: string }): EnhancedAgent =>
@@ -2651,6 +2666,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
         model={model}
         initialMode={activeMode}
         provider={provider}
+        runtimeStatus={runtimeStatus}
         baseUrl={baseUrl}
         needsFirstRunSetup={needsFirstRunSetup}
         defaultModel={model}

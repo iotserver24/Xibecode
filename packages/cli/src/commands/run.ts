@@ -18,6 +18,7 @@ import { PlanSessionManager } from 'xibecode-core';
 import { SessionBridge } from 'xibecode-core';
 import { builtInSkillsDir } from '../utils/built-in-skills-dir.js';
 import chalk from 'chalk';
+import { attachRemoteExecution, resolveRemoteExecutionConfig } from '../utils/remote-execution.js';
 
 interface RunOptions {
   file?: string;
@@ -85,6 +86,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   const maxIterations = useEconomy
     ? Math.min(parsedIterations, config.getEconomyMaxIterations())
     : parsedIterations;
+  const remoteExecution = resolveRemoteExecutionConfig(config, process.cwd());
 
   // Diagnostic — always print resolved config so misconfiguration is obvious
   const maskedKey = apiKey
@@ -95,6 +97,12 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
   console.log(chalk.dim('  model     ') + chalk.cyan(model));
   console.log(chalk.dim('  base url  ') + chalk.cyan(baseUrl ?? 'provider default'));
   console.log(chalk.dim('  api key   ') + chalk.cyan(maskedKey));
+  if (remoteExecution) {
+    console.log(chalk.dim('  runtime   ') + chalk.cyan(`cloud via ${remoteExecution.gatewayUrl}`));
+    console.log(chalk.dim('  sandbox   ') + chalk.cyan('host_only (file edits stay local)'));
+  } else {
+    console.log(chalk.dim('  runtime   ') + chalk.cyan('local'));
+  }
   console.log('');
 
   // Get dry-run setting
@@ -261,6 +269,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
     memory,
     skillManager,
   });
+  attachRemoteExecution(toolExecutor, remoteExecution);
   const [contextHintFiles] = await Promise.all([
     contextHintFilesPromise,
     sessionMemoryLoadPromise,

@@ -56,6 +56,14 @@ export interface XibeCodeConfig {
   executionModel?: string;
   /** When true, augment context pruning with PKG-style code graph (AST). */
   usePkgStyleContext?: boolean;
+  /** Command execution target. local = host shell, e2b = remote sandbox gateway */
+  sandboxMode?: 'local' | 'e2b';
+  /** Team gateway URL that fronts E2B sandbox creation/execution */
+  sandboxGatewayUrl?: string;
+  /** Optional gateway bearer token (not the E2B API key) */
+  sandboxAuthToken?: string;
+  /** File execution strategy in sandbox mode. host_only keeps file tools local. */
+  sandboxSessionStrategy?: 'host_only';
 }
 
 type XibeCodeMetaConfig = {
@@ -112,6 +120,8 @@ export class ConfigManager {
         economyMaxIterations: 50,
         maxContextFiles: 40,
         usePkgStyleContext: false,
+        sandboxMode: 'local',
+        sandboxSessionStrategy: 'host_only',
       },
     });
   }
@@ -302,6 +312,26 @@ export class ConfigManager {
     return this.get('usePkgStyleContext') ?? false;
   }
 
+  getSandboxMode(): 'local' | 'e2b' {
+    const envMode = process.env.XIBECODE_SANDBOX_MODE?.trim().toLowerCase();
+    if (envMode === 'e2b') return 'e2b';
+    if (envMode === 'local') return 'local';
+    return this.get('sandboxMode') || 'local';
+  }
+
+  getSandboxGatewayUrl(): string | undefined {
+    return process.env.XIBECODE_SANDBOX_GATEWAY_URL || this.get('sandboxGatewayUrl');
+  }
+
+  getSandboxAuthToken(): string | undefined {
+    return process.env.XIBECODE_SANDBOX_AUTH_TOKEN || this.get('sandboxAuthToken');
+  }
+
+  getSandboxSessionStrategy(): 'host_only' {
+    const strategy = (process.env.XIBECODE_SANDBOX_STRATEGY || this.get('sandboxSessionStrategy') || 'host_only').toLowerCase();
+    return strategy === 'host_only' ? 'host_only' : 'host_only';
+  }
+
   /**
    * Get preferred theme name
    */
@@ -357,6 +387,10 @@ export class ConfigManager {
     const baseUrl = this.get('baseUrl');
     if (baseUrl && !baseUrl.startsWith('http')) {
       errors.push('Base URL must start with http:// or https://');
+    }
+
+    if (this.getSandboxMode() === 'e2b' && !this.getSandboxGatewayUrl()) {
+      errors.push('Sandbox mode is e2b but sandbox gateway URL is not set. Use: xibecode config --set-sandbox-gateway-url <url>');
     }
 
     return {
@@ -426,6 +460,10 @@ export class ConfigManager {
       'Show Thinking': (config.showThinking ?? true).toString(),
       'Cost Mode': config.costMode || 'normal',
       'Economy Model': config.economyModel || 'Not set',
+      'Sandbox Mode': this.getSandboxMode(),
+      'Sandbox Gateway URL': this.getSandboxGatewayUrl() || 'Not set',
+      'Sandbox Auth Token': this.getSandboxAuthToken() ? 'set' : 'Not set',
+      'Sandbox Session Strategy': this.getSandboxSessionStrategy(),
       'Default Profile': this.getDefaultProfile(),
       'Config Path': this.getConfigPath(),
     };

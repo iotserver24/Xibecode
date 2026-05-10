@@ -10,6 +10,11 @@ import { MCPClientManager } from 'xibecode-core';
 import { CodingToolExecutor, NeuralMemory } from 'xibecode-core';
 import { EnhancedAgent, AgentStream } from 'xibecode-core';
 import { SessionManager } from 'xibecode-core';
+import {
+  attachRemoteExecution,
+  resolveRemoteExecutionConfig,
+  getRuntimeStatusLabel,
+} from '../utils/remote-execution.js';
 
 interface ChatOptions {
   model?: string;
@@ -38,6 +43,7 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
   const model = options.model || config.getModel(useEconomy);
   const baseUrl = options.baseUrl || config.getBaseUrl();
   const provider = (options.provider as any) || config.get('provider');
+  const remoteExecution = resolveRemoteExecutionConfig(config, process.cwd());
 
   const skillManager = new SkillManager(process.cwd(), apiKey, baseUrl, model, provider, builtInSkillsDir);
   await skillManager.loadSkills();
@@ -46,9 +52,11 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
   const memory = new NeuralMemory(process.cwd());
   await memory.init().catch(() => { });
   const toolExecutor = new CodingToolExecutor(process.cwd(), { mcpClientManager, skillManager, memory });
+  attachRemoteExecution(toolExecutor, remoteExecution);
 
   console.log(`xibecode chat (plain) v${version}`.trim());
   console.log(`model: ${model} | provider: ${provider ?? 'auto'} | format: ${config.get('requestFormat') ?? 'auto'}`);
+  console.log(`runtime: ${getRuntimeStatusLabel(config)}${remoteExecution ? ` (${remoteExecution.gatewayUrl})` : ''}`);
   console.log('Type /exit to quit.');
 
   const rl = readline.createInterface({

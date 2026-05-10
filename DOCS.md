@@ -534,6 +534,27 @@ Agent-triggered shell commands (`run_command`) run with the **same user and priv
 - **Path and URL validation**: File paths used by tools are resolved under the working directory; paths that escape it (e.g. `../etc/passwd`) are rejected. The `fetch_url` tool only allows `http`/`https` URLs and blocks local/private addresses by default to reduce SSRF risk.
 - **Blocked commands**: The built-in safety layer blocks obviously dangerous commands (e.g. `rm -rf /`, fork bombs). See `SECURITY.md` and `packages/core/src/utils/safety.ts` for details.
 
+### Team gateway with E2B (backend-held key)
+
+Use this if your team wants to pay for sandbox usage from one Pro account.
+
+```bash
+# 1) Run your gateway (keeps E2B_API_KEY server-side)
+export E2B_API_KEY="e2b_..."
+export XIBECODE_GATEWAY_TOKEN="your-team-shared-token"
+pnpm --filter @xibecode/e2b-gateway dev
+
+# 2) Configure CLI to use remote command execution
+xibecode config --set-sandbox-mode e2b
+xibecode config --set-sandbox-gateway-url "http://localhost:8787"
+xibecode config --set-sandbox-auth-token "your-team-shared-token"
+xibecode config --set-sandbox-session-strategy host_only
+```
+
+Notes:
+- `host_only` means `run_command` executes in E2B, while file tools (`read_file`, `write_file`, `edit_file`) still operate on your local checkout.
+- Never distribute `E2B_API_KEY` to end users. Only distribute gateway URL + gateway token.
+
 ---
 
 ## Platforms and devices

@@ -11,6 +11,13 @@
 - **Recommendation**: For untrusted code or third-party repositories, run XibeCode inside a container (e.g. Docker) or a dedicated sandbox (e.g. E2B) so that agent-triggered commands cannot affect the host.
 - The `SafetyChecker` in `src/utils/safety.ts` blocks obviously dangerous commands (e.g. `rm -rf /`, fork bombs). This is a best-effort filter, not a full sandbox.
 
+### Team-hosted E2B gateway model
+
+- If you use the new E2B integration with a **backend-held key**, keep `E2B_API_KEY` only on your gateway service (for example `packages/e2b-gateway`).
+- Do **not** store `E2B_API_KEY` in CLI profile JSON or pass it to end users.
+- The CLI should only hold a gateway URL and optional gateway auth token (`sandboxGatewayUrl`, `sandboxAuthToken`).
+- Current sandbox strategy is `host_only`: command execution is remote, but file-edit tools still mutate the local workspace. Use isolated repos/worktrees for untrusted tasks.
+
 ## Input validation
 
 - **File paths**: All file tools resolve paths under the working directory. Paths that escape the workspace (path traversal) are rejected via `sanitizePath()` in `src/utils/safety.ts`.

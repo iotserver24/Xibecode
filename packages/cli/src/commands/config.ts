@@ -34,6 +34,10 @@ interface ConfigOptions {
   setProvider?: string;
   setCostMode?: string;
   setEconomyModel?: string;
+  setSandboxMode?: string;
+  setSandboxGatewayUrl?: string;
+  setSandboxAuthToken?: string;
+  setSandboxSessionStrategy?: string;
   show?: boolean;
   reset?: boolean;
   listMcpServers?: boolean;
@@ -66,6 +70,10 @@ export async function configCommand(options: ConfigOptions) {
     console.log(chalk.cyan('  xibecode config --set-provider <provider>'));
     console.log(chalk.cyan('  xibecode config --set-cost-mode <normal|economy>'));
     console.log(chalk.cyan('  xibecode config --set-economy-model <model>'));
+    console.log(chalk.cyan('  xibecode config --set-sandbox-mode <local|e2b>'));
+    console.log(chalk.cyan('  xibecode config --set-sandbox-gateway-url <url>'));
+    console.log(chalk.cyan('  xibecode config --set-sandbox-auth-token <token>'));
+    console.log(chalk.cyan('  xibecode config --set-sandbox-session-strategy <host_only>'));
     console.log(chalk.cyan('  xibecode config --list-mcp-servers'));
     console.log(chalk.cyan('  xibecode config --list-profiles'));
     console.log(chalk.cyan('  xibecode config --set-default-profile <name>'));
@@ -147,6 +155,44 @@ export async function configCommand(options: ConfigOptions) {
   if (options.setEconomyModel) {
     config.set('economyModel', options.setEconomyModel);
     ui.success(`Economy model set to: ${options.setEconomyModel}`);
+    return;
+  }
+
+  if (options.setSandboxMode) {
+    const mode = options.setSandboxMode.toLowerCase();
+    if (mode !== 'local' && mode !== 'e2b') {
+      ui.error(`Invalid sandbox mode "${options.setSandboxMode}". Use: local or e2b`);
+      process.exit(1);
+    }
+    config.set('sandboxMode', mode as 'local' | 'e2b');
+    ui.success(`Sandbox mode set to: ${mode}`);
+    return;
+  }
+
+  if (options.setSandboxGatewayUrl) {
+    if (!options.setSandboxGatewayUrl.startsWith('http')) {
+      ui.error('Sandbox gateway URL must start with http:// or https://');
+      process.exit(1);
+    }
+    config.set('sandboxGatewayUrl', options.setSandboxGatewayUrl);
+    ui.success(`Sandbox gateway URL set to: ${options.setSandboxGatewayUrl}`);
+    return;
+  }
+
+  if (options.setSandboxAuthToken !== undefined) {
+    config.set('sandboxAuthToken', options.setSandboxAuthToken);
+    ui.success('Sandbox auth token updated.');
+    return;
+  }
+
+  if (options.setSandboxSessionStrategy) {
+    const strategy = options.setSandboxSessionStrategy.toLowerCase();
+    if (strategy !== 'host_only') {
+      ui.error(`Invalid sandbox session strategy "${options.setSandboxSessionStrategy}". Use: host_only`);
+      process.exit(1);
+    }
+    config.set('sandboxSessionStrategy', 'host_only');
+    ui.success('Sandbox session strategy set to: host_only');
     return;
   }
 

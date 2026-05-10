@@ -24,6 +24,7 @@ import { ConflictSolver } from './conflict-solver.js';
 import { SwarmOrchestrator } from './swarm.js';
 import { PermissionManager, type ApprovalScope, type PermissionMode } from './permissions.js';
 import { McpOAuthFlowManager } from './mcp/oauth-flow.js';
+import { RemoteExecutionClient, type RemoteExecutionConfig } from './remote-execution.js';
 import {
   createFileHistoryState,
   fileHistoryMakeSnapshot,
@@ -166,6 +167,7 @@ export class CodingToolExecutor implements ToolExecutor {
   private dryRun: boolean;
   private testCommandOverride?: string;
   private permissionManager: PermissionManager;
+  private remoteExecutionClient?: RemoteExecutionClient;
   /** Session-scoped tools synthesized by the agent (meta-agent). Execution is sandboxed via run_command. */
   private dynamicTools = new Map<string, { description: string; script: string }>();
   private mcpOAuth = new McpOAuthFlowManager();
@@ -214,6 +216,7 @@ export class CodingToolExecutor implements ToolExecutor {
       skillManager?: SkillManager; // Optional for compatibility, but recommended
       permissionManager?: PermissionManager;
       initialFileHistoryState?: FileHistoryState;
+      remoteExecution?: RemoteExecutionConfig;
     }
   ) {
     this.workingDir = workingDir;
@@ -241,6 +244,9 @@ export class CodingToolExecutor implements ToolExecutor {
     this.testCommandOverride = options?.testCommandOverride;
     this.permissionManager = options?.permissionManager ?? new PermissionManager(this.currentMode);
     this.fileHistoryState = options?.initialFileHistoryState ?? createFileHistoryState();
+    if (options?.remoteExecution?.gatewayUrl) {
+      this.remoteExecutionClient = new RemoteExecutionClient(options.remoteExecution);
+    }
   }
 
   private updateFileHistoryState = (
@@ -2397,6 +2403,27 @@ export class CodingToolExecutor implements ToolExecutor {
   }
 
   private async runCommand(command: string, cwd?: string, input?: string, timeout?: number, maxOutputChars?: number): Promise<any> {
+    if (this.remoteExecutionClient) {
+      const outputLimit = Math.max(1000, maxOutputChars ?? DEFAULT_COMMAND_OUTPUT_CHARS);
+      const result = await this.remoteExecutionClient.runCommand({
+        command,
+        cwd: cwd ? this.resolvePath(cwd) : this.workingDir,
+        input,
+        timeout,
+        maxOutputChars: outputLimit,
+      });
+      const compactedStdout = compactCommandOutput(String(result.stdout ?? '').trim(), outputLimit);
+      const compactedStderr = compactCommandOutput(String(result.stderr ?? '').trim(), outputLimit);
+      return {
+        ...result,
+        stdout: compactedStdout.output,
+        stderr: compactedStderr.output,
+        truncated: compactedStdout.truncated || compactedStderr.truncated,
+        originalStdoutLength: compactedStdout.originalLength,
+        originalStderrLength: compactedStderr.originalLength,
+      };
+    }
+
     const workDir = cwd ? this.resolvePath(cwd) : this.workingDir;
     const timeoutMs = (timeout || 120) * 1000;
     const shell = this.platform === 'win32' ? 'powershell.exe' : '/bin/sh';

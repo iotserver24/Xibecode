@@ -15,6 +15,7 @@ import { SkillManager } from 'xibecode-core';
 import { builtInSkillsDir } from '../utils/built-in-skills-dir.js';
 import chalk from 'chalk';
 import fetch from 'node-fetch';
+import { attachRemoteExecution, resolveRemoteExecutionConfig } from '../utils/remote-execution.js';
 
 const pkg = createRequire(import.meta.url)('../../package.json');
 import Anthropic from '@anthropic-ai/sdk';
@@ -330,11 +331,18 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
   const maskedKey = apiKey
     ? apiKey.slice(0, 8) + '...' + apiKey.slice(-4)
     : 'NOT SET';
+  const remoteExecution = resolveRemoteExecutionConfig(config, cwd);
   console.log(chalk.dim('  cost mode ') + chalk.cyan(useEconomy ? 'economy' : 'normal'));
   console.log(chalk.dim('  provider  ') + chalk.cyan(provider ?? 'auto-detect'));
   console.log(chalk.dim('  model     ') + chalk.cyan(model));
   console.log(chalk.dim('  base url  ') + chalk.cyan(baseUrl ?? 'provider default'));
   console.log(chalk.dim('  api key   ') + chalk.cyan(maskedKey));
+  if (remoteExecution) {
+    console.log(chalk.dim('  runtime   ') + chalk.cyan(`cloud via ${remoteExecution.gatewayUrl}`));
+    console.log(chalk.dim('  sandbox   ') + chalk.cyan('host_only (file edits stay local)'));
+  } else {
+    console.log(chalk.dim('  runtime   ') + chalk.cyan('local'));
+  }
   console.log('');
 
   // ── Connect MCP servers ───────────────────────────────────────────────────
@@ -404,6 +412,7 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
     memory,
     skillManager,
   });
+  attachRemoteExecution(toolExecutor, remoteExecution);
   const sessionMemory = new SessionMemory(cwd);
   await sessionMemory.loadPreviousLearnings().catch(() => {});
 
