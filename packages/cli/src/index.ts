@@ -86,6 +86,23 @@ program
   .option('--plain', 'Disable Ink UI; print line-by-line output (best for copying)', false)
   .action(chatCommand);
 
+program
+  .command('cloud')
+  .description('Interactive chat with E2B cloud execution (forces sandbox mode e2b for this process)')
+  .option('-m, --model <model>', 'AI model to use')
+  .option('-b, --base-url <url>', 'Custom API base URL')
+  .option('-k, --api-key <key>', 'API key (overrides config)')
+  .option('--profile <name>', 'Config profile to use (default: configured default profile)')
+  .option('--provider <provider>', 'Model API format: anthropic or openai')
+  .option('--cost-mode <mode>', 'Cost mode: normal or economy', 'normal')
+  .option('--theme <theme>', 'UI theme to use')
+  .option('--session <id>', 'Resume a specific chat session by id')
+  .option('--plain', 'Disable Ink UI; print line-by-line output (best for copying)', false)
+  .action(async (options: Parameters<typeof chatCommand>[0]) => {
+    process.env.XIBECODE_SANDBOX_MODE = 'e2b';
+    await chatCommand(options);
+  });
+
 // Resume a previous session
 program
   .command('resume')
@@ -114,6 +131,10 @@ program
   .option('--set-sandbox-session-strategy <strategy>', 'Set sandbox session strategy: host_only or sandbox_full')
   .option('--set-sandbox-sync-max-mb <number>', 'Set max compressed workspace size for sandbox_full sync (MB)')
   .option('--set-sandbox-sync-exclude <csv>', 'Set comma-separated exclude globs for sandbox_full sync tarball')
+  .option(
+    '--set-sandbox-sync-respect-gitignore <bool>',
+    'When true, tarball uses git ls-files (honors .gitignore); when false, tar cwd only',
+  )
   .option('--show', 'Show current configuration')
   .option('--list-profiles', 'List available config profiles')
   .option('--set-default-profile <name>', 'Set the default config profile')

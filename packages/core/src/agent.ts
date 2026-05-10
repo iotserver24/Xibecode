@@ -73,6 +73,11 @@ export interface AgentConfig {
   postEditVerification?: 'off' | 'balanced' | 'strict';
   /** Minimum neural-memory score required before recall is injected. */
   memoryRecallMinScore?: number;
+  /**
+   * When set (e.g. sandbox_full), the system prompt explains that file/shell tools run in E2B
+   * and the host cwd must not be passed as absolute paths to tools.
+   */
+  remoteToolWorkspaceRoot?: string;
 }
 
 export interface AgentEvent {
@@ -354,7 +359,7 @@ export class EnhancedAgent extends EventEmitter {
   private messages: MessageParam[] = [];
   private loopDetector = new LoopDetector();
   private thinkFilter = new ThinkTagFilter();
-  private config: Required<Omit<AgentConfig, 'sessionMemory' | 'contextHintFiles' | 'planningModel' | 'executionModel' | 'mindsetAdaptive' | 'strictTextOnlyCompletion' | 'defaultSkillsPrompt' | 'requestFormat' | 'completionEvidenceMode' | 'postEditVerification' | 'memoryRecallMinScore'>> & { customProviderFormat: 'openai' | 'anthropic'; requestFormat: 'auto' | 'openai' | 'anthropic'; sessionMemory?: SessionMemory | null; contextHintFiles: string[]; planningModel?: string; executionModel?: string; mindsetAdaptive?: boolean; strictTextOnlyCompletion: boolean; completionEvidenceMode: 'off' | 'balanced' | 'strict'; postEditVerification: 'off' | 'balanced' | 'strict'; memoryRecallMinScore: number };
+  private config: Required<Omit<AgentConfig, 'sessionMemory' | 'contextHintFiles' | 'planningModel' | 'executionModel' | 'mindsetAdaptive' | 'strictTextOnlyCompletion' | 'defaultSkillsPrompt' | 'requestFormat' | 'completionEvidenceMode' | 'postEditVerification' | 'memoryRecallMinScore' | 'remoteToolWorkspaceRoot'>> & { customProviderFormat: 'openai' | 'anthropic'; requestFormat: 'auto' | 'openai' | 'anthropic'; sessionMemory?: SessionMemory | null; contextHintFiles: string[]; planningModel?: string; executionModel?: string; mindsetAdaptive?: boolean; strictTextOnlyCompletion: boolean; completionEvidenceMode: 'off' | 'balanced' | 'strict'; postEditVerification: 'off' | 'balanced' | 'strict'; memoryRecallMinScore: number };
   private iterationCount = 0;
   private toolCallCount = 0;
   private filesChanged: Set<string> = new Set();
@@ -408,6 +413,10 @@ export class EnhancedAgent extends EventEmitter {
   private hooksManager?: import('./hooks/hooks.js').HooksManager;
   /** Auto-memory manager for persistent project memories */
   private autoMemManager?: import('./auto-memory/auto-memory.js').AutoMemoryManager;
+  /**
+   * When set, getSystemPrompt() adds E2B sandbox_full guidance (host vs remote tool paths).
+   */
+  private remoteToolWorkspaceRoot?: string;
 
   private isAbortError(err: unknown): boolean {
     if (!err || typeof err !== 'object') return false;
@@ -590,6 +599,7 @@ export class EnhancedAgent extends EventEmitter {
       memoryRecallMinScore: config.memoryRecallMinScore ?? 2,
     };
     this.defaultSkillsPrompt = config.defaultSkillsPrompt ?? '';
+    this.remoteToolWorkspaceRoot = config.remoteToolWorkspaceRoot?.trim() || undefined;
     this.mindsetAdaptive = this.config.mindsetAdaptive ?? false;
 
     // Initialize mode state and orchestrator
@@ -1964,13 +1974,20 @@ Do not use any tools. Do not write code. Output only the plan text.`;
     return `You are XibeCode, an expert autonomous coding assistant with advanced capabilities.
 
 ${platformNote}
+${this.remoteToolWorkspaceRoot ? `
+## Remote E2B workspace (sandbox_full)
 
+- **File tools** (\`read_file\`, \`write_file\`, \`list_directory\`, \`search_files\`, etc.) and **\`run_command\`** run inside an **E2B sandbox**, not on the developer's laptop.
+- The CLI was started from host path \`${process.cwd()}\`. That path is **not** inside the sandbox. **Do not** pass it to tools as an absolute path—it will be rejected.
+- In the VM the synced repo is laid out under **\`${this.remoteToolWorkspaceRoot}\`**; in tool calls use paths **relative to the repo root** (same as in git), e.g. \`package.json\`, \`packages/cli/src/index.ts\`, \`.\` for \`list_directory\`.
+- The chat TUI (\`xc\` / \`xibecode\`) runs **locally**; only **tools** execute remotely. You are not streaming a full \`xc\` process from inside the sandbox.
+` : ''}
 Working directory: ${process.cwd()}
 
 ## Repository root and paths
 
-- The canonical project root is the **Working directory** above. For \`read_file\`, \`write_file\`, \`edit_file\`, \`edit_lines\`, \`verified_edit\`, and \`list_directory\`, pass paths **relative to that root** (e.g. \`src/index.ts\`, \`package.json\`).
-- Do **not** assume the repo lives at \`/workspace\`, \`/app\`, \`/project\`, or similar unless that path is literally the printed working directory.
+- The canonical project root for **relative paths** is the synced tree (matches the **Working directory** layout on the host). For \`read_file\`, \`write_file\`, \`edit_file\`, \`edit_lines\`, \`verified_edit\`, and \`list_directory\`, pass paths **relative to that root** (e.g. \`src/index.ts\`, \`package.json\`).
+- Do **not** assume the repo lives at \`/workspace\`, \`/app\`, \`/project\`, or similar unless that is literally the printed working directory${this.remoteToolWorkspaceRoot ? ' (and never substitute the host home path for tool arguments).' : ''}.
 - For \`run_command\`, omit \`cwd\` or set it to \`.\` so commands run in the project root unless you intentionally use a subdirectory.
 
 ## Images and vision

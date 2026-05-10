@@ -15,7 +15,7 @@ import { SkillManager } from 'xibecode-core';
 import { builtInSkillsDir } from '../utils/built-in-skills-dir.js';
 import chalk from 'chalk';
 import fetch from 'node-fetch';
-import { attachRemoteExecution, resolveRemoteExecutionConfig } from '../utils/remote-execution.js';
+import { attachRemoteExecution, codingToolExecutorRemoteOptions, remoteToolWorkspaceRootForAgent, resolveRemoteExecutionConfig } from '../utils/remote-execution.js';
 import { syncWorkspaceToSandbox } from '../utils/sandbox-sync.js';
 
 const pkg = createRequire(import.meta.url)('../../package.json');
@@ -339,6 +339,7 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
       maxMb: config.getSandboxSyncMaxMb(),
       excludeGlobs: config.getSandboxSyncExcludeGlobs(),
       workspaceRoot: remoteExecution.workspaceRoot,
+      respectGitignore: config.getSandboxSyncRespectGitignore(),
     });
     remoteExecution.sessionId = syncResult.sessionId;
     ui.info(`Sandbox sync complete (${Math.ceil(syncResult.bytes / 1024)}KB uploaded).`);
@@ -426,6 +427,7 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
     mcpClientManager,
     memory,
     skillManager,
+    remoteExecution: codingToolExecutorRemoteOptions(remoteExecution),
   });
   attachRemoteExecution(toolExecutor, remoteExecution);
   const sessionMemory = new SessionMemory(cwd);
@@ -458,6 +460,7 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
       postEditVerification: 'strict',
       memoryRecallMinScore: 2,
       defaultSkillsPrompt,
+      remoteToolWorkspaceRoot: remoteToolWorkspaceRootForAgent(remoteExecution),
     },
     provider as any
   );
@@ -578,6 +581,7 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
             postEditVerification: 'strict',
             memoryRecallMinScore: 2,
             defaultSkillsPrompt,
+            remoteToolWorkspaceRoot: remoteToolWorkspaceRootForAgent(remoteExecution),
           },
           provider as any
         );

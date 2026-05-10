@@ -1,4 +1,5 @@
 import { ConfigManager } from './config.js';
+import type { RemoteExecutionConfig } from 'xibecode-core';
 
 export type CliRemoteExecutionConfig = {
   gatewayUrl: string;
@@ -36,6 +37,30 @@ export function resolveRemoteExecutionConfig(
 
 export function getRuntimeStatusLabel(config: ConfigManager): 'local' | 'cloud' {
   return config.getSandboxMode() === 'e2b' ? 'cloud' : 'local';
+}
+
+/** Session + gateway wiring for core CodingToolExecutor (enables remote search_files / grep_code in sandbox_full). */
+export function codingToolExecutorRemoteOptions(
+  remote?: CliRemoteExecutionConfig,
+): RemoteExecutionConfig | undefined {
+  if (!remote || remote.strategy !== 'sandbox_full') return undefined;
+  return {
+    gatewayUrl: remote.gatewayUrl,
+    authToken: remote.authToken,
+    sessionId: remote.sessionId,
+    strategy: 'sandbox_full',
+    cwd: remote.cwd,
+    workspaceRoot: remote.workspaceRoot,
+  };
+}
+
+/** E2B workspace path for system-prompt guidance (host paths must not be passed as tool paths). */
+export function remoteToolWorkspaceRootForAgent(remote?: CliRemoteExecutionConfig): string | undefined {
+  if (!remote || remote.strategy !== 'sandbox_full') return undefined;
+  const w = remote.workspaceRoot?.trim();
+  if (w) return w;
+  const env = process.env.XIBECODE_SANDBOX_WORKSPACE_ROOT?.trim();
+  return env || '/home/user/workspace';
 }
 
 class CliRemoteExecutionClient {

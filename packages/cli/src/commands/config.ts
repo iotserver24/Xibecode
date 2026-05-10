@@ -40,6 +40,7 @@ interface ConfigOptions {
   setSandboxSessionStrategy?: string;
   setSandboxSyncMaxMb?: string;
   setSandboxSyncExclude?: string;
+  setSandboxSyncRespectGitignore?: string;
   show?: boolean;
   reset?: boolean;
   listMcpServers?: boolean;
@@ -78,6 +79,7 @@ export async function configCommand(options: ConfigOptions) {
     console.log(chalk.cyan('  xibecode config --set-sandbox-session-strategy <host_only|sandbox_full>'));
     console.log(chalk.cyan('  xibecode config --set-sandbox-sync-max-mb <number>'));
     console.log(chalk.cyan('  xibecode config --set-sandbox-sync-exclude <csv_globs>'));
+    console.log(chalk.cyan('  xibecode config --set-sandbox-sync-respect-gitignore <true|false>'));
     console.log(chalk.cyan('  xibecode config --list-mcp-servers'));
     console.log(chalk.cyan('  xibecode config --list-profiles'));
     console.log(chalk.cyan('  xibecode config --set-default-profile <name>'));
@@ -214,6 +216,19 @@ export async function configCommand(options: ConfigOptions) {
   if (options.setSandboxSyncExclude !== undefined) {
     config.set('sandboxSyncExcludeGlobs', options.setSandboxSyncExclude);
     ui.success('Sandbox sync exclude globs updated.');
+    return;
+  }
+
+  if (options.setSandboxSyncRespectGitignore !== undefined) {
+    const raw = options.setSandboxSyncRespectGitignore.trim().toLowerCase();
+    const on = raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+    const off = raw === '0' || raw === 'false' || raw === 'no' || raw === 'off';
+    if (!on && !off) {
+      ui.error('Use true or false for --set-sandbox-sync-respect-gitignore');
+      process.exit(1);
+    }
+    config.set('sandboxSyncRespectGitignore', on);
+    ui.success(`Sandbox sync respect gitignore set to: ${on}`);
     return;
   }
 

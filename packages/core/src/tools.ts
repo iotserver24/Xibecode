@@ -26,6 +26,7 @@ import { PermissionManager, type ApprovalScope, type PermissionMode } from './pe
 import { McpOAuthFlowManager } from './mcp/oauth-flow.js';
 import { RemoteExecutionClient, type RemoteExecutionConfig } from './remote-execution.js';
 import { RemoteWorkspaceClient } from './remote-workspace-client.js';
+import picomatch from 'picomatch';
 import {
   createFileHistoryState,
   fileHistoryMakeSnapshot,
@@ -2060,6 +2061,24 @@ export class CodingToolExecutor implements ToolExecutor {
     return this.remoteExecutionStrategy === 'sandbox_full' && Boolean(this.remoteWorkspaceClient);
   }
 
+  /** Relative repo path only; used for remote find/rg roots. */
+  private assertSafeRemoteSearchPath(rel: string): string {
+    const raw = rel.trim() || '.';
+    const norm = path.posix.normalize(raw.split(path.sep).join(path.posix.sep));
+    if (path.posix.isAbsolute(norm)) {
+      throw new Error('search path must be relative to the repo root');
+    }
+    for (const seg of norm.split('/')) {
+      if (seg === '..') {
+        throw new Error('search path must not traverse outside the repo');
+      }
+    }
+    if (/[^A-Za-z0-9_.\-/]/.test(norm)) {
+      throw new Error('search path contains unsupported characters');
+    }
+    return norm.length === 0 || norm === '.' ? '.' : norm;
+  }
+
   private async readRemoteFullFile(filePath: string): Promise<string> {
     if (!this.remoteWorkspaceClient) return '';
     const result = await this.remoteWorkspaceClient.readFile(filePath);
@@ -2495,6 +2514,13 @@ export class CodingToolExecutor implements ToolExecutor {
   }
 
   private async searchFiles(pattern: string, searchPath: string = '.'): Promise<any> {
+    if (this.isSandboxFullMode() && this.remoteExecutionClient) {
+      try {
+        return await this.searchFilesInSandbox(pattern, searchPath);
+      } catch (error: any) {
+        return { error: true, success: false, message: `Failed to search files: ${error.message}` };
+      }
+    }
     try {
       const files = await this.contextManager.searchFiles(pattern, { maxResults: 100 });
       return {
@@ -2505,6 +2531,59 @@ export class CodingToolExecutor implements ToolExecutor {
     } catch (error: any) {
       return { error: true, success: false, message: `Failed to search files: ${error.message}` };
     }
+  }
+
+  private async searchFilesInSandbox(pattern: string, searchPath: string): Promise<any> {
+    const client = this.remoteExecutionClient;
+    if (!client) {
+      return { error: true, success: false, message: 'Remote execution client not available' };
+    }
+    const root = client.getWorkspaceRoot();
+    if (!root) {
+      return { error: true, success: false, message: 'Remote workspace root unset' };
+    }
+    let subdir: string;
+    try {
+      subdir = this.assertSafeRemoteSearchPath(searchPath);
+    } catch (e: any) {
+      return { error: true, success: false, message: e.message || String(e) };
+    }
+    const globPattern = (pattern || '**/*').trim() || '**/*';
+    const findDir = subdir === '.' ? '.' : subdir;
+    const cmd = `find ${findDir} -type f 2>/dev/null | head -n 8000`;
+    const result = await client.runCommand({
+      command: cmd,
+      cwd: root,
+      timeout: 120,
+      maxOutputChars: 2_000_000,
+    });
+    if (result?.error && result?.success === false) {
+      return {
+        error: true,
+        success: false,
+        message: String(result.stderr || result.message || 'find failed in sandbox'),
+        pattern,
+        searchPath: subdir,
+      };
+    }
+    const raw = String(result.stdout ?? '');
+    const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+    const isMatch = picomatch(globPattern, { dot: true });
+    const files: string[] = [];
+    for (const line of lines) {
+      const rel = line.replace(/^\.\//, '');
+      if (rel && isMatch(rel)) {
+        files.push(rel);
+        if (files.length >= 100) break;
+      }
+    }
+    return {
+      pattern: globPattern,
+      searchPath: subdir,
+      files,
+      count: files.length,
+      truncated_scan: lines.length >= 8000,
+    };
   }
 
   /**
@@ -3454,6 +3533,9 @@ export class CodingToolExecutor implements ToolExecutor {
     filePattern?: string,
     maxResults: number = 50
   ): Promise<any> {
+    if (this.isSandboxFullMode() && this.remoteExecutionClient) {
+      return this.grepCodeInSandbox(pattern, searchPath, ignoreCase, filePattern, maxResults);
+    }
     const fullPath = this.resolvePath(searchPath);
     const caseFlag = ignoreCase ? '-i' : '';
 
@@ -3506,6 +3588,73 @@ export class CodingToolExecutor implements ToolExecutor {
       }
       return { error: true, success: false, message: `Grep failed: ${error.message}` };
     }
+  }
+
+  private async grepCodeInSandbox(
+    pattern: string,
+    searchPath: string = '.',
+    ignoreCase: boolean = false,
+    filePattern?: string,
+    maxResults: number = 50
+  ): Promise<any> {
+    const client = this.remoteExecutionClient;
+    if (!client) {
+      return { error: true, success: false, message: 'Remote execution client not available' };
+    }
+    const root = client.getWorkspaceRoot();
+    if (!root) {
+      return { error: true, success: false, message: 'Remote workspace root unset' };
+    }
+    let subdir: string;
+    try {
+      subdir = this.assertSafeRemoteSearchPath(searchPath);
+    } catch (e: any) {
+      return { error: true, success: false, message: e.message || String(e) };
+    }
+    const caseFlag = ignoreCase ? '-i' : '';
+    const safePattern = JSON.stringify(pattern);
+    const safeSub = JSON.stringify(subdir);
+    const includeGlob = filePattern ? ` --glob ${JSON.stringify(filePattern)}` : '';
+    const rgCmd = `rg --no-heading --line-number --max-count ${maxResults} ${caseFlag}${includeGlob} -- ${safePattern} ${safeSub} 2>/dev/null`;
+    let result = await client.runCommand({
+      command: rgCmd,
+      cwd: root,
+      timeout: 90,
+      maxOutputChars: 500_000,
+    });
+    let output = String(result.stdout ?? '');
+    if (!output.trim()) {
+      const includeFlag = filePattern ? `--include=${JSON.stringify(filePattern)}` : '';
+      const grepCmd = `grep -rnI ${caseFlag} ${includeFlag} -- ${safePattern} ${safeSub} 2>/dev/null | head -${maxResults}`;
+      result = await client.runCommand({
+        command: grepCmd,
+        cwd: root,
+        timeout: 90,
+        maxOutputChars: 500_000,
+      });
+      output = String(result.stdout ?? '');
+    }
+    const lines = output.trim().split('\n').filter(Boolean);
+    if (lines.length === 0) {
+      return { success: true, pattern, total: 0, matches: [], message: 'No matches found' };
+    }
+    const matches = lines.map((line) => {
+      const m = line.match(/^(.+?):(\d+):(.*)$/);
+      if (m) {
+        return {
+          file: m[1],
+          line: parseInt(m[2], 10),
+          content: m[3].trim(),
+        };
+      }
+      return { raw: line };
+    });
+    return {
+      success: true,
+      pattern,
+      total: matches.length,
+      matches,
+    };
   }
 
   // ── web_search: DuckDuckGo HTML ───────────────────────────

@@ -25,7 +25,9 @@ import { AutoMemoryManager, HooksManager, SettingsManager as CoreSettingsManager
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
 import {
   attachRemoteExecution,
+  codingToolExecutorRemoteOptions,
   getRuntimeStatusLabel,
+  remoteToolWorkspaceRootForAgent,
   resolveRemoteExecutionConfig,
 } from '../utils/remote-execution.js';
 import { syncWorkspaceToSandbox } from '../utils/sandbox-sync.js';
@@ -2163,6 +2165,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
       maxMb: config.getSandboxSyncMaxMb(),
       excludeGlobs: config.getSandboxSyncExcludeGlobs(),
       workspaceRoot: remoteExecution.workspaceRoot,
+      respectGitignore: config.getSandboxSyncRespectGitignore(),
     });
     remoteExecution.sessionId = syncResult.sessionId;
   }
@@ -2177,10 +2180,12 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     mcpClientManager,
     skillManager,
     memory,
+    remoteExecution: codingToolExecutorRemoteOptions(remoteExecution),
   });
   attachRemoteExecution(toolExecutor, remoteExecution);
   let wireFormat: RequestWireFormat = config.get('requestFormat') ?? 'auto';
   const customProviderFormat = config.get('customProviderFormat');
+  const remoteWs = remoteToolWorkspaceRootForAgent(remoteExecution);
   const createAgentForModel = (modelName: string, creds: { apiKey: string; baseUrl?: string }): EnhancedAgent =>
     new EnhancedAgent(
       {
@@ -2193,6 +2198,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
         customProviderFormat,
         requestFormat: wireFormat,
         defaultSkillsPrompt,
+        remoteToolWorkspaceRoot: remoteWs,
       },
       provider,
     );

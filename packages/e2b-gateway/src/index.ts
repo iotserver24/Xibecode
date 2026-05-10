@@ -140,6 +140,23 @@ async function createSession(input: { sessionId?: string; cwd?: string; strategy
     syncStageFile: `/tmp/xibecode-sync-${sessionId}.b64`,
   };
   sessions.set(sessionId, session);
+
+  if (strategy === 'sandbox_full') {
+    try {
+      const mk = await sandbox.commands?.run(`mkdir -p ${shQuote(requestedWorkspaceRoot)}`, {
+        cwd: '/tmp',
+        timeoutMs: 60_000,
+      });
+      if (mk && (mk as any).exitCode && (mk as any).exitCode !== 0) {
+        console.warn(
+          `[xibecode-e2b-gateway] mkdir workspace failed (${(mk as any).exitCode}): ${String((mk as any).stderr ?? '')}`,
+        );
+      }
+    } catch (e) {
+      console.warn(`[xibecode-e2b-gateway] mkdir workspace error: ${(e as Error).message}`);
+    }
+  }
+
   return session;
 }
 

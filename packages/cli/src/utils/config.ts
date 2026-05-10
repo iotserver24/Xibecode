@@ -68,6 +68,11 @@ export interface XibeCodeConfig {
   sandboxSyncMaxMb?: number;
   /** Comma-separated globs to exclude during sandbox_full local_push sync. */
   sandboxSyncExcludeGlobs?: string;
+  /**
+   * When true (default), build sandbox tarball from git ls-files (tracked + untracked, honoring .gitignore).
+   * When false, archive the current directory with tar --exclude only (legacy).
+   */
+  sandboxSyncRespectGitignore?: boolean;
 }
 
 type XibeCodeMetaConfig = {
@@ -128,6 +133,7 @@ export class ConfigManager {
         sandboxSessionStrategy: 'host_only',
         sandboxSyncMaxMb: 50,
         sandboxSyncExcludeGlobs: '.git,node_modules,.xibecode,dist,build,.next,.turbo,.env,.env.*',
+        sandboxSyncRespectGitignore: true,
       },
     });
   }
@@ -352,6 +358,18 @@ export class ConfigManager {
   }
 
   /**
+   * Whether sandbox_full sync should use git ls-files + .gitignore rules (default true).
+   * Set XIBECODE_SANDBOX_SYNC_RESPECT_GITIGNORE=0 to disable.
+   */
+  getSandboxSyncRespectGitignore(): boolean {
+    const env = process.env.XIBECODE_SANDBOX_SYNC_RESPECT_GITIGNORE?.trim().toLowerCase();
+    if (env === '0' || env === 'false' || env === 'no' || env === 'off') return false;
+    if (env === '1' || env === 'true' || env === 'yes' || env === 'on') return true;
+    const v = this.get('sandboxSyncRespectGitignore');
+    return v !== false;
+  }
+
+  /**
    * Get preferred theme name
    */
   getTheme(): string {
@@ -485,6 +503,7 @@ export class ConfigManager {
       'Sandbox Session Strategy': this.getSandboxSessionStrategy(),
       'Sandbox Sync Max MB': this.getSandboxSyncMaxMb().toString(),
       'Sandbox Sync Excludes': this.getSandboxSyncExcludeGlobs().join(', ') || 'Not set',
+      'Sandbox Sync Respect Gitignore': this.getSandboxSyncRespectGitignore() ? 'true' : 'false',
       'Default Profile': this.getDefaultProfile(),
       'Config Path': this.getConfigPath(),
     };

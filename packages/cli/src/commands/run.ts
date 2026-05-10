@@ -18,7 +18,7 @@ import { PlanSessionManager } from 'xibecode-core';
 import { SessionBridge } from 'xibecode-core';
 import { builtInSkillsDir } from '../utils/built-in-skills-dir.js';
 import chalk from 'chalk';
-import { attachRemoteExecution, resolveRemoteExecutionConfig } from '../utils/remote-execution.js';
+import { attachRemoteExecution, codingToolExecutorRemoteOptions, remoteToolWorkspaceRootForAgent, resolveRemoteExecutionConfig } from '../utils/remote-execution.js';
 import { syncWorkspaceToSandbox } from '../utils/sandbox-sync.js';
 
 interface RunOptions {
@@ -94,6 +94,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
       maxMb: config.getSandboxSyncMaxMb(),
       excludeGlobs: config.getSandboxSyncExcludeGlobs(),
       workspaceRoot: remoteExecution.workspaceRoot,
+      respectGitignore: config.getSandboxSyncRespectGitignore(),
     });
     remoteExecution.sessionId = syncResult.sessionId;
     ui.info(`Sandbox sync complete (${Math.ceil(syncResult.bytes / 1024)}KB uploaded).`);
@@ -283,6 +284,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
     mcpClientManager,
     memory,
     skillManager,
+    remoteExecution: codingToolExecutorRemoteOptions(remoteExecution),
   });
   attachRemoteExecution(toolExecutor, remoteExecution);
   const [contextHintFiles] = await Promise.all([
@@ -311,6 +313,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
       postEditVerification: 'balanced',
       memoryRecallMinScore: 2,
       defaultSkillsPrompt,
+      remoteToolWorkspaceRoot: remoteToolWorkspaceRootForAgent(remoteExecution),
     },
     provider as any);
   // Inject memory into agent (we'll need to update Agent to accept it or just let it use its own? Better to share same instance)

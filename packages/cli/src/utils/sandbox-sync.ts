@@ -4,6 +4,55 @@ import type { CliRemoteExecutionConfig } from './remote-execution.js';
 
 const DEFAULT_CHUNK_BYTES = 32 * 1024;
 
+function spawnBuffer(cmd: string, args: string[], cwd: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { cwd });
+    const chunks: Buffer[] = [];
+    let stderr = '';
+    child.stdout.on('data', (c: Buffer) => chunks.push(c));
+    child.stderr.on('data', (c: Buffer) => {
+      stderr += c.toString();
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`${cmd} ${args.join(' ')} failed (${code}): ${stderr.trim() || 'no stderr'}`));
+        return;
+      }
+      resolve(Buffer.concat(chunks));
+    });
+  });
+}
+
+function decodeNullSeparatedPaths(buf: Buffer): string[] {
+  if (!buf.length) return [];
+  const raw = buf.toString('utf8');
+  const parts = raw.split('\0');
+  return parts.filter((p) => p.length > 0);
+}
+
+/** Repo root or null if cwd is not inside a git work tree. */
+async function gitRepoRoot(cwd: string): Promise<string | null> {
+  try {
+    const inside = (await spawnBuffer('git', ['rev-parse', '--is-inside-work-tree'], cwd)).toString('utf8').trim();
+    if (inside !== 'true') return null;
+    const root = (await spawnBuffer('git', ['rev-parse', '--show-toplevel'], cwd)).toString('utf8').trim();
+    return root || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Tracked + untracked paths that are not ignored by repo/global gitignore rules.
+ * Paths are relative to `repoRoot` (POSIX separators as git emits).
+ */
+async function gitWorkspacePaths(repoRoot: string): Promise<string[]> {
+  const tracked = decodeNullSeparatedPaths(await spawnBuffer('git', ['ls-files', '-z'], repoRoot));
+  const untracked = decodeNullSeparatedPaths(await spawnBuffer('git', ['ls-files', '-z', '-o', '--exclude-standard'], repoRoot));
+  return Array.from(new Set([...tracked, ...untracked])).sort((a, b) => a.localeCompare(b));
+}
+
 function getHeaders(authToken?: string): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (authToken) {
@@ -41,7 +90,8 @@ async function ensureRemoteSession(config: CliRemoteExecutionConfig): Promise<st
   return (typeof payload?.sessionId === 'string' && payload.sessionId.trim()) ? payload.sessionId.trim() : sessionId;
 }
 
-async function createTarGzBuffer(cwd: string, excludeGlobs: string[]): Promise<Buffer> {
+/** Tar whole directory (legacy) with optional extra --exclude globs. */
+async function createTarGzFromDirectory(cwd: string, excludeGlobs: string[]): Promise<Buffer> {
   const tarArgs = ['-czf', '-', '.'];
   for (const glob of excludeGlobs) {
     tarArgs.unshift(`--exclude=${glob}`);
@@ -63,6 +113,57 @@ async function createTarGzBuffer(cwd: string, excludeGlobs: string[]): Promise<B
       resolve(Buffer.concat(stdoutChunks));
     });
   });
+}
+
+/**
+ * Tar exactly the given paths (relative to repoRoot) plus tar --exclude globs.
+ * Uses GNU tar semantics: paths must use / as separator; no leading ./.
+ */
+async function createTarGzFromPathList(repoRoot: string, relativePaths: string[], excludeGlobs: string[]): Promise<Buffer> {
+  const stdin = Buffer.concat(relativePaths.map((p) => Buffer.from(`${p}\0`, 'utf8')));
+  const tarArgs = ['-czf', '-', '--null', '-T', '-'];
+  for (const glob of excludeGlobs) {
+    tarArgs.unshift(`--exclude=${glob}`);
+  }
+  return new Promise((resolve, reject) => {
+    const child = spawn('tar', tarArgs, { cwd: repoRoot, stdio: ['pipe', 'pipe', 'pipe'] });
+    const stdoutChunks: Buffer[] = [];
+    let stderr = '';
+    child.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`tar -T failed with exit code ${code}: ${stderr || 'unknown error'}`));
+        return;
+      }
+      resolve(Buffer.concat(stdoutChunks));
+    });
+    child.stdin.end(stdin);
+  });
+}
+
+async function createTarGzBuffer(
+  cwd: string,
+  excludeGlobs: string[],
+  respectGitignore: boolean,
+): Promise<Buffer> {
+  if (respectGitignore) {
+    const root = await gitRepoRoot(cwd);
+    if (root) {
+      try {
+        const paths = await gitWorkspacePaths(root);
+        if (paths.length > 0) {
+          return createTarGzFromPathList(root, paths, excludeGlobs);
+        }
+      } catch {
+        /* fall through to directory tar */
+      }
+    }
+  }
+  return createTarGzFromDirectory(cwd, excludeGlobs);
 }
 
 async function uploadChunks(
@@ -102,10 +203,12 @@ export async function syncWorkspaceToSandbox(
     maxMb: number;
     excludeGlobs: string[];
     workspaceRoot?: string;
+    /** When true (default), prefer git ls-files (tracked + untracked, honoring .gitignore). */
+    respectGitignore?: boolean;
   },
 ): Promise<{ sessionId: string; workspaceRoot?: string; bytes: number }> {
   const sessionId = await ensureRemoteSession(remoteExecution);
-  const archive = await createTarGzBuffer(cwd, options.excludeGlobs);
+  const archive = await createTarGzBuffer(cwd, options.excludeGlobs, options.respectGitignore !== false);
   const maxBytes = Math.max(1, options.maxMb) * 1024 * 1024;
   if (archive.length > maxBytes) {
     throw new Error(

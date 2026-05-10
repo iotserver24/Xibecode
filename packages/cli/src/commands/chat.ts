@@ -12,8 +12,10 @@ import { EnhancedAgent, AgentStream } from 'xibecode-core';
 import { SessionManager } from 'xibecode-core';
 import {
   attachRemoteExecution,
-  resolveRemoteExecutionConfig,
+  codingToolExecutorRemoteOptions,
   getRuntimeStatusLabel,
+  remoteToolWorkspaceRootForAgent,
+  resolveRemoteExecutionConfig,
 } from '../utils/remote-execution.js';
 import { syncWorkspaceToSandbox } from '../utils/sandbox-sync.js';
 
@@ -50,6 +52,7 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
       maxMb: config.getSandboxSyncMaxMb(),
       excludeGlobs: config.getSandboxSyncExcludeGlobs(),
       workspaceRoot: remoteExecution.workspaceRoot,
+      respectGitignore: config.getSandboxSyncRespectGitignore(),
     });
     remoteExecution.sessionId = syncResult.sessionId;
   }
@@ -60,7 +63,12 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
   const mcpClientManager = new MCPClientManager();
   const memory = new NeuralMemory(process.cwd());
   await memory.init().catch(() => { });
-  const toolExecutor = new CodingToolExecutor(process.cwd(), { mcpClientManager, skillManager, memory });
+  const toolExecutor = new CodingToolExecutor(process.cwd(), {
+    mcpClientManager,
+    skillManager,
+    memory,
+    remoteExecution: codingToolExecutorRemoteOptions(remoteExecution),
+  });
   attachRemoteExecution(toolExecutor, remoteExecution);
 
   console.log(`xibecode chat (plain) v${version}`.trim());
@@ -116,6 +124,7 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
         customProviderFormat: config.get('customProviderFormat'),
         requestFormat: config.get('requestFormat') ?? 'auto',
         defaultSkillsPrompt,
+        remoteToolWorkspaceRoot: remoteToolWorkspaceRootForAgent(remoteExecution),
       },
       provider,
     );
