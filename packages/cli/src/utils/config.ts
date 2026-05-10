@@ -6,6 +6,17 @@ import { MCPServersFileManager, PROVIDER_CONFIGS, type ProviderType, type MCPSer
 
 export { PROVIDER_CONFIGS, type ProviderType, type MCPServerConfig, type MCPServersConfig, type MCPServerConfigLegacy };
 
+/**
+ * Built-in cloud defaults for distributed CLI binaries.
+ *
+ * Override precedence for users remains:
+ *   1) XIBECODE_SANDBOX_* runtime env vars
+ *   2) xibecode config profile values
+ *   3) these default env values (publisher-controlled)
+ */
+const DEFAULT_SANDBOX_GATEWAY_URL = process.env.XIBECODE_DEFAULT_SANDBOX_GATEWAY_URL?.trim() || '';
+const DEFAULT_SANDBOX_AUTH_TOKEN = process.env.XIBECODE_DEFAULT_SANDBOX_AUTH_TOKEN?.trim() || '';
+
 export interface XibeCodeConfig {
   apiKey?: string;
   baseUrl?: string;
@@ -332,11 +343,19 @@ export class ConfigManager {
   }
 
   getSandboxGatewayUrl(): string | undefined {
-    return process.env.XIBECODE_SANDBOX_GATEWAY_URL || this.get('sandboxGatewayUrl');
+    const env = process.env.XIBECODE_SANDBOX_GATEWAY_URL?.trim();
+    if (env) return env;
+    const configured = this.get('sandboxGatewayUrl')?.trim();
+    if (configured) return configured;
+    return DEFAULT_SANDBOX_GATEWAY_URL || undefined;
   }
 
   getSandboxAuthToken(): string | undefined {
-    return process.env.XIBECODE_SANDBOX_AUTH_TOKEN || this.get('sandboxAuthToken');
+    const env = process.env.XIBECODE_SANDBOX_AUTH_TOKEN?.trim();
+    if (env) return env;
+    const configured = this.get('sandboxAuthToken')?.trim();
+    if (configured) return configured;
+    return DEFAULT_SANDBOX_AUTH_TOKEN || undefined;
   }
 
   getSandboxSessionStrategy(): 'host_only' | 'sandbox_full' {

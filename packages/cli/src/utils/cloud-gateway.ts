@@ -75,3 +75,39 @@ export async function downloadSandboxExportArchive(
   const bytes = await response.arrayBuffer();
   return Buffer.from(bytes);
 }
+
+export async function resolveSessionBySandboxId(
+  remoteExecution: CliRemoteExecutionConfig,
+  sandboxId: string,
+): Promise<{ sessionId: string; sandboxId: string; workspaceRoot?: string; strategy?: string }> {
+  const value = sandboxId.trim();
+  if (!value) {
+    throw new Error('Sandbox ID cannot be empty.');
+  }
+  const base = remoteExecution.gatewayUrl.replace(/\/+$/, '');
+  const response = await fetch(`${base}/sessions/by-sandbox/${encodeURIComponent(value)}`, {
+    method: 'GET',
+    headers: getHeaders(remoteExecution.authToken),
+  });
+  const payload = await parseJson(response);
+  if (!response.ok || payload?.success === false) {
+    throw new Error(String(payload?.message || `Failed to resolve sandbox ${value} (${response.status})`));
+  }
+  const sessionId = String(payload?.sessionId || '').trim();
+  const resolvedSandboxId = String(payload?.sandboxId || '').trim();
+  if (!sessionId || !resolvedSandboxId) {
+    throw new Error(`Gateway did not return valid session metadata for sandbox ${value}.`);
+  }
+  return {
+    sessionId,
+    sandboxId: resolvedSandboxId,
+    workspaceRoot:
+      typeof payload?.workspaceRoot === 'string' && payload.workspaceRoot.trim()
+        ? payload.workspaceRoot.trim()
+        : undefined,
+    strategy:
+      typeof payload?.strategy === 'string' && payload.strategy.trim()
+        ? payload.strategy.trim()
+        : undefined,
+  };
+}

@@ -13,6 +13,9 @@ import { skillsCommand } from './commands/skills.js';
 import { settingsCommand } from './commands/settings.js';
 import { hooksCommand } from './commands/hooks.js';
 import { memoryCommand } from './commands/memory.js';
+import { resolveSessionBySandboxId } from './utils/cloud-gateway.js';
+import { ConfigManager } from './utils/config.js';
+import { resolveRemoteExecutionConfig } from './utils/remote-execution.js';
 import dotenv from 'dotenv';
 import { createRequire } from 'module';
 
@@ -103,6 +106,31 @@ const cloudCmd = program
   .option('--plain', 'Disable Ink UI; print line-by-line output (best for copying)', false)
   .action(async (options: Parameters<typeof chatCommand>[0]) => {
     process.env.XIBECODE_SANDBOX_MODE = 'e2b';
+    await chatCommand(options);
+  });
+
+cloudCmd
+  .command('resume')
+  .description('Resume chat on an existing cloud sandbox by sandbox ID')
+  .argument('<sandbox-id>', 'E2B sandbox ID to resume')
+  .option('-m, --model <model>', 'AI model to use')
+  .option('-b, --base-url <url>', 'Custom API base URL')
+  .option('-k, --api-key <key>', 'API key (overrides config)')
+  .option('--profile <name>', 'Config profile to use (default: configured default profile)')
+  .option('--provider <provider>', 'Model API format: anthropic or openai')
+  .option('--cost-mode <mode>', 'Cost mode: normal or economy', 'normal')
+  .option('--theme <theme>', 'UI theme to use')
+  .option('--plain', 'Disable Ink UI; print line-by-line output (best for copying)', false)
+  .action(async (sandboxId: string, options: Parameters<typeof chatCommand>[0]) => {
+    process.env.XIBECODE_SANDBOX_MODE = 'e2b';
+    const config = new ConfigManager(options.profile);
+    const remote = resolveRemoteExecutionConfig(config, process.cwd());
+    if (!remote) {
+      throw new Error('Cloud runtime is not configured. Set sandbox gateway and token first.');
+    }
+    const resolved = await resolveSessionBySandboxId(remote, sandboxId);
+    process.env.XIBECODE_SANDBOX_SESSION_ID = resolved.sessionId;
+    process.env.XIBECODE_SANDBOX_SKIP_SYNC = '1';
     await chatCommand(options);
   });
 

@@ -32,7 +32,7 @@ export function resolveRemoteExecutionConfig(
     strategy,
     cwd,
     workspaceRoot,
-    sessionId: createSessionId(),
+    sessionId: process.env.XIBECODE_SANDBOX_SESSION_ID?.trim() || createSessionId(),
   };
 }
 

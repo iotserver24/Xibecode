@@ -2175,7 +2175,9 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
   const memory = new NeuralMemory(process.cwd());
   await memory.init().catch(() => { });
   const remoteExecution = resolveRemoteExecutionConfig(config, process.cwd());
-  if (remoteExecution?.strategy === 'sandbox_full') {
+  const skipInitialSync =
+    process.env.XIBECODE_SANDBOX_SKIP_SYNC === '1' || process.env.XIBECODE_SANDBOX_SKIP_SYNC === 'true';
+  if (remoteExecution?.strategy === 'sandbox_full' && !skipInitialSync) {
     const syncResult = await withCloudWorkspaceSyncSpinner(() =>
       syncWorkspaceToSandbox(remoteExecution, process.cwd(), {
         maxMb: config.getSandboxSyncMaxMb(),
@@ -2186,6 +2188,8 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     );
     remoteExecution.sessionId = syncResult.sessionId;
     remoteExecution.e2bSandboxId = syncResult.sandboxId || remoteExecution.e2bSandboxId;
+  } else if (skipInitialSync && remoteExecution?.strategy === 'sandbox_full' && !remoteExecution.sessionId) {
+    throw new Error('Cloud resume requested without a sandbox session ID.');
   }
   const cloudHint = await getCloudRuntimeHint(remoteExecution);
   const runtimeStatus = getRuntimeStatusLabel(config);

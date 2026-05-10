@@ -531,6 +531,30 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    const bySandboxMatch = url.pathname.match(/^\/sessions\/by-sandbox\/([^/]+)$/);
+    if (method === 'GET' && bySandboxMatch) {
+      const requestedSandboxId = decodeURIComponent(bySandboxMatch[1] || '').trim();
+      if (!requestedSandboxId) {
+        sendJson(res, 400, { success: false, error: true, message: 'Missing sandboxId path parameter' });
+        return;
+      }
+      const session = Array.from(sessions.values()).find((s) => s.sandboxId === requestedSandboxId);
+      if (!session) {
+        sendJson(res, 404, { success: false, error: true, message: `Sandbox not found: ${requestedSandboxId}` });
+        return;
+      }
+      session.updatedAt = Date.now();
+      sendJson(res, 200, {
+        success: true,
+        sessionId: session.sessionId,
+        sandboxId: session.sandboxId,
+        strategy: session.strategy,
+        cwd: session.cwd,
+        workspaceRoot: session.workspaceRoot,
+      });
+      return;
+    }
+
     if (method === 'POST' && url.pathname === '/sessions') {
       const body = await readJson<{ sessionId?: string; cwd?: string; strategy?: string; workspaceRoot?: string }>(req);
       const session = await createSession(body);
