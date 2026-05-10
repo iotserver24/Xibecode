@@ -21,6 +21,7 @@ import chalk from 'chalk';
 import { attachRemoteExecution, codingToolExecutorRemoteOptions, remoteToolWorkspaceRootForAgent, resolveRemoteExecutionConfig } from '../utils/remote-execution.js';
 import { syncWorkspaceToSandbox } from '../utils/sandbox-sync.js';
 import { withCloudWorkspaceSyncSpinner } from '../utils/cloud-sync-feedback.js';
+import { getCloudRuntimeHint } from '../utils/cloud-runtime-hints.js';
 
 interface RunOptions {
   file?: string;
@@ -99,7 +100,9 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
       }),
     );
     remoteExecution.sessionId = syncResult.sessionId;
+    remoteExecution.e2bSandboxId = syncResult.sandboxId || remoteExecution.e2bSandboxId;
   }
+  const cloudHint = await getCloudRuntimeHint(remoteExecution);
 
   // Diagnostic — always print resolved config so misconfiguration is obvious
   const maskedKey = apiKey
@@ -117,6 +120,15 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
         ? 'full (workspace synced to E2B)'
         : 'host_only (file edits stay local)';
     console.log(chalk.dim('  sandbox   ') + chalk.cyan(sandboxLabel));
+    if (cloudHint.sandboxId) {
+      console.log(chalk.dim('  sandbox id') + chalk.cyan(` ${cloudHint.sandboxId}`));
+    }
+    if (cloudHint.previewUrl) {
+      console.log(chalk.dim('  preview   ') + chalk.cyan(cloudHint.previewUrl));
+    }
+    if (cloudHint.pullHint) {
+      console.log(chalk.dim('  pull      ') + chalk.cyan(cloudHint.pullHint));
+    }
   } else {
     console.log(chalk.dim('  runtime   ') + chalk.cyan('local'));
   }
@@ -315,6 +327,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
       memoryRecallMinScore: 2,
       defaultSkillsPrompt,
       remoteToolWorkspaceRoot: remoteToolWorkspaceRootForAgent(remoteExecution),
+      remoteToolSandboxId: remoteExecution?.e2bSandboxId,
     },
     provider as any);
   // Inject memory into agent (we'll need to update Agent to accept it or just let it use its own? Better to share same instance)

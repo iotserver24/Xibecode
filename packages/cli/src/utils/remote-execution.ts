@@ -5,6 +5,7 @@ export type CliRemoteExecutionConfig = {
   gatewayUrl: string;
   authToken?: string;
   sessionId?: string;
+  e2bSandboxId?: string;
   strategy?: 'host_only' | 'sandbox_full';
   cwd?: string;
   workspaceRoot?: string;
@@ -63,22 +64,31 @@ export function remoteToolWorkspaceRootForAgent(remote?: CliRemoteExecutionConfi
   return env || '/home/user/workspace';
 }
 
+export function remoteToolSandboxIdForAgent(remote?: CliRemoteExecutionConfig): string | undefined {
+  const sid = remote?.e2bSandboxId?.trim();
+  return sid || undefined;
+}
+
 class CliRemoteExecutionClient {
+  private readonly configRef: CliRemoteExecutionConfig;
   private readonly gatewayUrl: string;
   private readonly authToken?: string;
   private readonly cwd?: string;
   private readonly strategy: 'host_only' | 'sandbox_full';
   private readonly workspaceRoot?: string;
   private sessionId: string;
+  private e2bSandboxId?: string;
   private initialized = false;
 
   constructor(config: CliRemoteExecutionConfig) {
+    this.configRef = config;
     this.gatewayUrl = config.gatewayUrl.replace(/\/+$/, '');
     this.authToken = config.authToken;
     this.cwd = config.cwd;
     this.strategy = config.strategy || 'host_only';
     this.workspaceRoot = config.workspaceRoot;
     this.sessionId = config.sessionId || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    this.e2bSandboxId = config.e2bSandboxId;
   }
 
   private getHeaders(): Record<string, string> {
@@ -117,8 +127,17 @@ class CliRemoteExecutionClient {
     }
     if (typeof payload?.sessionId === 'string' && payload.sessionId.trim()) {
       this.sessionId = payload.sessionId.trim();
+      this.configRef.sessionId = this.sessionId;
+    }
+    if (typeof payload?.sandboxId === 'string' && payload.sandboxId.trim()) {
+      this.e2bSandboxId = payload.sandboxId.trim();
+      this.configRef.e2bSandboxId = this.e2bSandboxId;
     }
     this.initialized = true;
+  }
+
+  getSandboxId(): string | undefined {
+    return this.e2bSandboxId?.trim() || undefined;
   }
 
   private async request(path: string, init: RequestInit): Promise<any> {
@@ -230,6 +249,11 @@ export function attachRemoteExecution(toolExecutor: any, remoteExecution?: CliRe
   const remoteClient = new CliRemoteExecutionClient(remoteExecution);
   const originalExecute = toolExecutor.execute.bind(toolExecutor);
   toolExecutor.execute = async (toolName: string, input: any) => {
+    if (!remoteExecution.e2bSandboxId) {
+      await remoteClient.ensureSession().catch(() => undefined);
+      const sid = remoteClient.getSandboxId();
+      if (sid) remoteExecution.e2bSandboxId = sid;
+    }
     if (toolName === 'run_command' && input && typeof input.command === 'string') {
       return remoteClient.runCommand(input);
     }

@@ -71,7 +71,9 @@ async function parseJson(response: Response): Promise<any> {
   }
 }
 
-async function ensureRemoteSession(config: CliRemoteExecutionConfig): Promise<string> {
+async function ensureRemoteSession(
+  config: CliRemoteExecutionConfig,
+): Promise<{ sessionId: string; sandboxId?: string }> {
   const sessionId = config.sessionId || randomUUID();
   const response = await fetch(`${config.gatewayUrl.replace(/\/+$/, '')}/sessions`, {
     method: 'POST',
@@ -87,7 +89,14 @@ async function ensureRemoteSession(config: CliRemoteExecutionConfig): Promise<st
   if (!response.ok || payload?.success === false) {
     throw new Error(String(payload?.message || `Gateway session setup failed (${response.status})`));
   }
-  return (typeof payload?.sessionId === 'string' && payload.sessionId.trim()) ? payload.sessionId.trim() : sessionId;
+  const resolvedSessionId =
+    (typeof payload?.sessionId === 'string' && payload.sessionId.trim()) ? payload.sessionId.trim() : sessionId;
+  const resolvedSandboxId =
+    (typeof payload?.sandboxId === 'string' && payload.sandboxId.trim()) ? payload.sandboxId.trim() : undefined;
+  return {
+    sessionId: resolvedSessionId,
+    sandboxId: resolvedSandboxId,
+  };
 }
 
 /** Tar whole directory (legacy) with optional extra --exclude globs. */
@@ -206,8 +215,12 @@ export async function syncWorkspaceToSandbox(
     /** When true (default), prefer git ls-files (tracked + untracked, honoring .gitignore). */
     respectGitignore?: boolean;
   },
-): Promise<{ sessionId: string; workspaceRoot?: string; bytes: number }> {
-  const sessionId = await ensureRemoteSession(remoteExecution);
+): Promise<{ sessionId: string; sandboxId?: string; workspaceRoot?: string; bytes: number }> {
+  const session = await ensureRemoteSession(remoteExecution);
+  const sessionId = session.sessionId;
+  if (session.sandboxId) {
+    remoteExecution.e2bSandboxId = session.sandboxId;
+  }
   const archive = await createTarGzBuffer(cwd, options.excludeGlobs, options.respectGitignore !== false);
   const maxBytes = Math.max(1, options.maxMb) * 1024 * 1024;
   if (archive.length > maxBytes) {
@@ -219,6 +232,7 @@ export async function syncWorkspaceToSandbox(
   await uploadChunks(remoteExecution.gatewayUrl, remoteExecution.authToken, sessionId, archive, options.workspaceRoot);
   return {
     sessionId,
+    sandboxId: session.sandboxId,
     workspaceRoot: options.workspaceRoot,
     bytes: archive.length,
   };

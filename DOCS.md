@@ -556,7 +556,10 @@ xibecode config --set-sandbox-sync-exclude ".git,node_modules,.xibecode,dist,bui
 Notes:
 - `host_only` means only `run_command` executes in E2B; file tools still operate on your local checkout.
 - `sandbox_full` uploads a compressed workspace tarball to the gateway (`local_push`) and runs file + shell operations in E2B.
+- In `sandbox_full`, the CLI now records the active `sandboxId` and can query the gateway for preview hosts. Typical preview shape is `https://{port}-{sandboxId}.e2b.dev` (gateway may return a different host format from E2B SDK `getHost`).
+- To pull verified sandbox edits back to local disk, use `xc cloud pull --session <id>` (or `xibecode cloud pull --session <id>`). By default this extracts to `.xibecode/sandbox-pull-<timestamp>`; add `--apply` to write directly into the current working directory.
 - Upload routes are intended for authenticated machine clients and may be blocked by strict Cloudflare Browser Integrity/WAF rules. If you keep orange-cloud proxying, add a scoped rule for your gateway hostname and API paths.
+- Gateway export route (`GET /sessions/:id/export`) returns a compressed archive of `workspaceRoot` and is protected by the same bearer token as other session routes.
 - Never distribute `E2B_API_KEY` to end users. Only distribute gateway URL + gateway token.
 - For a custom template, see `sandbox/e2b-template/Dockerfile` and set `XIBECODE_E2B_TEMPLATE` on the gateway.
 

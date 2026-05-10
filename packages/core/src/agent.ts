@@ -78,6 +78,8 @@ export interface AgentConfig {
    * and the host cwd must not be passed as absolute paths to tools.
    */
   remoteToolWorkspaceRoot?: string;
+  /** E2B sandbox id for preview URL context. */
+  remoteToolSandboxId?: string;
 }
 
 export interface AgentEvent {
@@ -359,7 +361,7 @@ export class EnhancedAgent extends EventEmitter {
   private messages: MessageParam[] = [];
   private loopDetector = new LoopDetector();
   private thinkFilter = new ThinkTagFilter();
-  private config: Required<Omit<AgentConfig, 'sessionMemory' | 'contextHintFiles' | 'planningModel' | 'executionModel' | 'mindsetAdaptive' | 'strictTextOnlyCompletion' | 'defaultSkillsPrompt' | 'requestFormat' | 'completionEvidenceMode' | 'postEditVerification' | 'memoryRecallMinScore' | 'remoteToolWorkspaceRoot'>> & { customProviderFormat: 'openai' | 'anthropic'; requestFormat: 'auto' | 'openai' | 'anthropic'; sessionMemory?: SessionMemory | null; contextHintFiles: string[]; planningModel?: string; executionModel?: string; mindsetAdaptive?: boolean; strictTextOnlyCompletion: boolean; completionEvidenceMode: 'off' | 'balanced' | 'strict'; postEditVerification: 'off' | 'balanced' | 'strict'; memoryRecallMinScore: number };
+  private config: Required<Omit<AgentConfig, 'sessionMemory' | 'contextHintFiles' | 'planningModel' | 'executionModel' | 'mindsetAdaptive' | 'strictTextOnlyCompletion' | 'defaultSkillsPrompt' | 'requestFormat' | 'completionEvidenceMode' | 'postEditVerification' | 'memoryRecallMinScore' | 'remoteToolWorkspaceRoot' | 'remoteToolSandboxId'>> & { customProviderFormat: 'openai' | 'anthropic'; requestFormat: 'auto' | 'openai' | 'anthropic'; sessionMemory?: SessionMemory | null; contextHintFiles: string[]; planningModel?: string; executionModel?: string; mindsetAdaptive?: boolean; strictTextOnlyCompletion: boolean; completionEvidenceMode: 'off' | 'balanced' | 'strict'; postEditVerification: 'off' | 'balanced' | 'strict'; memoryRecallMinScore: number };
   private iterationCount = 0;
   private toolCallCount = 0;
   private filesChanged: Set<string> = new Set();
@@ -417,6 +419,7 @@ export class EnhancedAgent extends EventEmitter {
    * When set, getSystemPrompt() adds E2B sandbox_full guidance (host vs remote tool paths).
    */
   private remoteToolWorkspaceRoot?: string;
+  private remoteToolSandboxId?: string;
 
   private isAbortError(err: unknown): boolean {
     if (!err || typeof err !== 'object') return false;
@@ -600,6 +603,7 @@ export class EnhancedAgent extends EventEmitter {
     };
     this.defaultSkillsPrompt = config.defaultSkillsPrompt ?? '';
     this.remoteToolWorkspaceRoot = config.remoteToolWorkspaceRoot?.trim() || undefined;
+    this.remoteToolSandboxId = config.remoteToolSandboxId?.trim() || undefined;
     this.mindsetAdaptive = this.config.mindsetAdaptive ?? false;
 
     // Initialize mode state and orchestrator
@@ -1980,6 +1984,7 @@ ${this.remoteToolWorkspaceRoot ? `
 - **File tools** (\`read_file\`, \`write_file\`, \`list_directory\`, \`search_files\`, etc.) and **\`run_command\`** run inside an **E2B sandbox**, not on the developer's laptop.
 - The CLI was started from host path \`${process.cwd()}\`. That path is **not** inside the sandbox. **Do not** pass it to tools as an absolute path—it will be rejected.
 - In the VM the synced repo is laid out under **\`${this.remoteToolWorkspaceRoot}\`**; in tool calls use paths **relative to the repo root** (same as in git), e.g. \`package.json\`, \`packages/cli/src/index.ts\`, \`.\` for \`list_directory\`.
+- Sandbox id: **\`${this.remoteToolSandboxId || 'unknown'}\`**. If a web server starts in the VM, preview URLs are typically \`https://{port}-${this.remoteToolSandboxId || 'sandboxId'}.e2b.dev\` unless the gateway returns a specific host.
 - The chat TUI (\`xc\` / \`xibecode\`) runs **locally**; only **tools** execute remotely. You are not streaming a full \`xc\` process from inside the sandbox.
 ` : ''}
 Working directory: ${process.cwd()}

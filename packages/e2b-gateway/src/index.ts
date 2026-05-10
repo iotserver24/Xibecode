@@ -7,6 +7,7 @@ import { Sandbox as E2BSandbox } from '@e2b/code-interpreter';
 type SandboxLike = {
   sandboxId?: string;
   sandboxDomain?: string;
+  getHost?: (port: number) => string | Promise<string>;
   commands?: {
     run: (command: string, opts?: Record<string, unknown>) => Promise<Record<string, unknown>>;
   };
@@ -58,6 +59,11 @@ const Sandbox = E2BSandbox as unknown as {
 const port = Number(process.env.PORT || 8787);
 const authToken = process.env.XIBECODE_GATEWAY_TOKEN?.trim() || '';
 const sandboxTemplate = process.env.XIBECODE_E2B_TEMPLATE?.trim() || '';
+const previewDomain = process.env.XIBECODE_E2B_PREVIEW_DOMAIN?.trim() || 'e2b.dev';
+const maxExportBytes = Math.max(
+  1,
+  Number(process.env.XIBECODE_EXPORT_MAX_MB || 64),
+) * 1024 * 1024;
 const sessions = new Map<string, SessionRecord>();
 const defaultWorkspaceRoot = process.env.XIBECODE_SANDBOX_WORKSPACE_ROOT?.trim() || '/home/user/workspace';
 
@@ -99,6 +105,25 @@ function getBearerToken(req: IncomingMessage): string {
 function isAuthorized(req: IncomingMessage): boolean {
   if (!authToken) return true;
   return getBearerToken(req) === authToken;
+}
+
+function normalizePreviewHost(hostOrUrl: string): string {
+  const trimmed = String(hostOrUrl || '').trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith('//')) return `https:${trimmed}`;
+  return `https://${trimmed}`;
+}
+
+async function resolvePreviewHost(session: SessionRecord, targetPort: number): Promise<string> {
+  const getter = session.sandbox.getHost;
+  if (typeof getter === 'function') {
+    const resolved = await getter(targetPort);
+    const normalized = normalizePreviewHost(resolved);
+    if (normalized) return normalized;
+  }
+  // Fallback host template for environments where SDK host helpers are unavailable.
+  return `https://${targetPort}-${session.sandboxId}.${previewDomain}`;
 }
 
 async function readJson<T>(req: IncomingMessage): Promise<T> {
@@ -261,6 +286,60 @@ async function syncWorkspaceChunk(session: SessionRecord, request: SyncRequest):
     workspaceRoot: session.workspaceRoot,
     strategy: session.strategy,
   };
+}
+
+async function exportWorkspaceArchiveInSession(
+  session: SessionRecord,
+): Promise<
+  | { ok: true; bytes: number; archive: Buffer }
+  | { ok: false; statusCode: number; message: string; bytes?: number }
+> {
+  const archivePath = `/tmp/xibecode-export-${session.sessionId}.tgz`;
+  const command =
+    `set -e; ` +
+    `rm -f ${shQuote(archivePath)}; ` +
+    `tar -czf ${shQuote(archivePath)} -C ${shQuote(session.workspaceRoot)} .; ` +
+    `size=$(wc -c < ${shQuote(archivePath)} | tr -d ' '); ` +
+    `if [ "$size" -gt "${maxExportBytes}" ]; then ` +
+    `echo "__XIBECODE_EXPORT_TOO_LARGE__:$size"; ` +
+    `rm -f ${shQuote(archivePath)}; ` +
+    `exit 9; ` +
+    `fi; ` +
+    `printf '%s' "$size"; echo "__XIBECODE_SPLIT__"; ` +
+    `base64 -w0 ${shQuote(archivePath)}; ` +
+    `rm -f ${shQuote(archivePath)}`;
+  const result = await runInSession(session, {
+    command,
+    cwd: '/tmp',
+    timeout: 600,
+  });
+  const stdout = String(result.stdout || '');
+  if (!result.success) {
+    const marker = stdout.match(/__XIBECODE_EXPORT_TOO_LARGE__:(\d+)/);
+    if (marker) {
+      return {
+        ok: false,
+        statusCode: 413,
+        message: `Sandbox export exceeds XIBECODE_EXPORT_MAX_MB (${Math.ceil(Number(marker[1]) / (1024 * 1024))}MB)`,
+        bytes: Number(marker[1]),
+      };
+    }
+    return {
+      ok: false,
+      statusCode: 400,
+      message: `Failed to export workspace: ${String(result.stderr || result.message || 'unknown error')}`,
+    };
+  }
+  const [bytesPart, encodedPart] = stdout.split('__XIBECODE_SPLIT__');
+  if (!encodedPart) {
+    return { ok: false, statusCode: 500, message: 'Sandbox export missing archive payload' };
+  }
+  const bytes = Number((bytesPart || '').trim()) || 0;
+  const archive = Buffer.from(encodedPart.trim(), 'base64');
+  if (!archive.length) {
+    return { ok: false, statusCode: 500, message: 'Sandbox export produced an empty archive' };
+  }
+  return { ok: true, bytes, archive };
 }
 
 async function readFileInSession(
@@ -498,6 +577,30 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    const previewMatch = url.pathname.match(/^\/sessions\/([^/]+)\/preview-host$/);
+    if (method === 'GET' && previewMatch) {
+      const sessionId = decodeURIComponent(previewMatch[1] || '');
+      const session = sessions.get(sessionId);
+      if (!session) {
+        sendJson(res, 404, { success: false, error: true, message: `Session not found: ${sessionId}` });
+        return;
+      }
+      const requestedPort = Number(url.searchParams.get('port') || '3000');
+      if (!Number.isFinite(requestedPort) || requestedPort < 1 || requestedPort > 65535) {
+        sendJson(res, 400, { success: false, error: true, message: 'Invalid port. Use 1-65535.' });
+        return;
+      }
+      const host = await resolvePreviewHost(session, Math.floor(requestedPort));
+      sendJson(res, 200, {
+        success: true,
+        sessionId: session.sessionId,
+        sandboxId: session.sandboxId,
+        port: Math.floor(requestedPort),
+        host,
+      });
+      return;
+    }
+
     const fileMatch = url.pathname.match(/^\/sessions\/([^/]+)\/file$/);
     if (fileMatch && method === 'GET') {
       const sessionId = decodeURIComponent(fileMatch[1] || '');
@@ -623,6 +726,39 @@ const server = createServer(async (req, res) => {
         result.success ? 200 : 400,
         result.success ? { success: true, source: body.source, destination: body.destination } : result,
       );
+      return;
+    }
+
+    const exportMatch = url.pathname.match(/^\/sessions\/([^/]+)\/export$/);
+    if (method === 'GET' && exportMatch) {
+      const sessionId = decodeURIComponent(exportMatch[1] || '');
+      const session = sessions.get(sessionId);
+      if (!session) {
+        sendJson(res, 404, { success: false, error: true, message: `Session not found: ${sessionId}` });
+        return;
+      }
+      const exported = await exportWorkspaceArchiveInSession(session);
+      if (!exported.ok) {
+        sendJson(res, exported.statusCode, {
+          success: false,
+          error: true,
+          message: exported.message,
+          bytes: exported.bytes,
+          maxBytes: maxExportBytes,
+          maxMb: Math.ceil(maxExportBytes / (1024 * 1024)),
+        });
+        return;
+      }
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/gzip');
+      res.setHeader('Content-Length', String(exported.archive.length));
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="xibecode-sandbox-${session.sandboxId}.tar.gz"`,
+      );
+      res.setHeader('X-XibeCode-Sandbox-Id', session.sandboxId);
+      res.setHeader('X-XibeCode-Workspace-Root', session.workspaceRoot);
+      res.end(exported.archive);
       return;
     }
 

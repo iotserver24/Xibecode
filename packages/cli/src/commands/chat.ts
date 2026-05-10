@@ -13,12 +13,14 @@ import { SessionManager } from 'xibecode-core';
 import {
   attachRemoteExecution,
   codingToolExecutorRemoteOptions,
+  remoteToolSandboxIdForAgent,
   getRuntimeStatusLabel,
   remoteToolWorkspaceRootForAgent,
   resolveRemoteExecutionConfig,
 } from '../utils/remote-execution.js';
 import { syncWorkspaceToSandbox } from '../utils/sandbox-sync.js';
 import { withCloudWorkspaceSyncSpinner } from '../utils/cloud-sync-feedback.js';
+import { getCloudRuntimeHint } from '../utils/cloud-runtime-hints.js';
 
 interface ChatOptions {
   model?: string;
@@ -58,7 +60,9 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
       }),
     );
     remoteExecution.sessionId = syncResult.sessionId;
+    remoteExecution.e2bSandboxId = syncResult.sandboxId || remoteExecution.e2bSandboxId;
   }
+  const cloudHint = await getCloudRuntimeHint(remoteExecution);
 
   const skillManager = new SkillManager(process.cwd(), apiKey, baseUrl, model, provider, builtInSkillsDir);
   await skillManager.loadSkills();
@@ -77,6 +81,9 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
   console.log(`xibecode chat (plain) v${version}`.trim());
   console.log(`model: ${model} | provider: ${provider ?? 'auto'} | format: ${config.get('requestFormat') ?? 'auto'}`);
   console.log(`runtime: ${getRuntimeStatusLabel(config)}${remoteExecution ? ` (${remoteExecution.gatewayUrl})` : ''}`);
+  if (cloudHint.sandboxId) console.log(`sandbox id: ${cloudHint.sandboxId}`);
+  if (cloudHint.previewUrl) console.log(`preview: ${cloudHint.previewUrl}`);
+  if (cloudHint.pullHint) console.log(`pull: ${cloudHint.pullHint}`);
   console.log('Type /exit to quit.');
 
   const rl = readline.createInterface({
@@ -128,6 +135,7 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
         requestFormat: config.get('requestFormat') ?? 'auto',
         defaultSkillsPrompt,
         remoteToolWorkspaceRoot: remoteToolWorkspaceRootForAgent(remoteExecution),
+        remoteToolSandboxId: remoteToolSandboxIdForAgent(remoteExecution),
       },
       provider,
     );

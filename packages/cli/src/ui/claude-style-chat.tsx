@@ -27,11 +27,13 @@ import {
   attachRemoteExecution,
   codingToolExecutorRemoteOptions,
   getRuntimeStatusLabel,
+  remoteToolSandboxIdForAgent,
   remoteToolWorkspaceRootForAgent,
   resolveRemoteExecutionConfig,
 } from '../utils/remote-execution.js';
 import { syncWorkspaceToSandbox } from '../utils/sandbox-sync.js';
 import { withCloudWorkspaceSyncSpinner } from '../utils/cloud-sync-feedback.js';
+import { getCloudRuntimeHint } from '../utils/cloud-runtime-hints.js';
 
 export type ChatOptions = {
   model?: string;
@@ -244,6 +246,9 @@ function XibeCodeChatApp(props: {
   provider?: ProviderType;
   runtimeStatus: 'local' | 'cloud';
   sandboxLabel?: string;
+  sandboxId?: string;
+  previewUrl?: string;
+  pullHint?: string;
   baseUrl?: string;
   needsFirstRunSetup?: boolean;
   defaultModel: string;
@@ -1717,6 +1722,15 @@ function XibeCodeChatApp(props: {
                 {props.sandboxLabel ? (
                   <Text color="inactive">sandbox: {props.sandboxLabel}</Text>
                 ) : null}
+                {props.sandboxId ? (
+                  <Text color="inactive">sandbox id: {props.sandboxId}</Text>
+                ) : null}
+                {props.previewUrl ? (
+                  <Text color="inactive">preview: {props.previewUrl}</Text>
+                ) : null}
+                {props.pullHint ? (
+                  <Text color="inactive">pull: {props.pullHint}</Text>
+                ) : null}
                 <Text color="inactive">
                   xibecode <Text color="claude">v{APP_VERSION}</Text>
                 </Text>
@@ -2171,7 +2185,9 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
       }),
     );
     remoteExecution.sessionId = syncResult.sessionId;
+    remoteExecution.e2bSandboxId = syncResult.sandboxId || remoteExecution.e2bSandboxId;
   }
+  const cloudHint = await getCloudRuntimeHint(remoteExecution);
   const runtimeStatus = getRuntimeStatusLabel(config);
   const sandboxLabel =
     remoteExecution?.strategy === 'sandbox_full'
@@ -2202,6 +2218,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
         requestFormat: wireFormat,
         defaultSkillsPrompt,
         remoteToolWorkspaceRoot: remoteWs,
+        remoteToolSandboxId: remoteToolSandboxIdForAgent(remoteExecution),
       },
       provider,
     );
@@ -2696,6 +2713,9 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
         provider={provider}
         runtimeStatus={runtimeStatus}
         sandboxLabel={sandboxLabel}
+        sandboxId={cloudHint.sandboxId}
+        previewUrl={cloudHint.previewUrl}
+        pullHint={cloudHint.pullHint}
         baseUrl={baseUrl}
         needsFirstRunSetup={needsFirstRunSetup}
         defaultModel={model}

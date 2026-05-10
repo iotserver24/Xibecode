@@ -21,6 +21,8 @@
 - Treat `sandbox_full` upload payloads as sensitive: exclude `.env*`, credentials, and build artifacts you do not need.
 - Set explicit upload size caps in CLI (`sandboxSyncMaxMb`) and keep gateway auth enabled.
 - If the gateway is behind Cloudflare orange-cloud proxying, allow machine clients on upload routes (`/sessions/*/sync`) via scoped WAF/Bot/BIC rules.
+- Preview helpers (`/sessions/:id/preview-host`) expose externally reachable sandbox hostnames. Treat these URLs as sensitive runtime metadata and avoid posting them in public channels for private environments.
+- Export endpoint (`/sessions/:id/export`) returns the full sandbox workspace archive. Keep gateway auth enabled and apply least-privilege network exposure.
 
 ## Input validation
 

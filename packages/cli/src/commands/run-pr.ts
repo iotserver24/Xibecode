@@ -18,6 +18,7 @@ import fetch from 'node-fetch';
 import { attachRemoteExecution, codingToolExecutorRemoteOptions, remoteToolWorkspaceRootForAgent, resolveRemoteExecutionConfig } from '../utils/remote-execution.js';
 import { syncWorkspaceToSandbox } from '../utils/sandbox-sync.js';
 import { withCloudWorkspaceSyncSpinner } from '../utils/cloud-sync-feedback.js';
+import { getCloudRuntimeHint } from '../utils/cloud-runtime-hints.js';
 
 const pkg = createRequire(import.meta.url)('../../package.json');
 import Anthropic from '@anthropic-ai/sdk';
@@ -344,7 +345,9 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
       }),
     );
     remoteExecution.sessionId = syncResult.sessionId;
+    remoteExecution.e2bSandboxId = syncResult.sandboxId || remoteExecution.e2bSandboxId;
   }
+  const cloudHint = await getCloudRuntimeHint(remoteExecution);
   console.log(chalk.dim('  cost mode ') + chalk.cyan(useEconomy ? 'economy' : 'normal'));
   console.log(chalk.dim('  provider  ') + chalk.cyan(provider ?? 'auto-detect'));
   console.log(chalk.dim('  model     ') + chalk.cyan(model));
@@ -357,6 +360,15 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
         ? 'full (workspace synced to E2B)'
         : 'host_only (file edits stay local)';
     console.log(chalk.dim('  sandbox   ') + chalk.cyan(sandboxLabel));
+    if (cloudHint.sandboxId) {
+      console.log(chalk.dim('  sandbox id') + chalk.cyan(` ${cloudHint.sandboxId}`));
+    }
+    if (cloudHint.previewUrl) {
+      console.log(chalk.dim('  preview   ') + chalk.cyan(cloudHint.previewUrl));
+    }
+    if (cloudHint.pullHint) {
+      console.log(chalk.dim('  pull      ') + chalk.cyan(cloudHint.pullHint));
+    }
   } else {
     console.log(chalk.dim('  runtime   ') + chalk.cyan('local'));
   }
@@ -462,6 +474,7 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
       memoryRecallMinScore: 2,
       defaultSkillsPrompt,
       remoteToolWorkspaceRoot: remoteToolWorkspaceRootForAgent(remoteExecution),
+      remoteToolSandboxId: remoteExecution?.e2bSandboxId,
     },
     provider as any
   );
@@ -583,6 +596,7 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
             memoryRecallMinScore: 2,
             defaultSkillsPrompt,
             remoteToolWorkspaceRoot: remoteToolWorkspaceRootForAgent(remoteExecution),
+            remoteToolSandboxId: remoteExecution?.e2bSandboxId,
           },
           provider as any
         );

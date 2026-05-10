@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import { runCommand } from './commands/run.js';
 import { runPrCommand } from './commands/run-pr.js';
 import { chatCommand } from './commands/chat.js';
+import { cloudPullCommand } from './commands/cloud-pull.js';
 import { resumeCommand } from './commands/resume.js';
 import { configCommand } from './commands/config.js';
 import { mcpCommand } from './commands/mcp.js';
@@ -86,7 +87,7 @@ program
   .option('--plain', 'Disable Ink UI; print line-by-line output (best for copying)', false)
   .action(chatCommand);
 
-program
+const cloudCmd = program
   .command('cloud')
   .description(
     'Interactive chat with E2B cloud execution (forces e2b for this process). With sandbox_full, uploads a tarball of your project first.',
@@ -103,6 +104,18 @@ program
   .action(async (options: Parameters<typeof chatCommand>[0]) => {
     process.env.XIBECODE_SANDBOX_MODE = 'e2b';
     await chatCommand(options);
+  });
+
+cloudCmd
+  .command('pull')
+  .description('Download a sandbox workspace back to local disk')
+  .option('--profile <name>', 'Config profile to use (default: configured default profile)')
+  .option('--session <id>', 'Sandbox session ID to pull from')
+  .option('--output <path>', 'Destination directory (default: .xibecode/sandbox-pull-<timestamp>)')
+  .option('--apply', 'Extract directly into current working directory', false)
+  .option('--force', 'Allow extracting into a non-empty destination directory', false)
+  .action(async (options: Parameters<typeof cloudPullCommand>[0]) => {
+    await cloudPullCommand(options);
   });
 
 // Resume a previous session
