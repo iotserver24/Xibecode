@@ -114,7 +114,7 @@ export default function ChatPanel({
           <div className={`min-h-full ${CHAT_GUTTER}`}>
             <div className={`${CHAT_WIDTH} animate-fade-in flex min-h-full flex-col items-center justify-center text-center`}>
               <div className="mb-8">
-                <div className="mx-auto w-12 h-12 bg-xibe-surface-raised rounded-2xl flex items-center justify-center mb-4 border border-xibe-border-subtle shadow-sm">
+                <div className="mx-auto w-12 h-12 flex items-center justify-center mb-4">
                   <Terminal className="h-6 w-6 text-xibe-text" />
                 </div>
                 <h1 className="text-3xl font-semibold text-xibe-text tracking-tight">How can I help you today?</h1>
@@ -133,9 +133,9 @@ export default function ChatPanel({
                         key={m.id}
                         onClick={() => onModeSwitch(m.id, `Switched to ${m.label}`)}
                         className={cn(
-                          "rounded-full px-4 py-1.5 text-xs font-medium transition-colors duration-200",
+                          "rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-200",
                           modeState.current === m.id
-                            ? "bg-xibe-surface-raised text-xibe-text"
+                            ? "bg-xibe-surface text-xibe-text"
                             : "text-xibe-text-dim hover:text-xibe-text hover:bg-xibe-surface"
                         )}
                       >
@@ -153,7 +153,7 @@ export default function ChatPanel({
                       <button
                         key={q.text}
                         onClick={() => onSendMessage(q.text)}
-                        className="group flex items-center gap-3 rounded-2xl bg-xibe-surface px-4 py-3 text-sm text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors"
+                        className="group flex items-center gap-3 rounded-lg border border-xibe-border-subtle bg-transparent px-4 py-3 text-sm text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors"
                       >
                         <div className="rounded-lg p-1.5 text-xibe-text-dim group-hover:text-xibe-text transition-colors">
                           {q.icon}
@@ -203,7 +203,7 @@ export default function ChatPanel({
           )}
 
           {/* Floating Pill input */}
-          <div className="relative flex items-end rounded-xl bg-xibe-surface transition-colors duration-200 focus-within:bg-xibe-surface-raised">
+          <div className="relative flex items-end rounded-lg border border-xibe-border-subtle bg-xibe-bg transition-colors duration-200 focus-within:border-xibe-border-focus">
             <textarea
               ref={inputRef}
               value={input}
