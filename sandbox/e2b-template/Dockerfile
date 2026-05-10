@@ -22,6 +22,10 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
+# Match published CLI so manual `xibecode`/`xc` in the VM matches your release track.
+# Bump this when you cut a new npm release, then rebuild + publish this template.
+RUN npm install -g xibecode@1.3.7
+
 # Ubuntu base often has UID/GID 1000 as ubuntu:ubuntu; E2B expects login+group `user`.
 RUN G="$(getent group 1000 | cut -d: -f1 || true)" && \
     U="$(getent passwd 1000 | cut -d: -f1 || true)" && \
