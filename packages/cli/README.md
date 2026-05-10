@@ -9,6 +9,12 @@ AI-powered autonomous coding assistant for your terminal and browser.
 
 XibeCode is a CLI agent that can read and edit code, run commands, and iterate on tasks from your terminal using LLMs. It includes a **WebUI** for a browser-based experience, **AI-powered test generation**, and **multi-model support** for both Anthropic and OpenAI-compatible providers.
 
+## What's new in v1.3.6
+
+- **npm update hint:** when you start `xibecode` / `xibecode chat`, the CLI may print a short stderr message if a newer version is published on npm (cached check). Set `XIBECODE_DISABLE_UPDATE_CHECK=1` to turn it off.
+- **`xibecode whats-new`** (**`changelog`**): compare your install to npm’s latest and open the package page for context.
+- Docs: fuller reference for interactive slash commands (`/setup`, `/config`, cloud shortcuts, etc.) on the project docs site.
+
 ## What's New in v0.9.1
 
 ### Reliability and anti-hallucination upgrades

@@ -2,6 +2,18 @@
 
 All notable changes to XibeCode will be documented in this file.
 
+## [1.3.6] - 2026-05-10
+
+### CLI (`xibecode`)
+
+- **Update awareness:** optional notice when starting chat if a newer version exists on npm (registry check with ~48h cache). Disable with `XIBECODE_DISABLE_UPDATE_CHECK=1`.
+- **`xibecode whats-new`** and **`xibecode changelog`:** compare the installed CLI to the latest version on npm; links use the npm package page only.
+- Documentation site: expanded **Chat slash commands** (`/setup`, `/config`, `/format`, `/model`, `/mode`, etc.).
+
+### Core (`xibecode-core`)
+
+- Lockstep **1.3.6** release with the CLI for a consistent published pair on npm.
+
 ## [1.0.4] - 2026-05-01
 
 ### Monorepo Restructure
