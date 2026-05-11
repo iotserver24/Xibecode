@@ -153,7 +153,7 @@ export default function ChatPanel({
                       <button
                         key={q.text}
                         onClick={() => onSendMessage(q.text)}
-                        className="group flex items-center gap-3 rounded-lg border border-xibe-border-subtle bg-transparent px-4 py-3 text-sm text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors"
+                        className="group flex items-center gap-3 rounded-lg bg-xibe-surface px-4 py-3 text-sm text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors"
                       >
                         <div className="rounded-lg p-1.5 text-xibe-text-dim group-hover:text-xibe-text transition-colors">
                           {q.icon}
@@ -203,7 +203,7 @@ export default function ChatPanel({
           )}
 
           {/* Floating Pill input */}
-          <div className="relative flex items-end rounded-lg border border-xibe-border-subtle bg-xibe-bg transition-colors duration-200 focus-within:border-xibe-border-focus">
+          <div className="relative flex items-end rounded-lg bg-xibe-surface transition-colors duration-200">
             <textarea
               ref={inputRef}
               value={input}
@@ -231,7 +231,7 @@ export default function ChatPanel({
           </div>
           <div className="mt-2 text-center">
             <p className="text-[11px] font-medium text-xibe-text-dim/40">
-              <span className="hidden sm:inline">Use <kbd className="font-sans px-1 rounded border border-xibe-border-subtle bg-xibe-surface-raised/50">Enter</kbd> to send, <kbd className="font-sans px-1 rounded border border-xibe-border-subtle bg-xibe-surface-raised/50">Shift + Enter</kbd> for new line</span>
+              <span className="hidden sm:inline">Use <kbd className="font-sans px-1 rounded bg-xibe-surface-raised/50">Enter</kbd> to send, <kbd className="font-sans px-1 rounded bg-xibe-surface-raised/50">Shift + Enter</kbd> for new line</span>
             </p>
           </div>
         </div>
