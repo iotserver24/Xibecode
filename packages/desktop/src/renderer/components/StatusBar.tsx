@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { useRunElapsed } from '../hooks/useRunElapsed';
+import SpinnerVerbDisplay from './SpinnerVerbDisplay';
 
 const StatusBarTimer = memo(function StatusBarTimer({ isRunning }: { isRunning: boolean }) {
   const runElapsed = useRunElapsed(isRunning);
@@ -16,7 +17,6 @@ interface Props {
   mode: string;
   workingDir: string;
   isRunning: boolean;
-  spinnerVerb: string;
   activeModel: string;
   activeProvider: string;
   wireFormat: string;
@@ -33,7 +33,7 @@ const MODE_COLORS: Record<string, string> = {
   engineer: 'bg-green-400', data: 'bg-cyan-400', researcher: 'bg-pink-300',
 };
 
-export default function StatusBar({ mode, workingDir, isRunning, spinnerVerb, activeModel, activeProvider, wireFormat, costMode, onToggleSidebar, onTogglePreview }: Props) {
+export default function StatusBar({ mode, workingDir, isRunning, activeModel, activeProvider, wireFormat, costMode, onToggleSidebar, onTogglePreview }: Props) {
   const dot = MODE_COLORS[mode] ?? 'bg-zinc-400';
 
   return (
@@ -55,7 +55,7 @@ export default function StatusBar({ mode, workingDir, isRunning, spinnerVerb, ac
         {isRunning && (
           <>
             <span className="text-xibe-border">|</span>
-            <span className="text-xibe-brand-blue">{spinnerVerb}</span>
+            <SpinnerVerbDisplay isRunning={isRunning} className="text-xibe-brand-blue" />
             <StatusBarTimer isRunning={isRunning} />
           </>
         )}

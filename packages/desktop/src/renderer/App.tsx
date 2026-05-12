@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { PanelLeft, PanelRight, Settings, Command } from 'lucide-react';
 import type { HostedAgentEvent, ModeState } from '../preload/index';
 import ChatPanel from './components/ChatPanel';
@@ -27,13 +27,6 @@ function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
-const SPINNER_VERBS = [
-  'Thinking', 'Analyzing', 'Processing', 'Writing code', 'Reading files',
-  'Running commands', 'Searching', 'Debugging', 'Building', 'Testing',
-  'Reviewing', 'Planning', 'Implementing', 'Refactoring', 'Optimizing',
-  'Generating', 'Compiling', 'Deploying', 'Cooking', 'Locked in',
-];
-
 export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [modeState, setModeState] = useState<ModeState>({
@@ -52,12 +45,10 @@ export default function App() {
   const [needsSetup, setNeedsSetup] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [spinnerVerb, setSpinnerVerb] = useState('');
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [costMode, setCostMode] = useState('normal');
   const [activeSessionId, setActiveSessionId] = useState<string | undefined>();
-  const spinnerIndexRef = useRef(0);
 
   useEffect(() => {
     (async () => {
@@ -82,17 +73,6 @@ export default function App() {
       setCostMode(cm || 'normal');
     })();
   }, []);
-
-  useEffect(() => {
-    if (!isRunning) return;
-    spinnerIndexRef.current = Math.floor(Math.random() * SPINNER_VERBS.length);
-    setSpinnerVerb(SPINNER_VERBS[spinnerIndexRef.current]);
-    const id = setInterval(() => {
-      spinnerIndexRef.current = (spinnerIndexRef.current + 1) % SPINNER_VERBS.length;
-      setSpinnerVerb(SPINNER_VERBS[spinnerIndexRef.current]);
-    }, 2400);
-    return () => clearInterval(id);
-  }, [isRunning]);
 
   const handleAgentEvents = useCallback((batch: HostedAgentEvent[]) => {
     setMessages((prev) => {
@@ -419,7 +399,6 @@ export default function App() {
             onSendMessage={handleSendMessage}
             onCommand={handleCommand}
             isRunning={isRunning}
-            spinnerVerb={spinnerVerb}
             activeModel={activeModel}
             activeProvider={activeProvider}
             wireFormat={wireFormat}
@@ -451,7 +430,6 @@ export default function App() {
         mode={modeState.current}
         workingDir={workingDir}
         isRunning={isRunning}
-        spinnerVerb={spinnerVerb}
         activeModel={activeModel}
         activeProvider={activeProvider}
         wireFormat={wireFormat}

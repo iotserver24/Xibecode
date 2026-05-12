@@ -6,6 +6,7 @@ import MessageBubble from './MessageBubble';
 import ToolCallCard from './ToolCallCard';
 import { cn } from '../lib/utils';
 import { useRunElapsed } from '../hooks/useRunElapsed';
+import SpinnerVerbDisplay from './SpinnerVerbDisplay';
 
 const ChatPanelTimer = memo(function ChatPanelTimer({ isRunning }: { isRunning: boolean }) {
   const runElapsed = useRunElapsed(isRunning);
@@ -41,7 +42,6 @@ interface ChatPanelProps {
   onSendMessage: (content: string) => void;
   onCommand: (cmd: string, arg?: string) => void;
   isRunning: boolean;
-  spinnerVerb: string;
   activeModel: string;
   activeProvider: string;
   wireFormat: string;
@@ -54,7 +54,7 @@ interface ChatPanelProps {
 }
 
 export default function ChatPanel({
-  messages, onSendMessage, onCommand, isRunning, spinnerVerb,
+  messages, onSendMessage, onCommand, isRunning,
   activeModel, activeProvider, wireFormat, appVersion, needsSetup, onOpenSetup, onOpenCommandPalette,
   modeState, onModeSwitch,
 }: ChatPanelProps) {
@@ -177,7 +177,7 @@ export default function ChatPanel({
                     <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-bounce" style={{ animationDelay: '150ms' }} />
                     <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
-                  <span className="ml-1">{spinnerVerb}</span>
+                  <SpinnerVerbDisplay isRunning={isRunning} className="ml-1" />
                   <ChatPanelTimer isRunning={isRunning} />
                 </div>
               )}
