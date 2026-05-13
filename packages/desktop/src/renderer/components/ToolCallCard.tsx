@@ -51,7 +51,7 @@ const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutpu
                 <span className="text-[10px] font-bold uppercase tracking-widest text-xibe-text-dim">Input</span>
                 <div className="h-px flex-1 bg-xibe-border-subtle/50" />
               </div>
-              <pre className="overflow-x-auto rounded-lg bg-xibe-bg border border-xibe-border-subtle p-3 text-[12px] font-mono text-xibe-text leading-relaxed shadow-inner">{inputStr}</pre>
+              <pre className="overflow-x-auto rounded-lg bg-xibe-bg border border-xibe-border-subtle p-3 text-[12px] font-mono text-xibe-text leading-relaxed">{inputStr}</pre>
             </div>
           )}
           {outputStr && (
@@ -60,7 +60,7 @@ const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutpu
                 <span className="text-[10px] font-bold uppercase tracking-widest text-xibe-text-dim">Output</span>
                 <div className="h-px flex-1 bg-xibe-border-subtle/50" />
               </div>
-              <pre className="overflow-x-auto rounded-lg bg-xibe-bg border border-xibe-border-subtle p-3 text-[12px] font-mono text-xibe-text-secondary leading-relaxed max-h-64 shadow-inner">{outputStr.length > 5000 ? outputStr.slice(0, 5000) + '\n\n...[Output truncated]...' : outputStr}</pre>
+              <pre className="overflow-x-auto rounded-lg bg-xibe-bg border border-xibe-border-subtle p-3 text-[12px] font-mono text-xibe-text-secondary leading-relaxed max-h-64">{outputStr.length > 5000 ? outputStr.slice(0, 5000) + '\n\n...[Output truncated]...' : outputStr}</pre>
             </div>
           )}
         </div>

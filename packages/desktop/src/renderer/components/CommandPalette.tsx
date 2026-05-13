@@ -71,7 +71,7 @@ export default function CommandPalette({ onClose, onCommand }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh] bg-black/40 backdrop-blur-md" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-lg rounded-xl border border-xibe-border bg-xibe-surface shadow-lg overflow-hidden animate-slide-up">
+      <div className="w-full max-w-lg rounded-xl border border-xibe-border bg-xibe-surface overflow-hidden animate-slide-up">
         <div className="flex items-center gap-2 border-b border-xibe-border-subtle px-4 py-3">
           <svg className="h-4 w-4 text-xibe-accent shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
           <input

@@ -84,7 +84,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md">
-      <div className="w-full max-w-2xl h-[70vh] rounded-xl border border-xibe-border bg-xibe-surface shadow-lg flex flex-col animate-slide-up overflow-hidden">
+      <div className="w-full max-w-2xl h-[70vh] rounded-xl border border-xibe-border bg-xibe-surface flex flex-col animate-slide-up overflow-hidden">
         <div className="flex items-center justify-between border-b border-xibe-border-subtle px-5 py-3">
           <h2 className="text-sm font-semibold text-xibe-text">Settings</h2>
           <button onClick={onClose} className="rounded-md p-1 text-xibe-text-dim hover:text-xibe-text hover:bg-xibe-surface-hover transition-colors">
