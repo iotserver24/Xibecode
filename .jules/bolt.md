@@ -57,3 +57,7 @@
 ## 2024-05-09 - Avoid O(N) array allocation in loops
 **Learning:** Using `[...updated].reverse().findIndex(...)` in frequent event callbacks (like stream_text in React) forces O(N) memory allocation and O(N) forward searching each tick, causing major garbage collection pauses. `findLastIndex` is not supported on ES2022 output targets.
 **Action:** Replace functional backwards searches that depend on clones with traditional reverse `for` loops to find items instantly in O(1) time without allocations.
+
+## 2026-05-19 - Top-Level Interval Anti-Pattern (SpinnerVerb)
+**Learning:** Storing a slow interval state like `spinnerVerb` (every 2.4s) at the top-level `App` component still forces a full application tree O(N) cascade re-render every tick. Even if it is not as fast as a 250ms timer, it causes noticeable micro-stuttering during UI interactions and when large lists are rendered because it triggers diffs across the entire application including Heavy `ChatPanel` and `TabbedRightPanel`.
+**Action:** Always extract even slow interval-driven decorative states into isolated leaf components (like `SpinnerVerbDisplay`) wrapped in `React.memo()`. Removing the prop-drilling entirely isolates the re-renders specifically to the UI span rendering the changing string.
