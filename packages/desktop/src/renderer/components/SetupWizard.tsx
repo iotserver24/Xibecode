@@ -91,7 +91,7 @@ export default function SetupWizard({ onComplete, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md">
-      <div className="w-full max-w-md rounded-xl border border-xibe-border bg-xibe-surface shadow-lg animate-slide-up">
+      <div className="w-full max-w-md rounded-xl border border-xibe-border bg-xibe-surface animate-slide-up">
         <div className="px-6 pt-6 pb-4">
           <div className="flex items-center justify-between mb-4">
             <div>

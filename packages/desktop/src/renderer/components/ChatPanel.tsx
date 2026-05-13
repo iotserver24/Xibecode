@@ -99,7 +99,7 @@ export default function ChatPanel({
           <span className="text-[11px] font-medium text-xibe-text-dim bg-xibe-surface px-3 py-1 rounded-full border border-xibe-border-subtle">{msg.content}</span>
         </div>
       ) : msg.role === 'error' ? (
-        <div key={msg.id} className="text-sm text-xibe-error bg-xibe-error/10 border border-xibe-error/20 rounded-xl px-4 py-3 shadow-sm">{msg.content}</div>
+        <div key={msg.id} className="text-sm text-xibe-error bg-xibe-error/10 border border-xibe-error/20 rounded-xl px-4 py-3">{msg.content}</div>
       ) : (
         <MessageBubble key={msg.id} role={msg.role as 'user' | 'assistant'} content={msg.content} isStreaming={msg.isStreaming} timestamp={msg.timestamp} />
       ),
@@ -122,7 +122,7 @@ export default function ChatPanel({
               </div>
 
               {needsSetup ? (
-                <button onClick={onOpenSetup} className="rounded-full bg-xibe-accent px-8 py-2.5 text-sm font-medium text-xibe-bg hover:bg-xibe-accent-hover transition-colors shadow-sm">
+                <button onClick={onOpenSetup} className="rounded-full bg-xibe-accent px-8 py-2.5 text-sm font-medium text-xibe-bg hover:bg-xibe-accent-hover transition-colors">
                   Complete Setup
                 </button>
               ) : (
@@ -192,7 +192,7 @@ export default function ChatPanel({
         <div className={`relative ${CHAT_WIDTH}`}>
           {/* Command dropdown above input */}
           {isSlashMode && filteredCmds.length > 0 && (
-            <div className="absolute bottom-full mb-2 w-full rounded-xl border border-xibe-border-subtle bg-xibe-surface/95 backdrop-blur-md shadow-lg overflow-hidden animate-slide-up z-20">
+            <div className="absolute bottom-full mb-2 w-full rounded-xl border border-xibe-border-subtle bg-xibe-surface/95 backdrop-blur-md overflow-hidden animate-slide-up z-20">
               {filteredCmds.slice(0, 6).map((cmd, i) => (
                 <button key={cmd.name} onClick={() => { setInput(cmd.name + ' '); inputRef.current?.focus(); }} className={`flex w-full items-center justify-between px-4 py-2.5 text-left text-sm transition-colors ${i === selectedCmd ? 'bg-xibe-surface-hover text-xibe-text' : 'text-xibe-text-secondary hover:bg-xibe-surface-hover/50'}`}>
                   <span className="font-mono font-medium text-xibe-text">{cmd.name}</span>
