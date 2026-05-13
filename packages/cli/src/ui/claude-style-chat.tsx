@@ -473,6 +473,9 @@ function XibeCodeChatApp(props: {
   const lastVisibleOutputAtRef = useRef<number>(Date.now());
   const currentPromptRef = useRef<string | null>(null);
   const restartAttemptsRef = useRef<number>(0);
+  const promptHistoryRef = useRef<string[]>([]);
+  const historyIndexRef = useRef(-1);
+  const savedInputRef = useRef('');
   const sessionMessagesRef = useRef<MessageParam[]>(
     (props.initialMessages as MessageParam[]) || []
   );
@@ -1159,6 +1162,15 @@ function XibeCodeChatApp(props: {
         return anyErr.name === 'AbortError' || String(anyErr.message || '').toLowerCase().includes('aborted');
       };
 
+      // Save to prompt history (avoid duplicates for consecutive same prompts)
+      if (resolvedInput && !resolvedInput.startsWith('/')) {
+        const hist = promptHistoryRef.current;
+        if (hist[hist.length - 1] !== resolvedInput) {
+          hist.push(resolvedInput);
+        }
+        historyIndexRef.current = hist.length;
+      }
+
       // Watchdog auto-restart loop (up to 2 restarts)
       restartAttemptsRef.current = 0;
       let promptToRun: string | null = resolvedInput;
@@ -1662,6 +1674,34 @@ function XibeCodeChatApp(props: {
         const selectedModel = filteredModels[selectedModelIndex];
         if (selectedModel) {
           void applyModel(selectedModel);
+        }
+        return;
+      }
+    }
+
+    // Prompt history browsing with UP/DOWN arrows (only in normal chat input)
+    if (!isSlashMode && !isRunning && !questionsState && !configMenuOpen && !modePickerOpen && !modelPickerOpen && !setupModelPickerOpen && !setupProviderPickerOpen && !configProviderPickerOpen && !configCostModePickerOpen) {
+      const hist = promptHistoryRef.current;
+      if (key.upArrow) {
+        if (hist.length === 0) return;
+        // Save current input before browsing (only the first time we press up)
+        if (historyIndexRef.current >= hist.length) {
+          savedInputRef.current = input;
+        }
+        if (historyIndexRef.current > 0) {
+          historyIndexRef.current -= 1;
+          setInput(hist[historyIndexRef.current]);
+        }
+        return;
+      }
+      if (key.downArrow) {
+        if (historyIndexRef.current < hist.length) {
+          historyIndexRef.current += 1;
+          if (historyIndexRef.current >= hist.length) {
+            setInput(savedInputRef.current);
+          } else {
+            setInput(hist[historyIndexRef.current]);
+          }
         }
         return;
       }
