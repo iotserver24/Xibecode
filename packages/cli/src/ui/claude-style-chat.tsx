@@ -135,6 +135,54 @@ function summarizeToolResultContent(content: unknown): string {
   return raw.replace(/\s+/g, ' ').trim().slice(0, 300);
 }
 
+/** Mathem. brackets — wrap @-file picks so each pick is one immutable token */
+const AT_MENTION_OPEN = '\u27e6'; // ⟦
+const AT_MENTION_CLOSE = '\u27e7'; // ⟧
+
+/** Drop unknown ⟦…⟧ groups; keep only exact picker-produced tokens still registered in `locked` */
+function reconcileTaggedAtMentions(next: string, locked: React.MutableRefObject<Set<string>>): string {
+  let out = '';
+  let i = 0;
+  while (i < next.length) {
+    if (next.startsWith(AT_MENTION_OPEN, i)) {
+      const closeIdx = next.indexOf(AT_MENTION_CLOSE, i + AT_MENTION_OPEN.length);
+      if (closeIdx === -1) {
+        return out;
+      }
+      const block = next.slice(i, closeIdx + AT_MENTION_CLOSE.length);
+      if (locked.current.has(block)) {
+        out += block;
+      }
+      i = closeIdx + AT_MENTION_CLOSE.length;
+      continue;
+    }
+    out += next[i]!;
+    i += 1;
+  }
+  for (const t of [...locked.current]) {
+    if (!out.includes(t)) locked.current.delete(t);
+  }
+  return out;
+}
+
+/** Strip pick wrappers before commands / history / prompts — core expects plain `@path` */
+function flattenTaggedAtMentions(s: string): string {
+  return s.replace(/\u27e6(@[A-Za-z0-9._\-\/]+)\u27e7/g, (_, inner: string) => {
+    let body = inner.slice(1);
+    if (body.startsWith('/')) body = body.slice(1);
+    return `@${body}`;
+  });
+}
+
+/** Inserted path for dirs: `/relative/` — files stay repo-relative without a leading slash */
+function mentionPathForPick(entry: FileEntry): string {
+  if (entry.isDirectory) {
+    const trimmed = entry.relativePath.replace(/\/+$/, '');
+    return trimmed ? `/${trimmed}/` : '/';
+  }
+  return entry.relativePath;
+}
+
 function transcriptLinesFromMessage(message: MessageParam): UiLine[] {
   if (typeof message.content === 'string') {
     const text = message.content.trim();
@@ -399,6 +447,8 @@ function XibeCodeChatApp(props: {
   const [fileQuery, setFileQuery] = useState('');
   const [atPos, setAtPos] = useState(-1);
   const [filePickerLoading, setFilePickerLoading] = useState(false);
+  /** Bump when the file picker inserts text so Ink TextInput remounts with the caret at the end */
+  const [chatInputMountKey, setChatInputMountKey] = useState(0);
 
   // Interactive questions state for plan mode
   type QuestionsState = {
@@ -462,6 +512,10 @@ function XibeCodeChatApp(props: {
     [props],
   );
 
+  const handleChatInputChange = useCallback((next: string) => {
+    setInput(reconcileTaggedAtMentions(next, lockedPickTagsRef));
+  }, []);
+
   useEffect(() => {
     props.registerUiSink?.(pushLine);
   }, [props, pushLine]);
@@ -488,6 +542,8 @@ function XibeCodeChatApp(props: {
   const historyIndexRef = useRef(-1);
   const savedInputRef = useRef('');
   const cachedFileEntriesRef = useRef<FileEntry[]>([]);
+  /** Exact ⟦@path⟧ strings inserted via the file picker — edits inside remove the whole token */
+  const lockedPickTagsRef = useRef<Set<string>>(new Set());
   const sessionMessagesRef = useRef<MessageParam[]>(
     (props.initialMessages as MessageParam[]) || []
   );
@@ -606,35 +662,40 @@ function XibeCodeChatApp(props: {
     const lastAtIndex = input.lastIndexOf('@');
 
     if (lastAtIndex === -1) {
-      if (filePickerOpen) {
-        setFilePickerOpen(false);
-        setSelectedFileIndex(0);
-      }
+      setFilePickerOpen(false);
+      setSelectedFileIndex(0);
       return;
     }
 
-    // '@' must be at a word boundary (preceded by space, '(', or start of string)
-    if (lastAtIndex > 0 && input[lastAtIndex - 1] !== ' ' && input[lastAtIndex - 1] !== '(') {
-      if (filePickerOpen) {
+    // '@' must be at a word boundary
+    if (lastAtIndex > 0) {
+      const prev = input[lastAtIndex - 1];
+      if (prev !== ' ' && prev !== '(' && prev !== AT_MENTION_CLOSE) {
         setFilePickerOpen(false);
         setSelectedFileIndex(0);
+        return;
       }
-      return;
     }
 
-    // Extract query: everything after '@' up to the next space
     const afterAt = input.slice(lastAtIndex + 1);
-    const spaceIdx = afterAt.indexOf(' ');
-    const query = spaceIdx === -1 ? afterAt : afterAt.slice(0, spaceIdx);
+    // Space ends the active @-mention — hide suggestions (typing past first word breaks mention mode)
+    if (afterAt.includes(' ')) {
+      setFilePickerOpen(false);
+      setSelectedFileIndex(0);
+      return;
+    }
 
+    const query = afterAt;
     setAtPos(lastAtIndex);
     setFileQuery(query);
     setFilePickerOpen(true);
 
     const lowerQuery = query.toLowerCase();
-    const filtered = cachedFileEntriesRef.current.filter(
-      (e) => e.relativePath.toLowerCase().includes(lowerQuery),
-    );
+    const filtered = cachedFileEntriesRef.current.filter((e) => {
+      const rel = e.relativePath.toLowerCase();
+      const label = mentionPathForPick(e).toLowerCase();
+      return rel.includes(lowerQuery) || label.includes(lowerQuery);
+    });
     setFilteredFileEntries(filtered);
     setSelectedFileIndex((prev) => Math.min(prev, Math.max(0, filtered.length - 1)));
   }, [input]);
@@ -842,23 +903,25 @@ function XibeCodeChatApp(props: {
         return;
       }
 
+      const flat = flattenTaggedAtMentions(trimmed);
+
       if (isRunning) {
-        queuedPromptRef.current = trimmed;
+        queuedPromptRef.current = flat;
         setInput('');
         pushLine({ type: 'info', text: 'Queued message — will run next.' });
         return;
       }
 
       const commandMatches = CHAT_COMMANDS.filter((command) =>
-        command.name.toLowerCase().startsWith(trimmed.toLowerCase()),
+        command.name.toLowerCase().startsWith(flat.toLowerCase()),
       );
       const exactMatch = CHAT_COMMANDS.some(
-        (command) => command.name.toLowerCase() === trimmed.toLowerCase(),
+        (command) => command.name.toLowerCase() === flat.toLowerCase(),
       );
       const resolvedInput =
-        trimmed.startsWith('/') && !exactMatch && commandMatches[selectedCommandIndex]
+        flat.startsWith('/') && !exactMatch && commandMatches[selectedCommandIndex]
           ? commandMatches[selectedCommandIndex].name
-          : trimmed;
+          : flat;
 
       setInput('');
 
@@ -1791,8 +1854,12 @@ function XibeCodeChatApp(props: {
           const afterAtPart = input.slice(atPos + 1);
           const spaceIdx = afterAtPart.indexOf(' ');
           const rest = spaceIdx === -1 ? '' : afterAtPart.slice(spaceIdx);
-          const newInput = `${beforeAt}@${selected.relativePath}${rest} `;
-          setInput(newInput);
+          const pickedPath = mentionPathForPick(selected);
+          const tag = `${AT_MENTION_OPEN}@${pickedPath}${AT_MENTION_CLOSE}`;
+          lockedPickTagsRef.current.add(tag);
+          const newInput = `${beforeAt}${tag}${rest} `;
+          setInput(reconcileTaggedAtMentions(newInput, lockedPickTagsRef));
+          setChatInputMountKey((k) => k + 1);
         }
         setFilePickerOpen(false);
         setSelectedFileIndex(0);
@@ -2113,8 +2180,9 @@ function XibeCodeChatApp(props: {
       <Box marginTop={1} borderStyle="round" borderColor={questionsState ? (questionsState.isTypingCustom ? 'green' : 'yellow') : 'claude'} paddingX={1}>
         <Text color={questionsState ? (questionsState.isTypingCustom ? 'green' : 'yellow') : 'claude'}>{'> '}</Text>
         <TextInput
+          key={chatInputMountKey}
           value={input}
-          onChange={setInput}
+          onChange={handleChatInputChange}
           onSubmit={onSubmit}
           placeholder={questionsState
             ? questionsState.isTypingCustom
@@ -2150,16 +2218,13 @@ function XibeCodeChatApp(props: {
                     {isSelected ? '▸ ' : '  '}
                   </Text>
                   <Text color={isSelected ? 'claude' : (entry.isDirectory ? 'yellow' : 'text')}>
-                    {entry.relativePath}
+                    {mentionPathForPick(entry)}
                   </Text>
-                  {entry.isDirectory && (
-                    <Text color="inactive">/</Text>
-                  )}
                 </Text>
               );
             })
           )}
-          <Text color="subtle">↑/↓ navigate • Enter select • Esc close</Text>
+          <Text color="subtle">↑/↓ navigate • Enter inserts locked ⟦@path⟧ • Space ends mention • Esc close</Text>
         </Box>
       )}
       {isSlashMode && (
