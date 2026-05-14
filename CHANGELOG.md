@@ -2,6 +2,20 @@
 
 All notable changes to XibeCode will be documented in this file.
 
+## [1.3.11] - 2026-05-14
+
+### CLI (`xibecode`)
+
+- Depend on **`xibecode-core` ^1.3.10** (npm).
+
+### VS Code extension (`xibecode-vscode`)
+
+- Depend on **`xibecode-core` ^1.3.10**.
+
+### Desktop (`xibecode-desktop`)
+
+- Depend on **`xibecode-core` ^1.3.10**.
+
 ## [1.3.10] - 2026-05-14
 
 ### Core (`xibecode-core`)
