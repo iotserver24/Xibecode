@@ -25,6 +25,7 @@ import { SessionManager, type ChatSession } from 'xibecode-core';
 import { AutoMemoryManager, HooksManager, SettingsManager as CoreSettingsManager } from 'xibecode-core';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
 import { cloudPullCommand } from '../commands/cloud-pull.js';
+import { listWorkspaceFiles, type FileEntry } from '../utils/list-files.js';
 import {
   attachRemoteExecution,
   codingToolExecutorRemoteOptions,
@@ -47,6 +48,8 @@ export type ChatOptions = {
   profile?: string;
   sessionId?: string;
   initialMessages?: Array<{ role: string; content: string | Array<any> }>;
+  /** When true, force local sandbox mode for this run (e.g. host `resume` should not inherit global e2b). */
+  forceLocalRuntime?: boolean;
 };
 
 function isAbortLikeError(err: unknown): boolean {
@@ -389,6 +392,14 @@ function XibeCodeChatApp(props: {
   const [configCostModePickerOpen, setConfigCostModePickerOpen] = useState(false);
   const [configCostModeIndex, setConfigCostModeIndex] = useState(0);
 
+  // File picker state (@-triggered)
+  const [filePickerOpen, setFilePickerOpen] = useState(false);
+  const [filteredFileEntries, setFilteredFileEntries] = useState<FileEntry[]>([]);
+  const [selectedFileIndex, setSelectedFileIndex] = useState(0);
+  const [fileQuery, setFileQuery] = useState('');
+  const [atPos, setAtPos] = useState(-1);
+  const [filePickerLoading, setFilePickerLoading] = useState(false);
+
   // Interactive questions state for plan mode
   type QuestionsState = {
     questions: ParsedQuestion[];
@@ -476,6 +487,7 @@ function XibeCodeChatApp(props: {
   const promptHistoryRef = useRef<string[]>([]);
   const historyIndexRef = useRef(-1);
   const savedInputRef = useRef('');
+  const cachedFileEntriesRef = useRef<FileEntry[]>([]);
   const sessionMessagesRef = useRef<MessageParam[]>(
     (props.initialMessages as MessageParam[]) || []
   );
@@ -569,6 +581,63 @@ function XibeCodeChatApp(props: {
     }, WORK_VERB_ROTATE_MS);
     return () => clearInterval(id);
   }, [isRunning]);
+
+  // Load workspace file list once on mount for @-picker
+  useEffect(() => {
+    let cancelled = false;
+    setFilePickerLoading(true);
+    (async () => {
+      try {
+        const entries = await listWorkspaceFiles(process.cwd());
+        if (!cancelled) {
+          cachedFileEntriesRef.current = entries;
+        }
+      } catch {
+        // silently fail
+      } finally {
+        if (!cancelled) setFilePickerLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Detect '@' in input to open file picker
+  useEffect(() => {
+    const lastAtIndex = input.lastIndexOf('@');
+
+    if (lastAtIndex === -1) {
+      if (filePickerOpen) {
+        setFilePickerOpen(false);
+        setSelectedFileIndex(0);
+      }
+      return;
+    }
+
+    // '@' must be at a word boundary (preceded by space, '(', or start of string)
+    if (lastAtIndex > 0 && input[lastAtIndex - 1] !== ' ' && input[lastAtIndex - 1] !== '(') {
+      if (filePickerOpen) {
+        setFilePickerOpen(false);
+        setSelectedFileIndex(0);
+      }
+      return;
+    }
+
+    // Extract query: everything after '@' up to the next space
+    const afterAt = input.slice(lastAtIndex + 1);
+    const spaceIdx = afterAt.indexOf(' ');
+    const query = spaceIdx === -1 ? afterAt : afterAt.slice(0, spaceIdx);
+
+    setAtPos(lastAtIndex);
+    setFileQuery(query);
+    setFilePickerOpen(true);
+
+    const lowerQuery = query.toLowerCase();
+    const filtered = cachedFileEntriesRef.current.filter(
+      (e) => e.relativePath.toLowerCase().includes(lowerQuery),
+    );
+    setFilteredFileEntries(filtered);
+    setSelectedFileIndex((prev) => Math.min(prev, Math.max(0, filtered.length - 1)));
+  }, [input]);
 
   const ensureModelsLoaded = useCallback(async (): Promise<string[]> => {
     if (availableModels.length > 0) {
@@ -765,6 +834,11 @@ function XibeCodeChatApp(props: {
 
       // If questions are active but not in typing mode, ignore (use arrows + Enter)
       if (questionsState) {
+        return;
+      }
+
+      // If file picker is open, ignore Enter (handled by useInput)
+      if (filePickerOpen) {
         return;
       }
 
@@ -1209,9 +1283,11 @@ function XibeCodeChatApp(props: {
       configPrompt.kind,
       ensureModelsLoaded,
       exit,
+      filePickerOpen,
       isRunning,
       props,
       pushLine,
+      questionsState,
       requestOpenAIModelsFrom,
       selectedCommandIndex,
       activeMode,
@@ -1220,7 +1296,6 @@ function XibeCodeChatApp(props: {
       wireFormat,
       applyMode,
       startSetupWizard,
-      isRunning,
     ],
   );
 
@@ -1264,6 +1339,17 @@ function XibeCodeChatApp(props: {
   const visibleSetupModelOptions = setupModels.slice(
     setupModelPickerStart,
     setupModelPickerStart + MODEL_PICKER_WINDOW,
+  );
+
+  const FILE_PICKER_WINDOW = 14;
+  const filePickerStart = computeWindowStart(
+    filteredFileEntries.length,
+    selectedFileIndex,
+    FILE_PICKER_WINDOW,
+  );
+  const visibleFileEntries = filteredFileEntries.slice(
+    filePickerStart,
+    filePickerStart + FILE_PICKER_WINDOW,
   );
 
   useInput((inputKey, key) => {
@@ -1679,6 +1765,41 @@ function XibeCodeChatApp(props: {
       }
     }
 
+    // File picker arrow navigation (@-triggered)
+    if (filePickerOpen && !isRunning && !isSlashMode) {
+      if (key.escape) {
+        setFilePickerOpen(false);
+        setSelectedFileIndex(0);
+        return;
+      }
+      if (key.upArrow) {
+        setSelectedFileIndex((prev) =>
+          prev === 0 ? filteredFileEntries.length - 1 : prev - 1,
+        );
+        return;
+      }
+      if (key.downArrow) {
+        setSelectedFileIndex((prev) =>
+          prev >= filteredFileEntries.length - 1 ? 0 : prev + 1,
+        );
+        return;
+      }
+      if (key.return) {
+        const selected = filteredFileEntries[selectedFileIndex];
+        if (selected) {
+          const beforeAt = input.slice(0, atPos);
+          const afterAtPart = input.slice(atPos + 1);
+          const spaceIdx = afterAtPart.indexOf(' ');
+          const rest = spaceIdx === -1 ? '' : afterAtPart.slice(spaceIdx);
+          const newInput = `${beforeAt}@${selected.relativePath}${rest} `;
+          setInput(newInput);
+        }
+        setFilePickerOpen(false);
+        setSelectedFileIndex(0);
+        return;
+      }
+    }
+
     // Prompt history browsing with UP/DOWN arrows (only in normal chat input)
     if (!isSlashMode && !isRunning && !questionsState && !configMenuOpen && !modePickerOpen && !modelPickerOpen && !setupModelPickerOpen && !setupProviderPickerOpen && !configProviderPickerOpen && !configCostModePickerOpen) {
       const hist = promptHistoryRef.current;
@@ -2002,6 +2123,45 @@ function XibeCodeChatApp(props: {
             : isRunning ? 'Waiting for response…' : 'Message XibeCode…'}
         />
       </Box>
+      {filePickerOpen && (
+        <Box
+          marginTop={1}
+          borderStyle="round"
+          borderColor="suggestion"
+          flexDirection="column"
+          paddingX={1}
+        >
+          <Text bold color="suggestion">
+            Files{filePickerLoading ? ' (loading...)' : ''}
+          </Text>
+          {filePickerLoading ? (
+            <Text color="inactive">Scanning workspace…</Text>
+          ) : filteredFileEntries.length === 0 ? (
+            <Text color="inactive">
+              {fileQuery ? `No files match "${fileQuery}"` : 'No files in workspace'}
+            </Text>
+          ) : (
+            visibleFileEntries.map((entry, index) => {
+              const absoluteIndex = filePickerStart + index;
+              const isSelected = absoluteIndex === selectedFileIndex;
+              return (
+                <Text key={entry.relativePath}>
+                  <Text color={isSelected ? 'claude' : 'inactive'}>
+                    {isSelected ? '▸ ' : '  '}
+                  </Text>
+                  <Text color={isSelected ? 'claude' : (entry.isDirectory ? 'yellow' : 'text')}>
+                    {entry.relativePath}
+                  </Text>
+                  {entry.isDirectory && (
+                    <Text color="inactive">/</Text>
+                  )}
+                </Text>
+              );
+            })
+          )}
+          <Text color="subtle">↑/↓ navigate • Enter select • Esc close</Text>
+        </Box>
+      )}
       {isSlashMode && (
         <Box
           marginTop={1}
@@ -2288,6 +2448,12 @@ function XibeCodeChatApp(props: {
 }
 
 export async function launchClaudeStyleChat(options: ChatOptions): Promise<void> {
+  if (options.forceLocalRuntime) {
+    process.env.XIBECODE_SANDBOX_MODE = 'local';
+    delete process.env.XIBECODE_SANDBOX_SESSION_ID;
+    delete process.env.XIBECODE_SANDBOX_SKIP_SYNC;
+  }
+
   const config = new ConfigManager(options.profile);
   const apiKey = options.apiKey || config.getApiKey() || '';
   const needsFirstRunSetup = !apiKey;

@@ -2,6 +2,13 @@
 
 All notable changes to XibeCode will be documented in this file.
 
+## [1.3.9] - 2026-05-13
+
+### CLI (`xibecode`)
+
+- **`xibecode resume`** resumes host-stored sessions **locally** even when the profile uses E2B / `sandbox_full` (no implicit workspace sync on resume).
+- **`xibecode resume cloud <sandbox-id>`** — alias of **`xibecode cloud resume`** for attaching to an existing E2B sandbox by id.
+
 ## [1.3.7] - 2026-05-10
 
 ### CLI (`xibecode`)

@@ -244,5 +244,6 @@ async function resumeSession(
     profile,
     sessionId,
     initialMessages,
+    forceLocalRuntime: true,
   });
 }

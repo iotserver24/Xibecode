@@ -25,6 +25,22 @@ const pkg = require('../package.json');
 
 dotenv.config();
 
+type ChatCliOptions = Parameters<typeof chatCommand>[0];
+
+/** Attach to an existing E2B sandbox by id (gateway resolves gateway session). */
+async function runCloudChatResumeBySandboxId(sandboxId: string, options: ChatCliOptions): Promise<void> {
+  process.env.XIBECODE_SANDBOX_MODE = 'e2b';
+  const config = new ConfigManager(options.profile);
+  const remote = resolveRemoteExecutionConfig(config, process.cwd());
+  if (!remote) {
+    throw new Error('Cloud runtime is not configured. Set sandbox gateway and token first.');
+  }
+  const resolved = await resolveSessionBySandboxId(remote, sandboxId);
+  process.env.XIBECODE_SANDBOX_SESSION_ID = resolved.sessionId;
+  process.env.XIBECODE_SANDBOX_SKIP_SYNC = '1';
+  await chatCommand(options);
+}
+
 const program = new Command();
 
 program
@@ -112,7 +128,9 @@ const cloudCmd = program
 
 cloudCmd
   .command('resume')
-  .description('Resume chat on an existing cloud sandbox by sandbox ID')
+  .description(
+    'Resume chat on an existing cloud sandbox by E2B sandbox ID (same as `xibecode resume cloud <sandbox-id>`). Requires gateway and token in config.',
+  )
   .argument('<sandbox-id>', 'E2B sandbox ID to resume')
   .option('-m, --model <model>', 'AI model to use')
   .option('-b, --base-url <url>', 'Custom API base URL')
@@ -122,17 +140,8 @@ cloudCmd
   .option('--cost-mode <mode>', 'Cost mode: normal or economy', 'normal')
   .option('--theme <theme>', 'UI theme to use')
   .option('--plain', 'Disable Ink UI; print line-by-line output (best for copying)', false)
-  .action(async (sandboxId: string, options: Parameters<typeof chatCommand>[0]) => {
-    process.env.XIBECODE_SANDBOX_MODE = 'e2b';
-    const config = new ConfigManager(options.profile);
-    const remote = resolveRemoteExecutionConfig(config, process.cwd());
-    if (!remote) {
-      throw new Error('Cloud runtime is not configured. Set sandbox gateway and token first.');
-    }
-    const resolved = await resolveSessionBySandboxId(remote, sandboxId);
-    process.env.XIBECODE_SANDBOX_SESSION_ID = resolved.sessionId;
-    process.env.XIBECODE_SANDBOX_SKIP_SYNC = '1';
-    await chatCommand(options);
+  .action(async (sandboxId: string, options: ChatCliOptions) => {
+    await runCloudChatResumeBySandboxId(sandboxId, options);
   });
 
 cloudCmd
@@ -152,10 +161,31 @@ cloudCmd
     await cloudPullCommand(options);
   });
 
-// Resume a previous session
-program
-  .command('resume')
-  .description('Resume a previous chat session')
+// Resume a host-stored session locally; `resume cloud <id>` attaches to an existing sandbox
+const resumeCmd = program.command('resume');
+
+resumeCmd
+  .command('cloud')
+  .description(
+    'Resume chat on an existing cloud sandbox by E2B sandbox ID (alias of `xibecode cloud resume`). Requires gateway and token in config.',
+  )
+  .argument('<sandbox-id>', 'E2B sandbox ID to resume')
+  .option('-m, --model <model>', 'AI model to use')
+  .option('-b, --base-url <url>', 'Custom API base URL')
+  .option('-k, --api-key <key>', 'API key (overrides config)')
+  .option('--profile <name>', 'Config profile to use (default: configured default profile)')
+  .option('--provider <provider>', 'Model API format: anthropic or openai')
+  .option('--cost-mode <mode>', 'Cost mode: normal or economy', 'normal')
+  .option('--theme <theme>', 'UI theme to use')
+  .option('--plain', 'Disable Ink UI; print line-by-line output (best for copying)', false)
+  .action(async (sandboxId: string, options: ChatCliOptions) => {
+    await runCloudChatResumeBySandboxId(sandboxId, options);
+  });
+
+resumeCmd
+  .description(
+    'Resume a host-stored chat session locally (ignores global e2b for this run). To continue in an existing cloud sandbox, use: xibecode resume cloud <sandbox-id> or xibecode cloud resume <sandbox-id>.',
+  )
   .argument('[session-id]', 'Session ID to resume (optional - shows picker if not provided)')
   .option('--profile <name>', 'Config profile to use (default: configured default profile)')
   .option('--all', 'Show sessions from all projects, not just the current directory')

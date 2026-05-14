@@ -9,7 +9,7 @@ export const CLOUD_SYNC_FACTS: string[] = [
   'The stack is a pnpm monorepo: xibecode-core (agent + tools), xibecode CLI (Ink UI), desktop and VS Code ext.',
   'Use `xc` as a short alias for `xibecode`; `xc` / `xibecode` with no args opens local chat; `xc cloud` uses E2B.',
   // Sessions & files
-  'Sessions for this project folder live under ~/.xibecode/sessions/ — resume with `xibecode resume`.',
+  'Sessions for this project folder live under ~/.xibecode/sessions/ — resume locally with `xibecode resume`; to attach an existing cloud sandbox use `xibecode resume cloud <sandbox-id>`.',
   'File undo checkpoints use ~/.xibecode/file-history/; set XIBECODE_DISABLE_FILE_CHECKPOINTING=1 to turn that off.',
   // Sandbox & cloud
   'With sandbox_full, your repo is packed and uploaded to the team gateway, then extracted in the VM workspace.',
