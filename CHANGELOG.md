@@ -2,6 +2,17 @@
 
 All notable changes to XibeCode will be documented in this file.
 
+## [1.3.10] - 2026-05-14
+
+### Core (`xibecode-core`)
+
+- **1.3.10** — npm package README; keep semver aligned with the CLI release line.
+
+### CLI (`xibecode`)
+
+- Chat **`@` file picker:** locked **`⟦@path⟧`** tokens from the picker, caret jumps to end after select (remount fix), **Space** closes suggestions, **`/`**-wrapped directory labels (`/dir/`) vs plain file paths; flatten to cwd-relative **`@path`** for prompts.
+- **`onSubmit`** stale closure fix so Enter selects from the picker without sending the message early.
+
 ## [1.3.9] - 2026-05-13
 
 ### CLI (`xibecode`)
