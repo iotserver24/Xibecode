@@ -153,7 +153,7 @@ export default function ChatPanel({
                       <button
                         key={q.text}
                         onClick={() => onSendMessage(q.text)}
-                        className="group flex items-center gap-3 rounded-lg bg-xibe-surface px-4 py-3 text-sm text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors"
+                        className="group flex items-center gap-3 rounded-xl border border-xibe-border-subtle bg-transparent px-4 py-3 text-sm text-xibe-text-secondary hover:bg-xibe-surface/50 hover:text-xibe-text transition-colors"
                       >
                         <div className="rounded-lg p-1.5 text-xibe-text-dim group-hover:text-xibe-text transition-colors">
                           {q.icon}
@@ -203,7 +203,7 @@ export default function ChatPanel({
           )}
 
           {/* Floating Pill input */}
-          <div className="relative flex items-end rounded-lg bg-xibe-surface transition-colors duration-200">
+          <div className="relative flex items-end rounded-2xl border border-xibe-border-subtle bg-xibe-bg focus-within:border-xibe-border-focus focus-within:ring-1 focus-within:ring-xibe-border-focus transition-all duration-200">
             <textarea
               ref={inputRef}
               value={input}

@@ -93,10 +93,10 @@ const ChatHistory = memo(function ChatHistory({ activeSessionId, onSelectSession
                   key={s.id}
                   onClick={() => onSelectSession(s.id)}
                   className={cn(
-                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-all duration-200 group relative",
+                    "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-all duration-200 group relative",
                     activeSessionId === s.id
                       ? "text-xibe-text font-semibold before:absolute before:left-0 before:top-1/4 before:bottom-1/4 before:w-1 before:bg-xibe-text before:rounded-r"
-                      : "text-xibe-text-secondary hover:bg-xibe-surface-hover/50 hover:text-xibe-text"
+                      : "text-xibe-text-secondary hover:bg-xibe-surface-hover/30 hover:text-xibe-text"
                   )}
                 >
                   <MessageSquare className={cn("h-3.5 w-3.5 shrink-0", activeSessionId === s.id ? "text-xibe-text" : "text-xibe-text-dim/40 group-hover:text-xibe-text-dim/70")} />
