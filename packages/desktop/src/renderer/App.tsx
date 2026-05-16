@@ -319,7 +319,7 @@ export default function App() {
   return (
     <div className="flex h-screen flex-col bg-xibe-bg text-xibe-text font-sans overflow-hidden">
       {/* Header */}
-      <header className="flex h-12 items-center justify-between px-3 shrink-0 bg-xibe-bg z-10 border-b border-xibe-border-subtle">
+      <header className="flex h-12 items-center justify-between px-3 shrink-0 bg-xibe-bg z-10">
         <div className="flex items-center gap-3">
           <button
             onClick={() => setLeftPanelOpen((v) => !v)}
@@ -370,7 +370,7 @@ export default function App() {
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
         {/* Left panel: Chat history + settings shortcut */}
         <aside
-          className="shrink-0 bg-xibe-bg flex flex-col overflow-hidden transition-[width] duration-200 ease-in-out border-r border-xibe-border-subtle"
+          className="shrink-0 bg-xibe-surface flex flex-col overflow-hidden transition-[width] duration-200 ease-in-out"
           style={{ width: leftPanelOpen ? 240 : 0 }}
         >
             <div className="flex-1 min-h-0 overflow-y-auto p-3">
