@@ -22,6 +22,15 @@ const MIME_TYPES: Record<string, string> = {
   '.wasm': 'application/wasm',
 };
 
+const existsAsync = async (p: string) => {
+  try {
+    await fs.promises.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export class PreviewServer {
   private server: Server | null = null;
   private port: number = 0;
@@ -70,13 +79,14 @@ export class PreviewServer {
     return this.port ? `http://127.0.0.1:${this.port}` : '';
   }
 
-  private handleRequest(req: any, res: any): void {
+  private async handleRequest(req: any, res: any): Promise<void> {
     const urlPath = req.url.split('?')[0];
     let filePath = path.join(this.rootDir, urlPath === '/' ? 'index.html' : urlPath);
 
-    if (!fs.existsSync(filePath)) {
+    // ⚡ Bolt: Replace synchronous file operations with async promises to prevent blocking the main thread
+    if (!(await existsAsync(filePath))) {
       const htmlPath = filePath + '.html';
-      if (fs.existsSync(htmlPath)) {
+      if (await existsAsync(htmlPath)) {
         filePath = htmlPath;
       } else {
         res.writeHead(404);
@@ -86,10 +96,10 @@ export class PreviewServer {
     }
 
     try {
-      const stat = fs.statSync(filePath);
+      const stat = await fs.promises.stat(filePath);
       if (stat.isDirectory()) {
         const indexPath = path.join(filePath, 'index.html');
-        if (fs.existsSync(indexPath)) {
+        if (await existsAsync(indexPath)) {
           filePath = indexPath;
         } else {
           res.writeHead(403);
@@ -106,16 +116,20 @@ export class PreviewServer {
     const ext = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[ext] ?? 'application/octet-stream';
 
-    try {
-      const content = fs.readFileSync(filePath);
+    // ⚡ Bolt: Use stream piping instead of readFileSync to avoid loading large files fully into memory
+    const readStream = fs.createReadStream(filePath);
+    readStream.on('error', () => {
+      if (!res.headersSent) {
+        res.writeHead(500);
+      }
+      res.end('Failed to read file');
+    });
+    readStream.on('open', () => {
       res.writeHead(200, {
         'Content-Type': contentType,
         'Cache-Control': 'no-cache',
       });
-      res.end(content);
-    } catch {
-      res.writeHead(500);
-      res.end('Failed to read file');
-    }
+    });
+    readStream.pipe(res);
   }
 }
