@@ -556,6 +556,8 @@ export class SessionManager {
 
     // Collect legacy JSON sessions
     const jsonFiles = files.filter((f) => f.endsWith('.json'));
+    // ⚡ Bolt: Pre-compute Set for O(1) lookups instead of O(N^2) array.some() string replacement in the inner loop
+    const jsonlBaseNames = new Set(jsonlFiles.map((f) => f.slice(0, -6)));
     const CONCURRENCY_LIMIT = 20;
     for (let i = 0; i < jsonFiles.length; i += CONCURRENCY_LIMIT) {
       const chunk = jsonFiles.slice(i, i + CONCURRENCY_LIMIT);
@@ -566,7 +568,7 @@ export class SessionManager {
             const raw = await fs.readFile(fullPath, 'utf-8');
             const data = JSON.parse(raw) as ChatSession;
             // Skip if already have a JSONL version
-            if (jsonlFiles.some((jf) => jf.replace('.jsonl', '') === file.replace('.json', ''))) return;
+            if (jsonlBaseNames.has(file.slice(0, -5))) return;
             const { messages: _messages, stats: _stats, ...meta } = data;
             metas.push(meta);
           } catch {
