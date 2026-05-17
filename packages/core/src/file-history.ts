@@ -193,43 +193,51 @@ export async function fileHistoryMakeSnapshot(
   const mostRecentSnapshot = captured.snapshots.at(-1);
 
   if (mostRecentSnapshot) {
-    await Promise.all(
-      Array.from(captured.trackedFiles, async (trackingPath) => {
-        const latestBackup = mostRecentSnapshot.trackedFileBackups[trackingPath];
-        const nextVersion = latestBackup ? latestBackup.version + 1 : 1;
+    const trackedFilesArray = Array.from(captured.trackedFiles);
+    // ⚡ Bolt: Chunked concurrency to prevent EMFILE (too many open files) OS errors when evaluating thousands of tracked files.
+    const CONCURRENCY_LIMIT = 20;
 
-        let fileStats: Stats | undefined;
-        try {
-          fileStats = await stat(trackingPath);
-        } catch {
-          fileStats = undefined;
-        }
+    for (let i = 0; i < trackedFilesArray.length; i += CONCURRENCY_LIMIT) {
+      const chunk = trackedFilesArray.slice(i, i + CONCURRENCY_LIMIT);
 
-        if (!fileStats) {
-          trackedFileBackups[trackingPath] = {
-            backupFileName: null,
-            version: nextVersion,
-            backupTime: new Date().toISOString(),
-          };
-          return;
-        }
+      await Promise.all(
+        chunk.map(async (trackingPath) => {
+          const latestBackup = mostRecentSnapshot.trackedFileBackups[trackingPath];
+          const nextVersion = latestBackup ? latestBackup.version + 1 : 1;
 
-        if (
-          latestBackup &&
-          latestBackup.backupFileName !== null &&
-          !(await checkOriginFileChanged(
-            trackingPath,
-            latestBackup.backupFileName,
-            fileStats,
-          ))
-        ) {
-          trackedFileBackups[trackingPath] = latestBackup;
-          return;
-        }
+          let fileStats: Stats | undefined;
+          try {
+            fileStats = await stat(trackingPath);
+          } catch {
+            fileStats = undefined;
+          }
 
-        trackedFileBackups[trackingPath] = await createBackup(trackingPath, nextVersion);
-      }),
-    );
+          if (!fileStats) {
+            trackedFileBackups[trackingPath] = {
+              backupFileName: null,
+              version: nextVersion,
+              backupTime: new Date().toISOString(),
+            };
+            return;
+          }
+
+          if (
+            latestBackup &&
+            latestBackup.backupFileName !== null &&
+            !(await checkOriginFileChanged(
+              trackingPath,
+              latestBackup.backupFileName,
+              fileStats,
+            ))
+          ) {
+            trackedFileBackups[trackingPath] = latestBackup;
+            return;
+          }
+
+          trackedFileBackups[trackingPath] = await createBackup(trackingPath, nextVersion);
+        })
+      );
+    }
   }
 
   let createdSnapshot: FileHistorySnapshot | undefined;
