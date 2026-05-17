@@ -135,8 +135,8 @@ export default function ChatPanel({
                         className={cn(
                           "rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-200",
                           modeState.current === m.id
-                            ? "bg-xibe-surface text-xibe-text"
-                            : "text-xibe-text-dim hover:text-xibe-text hover:bg-xibe-surface"
+                            ? "bg-xibe-surface-raised text-xibe-text"
+                            : "text-xibe-text-dim hover:text-xibe-text hover:bg-xibe-surface-raised"
                         )}
                       >
                         {m.label}
@@ -153,7 +153,7 @@ export default function ChatPanel({
                       <button
                         key={q.text}
                         onClick={() => onSendMessage(q.text)}
-                        className="group flex items-center gap-3 rounded-xl border border-xibe-border-subtle bg-transparent px-4 py-3 text-sm text-xibe-text-secondary hover:bg-xibe-surface/50 hover:text-xibe-text transition-colors"
+                        className="group flex items-center gap-3 rounded-xl bg-xibe-surface-raised border-none px-4 py-3 text-sm text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors"
                       >
                         <div className="rounded-lg p-1.5 text-xibe-text-dim group-hover:text-xibe-text transition-colors">
                           {q.icon}
@@ -203,7 +203,7 @@ export default function ChatPanel({
           )}
 
           {/* Floating Pill input */}
-          <div className="relative flex items-end rounded-2xl border border-xibe-border-subtle bg-xibe-bg focus-within:border-xibe-border-focus focus-within:ring-1 focus-within:ring-xibe-border-focus transition-all duration-200">
+          <div className="relative flex items-end rounded-2xl bg-xibe-surface-raised border-none transition-all duration-200">
             <textarea
               ref={inputRef}
               value={input}
