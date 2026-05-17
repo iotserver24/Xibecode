@@ -64,3 +64,6 @@
 ## 2024-05-15 - Electron Main Process File Operations
 **Learning:** Using synchronous `fs` methods (`readFileSync`, `existsSync`, `statSync`) in the Electron main process (e.g., `preview-server.ts`) severely blocks the Node.js event loop, preventing concurrent processing of HTTP requests and potentially causing UI thread starvation or micro-stuttering. Furthermore, buffering entire large files (e.g., `readFileSync`) consumes unnecessary heap memory.
 **Action:** Always default to async file operations (`fs.promises`) and stream piping (`createReadStream(..).pipe(res)`) when dealing with HTTP response bodies in the Electron main process to maintain responsiveness and minimize memory footprint.
+## 2025-05-17 - Replace O(N²) array search with O(N) Set lookup in session listing
+**Learning:** Using `array.some(...)` with string operations (like `replace()`) inside a loop over files creates an unnecessary O(N²) performance bottleneck, particularly when reading directories with many files (like the sessions history directory).
+**Action:** When filtering files against another list of files, pre-compute a `Set` of base names outside the loop for O(1) lookups, changing the overall time complexity from O(N²) to O(N).
