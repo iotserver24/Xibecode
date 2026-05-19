@@ -19,7 +19,7 @@ const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutpu
     <div className="rounded-xl border border-xibe-border-subtle overflow-hidden animate-fade-in my-3 group">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-3 px-3 py-1.5 text-left hover:bg-xibe-surface-hover transition-colors"
+        className="flex w-full items-center gap-3 px-2.5 py-1 text-left hover:bg-xibe-surface-hover transition-colors"
       >
         <ChevronRight className={cn("h-4 w-4 shrink-0 transition-transform text-xibe-text-dim", open && "rotate-90")} />
 
@@ -44,7 +44,7 @@ const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutpu
       </button>
 
       {open && (
-        <div className="border-t border-xibe-border-subtle px-4 py-3 space-y-4 animate-fade-in bg-xibe-surface/30">
+        <div className="border-t border-xibe-border-subtle px-4 py-3 space-y-4 animate-fade-in bg-transparent">
           {inputStr && (
             <div>
               <div className="flex items-center gap-2 mb-2">

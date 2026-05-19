@@ -117,7 +117,7 @@ export default function ChatPanel({
                 <div className="mx-auto w-12 h-12 flex items-center justify-center mb-4">
                   <Terminal className="h-6 w-6 text-xibe-text" />
                 </div>
-                <h1 className="text-3xl font-semibold text-xibe-text tracking-tight">How can I help you today?</h1>
+                <h1 className="text-2xl font-semibold text-xibe-text tracking-tight">How can I help you today?</h1>
                 <p className="text-sm text-xibe-text-dim mt-2 max-w-md mx-auto">I can write code, fix bugs, explain concepts, and help you navigate your codebase.</p>
               </div>
 
@@ -133,7 +133,7 @@ export default function ChatPanel({
                         key={m.id}
                         onClick={() => onModeSwitch(m.id, `Switched to ${m.label}`)}
                         className={cn(
-                          "rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-200",
+                          "rounded-full px-4 py-1.5 text-xs font-medium transition-colors duration-200",
                           modeState.current === m.id
                             ? "bg-xibe-surface-raised text-xibe-text"
                             : "text-xibe-text-dim hover:text-xibe-text hover:bg-xibe-surface-raised"
@@ -203,7 +203,7 @@ export default function ChatPanel({
           )}
 
           {/* Floating Pill input */}
-          <div className="relative flex items-end rounded-2xl bg-xibe-surface-raised border-none transition-all duration-200">
+          <div className="relative flex items-end rounded-2xl bg-xibe-surface-raised border border-transparent focus-within:border-xibe-border-focus focus-within:bg-xibe-bg transition-all duration-200">
             <textarea
               ref={inputRef}
               value={input}
@@ -224,7 +224,7 @@ export default function ChatPanel({
             <button
               onClick={submit}
               disabled={isRunning || !input.trim()}
-              className="absolute right-2 bottom-2 h-9 w-9 rounded-lg bg-transparent flex items-center justify-center text-xibe-text hover:bg-xibe-surface-hover disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+              className="absolute right-2 bottom-2 h-9 w-9 rounded-lg flex items-center justify-center text-xibe-text bg-xibe-surface hover:bg-xibe-surface-hover disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
             >
               <Send className="h-4 w-4 ml-0.5" />
             </button>
