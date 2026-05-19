@@ -3,10 +3,10 @@
 @theme {
   --color-xibe-bg: #09090b;
   --color-xibe-surface: #09090b;
-  --color-xibe-surface-raised: #18181b;
-  --color-xibe-surface-hover: #18181b;
+  --color-xibe-surface-raised: #121214;
+  --color-xibe-surface-hover: #27272a;
   --color-xibe-border: #27272a;
-  --color-xibe-border-subtle: #18181b;
+  --color-xibe-border-subtle: #27272a;
   --color-xibe-border-focus: #52525b;
   --color-xibe-muted: #71717a;
   --color-xibe-text: #fafafa;
