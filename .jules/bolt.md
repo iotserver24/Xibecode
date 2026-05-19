@@ -67,3 +67,6 @@
 ## 2025-05-17 - Replace O(N²) array search with O(N) Set lookup in session listing
 **Learning:** Using `array.some(...)` with string operations (like `replace()`) inside a loop over files creates an unnecessary O(N²) performance bottleneck, particularly when reading directories with many files (like the sessions history directory).
 **Action:** When filtering files against another list of files, pre-compute a `Set` of base names outside the loop for O(1) lookups, changing the overall time complexity from O(N²) to O(N).
+## 2025-02-23 - Memoizing List Items Requires Stable Callback Props
+**Learning:** Extracting an inline list item into a `React.memo` component (like `ChatHistoryItem`) to prevent O(N) VDOM re-renders is completely ineffective if the event handler props (like `onDelete`) are not wrapped in `useCallback` in the parent component. Without `useCallback`, the parent creates a new function reference on every render, causing `React.memo`'s shallow comparison to fail and re-render every item anyway.
+**Action:** When extracting React components into `React.memo()` to prevent unnecessary re-renders (e.g., list items), ensure all functions passed as props (such as event handlers) are wrapped in `useCallback` in the parent component to maintain referential equality across renders.

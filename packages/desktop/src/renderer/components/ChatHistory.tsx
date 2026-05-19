@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { Plus, MessageSquare, Trash2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -31,6 +31,45 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
+const ChatHistoryItem = memo(function ChatHistoryItem({
+  session,
+  isActive,
+  onSelect,
+  onDelete,
+}: {
+  session: SessionItem;
+  isActive: boolean;
+  onSelect: (id: string) => void;
+  onDelete: (e: React.MouseEvent, id: string) => void;
+}) {
+  return (
+    <button
+      onClick={() => onSelect(session.id)}
+      className={cn(
+        "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-all duration-200 group relative",
+        isActive
+          ? "text-xibe-text font-semibold before:absolute before:left-0 before:top-1/4 before:bottom-1/4 before:w-1 before:bg-xibe-text before:rounded-r"
+          : "text-xibe-text-secondary hover:bg-xibe-surface-hover/30 hover:text-xibe-text"
+      )}
+    >
+      <MessageSquare className={cn("h-3.5 w-3.5 shrink-0", isActive ? "text-xibe-text" : "text-xibe-text-dim/40 group-hover:text-xibe-text-dim/70")} />
+      <span className="flex-1 truncate text-[12px] font-medium leading-tight">{session.title}</span>
+
+      {/* ⚡ Bolt: Used CSS group-hover instead of React state to toggle delete button visibility to prevent O(N) re-renders of the entire list on hover */}
+      <span
+        onClick={(e) => onDelete(e, session.id)}
+        className="shrink-0 rounded p-1 text-xibe-text-dim/50 hover:text-xibe-error hover:bg-xibe-error/10 transition-colors animate-fade-in hidden group-hover:block"
+        title="Delete chat"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </span>
+
+      {/* ⚡ Bolt: Hide timestamp on hover using group-hover to make room for delete button without React state overhead */}
+      <span className="shrink-0 text-[10px] text-xibe-text-dim/40 tabular-nums block group-hover:hidden">{relativeTime(session.updated)}</span>
+    </button>
+  );
+});
+
 const ChatHistory = memo(function ChatHistory({ activeSessionId, onSelectSession, onNewChat }: ChatHistoryProps) {
   const [sessions, setSessions] = useState<SessionItem[]>([]);
 
@@ -41,29 +80,46 @@ const ChatHistory = memo(function ChatHistory({ activeSessionId, onSelectSession
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
+  const handleDelete = useCallback(async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     await xibe.session.delete(id);
     refresh();
-  };
+  }, [refresh]);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const weekAgo = new Date(today);
-  weekAgo.setDate(weekAgo.getDate() - 7);
+  // ⚡ Bolt: Memoize the grouping of sessions into an O(N) single pass to avoid O(4N) filtering and Date parsing on every render
+  const groups = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const weekAgo = new Date(today);
+    weekAgo.setDate(weekAgo.getDate() - 7);
 
-  const groups: { label: string; items: SessionItem[] }[] = [];
-  const todayItems = sessions.filter((s) => new Date(s.updated) >= today);
-  const yesterdayItems = sessions.filter((s) => { const d = new Date(s.updated); return d >= yesterday && d < today; });
-  const weekItems = sessions.filter((s) => { const d = new Date(s.updated); return d >= weekAgo && d < yesterday; });
-  const olderItems = sessions.filter((s) => new Date(s.updated) < weekAgo);
+    const todayItems: SessionItem[] = [];
+    const yesterdayItems: SessionItem[] = [];
+    const weekItems: SessionItem[] = [];
+    const olderItems: SessionItem[] = [];
 
-  if (todayItems.length) groups.push({ label: 'Today', items: todayItems });
-  if (yesterdayItems.length) groups.push({ label: 'Yesterday', items: yesterdayItems });
-  if (weekItems.length) groups.push({ label: 'This Week', items: weekItems });
-  if (olderItems.length) groups.push({ label: 'Older', items: olderItems });
+    for (const s of sessions) {
+      const d = new Date(s.updated);
+      if (d >= today) {
+        todayItems.push(s);
+      } else if (d >= yesterday) {
+        yesterdayItems.push(s);
+      } else if (d >= weekAgo) {
+        weekItems.push(s);
+      } else {
+        olderItems.push(s);
+      }
+    }
+
+    const g: { label: string; items: SessionItem[] }[] = [];
+    if (todayItems.length) g.push({ label: 'Today', items: todayItems });
+    if (yesterdayItems.length) g.push({ label: 'Yesterday', items: yesterdayItems });
+    if (weekItems.length) g.push({ label: 'This Week', items: weekItems });
+    if (olderItems.length) g.push({ label: 'Older', items: olderItems });
+    return g;
+  }, [sessions]);
 
   return (
     <div className="flex h-full flex-col">
@@ -89,31 +145,13 @@ const ChatHistory = memo(function ChatHistory({ activeSessionId, onSelectSession
             <div className="mb-2 px-1 text-[10px] font-bold uppercase tracking-widest text-xibe-text-dim/50">{group.label}</div>
             <div className="space-y-0.5">
               {group.items.map((s) => (
-                <button
+                <ChatHistoryItem
                   key={s.id}
-                  onClick={() => onSelectSession(s.id)}
-                  className={cn(
-                    "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-all duration-200 group relative",
-                    activeSessionId === s.id
-                      ? "text-xibe-text font-semibold before:absolute before:left-0 before:top-1/4 before:bottom-1/4 before:w-1 before:bg-xibe-text before:rounded-r"
-                      : "text-xibe-text-secondary hover:bg-xibe-surface-hover/30 hover:text-xibe-text"
-                  )}
-                >
-                  <MessageSquare className={cn("h-3.5 w-3.5 shrink-0", activeSessionId === s.id ? "text-xibe-text" : "text-xibe-text-dim/40 group-hover:text-xibe-text-dim/70")} />
-                  <span className="flex-1 truncate text-[12px] font-medium leading-tight">{s.title}</span>
-
-                  {/* ⚡ Bolt: Used CSS group-hover instead of React state to toggle delete button visibility to prevent O(N) re-renders of the entire list on hover */}
-                  <span
-                    onClick={(e) => handleDelete(e, s.id)}
-                    className="shrink-0 rounded p-1 text-xibe-text-dim/50 hover:text-xibe-error hover:bg-xibe-error/10 transition-colors animate-fade-in hidden group-hover:block"
-                    title="Delete chat"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </span>
-
-                  {/* ⚡ Bolt: Hide timestamp on hover using group-hover to make room for delete button without React state overhead */}
-                  <span className="shrink-0 text-[10px] text-xibe-text-dim/40 tabular-nums block group-hover:hidden">{relativeTime(s.updated)}</span>
-                </button>
+                  session={s}
+                  isActive={activeSessionId === s.id}
+                  onSelect={onSelectSession}
+                  onDelete={handleDelete}
+                />
               ))}
             </div>
           </div>
