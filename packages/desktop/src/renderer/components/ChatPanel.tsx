@@ -127,16 +127,16 @@ export default function ChatPanel({
                 </button>
               ) : (
                 <div className="w-full max-w-2xl space-y-4">
-                  <div className="flex justify-center gap-2 mb-6">
+                  <div className="flex justify-center gap-1 mb-6">
                     {MODES.map((m) => (
                       <button
                         key={m.id}
                         onClick={() => onModeSwitch(m.id, `Switched to ${m.label}`)}
                         className={cn(
-                          "rounded-full px-4 py-1.5 text-xs font-medium transition-colors duration-200",
+                          "rounded-md px-3 py-1 text-xs font-medium transition-colors duration-200",
                           modeState.current === m.id
                             ? "bg-xibe-surface-raised text-xibe-text"
-                            : "text-xibe-text-dim hover:text-xibe-text hover:bg-xibe-surface-raised"
+                            : "text-xibe-text-dim hover:text-xibe-text hover:bg-xibe-surface-raised/50"
                         )}
                       >
                         {m.label}
@@ -153,9 +153,9 @@ export default function ChatPanel({
                       <button
                         key={q.text}
                         onClick={() => onSendMessage(q.text)}
-                        className="group flex items-center gap-3 rounded-xl bg-xibe-surface-raised border-none px-4 py-3 text-sm text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors"
+                        className="group flex items-center gap-3 rounded-xl bg-transparent border border-xibe-border-subtle px-4 py-3 text-sm text-xibe-text-secondary hover:bg-xibe-surface-raised hover:text-xibe-text transition-colors"
                       >
-                        <div className="rounded-lg p-1.5 text-xibe-text-dim group-hover:text-xibe-text transition-colors">
+                        <div className="rounded-lg p-1 text-xibe-text-dim group-hover:text-xibe-text transition-colors">
                           {q.icon}
                         </div>
                         {q.text}
@@ -203,7 +203,7 @@ export default function ChatPanel({
           )}
 
           {/* Floating Pill input */}
-          <div className="relative flex items-end rounded-2xl bg-xibe-surface-raised border border-transparent focus-within:border-xibe-border-focus focus-within:bg-xibe-bg transition-all duration-200">
+          <div className="relative flex items-end rounded-2xl bg-xibe-surface-raised border border-transparent focus-within:border-xibe-border-focus focus-within:bg-xibe-surface-raised transition-all duration-200">
             <textarea
               ref={inputRef}
               value={input}
