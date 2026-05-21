@@ -67,3 +67,6 @@
 ## 2025-05-17 - Replace O(N²) array search with O(N) Set lookup in session listing
 **Learning:** Using `array.some(...)` with string operations (like `replace()`) inside a loop over files creates an unnecessary O(N²) performance bottleneck, particularly when reading directories with many files (like the sessions history directory).
 **Action:** When filtering files against another list of files, pre-compute a `Set` of base names outside the loop for O(1) lookups, changing the overall time complexity from O(N²) to O(N).
+## 2023-10-27 - O(N) Re-renders in List Components
+**Learning:** React list components mapped from arrays (e.g. `sessions.map(...)`) will experience severe O(N) re-renders when a single element changes state if the evaluation is done inline inside the map without memoization. Passing the active check (e.g., `isActive={activeSessionId === s.id}`) down to a `React.memo` wrapper component is necessary to convert this into an O(1) re-render (only the two affected components will update).
+**Action:** When creating high-frequency updating list elements with individual active states in React, extract the items into `React.memo` components and pass simple boolean flags to prevent massive VDOM updates.
