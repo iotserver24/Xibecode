@@ -114,11 +114,7 @@ export default function ChatPanel({
           <div className={`min-h-full ${CHAT_GUTTER}`}>
             <div className={`${CHAT_WIDTH} animate-fade-in flex min-h-full flex-col items-center justify-center text-center`}>
               <div className="mb-8">
-                <div className="mx-auto w-12 h-12 flex items-center justify-center mb-4">
-                  <Terminal className="h-6 w-6 text-xibe-text" />
-                </div>
-                <h1 className="text-2xl font-semibold text-xibe-text tracking-tight">How can I help you today?</h1>
-                <p className="text-sm text-xibe-text-dim mt-2 max-w-md mx-auto">I can write code, fix bugs, explain concepts, and help you navigate your codebase.</p>
+                <h1 className="text-3xl font-medium text-xibe-text tracking-tight">How can I help you today?</h1>
               </div>
 
               {needsSetup ? (
@@ -127,37 +123,18 @@ export default function ChatPanel({
                 </button>
               ) : (
                 <div className="w-full max-w-2xl space-y-4">
-                  <div className="flex justify-center gap-1 mb-6">
-                    {MODES.map((m) => (
-                      <button
-                        key={m.id}
-                        onClick={() => onModeSwitch(m.id, `Switched to ${m.label}`)}
-                        className={cn(
-                          "rounded-md px-3 py-1 text-xs font-medium transition-colors duration-200",
-                          modeState.current === m.id
-                            ? "bg-xibe-surface-raised text-xibe-text"
-                            : "text-xibe-text-dim hover:text-xibe-text hover:bg-xibe-surface-raised/50"
-                        )}
-                      >
-                        {m.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
+                  <div className="flex flex-wrap justify-center gap-2 mb-6">
                     {[
-                      { text: 'Build a REST API', icon: <Zap className="h-4 w-4 text-xibe-text-dim" /> },
-                      { text: 'Fix a bug', icon: <BookOpen className="h-4 w-4 text-xibe-text-dim" /> },
-                      { text: 'Set up a project', icon: <Terminal className="h-4 w-4 text-xibe-text-dim" /> },
-                      { text: 'Write unit tests', icon: <BookOpen className="h-4 w-4 text-xibe-text-dim" /> }
+                      { text: 'Build a REST API', icon: <Zap className="h-3.5 w-3.5" /> },
+                      { text: 'Fix a bug', icon: <BookOpen className="h-3.5 w-3.5" /> },
+                      { text: 'Set up a project', icon: <Terminal className="h-3.5 w-3.5" /> }
                     ].map((q) => (
                       <button
                         key={q.text}
                         onClick={() => onSendMessage(q.text)}
-                        className="group flex items-center gap-3 rounded-xl bg-transparent border border-xibe-border-subtle px-4 py-3 text-sm text-xibe-text-secondary hover:bg-xibe-surface-raised hover:text-xibe-text transition-colors"
+                        className="flex items-center gap-2 rounded-full bg-xibe-surface px-3.5 py-1.5 text-[13px] text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors border border-xibe-border-subtle"
                       >
-                        <div className="rounded-lg p-1 text-xibe-text-dim group-hover:text-xibe-text transition-colors">
-                          {q.icon}
-                        </div>
+                        <span className="text-xibe-text-dim">{q.icon}</span>
                         {q.text}
                       </button>
                     ))}
@@ -203,7 +180,26 @@ export default function ChatPanel({
           )}
 
           {/* Floating Pill input */}
-          <div className="relative flex items-end rounded-2xl bg-xibe-surface-raised border border-transparent focus-within:border-xibe-border-focus focus-within:bg-xibe-surface-raised transition-all duration-200">
+          <div className="relative flex flex-col rounded-3xl bg-xibe-surface border border-xibe-border-subtle focus-within:border-xibe-border-focus focus-within:bg-xibe-surface transition-all duration-200">
+            <div className="flex items-center px-4 pt-2 pb-1 text-xs text-xibe-text-dim">
+                <span className="flex items-center gap-1.5">
+                    {MODES.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => onModeSwitch(m.id, `Switched to ${m.label}`)}
+                          className={cn(
+                            "rounded-full px-2 py-0.5 font-medium transition-colors duration-200",
+                            modeState.current === m.id
+                              ? "bg-xibe-surface-hover text-xibe-text"
+                              : "text-xibe-text-dim hover:text-xibe-text"
+                          )}
+                        >
+                          {m.label}
+                        </button>
+                    ))}
+                </span>
+            </div>
+            <div className="relative flex items-end">
             <textarea
               ref={inputRef}
               value={input}
@@ -217,17 +213,18 @@ export default function ChatPanel({
               placeholder={isRunning ? 'Thinking...' : 'Ask anything or type / for commands'}
               disabled={isRunning}
               rows={1}
-              className="flex-1 resize-none bg-transparent pl-4 pr-12 py-3.5 text-[15px] leading-relaxed text-xibe-text placeholder-xibe-text-dim/50 focus:outline-none disabled:opacity-40"
-              style={{ minHeight: '52px', maxHeight: '400px' }}
+              className="flex-1 resize-none bg-transparent pl-4 pr-12 pb-3.5 pt-1 text-[15px] leading-relaxed text-xibe-text placeholder-xibe-text-dim/50 focus:outline-none disabled:opacity-40"
+              style={{ minHeight: '36px', maxHeight: '400px' }}
               onInput={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 400) + 'px'; }}
             />
-            <button
-              onClick={submit}
-              disabled={isRunning || !input.trim()}
-              className="absolute right-2 bottom-2 h-9 w-9 rounded-lg flex items-center justify-center text-xibe-text bg-xibe-surface hover:bg-xibe-surface-hover disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
-            >
-              <Send className="h-4 w-4 ml-0.5" />
-            </button>
+              <button
+                onClick={submit}
+                disabled={isRunning || !input.trim()}
+                className="absolute right-3 bottom-2 h-8 w-8 rounded-full flex items-center justify-center text-xibe-bg bg-xibe-text hover:opacity-90 disabled:opacity-30 disabled:bg-xibe-text-dim disabled:text-xibe-surface disabled:cursor-not-allowed transition-all duration-200"
+              >
+                <Send className="h-3.5 w-3.5 ml-0.5" />
+              </button>
+            </div>
           </div>
           <div className="mt-2 text-center">
             <p className="text-[11px] font-medium text-xibe-text-dim/40">

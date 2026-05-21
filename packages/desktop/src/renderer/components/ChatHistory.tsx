@@ -70,14 +70,14 @@ const ChatHistory = memo(function ChatHistory({ activeSessionId, onSelectSession
       {/* New chat button */}
       <button
         onClick={onNewChat}
-        className="flex items-center gap-2 rounded-lg bg-xibe-surface px-3 py-2.5 text-xs font-medium text-xibe-text hover:bg-xibe-surface-hover transition-colors mb-4"
+        className="flex items-center gap-2 rounded-lg px-2 py-2 text-xs font-medium text-xibe-text hover:bg-xibe-surface-hover transition-colors mb-2"
       >
         <Plus className="h-4 w-4 text-xibe-text" />
         New Chat
       </button>
 
       {/* Session list */}
-      <div className="flex-1 overflow-y-auto space-y-5 min-h-0 pr-1">
+      <div className="flex-1 overflow-y-auto space-y-4 min-h-0 pr-1">
         {groups.length === 0 && (
           <div className="flex flex-col items-center justify-center h-32 text-center">
             <MessageSquare className="h-6 w-6 text-xibe-text-dim/20 mb-2" />
@@ -93,14 +93,13 @@ const ChatHistory = memo(function ChatHistory({ activeSessionId, onSelectSession
                   key={s.id}
                   onClick={() => onSelectSession(s.id)}
                   className={cn(
-                    "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-all duration-200 group",
+                    "flex w-full items-center gap-2.5 rounded-lg px-2 py-1 text-left transition-all duration-200 group",
                     activeSessionId === s.id
-                      ? "text-xibe-text font-semibold bg-xibe-surface-raised"
-                      : "text-xibe-text-secondary hover:bg-xibe-surface-raised/50 hover:text-xibe-text"
+                      ? "text-xibe-text font-medium bg-xibe-surface-hover"
+                      : "text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text"
                   )}
                 >
-                  <MessageSquare className={cn("h-3.5 w-3.5 shrink-0", activeSessionId === s.id ? "text-xibe-text" : "text-xibe-text-dim/40 group-hover:text-xibe-text-dim/70")} />
-                  <span className="flex-1 truncate text-[12px] font-medium leading-tight">{s.title}</span>
+                  <span className="flex-1 truncate text-[13px] leading-tight">{s.title}</span>
 
                   {/* ⚡ Bolt: Used CSS group-hover instead of React state to toggle delete button visibility to prevent O(N) re-renders of the entire list on hover */}
                   <span
