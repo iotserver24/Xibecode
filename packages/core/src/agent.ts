@@ -299,14 +299,14 @@ function compactLargeString(value: string, maxChars: number): string {
 
 /** Classify an API error as retryable or fatal. */
 function isRetryableError(err: unknown): boolean {
-  if (!err || typeof err !== 'object') return false;
+  if (!err) return false;
   const e = err as any;
 
-  // Network-level errors: always retryable
-  const msg = String(e.message || '').toLowerCase();
+  // Classify by error message string (including empty response)
+  const msg = String(e.message || err || '').toLowerCase();
   if (msg.includes('econnreset') || msg.includes('econnrefused') || msg.includes('etimedout') ||
       msg.includes('socket hang up') || msg.includes('network') || msg.includes('fetch failed') ||
-      msg.includes('inactivity timeout') || msg.includes('epipe')) {
+      msg.includes('inactivity timeout') || msg.includes('epipe') || msg.includes('empty response')) {
     return true;
   }
 
@@ -848,6 +848,15 @@ export class EnhancedAgent extends EventEmitter {
         for (let attempt = 1; attempt <= maxApiRetries; attempt++) {
           try {
             const result = await this.callModel(effectiveTools, opts?.signal);
+
+            const contentBlocks = result.message.content;
+            const isEmpty = contentBlocks.length === 0 || 
+                            contentBlocks.every((b: any) => b.type === 'text' && !b.text.trim());
+                            
+            if (isEmpty) {
+              throw new Error('Empty response from model');
+            }
+
             response = result.message;
             streamed = result.streamed;
             const persona = result.persona;
@@ -2016,7 +2025,7 @@ ${this.defaultSkillsPrompt ? `${this.defaultSkillsPrompt}\n\n` : ''}
 The following markdown memories were selected for this session (keyword-ranked; verify critical facts):
 
 ${this.autoMemoryMarkdownSection}` : ''}
-9. **Mode Switching**: When you need to perform actions blocked by your current mode (e.g. review mode blocks writes), use \`[[REQUEST_MODE: agent | reason=need write access to complete user task]]\` to switch. The system will auto-approve mode changes needed to complete the user's request.
+9. **Mode Switching**: When you need to switch modes, or when the user explicitly asks you to switch/change mode or model/persona (e.g. "switch to review mode"), you MUST output the tag \`[[REQUEST_MODE: <mode_id> | reason=<reason>]]\` in your response. The system will process this tag and transition to the new mode. Do not simply state that you are switching or pretend to be the new persona without outputting this tag.
 10. **Lifecycle Awareness**: The system supports hooks that run before/after tool use and session events. If a hook modifies your input or blocks a tool call, respect its decision and adapt accordingly.
 11. **Permission Rules**: The user may have configured allow/deny/ask rules for specific tools. If a tool call is denied by a permission rule, do not retry it — ask the user or find an alternative approach.
 

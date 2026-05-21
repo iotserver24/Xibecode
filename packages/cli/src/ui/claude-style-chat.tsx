@@ -409,6 +409,7 @@ function XibeCodeChatApp(props: {
   const [setupSelectedModelIndex, setSetupSelectedModelIndex] = useState(0);
   const [setupProviderPickerOpen, setSetupProviderPickerOpen] = useState(false);
   const [setupProviderIndex, setSetupProviderIndex] = useState(0);
+  const [setupProvider, setSetupProvider] = useState<ProviderType | 'custom' | null>(null);
 
   type ConfigMenuItem =
     | 'set_baseurl'
@@ -762,6 +763,7 @@ function XibeCodeChatApp(props: {
     setSetupSelectedModelIndex(0);
     setSetupProviderPickerOpen(true);
     setSetupProviderIndex(0);
+    setSetupProvider(null);
     pushLine({ type: 'info', text: 'Setup started.' });
   }, [pushLine]);
 
@@ -1202,6 +1204,28 @@ function XibeCodeChatApp(props: {
           const message =
             error instanceof Error ? error.message : 'Failed to switch model';
           pushLine({ type: 'error', text: message });
+        }
+        return;
+      }
+
+      // Intercept natural language mode-switching commands (e.g., "switch to review mode", "switch to review model", "change to plan mode")
+      const modeSwitchRegex = /^(?:please\s+)?(?:switch|change|go|use|activate|turn\s+on)\s+(?:to\s+(?:the\s+)?|mode\s+to\s+)?(agent|plan|review|debugger|tester|security|pentest|team_leader|seo|product|architect|engineer|data|researcher)\s*(?:mode|model|persona)?(?:\s+please)?[\s.!?]*$/i;
+      const matchMode = resolvedInput.match(modeSwitchRegex);
+      if (matchMode) {
+        const modeArg = matchMode[1].toLowerCase();
+        const selectedMode = props.modeOptions.find((mode) => mode.id === modeArg);
+        if (selectedMode) {
+          try {
+            await applyMode(selectedMode.id);
+          } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Failed to switch mode';
+            pushLine({ type: 'error', text: message });
+          }
+        } else {
+          pushLine({
+            type: 'error',
+            text: `Mode "${modeArg}" is not enabled. Enabled modes are: ${props.modeOptions.map(m => m.id).join(', ')}.`,
+          });
         }
         return;
       }
@@ -1715,6 +1739,7 @@ function XibeCodeChatApp(props: {
         if (!picked) return;
         const config = new ConfigManager(props.profile);
         setSetupProviderPickerOpen(false);
+        setSetupProvider(picked.value);
 
         if (picked.value === 'custom') {
           setSetupStep('baseUrl');
@@ -2179,8 +2204,8 @@ function XibeCodeChatApp(props: {
           </Box>
         );
       })()}
-      <Box marginTop={1} borderStyle="round" borderColor={questionsState ? (questionsState.isTypingCustom ? 'green' : 'yellow') : 'claude'} paddingX={1}>
-        <Text color={questionsState ? (questionsState.isTypingCustom ? 'green' : 'yellow') : 'claude'}>{'> '}</Text>
+      <Box marginTop={1} borderStyle="round" borderColor={questionsState ? (questionsState.isTypingCustom ? 'green' : 'yellow') : prefixColorKey('assistant', activeMode)} paddingX={1}>
+        <Text color={questionsState ? (questionsState.isTypingCustom ? 'green' : 'yellow') : prefixColorKey('assistant', activeMode)}>{'> '}</Text>
         <TextInput
           key={chatInputMountKey}
           value={input}
@@ -2190,18 +2215,38 @@ function XibeCodeChatApp(props: {
             ? questionsState.isTypingCustom
               ? `Type your answer for Q${questionsState.currentIndex + 1} and press Enter`
               : `Use ↑/↓ and Enter to pick an option (Q${questionsState.currentIndex + 1}/${questionsState.questions.length})`
-            : isRunning ? 'Waiting for response…' : 'Message XibeCode…'}
+            : (setupStep === 'apiKey' || configPrompt.kind === 'apiKey')
+              ? 'Enter the API key'
+              : isRunning ? 'Waiting for response…' : 'Message XibeCode…'}
         />
       </Box>
+      {((setupStep === 'apiKey' && !setupProviderPickerOpen) || configPrompt.kind === 'apiKey') && (() => {
+        const activeSetupProvider = setupStep === 'apiKey'
+          ? (setupProvider || new ConfigManager(props.profile).get('provider'))
+          : new ConfigManager(props.profile).get('provider');
+        const configVal = activeSetupProvider && activeSetupProvider !== 'custom'
+          ? (PROVIDER_CONFIGS[activeSetupProvider as keyof typeof PROVIDER_CONFIGS] as any)
+          : null;
+        const apiKeyUrl = configVal?.apiKeyUrl;
+        if (!apiKeyUrl) return null;
+        return (
+          <Box marginTop={1} marginLeft={1}>
+            <Text color="cyan" underline>
+              {`\u001b]8;;${apiKeyUrl}\u001b\\get api key here\u001b]8;;\u001b\\`}
+            </Text>
+            <Text color="inactive"> (Ctrl+Click / Cmd+Click to open link)</Text>
+          </Box>
+        );
+      })()}
       {filePickerOpen && (
         <Box
           marginTop={1}
           borderStyle="round"
-          borderColor="suggestion"
+          borderColor={prefixColorKey('assistant', activeMode)}
           flexDirection="column"
           paddingX={1}
         >
-          <Text bold color="suggestion">
+          <Text bold color={prefixColorKey('assistant', activeMode)}>
             Files{filePickerLoading ? ' (loading...)' : ''}
           </Text>
           {filePickerLoading ? (
@@ -2216,10 +2261,10 @@ function XibeCodeChatApp(props: {
               const isSelected = absoluteIndex === selectedFileIndex;
               return (
                 <Text key={entry.relativePath}>
-                  <Text color={isSelected ? 'claude' : 'inactive'}>
+                  <Text color={isSelected ? prefixColorKey('assistant', activeMode) : 'inactive'}>
                     {isSelected ? '▸ ' : '  '}
                   </Text>
-                  <Text color={isSelected ? 'claude' : (entry.isDirectory ? 'yellow' : 'text')}>
+                  <Text color={isSelected ? prefixColorKey('assistant', activeMode) : (entry.isDirectory ? 'yellow' : 'text')}>
                     {mentionPathForPick(entry)}
                   </Text>
                 </Text>
@@ -2233,11 +2278,11 @@ function XibeCodeChatApp(props: {
         <Box
           marginTop={1}
           borderStyle="round"
-          borderColor="suggestion"
+          borderColor={prefixColorKey('assistant', activeMode)}
           flexDirection="column"
           paddingX={1}
         >
-          <Text color="suggestion" bold>
+          <Text color={prefixColorKey('assistant', activeMode)} bold>
             Commands
           </Text>
           {filteredCommands.length === 0 ? (
@@ -2246,10 +2291,10 @@ function XibeCodeChatApp(props: {
             filteredCommands.map((command, index) => (
               <React.Fragment key={command.name}>
                 <Text>
-                  <Text color={index === selectedCommandIndex ? 'claude' : 'inactive'}>
+                  <Text color={index === selectedCommandIndex ? prefixColorKey('assistant', activeMode) : 'inactive'}>
                     {index === selectedCommandIndex ? '▸ ' : '  '}
                   </Text>
-                  <Text bold color={index === selectedCommandIndex ? 'claude' : 'text'}>
+                  <Text bold color={index === selectedCommandIndex ? prefixColorKey('assistant', activeMode) : 'text'}>
                     {command.name}
                   </Text>
                   <Text color="inactive"> — {command.description}</Text>
@@ -2264,11 +2309,11 @@ function XibeCodeChatApp(props: {
         <Box
           marginTop={1}
           borderStyle="round"
-          borderColor="claude"
+          borderColor={prefixColorKey('assistant', activeMode)}
           flexDirection="column"
           paddingX={1}
         >
-          <Text bold color="claude">
+          <Text bold color={prefixColorKey('assistant', activeMode)}>
             Select model
           </Text>
           {isModelListLoading ? (
@@ -2282,10 +2327,10 @@ function XibeCodeChatApp(props: {
               return (
               <React.Fragment key={modelName}>
                 <Text>
-                  <Text color={isSelected ? 'claude' : 'inactive'}>
+                  <Text color={isSelected ? prefixColorKey('assistant', activeMode) : 'inactive'}>
                     {isSelected ? '▸ ' : '  '}
                   </Text>
-                  <Text color={isSelected ? 'claude' : 'text'}>
+                  <Text color={isSelected ? prefixColorKey('assistant', activeMode) : 'text'}>
                     {modelName}
                   </Text>
                 </Text>
@@ -2300,11 +2345,11 @@ function XibeCodeChatApp(props: {
         <Box
           marginTop={1}
           borderStyle="round"
-          borderColor="claude"
+          borderColor={prefixColorKey('assistant', activeMode)}
           flexDirection="column"
           paddingX={1}
         >
-          <Text bold color="claude">
+          <Text bold color={prefixColorKey('assistant', activeMode)}>
             Setup: select model
           </Text>
           {setupModels.length === 0 ? (
@@ -2316,10 +2361,10 @@ function XibeCodeChatApp(props: {
               return (
               <React.Fragment key={modelName}>
                 <Text>
-                  <Text color={isSelected ? 'claude' : 'inactive'}>
+                  <Text color={isSelected ? prefixColorKey('assistant', activeMode) : 'inactive'}>
                     {isSelected ? '▸ ' : '  '}
                   </Text>
-                  <Text color={isSelected ? 'claude' : 'text'}>
+                  <Text color={isSelected ? prefixColorKey('assistant', activeMode) : 'text'}>
                     {modelName}
                   </Text>
                 </Text>
@@ -2334,15 +2379,15 @@ function XibeCodeChatApp(props: {
         <Box
           marginTop={1}
           borderStyle="round"
-          borderColor="suggestion"
+          borderColor={prefixColorKey('assistant', activeMode)}
           flexDirection="column"
           paddingX={1}
         >
-          <Text bold color="suggestion">
+          <Text bold color={prefixColorKey('assistant', activeMode)}>
             Setup wizard
           </Text>
           <Text wrap="wrap">
-            <Text color="claude" bold>
+            <Text color={prefixColorKey('assistant', activeMode)} bold>
               You are configuring your provider connection.
             </Text>
             <Text color="inactive">
@@ -2369,10 +2414,10 @@ function XibeCodeChatApp(props: {
               ].map((label, index) => (
                 <React.Fragment key={label}>
                   <Text>
-                    <Text color={index === setupProviderIndex ? 'claude' : 'inactive'}>
+                    <Text color={index === setupProviderIndex ? prefixColorKey('assistant', activeMode) : 'inactive'}>
                       {index === setupProviderIndex ? '▸ ' : '  '}
                     </Text>
-                    <Text color={index === setupProviderIndex ? 'claude' : 'text'}>{label}</Text>
+                    <Text color={index === setupProviderIndex ? prefixColorKey('assistant', activeMode) : 'text'}>{label}</Text>
                   </Text>
                 </React.Fragment>
               ))}
@@ -2398,20 +2443,20 @@ function XibeCodeChatApp(props: {
         <Box
           marginTop={1}
           borderStyle="round"
-          borderColor="suggestion"
+          borderColor={prefixColorKey('assistant', activeMode)}
           flexDirection="column"
           paddingX={1}
         >
-          <Text bold color="suggestion">
+          <Text bold color={prefixColorKey('assistant', activeMode)}>
             Config
           </Text>
           {CONFIG_MENU.map((item, index) => (
             <React.Fragment key={item.value}>
               <Text>
-                <Text color={index === configSelectedIndex ? 'claude' : 'inactive'}>
+                <Text color={index === configSelectedIndex ? prefixColorKey('assistant', activeMode) : 'inactive'}>
                   {index === configSelectedIndex ? '▸ ' : '  '}
                 </Text>
-                <Text bold color={index === configSelectedIndex ? 'claude' : 'text'}>
+                <Text bold color={index === configSelectedIndex ? prefixColorKey('assistant', activeMode) : 'text'}>
                   {item.label}
                 </Text>
                 <Text color="inactive"> — {item.description}</Text>
@@ -2425,11 +2470,11 @@ function XibeCodeChatApp(props: {
         <Box
           marginTop={1}
           borderStyle="round"
-          borderColor="suggestion"
+          borderColor={prefixColorKey('assistant', activeMode)}
           flexDirection="column"
           paddingX={1}
         >
-          <Text bold color="suggestion">
+          <Text bold color={prefixColorKey('assistant', activeMode)}>
             Provider
           </Text>
           {[
@@ -2445,10 +2490,10 @@ function XibeCodeChatApp(props: {
           ].map((label, index) => (
             <React.Fragment key={label}>
               <Text>
-                <Text color={index === configProviderIndex ? 'claude' : 'inactive'}>
+                <Text color={index === configProviderIndex ? prefixColorKey('assistant', activeMode) : 'inactive'}>
                   {index === configProviderIndex ? '▸ ' : '  '}
                 </Text>
-                <Text color={index === configProviderIndex ? 'claude' : 'text'}>{label}</Text>
+                <Text color={index === configProviderIndex ? prefixColorKey('assistant', activeMode) : 'text'}>{label}</Text>
               </Text>
             </React.Fragment>
           ))}
@@ -2459,20 +2504,20 @@ function XibeCodeChatApp(props: {
         <Box
           marginTop={1}
           borderStyle="round"
-          borderColor="suggestion"
+          borderColor={prefixColorKey('assistant', activeMode)}
           flexDirection="column"
           paddingX={1}
         >
-          <Text bold color="suggestion">
+          <Text bold color={prefixColorKey('assistant', activeMode)}>
             Cost mode
           </Text>
           {['normal', 'economy'].map((label, index) => (
             <React.Fragment key={label}>
               <Text>
-                <Text color={index === configCostModeIndex ? 'claude' : 'inactive'}>
+                <Text color={index === configCostModeIndex ? prefixColorKey('assistant', activeMode) : 'inactive'}>
                   {index === configCostModeIndex ? '▸ ' : '  '}
                 </Text>
-                <Text color={index === configCostModeIndex ? 'claude' : 'text'}>{label}</Text>
+                <Text color={index === configCostModeIndex ? prefixColorKey('assistant', activeMode) : 'text'}>{label}</Text>
               </Text>
             </React.Fragment>
           ))}
@@ -2483,11 +2528,11 @@ function XibeCodeChatApp(props: {
         <Box
           marginTop={1}
           borderStyle="round"
-          borderColor="suggestion"
+          borderColor={prefixColorKey('assistant', activeMode)}
           flexDirection="column"
           paddingX={1}
         >
-          <Text bold color="suggestion">
+          <Text bold color={prefixColorKey('assistant', activeMode)}>
             Select mode
           </Text>
           {filteredModeOptions.length === 0 ? (
@@ -2496,10 +2541,10 @@ function XibeCodeChatApp(props: {
             filteredModeOptions.map((mode, index) => (
               <React.Fragment key={mode.id}>
                 <Text>
-                  <Text color={index === selectedModeIndex ? 'claude' : 'inactive'}>
+                  <Text color={index === selectedModeIndex ? prefixColorKey('assistant', activeMode) : 'inactive'}>
                     {index === selectedModeIndex ? '▸ ' : '  '}
                   </Text>
-                  <Text color={index === selectedModeIndex ? 'claude' : 'text'}>
+                  <Text color={index === selectedModeIndex ? prefixColorKey('assistant', activeMode) : 'text'}>
                     {mode.id}
                   </Text>
                   <Text color="inactive"> — {mode.description}</Text>
@@ -2707,6 +2752,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     activeAgent.removeAllListeners('event');
     let streamedBuffer = '';
     let streamFlushTimer: ReturnType<typeof setTimeout> | null = null;
+    let didOutputContent = false;
 
     const flushStreamedBuffer = () => {
       if (streamedBuffer.trim()) {
@@ -2729,6 +2775,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
           });
           break;
         case 'tool_call': {
+          didOutputContent = true;
           // Flush any pending streamed text before showing tool call
           flushStreamedBuffer();
           if (streamFlushTimer) { clearTimeout(streamFlushTimer); streamFlushTimer = null; }
@@ -2767,6 +2814,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
           break;
         }
         case 'stream_text':
+          if (event.data?.text) didOutputContent = true;
           opts?.onVisibleOutput?.();
           streamedBuffer += (event.data?.text as string) || '';
           // Accumulate streamed text and flush periodically or when buffer is large.
@@ -2788,6 +2836,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
           flushStreamedBuffer();
           break;
         case 'response':
+          if (event.data?.text) didOutputContent = true;
           opts?.onVisibleOutput?.();
           onLine({ type: 'assistant', text: (event.data?.text as string) || '' });
           break;
@@ -2836,6 +2885,13 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
       images: opts?.images,
       signal: opts?.signal,
     });
+
+    if (!didOutputContent) {
+      onLine({
+        type: 'error',
+        text: 'The model returned an empty response. This often happens if the selected model is incompatible with the system prompt, or the API provider dropped the response due to context length.',
+      });
+    }
 
     // Write the latest messages to the transcript incrementally.
     // The agent's run() method appends to this.messages; we persist

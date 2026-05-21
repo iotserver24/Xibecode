@@ -881,32 +881,6 @@ export class CodingToolExecutor implements ToolExecutor {
         const task = await this.backgroundAgent.getTask(p.task_id);
         return { success: true, task, logs };
       }
-
-      case 'start_background_task': {
-        if (!p.prompt || typeof p.prompt !== 'string') {
-          return { error: true, success: false, message: 'Missing required parameter: prompt (string)' };
-        }
-        const taskId = await this.backgroundAgent.startTask(p.prompt);
-        return { success: true, message: `Background task started with ID: ${taskId}`, task_id: taskId };
-      }
-
-      case 'list_background_tasks': {
-        const tasks = await this.backgroundAgent.listTasks();
-        const summary = tasks.map(t =>
-          `ID: ${t.id} | Status: ${t.status} | Started: ${new Date(t.startTime).toISOString()} | Prompt: "${t.prompt.substring(0, 50)}..."`
-        ).join('\n');
-        return { success: true, message: `Active Tasks:\n${summary || 'No active tasks.'}`, tasks };
-      }
-
-      case 'check_background_task': {
-        if (!p.task_id || typeof p.task_id !== 'string') {
-          return { error: true, success: false, message: 'Missing required parameter: task_id (string)' };
-        }
-        const logs = await this.backgroundAgent.getTaskLogs(p.task_id);
-        const task = await this.backgroundAgent.getTask(p.task_id);
-        return { success: true, task, logs };
-      }
-
       case 'search_code_graph': {
         if (!p.query || typeof p.query !== 'string') {
           return { error: true, success: false, message: 'Missing required parameter: query (symbol name)' };

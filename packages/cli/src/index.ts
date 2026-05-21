@@ -105,7 +105,10 @@ program
   .option('--theme <theme>', 'UI theme to use')
   .option('--session <id>', 'Resume a specific chat session by id')
   .option('--plain', 'Disable Ink UI; print line-by-line output (best for copying)', false)
-  .action(chatCommand);
+  .action((options: Parameters<typeof chatCommand>[0]) => {
+    process.env.XIBECODE_SANDBOX_MODE = 'local';
+    chatCommand(options);
+  });
 
 const cloudCmd = program
   .command('cloud')
@@ -190,6 +193,7 @@ resumeCmd
   .option('--profile <name>', 'Config profile to use (default: configured default profile)')
   .option('--all', 'Show sessions from all projects, not just the current directory')
   .action((sessionId: string | undefined, options: { profile?: string; all?: boolean }) => {
+    process.env.XIBECODE_SANDBOX_MODE = 'local';
     resumeCommand({ session: sessionId, profile: options.profile, all: options.all });
   });
 
