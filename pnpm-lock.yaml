@@ -80,8 +80,8 @@ importers:
         specifier: ^19.2.4
         version: 19.2.5
       xibecode-core:
-        specifier: ^1.3.10
-        version: 1.3.10(@cfworker/json-schema@4.1.1)
+        specifier: ^1.3.13
+        version: 1.3.13(@cfworker/json-schema@4.1.1)
     devDependencies:
       '@types/inquirer':
         specifier: ^9.0.9
@@ -190,8 +190,8 @@ importers:
         specifier: ^3.5.0
         version: 3.5.0
       xibecode-core:
-        specifier: ^1.3.10
-        version: 1.3.10(@cfworker/json-schema@4.1.1)
+        specifier: ^1.3.13
+        version: 1.3.13(@cfworker/json-schema@4.1.1)
     devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4.2.4
@@ -258,8 +258,8 @@ importers:
         specifier: ^11.2.0
         version: 11.2.0
       xibecode-core:
-        specifier: ^1.3.10
-        version: 1.3.10(@cfworker/json-schema@4.1.1)
+        specifier: ^1.3.13
+        version: 1.3.13(@cfworker/json-schema@4.1.1)
     devDependencies:
       '@types/node':
         specifier: ^20.10.0
@@ -4125,8 +4125,8 @@ packages:
     resolution: {integrity: sha512-h3Fbisa2nKGPxCpm89Hk33lBLsnaGBvctQopaBSOW/uIs6FTe1ATyAnKFJrzVs9vpGdsTe73WF3V4lIsk4Gacw==}
     engines: {node: '>=18'}
 
-  xibecode-core@1.3.10:
-    resolution: {integrity: sha512-l0ra0cr3EWjErJiecY50qyxxFktNK5rfge7Uq6VOGIkx+ACjrBiP4o6P9//iYN8nmF/dyVVXtCkqxVnn6ezdUw==}
+  xibecode-core@1.3.13:
+    resolution: {integrity: sha512-rLgiDgDzkgGzrv2QtLtWBmHefmnub0dIt/JFu6UfbtoAhdrkJwGelvmRkoH83z9W5g9V/gAEPPr3YAHGbrJYDw==}
     engines: {node: '>=18.0.0'}
 
   xmlbuilder@15.1.1:
@@ -8327,7 +8327,7 @@ snapshots:
     dependencies:
       is-wsl: 3.1.1
 
-  xibecode-core@1.3.10(@cfworker/json-schema@4.1.1):
+  xibecode-core@1.3.13(@cfworker/json-schema@4.1.1):
     dependencies:
       '@anthropic-ai/sdk': 0.78.0(zod@4.4.3)
       '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
