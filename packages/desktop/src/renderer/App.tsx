@@ -333,13 +333,16 @@ export default function App() {
           >
             <PanelLeft className="h-4 w-4" />
           </button>
-          <span className="text-sm font-semibold tracking-tight text-xibe-text-secondary">XibeCode</span>
-          <button
-            onClick={() => setSettingsOpen(true)}
-            className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors"
-          >
-            <span className="truncate max-w-[150px]">{activeModel.split('/').pop() || 'No model'}</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold tracking-tight text-xibe-text">XibeCode</span>
+            <span className="text-xibe-text-dim text-xs">/</span>
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[13px] text-xibe-text-secondary hover:bg-xibe-surface hover:text-xibe-text transition-colors"
+            >
+              <span className="truncate max-w-[150px]">{activeModel.split('/').pop() || 'No model'}</span>
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -369,7 +372,7 @@ export default function App() {
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
         {/* Left panel: Chat history + settings shortcut */}
         <aside
-          className="shrink-0 bg-xibe-bg flex flex-col overflow-hidden transition-[width] duration-200 ease-in-out border-r border-xibe-border-subtle"
+          className="shrink-0 bg-xibe-surface flex flex-col overflow-hidden transition-[width] duration-200 ease-in-out border-r border-xibe-border-subtle"
           style={{ width: leftPanelOpen ? 240 : 0 }}
         >
             <div className="flex-1 min-h-0 overflow-y-auto p-3">
