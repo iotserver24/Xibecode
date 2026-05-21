@@ -29,49 +29,49 @@ type ConfigSection = 'provider' | 'apiKey' | 'model' | 'baseUrl' | 'costMode' | 
 
 // Icons for settings navigation categories
 const SummaryIcon = () => (
-  <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+  <svg className="h-4.5 w-4.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
   </svg>
 );
 
 const ProviderIcon = () => (
-  <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+  <svg className="h-4.5 w-4.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
   </svg>
 );
 
 const KeyIcon = () => (
-  <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+  <svg className="h-4.5 w-4.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m-3.418 3.418l-3.182 3.182a1.5 1.5 0 00-.439 1.061v2.357a.5.5 0 01-.5.5H8a.5.5 0 01-.5-.5v-1a.5.5 0 00-.5-.5H6a.5.5 0 01-.5-.5v-1a.5.5 0 00-.5-.5H4a.5.5 0 01-.5-.5v-1.357a1.5 1.5 0 00-.44-1.06l3.181-3.182m0 0A5.5 5.5 0 1113.5 6.5a5.5 5.5 0 01-2.918 5.418z" />
   </svg>
 );
 
 const ModelIcon = () => (
-  <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+  <svg className="h-4.5 w-4.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
   </svg>
 );
 
 const GlobeIcon = () => (
-  <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+  <svg className="h-4.5 w-4.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
   </svg>
 );
 
 const CodeIcon = () => (
-  <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+  <svg className="h-4.5 w-4.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
   </svg>
 );
 
 const CoinsIcon = () => (
-  <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+  <svg className="h-4.5 w-4.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
 
 const PiggyIcon = () => (
-  <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+  <svg className="h-4.5 w-4.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
   </svg>
 );
@@ -203,7 +203,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
   const navItem = (id: ConfigSection, label: string, icon: React.ReactNode) => (
     <button 
       onClick={() => setSection(id)} 
-      className={`flex items-center gap-3 w-full text-left rounded-lg px-3 py-2.5 text-xs transition-all duration-200 border-l-2 select-none cursor-pointer ${
+      className={`flex items-center gap-3.5 w-full text-left rounded-lg px-3.5 py-3.5 text-xs transition-all duration-200 border-l-2 select-none cursor-pointer ${
         section === id 
           ? 'bg-xibe-surface-raised border-xibe-brand-blue text-xibe-brand-blue font-semibold shadow-sm' 
           : 'border-transparent text-xibe-text-dim hover:text-xibe-text hover:bg-xibe-surface-hover/60'
@@ -218,12 +218,12 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md animate-fade-in">
-      <div className="w-full max-w-3xl h-[75vh] rounded-2xl border border-xibe-border bg-xibe-surface/98 backdrop-blur-xl flex flex-col shadow-2xl shadow-black/85 animate-slide-up overflow-hidden">
+      <div className="w-full max-w-3xl h-[80vh] rounded-2xl border border-xibe-border bg-xibe-surface/98 backdrop-blur-xl flex flex-col shadow-2xl shadow-black/85 animate-slide-up overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-xibe-border-subtle/80 px-6 py-4.5 bg-gradient-to-r from-xibe-surface to-xibe-surface-raised/40">
-          <div className="flex items-center gap-3">
-            <span className="h-6 w-6 rounded-lg bg-xibe-brand-blue/10 flex items-center justify-center text-xibe-brand-blue">
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+        <div className="flex items-center justify-between border-b border-xibe-border-subtle/80 px-6 py-5.5 bg-gradient-to-r from-xibe-surface to-xibe-surface-raised/40">
+          <div className="flex items-center gap-3.5">
+            <span className="h-6.5 w-6.5 rounded-lg bg-xibe-brand-blue/10 flex items-center justify-center text-xibe-brand-blue">
+              <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
@@ -235,9 +235,9 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
           </div>
           <button 
             onClick={onClose} 
-            className="rounded-full p-1.5 text-xibe-text-dim hover:text-xibe-text hover:bg-xibe-surface-hover transition-colors cursor-pointer"
+            className="rounded-full p-2 text-xibe-text-dim hover:text-xibe-text hover:bg-xibe-surface-hover transition-colors cursor-pointer"
           >
-            <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -246,7 +246,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
         {/* Workspace Body */}
         <div className="flex flex-1 overflow-hidden">
           {/* Navigation Panel */}
-          <nav className="w-52 shrink-0 border-r border-xibe-border-subtle p-3 space-y-1.5 bg-xibe-surface/40 overflow-y-auto">
+          <nav className="w-56 shrink-0 border-r border-xibe-border-subtle p-4 space-y-2.5 bg-xibe-surface/40 overflow-y-auto">
             {navItem('summary', 'Config Summary', <SummaryIcon />)}
             {navItem('provider', 'Provider', <ProviderIcon />)}
             {navItem('apiKey', 'API Key', <KeyIcon />)}
@@ -258,31 +258,31 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
           </nav>
 
           {/* Details Content Panel */}
-          <div className="flex-1 overflow-y-auto p-6 flex flex-col">
+          <div className="flex-1 overflow-y-auto p-8 flex flex-col">
             {/* Context Header */}
-            <div className="mb-5 border-b border-xibe-border-subtle/40 pb-3 shrink-0">
+            <div className="mb-7 border-b border-xibe-border-subtle/40 pb-4 shrink-0">
               <h3 className="text-sm font-semibold text-xibe-text">{activeMeta.title}</h3>
-              <p className="text-xs text-xibe-text-dim mt-1 font-medium leading-relaxed">{activeMeta.desc}</p>
+              <p className="text-xs text-xibe-text-dim mt-1.5 font-medium leading-relaxed">{activeMeta.desc}</p>
             </div>
 
             <div className="flex-1 min-w-0">
               {/* Section - Summary */}
               {section === 'summary' && (
-                <div className="space-y-4 animate-fade-in">
+                <div className="space-y-6 animate-fade-in">
                   {/* Profile and Path Card */}
-                  <div className="bg-xibe-surface-raised/40 border border-xibe-border/60 rounded-xl p-4.5 space-y-3.5 shadow-sm">
+                  <div className="bg-xibe-surface-raised/40 border border-xibe-border/60 rounded-xl p-5 space-y-4 shadow-sm">
                     <h4 className="text-[10px] font-bold text-xibe-brand-blue uppercase tracking-wider">Profile & Location</h4>
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-xibe-text-dim font-medium">Active Config Profile</span>
                         <span className="px-2.5 py-0.5 rounded-md bg-xibe-brand-blue/10 border border-xibe-brand-blue/20 text-xibe-brand-blue font-semibold">{summary['Profile'] || 'default'}</span>
                       </div>
-                      <div className="flex flex-col gap-1.5 pt-2 border-t border-xibe-border-subtle/50">
+                      <div className="flex flex-col gap-2 pt-3.5 border-t border-xibe-border-subtle/50">
                         <div className="flex items-center justify-between text-xs text-xibe-text-dim">
                           <span className="font-medium">Config File Path</span>
                           <button 
                             onClick={() => copyToClipboard(summary['Config Path'] || '')} 
-                            className="flex items-center gap-1 text-[10px] text-xibe-brand-blue hover:text-xibe-accent-hover transition-colors font-semibold cursor-pointer"
+                            className="flex items-center gap-1.5 text-[10px] text-xibe-brand-blue hover:text-xibe-accent-hover transition-colors font-semibold cursor-pointer"
                           >
                             {copiedPath ? (
                               <>
@@ -297,7 +297,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                             )}
                           </button>
                         </div>
-                        <span className="text-[11px] font-mono text-xibe-text-secondary bg-xibe-surface-raised border border-xibe-border/40 rounded-lg px-3 py-2 break-all select-all font-medium">
+                        <span className="text-[11px] font-mono text-xibe-text-secondary bg-xibe-surface-raised border border-xibe-border/40 rounded-lg px-3 py-2.5 break-all select-all font-medium">
                           {summary['Config Path']}
                         </span>
                       </div>
@@ -305,10 +305,10 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                   </div>
 
                   {/* AI Configuration Card */}
-                  <div className="bg-xibe-surface-raised/40 border border-xibe-border/60 rounded-xl p-4.5 space-y-3.5 shadow-sm">
+                  <div className="bg-xibe-surface-raised/40 border border-xibe-border/60 rounded-xl p-5 space-y-4 shadow-sm">
                     <h4 className="text-[10px] font-bold text-xibe-brand-blue/80 uppercase tracking-wider">AI API Configuration</h4>
                     <div className="divide-y divide-xibe-border-subtle/50 text-xs">
-                      <div className="flex items-center justify-between py-2.5">
+                      <div className="flex items-center justify-between py-3.5">
                         <span className="text-xibe-text-dim font-medium">Active Provider</span>
                         <div className="flex items-center gap-2">
                           {(() => {
@@ -316,26 +316,28 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                             const badg = getProviderInitialsAndColor(p);
                             return (
                               <>
-                                <span className={`h-5 w-5 rounded-md flex items-center justify-center border font-bold text-[9px] ${badg.bg}`}>{badg.text}</span>
+                                <span className="h-5.5 w-5.5 rounded-md flex items-center justify-center border font-bold text-[9px] bg-xibe-surface-raised border-xibe-border" style={{ borderColor: 'var(--color-xibe-border)' }}>
+                                  <span className={`h-5 w-5 rounded-md flex items-center justify-center font-bold ${badg.bg}`}>{badg.text}</span>
+                                </span>
                                 <span className="font-semibold text-xibe-text-secondary capitalize">{p}</span>
                               </>
                             );
                           })()}
                         </div>
                       </div>
-                      <div className="flex items-center justify-between py-2.5">
+                      <div className="flex items-center justify-between py-3.5">
                         <span className="text-xibe-text-dim font-medium">Primary Model</span>
-                        <span className="font-mono text-[11px] text-xibe-brand-blue bg-xibe-brand-blue/5 border border-xibe-brand-blue/10 px-2.5 py-0.5 rounded-md font-semibold">{summary['Model']}</span>
+                        <span className="font-mono text-[11px] text-xibe-brand-blue bg-xibe-brand-blue/5 border border-xibe-brand-blue/10 px-2.5 py-1 rounded-md font-semibold">{summary['Model']}</span>
                       </div>
-                      <div className="flex items-center justify-between py-2.5">
+                      <div className="flex items-center justify-between py-3.5">
                         <span className="text-xibe-text-dim font-medium">Economy Model</span>
-                        <span className={`font-mono text-[11px] px-2.5 py-0.5 rounded-md font-semibold ${summary['Economy Model'] && summary['Economy Model'] !== 'Not set' ? 'text-xibe-brand-orange bg-xibe-brand-orange/5 border border-xibe-brand-orange/10' : 'text-xibe-text-dim/60 bg-xibe-surface-raised border border-xibe-border/30'}`}>{summary['Economy Model']}</span>
+                        <span className={`font-mono text-[11px] px-2.5 py-1 rounded-md font-semibold ${summary['Economy Model'] && summary['Economy Model'] !== 'Not set' ? 'text-xibe-brand-orange bg-xibe-brand-orange/5 border border-xibe-brand-orange/10' : 'text-xibe-text-dim/60 bg-xibe-surface-raised border border-xibe-border/30'}`}>{summary['Economy Model']}</span>
                       </div>
-                      <div className="flex items-center justify-between py-2.5">
+                      <div className="flex items-center justify-between py-3.5">
                         <span className="text-xibe-text-dim font-medium">Base URL Override</span>
                         <span className="font-mono text-[11px] text-xibe-text-secondary truncate max-w-[280px] font-medium">{summary['Base URL']}</span>
                       </div>
-                      <div className="flex items-center justify-between py-2.5">
+                      <div className="flex items-center justify-between py-3.5">
                         <span className="text-xibe-text-dim font-medium">API Key Status</span>
                         <span className="font-mono text-[11px] text-xibe-text-secondary font-medium">{summary['API Key']}</span>
                       </div>
@@ -343,29 +345,29 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                   </div>
 
                   {/* Agent Preferences Card */}
-                  <div className="bg-xibe-surface-raised/40 border border-xibe-border/60 rounded-xl p-4.5 space-y-3.5 shadow-sm">
+                  <div className="bg-xibe-surface-raised/40 border border-xibe-border/60 rounded-xl p-5 space-y-4 shadow-sm">
                     <h4 className="text-[10px] font-bold text-xibe-brand-blue/80 uppercase tracking-wider">Agent Runtime Options</h4>
-                    <div className="grid grid-cols-2 gap-3 text-xs">
-                      <div className="flex flex-col gap-1 p-3 rounded-xl border border-xibe-border/30 bg-xibe-surface-raised/20">
+                    <div className="grid grid-cols-2 gap-4 text-xs">
+                      <div className="flex flex-col gap-1.5 p-4 rounded-xl border border-xibe-border/30 bg-xibe-surface-raised/20">
                         <span className="text-[10px] text-xibe-text-dim font-semibold uppercase tracking-wider">Cost Mode</span>
                         <span className="font-semibold text-xibe-text-secondary capitalize">{summary['Cost Mode']}</span>
                       </div>
-                      <div className="flex flex-col gap-1 p-3 rounded-xl border border-xibe-border/30 bg-xibe-surface-raised/20">
+                      <div className="flex flex-col gap-1.5 p-4 rounded-xl border border-xibe-border/30 bg-xibe-surface-raised/20">
                         <span className="text-[10px] text-xibe-text-dim font-semibold uppercase tracking-wider">Wire Format</span>
                         <span className="font-semibold text-xibe-text-secondary capitalize">{summary['Wire Format']}</span>
                       </div>
-                      <div className="flex flex-col gap-1 p-3 rounded-xl border border-xibe-border/30 bg-xibe-surface-raised/20">
+                      <div className="flex flex-col gap-1.5 p-4 rounded-xl border border-xibe-border/30 bg-xibe-surface-raised/20">
                         <span className="text-[10px] text-xibe-text-dim font-semibold uppercase tracking-wider">Max Iterations</span>
                         <span className="font-mono font-semibold text-xibe-text-secondary">{summary['Max Iterations']}</span>
                       </div>
-                      <div className="flex flex-col gap-1 p-3 rounded-xl border border-xibe-border/30 bg-xibe-surface-raised/20">
+                      <div className="flex flex-col gap-1.5 p-4 rounded-xl border border-xibe-border/30 bg-xibe-surface-raised/20">
                         <span className="text-[10px] text-xibe-text-dim font-semibold uppercase tracking-wider">Show Details</span>
                         <div className="flex items-center gap-1.5">
                           <span className={`h-1.5 w-1.5 rounded-full ${summary['Show Details'] === 'true' ? 'bg-xibe-success animate-pulse' : 'bg-xibe-error'}`} />
                           <span className="font-semibold text-xibe-text-secondary uppercase text-[10px]">{summary['Show Details']}</span>
                         </div>
                       </div>
-                      <div className="col-span-2 flex flex-col gap-1 p-3 rounded-xl border border-xibe-border/30 bg-xibe-surface-raised/20">
+                      <div className="col-span-2 flex flex-col gap-1.5 p-4 rounded-xl border border-xibe-border/30 bg-xibe-surface-raised/20">
                         <span className="text-[10px] text-xibe-text-dim font-semibold uppercase tracking-wider">Show Thinking Blocks</span>
                         <div className="flex items-center gap-1.5">
                           <span className={`h-1.5 w-1.5 rounded-full ${summary['Show Thinking'] === 'true' ? 'bg-xibe-success animate-pulse' : 'bg-xibe-error'}`} />
@@ -379,8 +381,8 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
 
               {/* Section - Provider */}
               {section === 'provider' && (
-                <div className="space-y-4 animate-fade-in">
-                  <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-6 animate-fade-in">
+                  <div className="grid grid-cols-2 gap-4">
                     {PROVIDERS.map((p) => {
                       const badg = getProviderInitialsAndColor(p.id);
                       const isActive = activeProvider === p.id;
@@ -393,14 +395,14 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                             setSummary(all);
                             setSection('summary');
                           }}
-                          className={`flex items-center justify-between rounded-xl border p-4 text-left transition-all duration-200 cursor-pointer ${
+                          className={`flex items-center justify-between rounded-xl border p-5 text-left transition-all duration-200 cursor-pointer ${
                             isActive
                               ? 'border-xibe-brand-blue/50 bg-xibe-brand-blue/5 ring-1 ring-xibe-brand-blue/15 shadow-md shadow-xibe-brand-blue/5'
                               : 'border-xibe-border/60 hover:border-xibe-border-focus hover:bg-xibe-surface-hover/30'
                           }`}
                         >
-                          <div className="flex items-center gap-3">
-                            <span className={`h-8 w-8 rounded-lg flex items-center justify-center border font-bold text-xs select-none shadow-sm shrink-0 ${badg.bg}`}>
+                          <div className="flex items-center gap-4">
+                            <span className={`h-8.5 w-8.5 rounded-lg flex items-center justify-center border font-bold text-xs select-none shadow-sm shrink-0 ${badg.bg}`}>
                               {badg.text}
                             </span>
                             <div>
@@ -413,8 +415,8 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                             </div>
                           </div>
                           {isActive && (
-                            <span className="h-5 w-5 rounded-full bg-xibe-brand-blue/10 flex items-center justify-center text-xibe-brand-blue">
-                              <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                            <span className="h-5.5 w-5.5 rounded-full bg-xibe-brand-blue/10 flex items-center justify-center text-xibe-brand-blue">
+                              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                               </svg>
                             </span>
@@ -428,8 +430,8 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
 
               {/* Section - API Key */}
               {section === 'apiKey' && (
-                <div className="space-y-4.5 animate-fade-in">
-                  <div className="bg-xibe-brand-blue/5 border border-xibe-brand-blue/10 rounded-xl p-4 flex gap-3 text-xs text-xibe-text-secondary leading-relaxed">
+                <div className="space-y-6 animate-fade-in">
+                  <div className="bg-xibe-brand-blue/5 border border-xibe-brand-blue/10 rounded-xl p-5 flex gap-3.5 text-xs text-xibe-text-secondary leading-relaxed">
                     <svg className="h-5 w-5 text-xibe-brand-blue shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
@@ -438,14 +440,14 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <label className="text-[10px] font-bold text-xibe-text-dim uppercase tracking-wider">Active Token Key</label>
-                    <div className="font-mono text-xs text-xibe-text-secondary bg-xibe-surface-raised rounded-xl px-4 py-3 border border-xibe-border/40 select-all break-all font-medium">
+                    <div className="font-mono text-xs text-xibe-text-secondary bg-xibe-surface-raised rounded-xl px-4.5 py-3.5 border border-xibe-border/40 select-all break-all font-medium">
                       {apiKey || 'Not set'}
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <label className="text-[10px] font-bold text-xibe-text-dim uppercase tracking-wider">Set New Key</label>
                     <div className="relative">
                       <input
@@ -464,7 +466,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                       />
                       <button
                         onClick={() => setShowKey(!showKey)}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xibe-text-dim hover:text-xibe-text transition-colors cursor-pointer"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-xibe-text-dim hover:text-xibe-text transition-colors cursor-pointer"
                       >
                         {showKey ? (
                           <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
@@ -479,7 +481,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                     </div>
                   </div>
 
-                  <div className="pt-1.5">
+                  <div className="pt-2.5">
                     <button
                       onClick={async () => {
                         if (apiKey.length >= 10) {
@@ -489,7 +491,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                           setSection('summary');
                         }
                       }}
-                      className="rounded-xl bg-xibe-brand-blue px-5 py-2.5 text-xs font-semibold text-xibe-bg hover:bg-xibe-accent-hover transition-all duration-200 cursor-pointer shadow-md shadow-xibe-brand-blue/10 active:scale-98"
+                      className="rounded-xl bg-xibe-brand-blue px-6 py-3 text-xs font-semibold text-xibe-bg hover:bg-xibe-accent-hover transition-all duration-200 cursor-pointer shadow-md shadow-xibe-brand-blue/10 active:scale-98"
                     >
                       Save Key Value
                     </button>
@@ -499,35 +501,35 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
 
               {/* Section - Model */}
               {section === 'model' && (
-                <div className="space-y-4 animate-fade-in">
-                  <div className="flex items-center justify-between gap-3 text-xs bg-xibe-surface-raised/40 border border-xibe-border/50 rounded-xl px-4.5 py-3">
+                <div className="space-y-6 animate-fade-in">
+                  <div className="flex items-center justify-between gap-4 text-xs bg-xibe-surface-raised/40 border border-xibe-border/50 rounded-xl px-5 py-4">
                     <span className="text-xibe-text-dim font-medium">Selected Model</span>
-                    <span className="font-mono text-xs font-semibold text-xibe-brand-blue bg-xibe-brand-blue/5 border border-xibe-brand-blue/10 px-2.5 py-1 rounded-md">
+                    <span className="font-mono text-xs font-semibold text-xibe-brand-blue bg-xibe-brand-blue/5 border border-xibe-brand-blue/10 px-3 py-1 rounded-md">
                       {activeModel}
                     </span>
                   </div>
 
-                  <div className="flex gap-2.5">
+                  <div className="flex gap-3.5">
                     <div className="relative flex-1">
                       <input
                         type="text"
                         value={modelFilter}
                         onChange={(e) => setModelFilter(e.target.value)}
                         placeholder="Search model registry..."
-                        className={`${inputCls} pl-9.5 py-2.5`}
+                        className={`${inputCls} pl-9.5 py-3`}
                       />
-                      <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-xibe-text-dim/40" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4.5 w-4.5 text-xibe-text-dim/40" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                       </svg>
                     </div>
                     <button
                       onClick={fetchModels}
                       disabled={loadingModels}
-                      className="shrink-0 flex items-center gap-2 rounded-xl bg-xibe-brand-blue px-4 py-2.5 text-xs font-semibold text-xibe-bg hover:bg-xibe-accent-hover disabled:opacity-50 transition-all cursor-pointer select-none active:scale-98"
+                      className="shrink-0 flex items-center gap-2.5 rounded-xl bg-xibe-brand-blue px-5 py-3 text-xs font-semibold text-xibe-bg hover:bg-xibe-accent-hover disabled:opacity-50 transition-all cursor-pointer select-none active:scale-98"
                     >
                       {loadingModels ? (
                         <>
-                          <svg className="animate-spin h-3.5 w-3.5 text-xibe-bg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <svg className="animate-spin h-4 w-4 text-xibe-bg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
@@ -535,7 +537,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                         </>
                       ) : (
                         <>
-                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2a8.001 8.001 0 11-21.21-3.89M9 11l3-3 3 3m-3-3v12" />
                           </svg>
                           <span>Fetch Models</span>
@@ -545,7 +547,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                   </div>
 
                   {models.length > 0 ? (
-                    <div className="max-h-56 overflow-y-auto space-y-1.5 border border-xibe-border/60 rounded-xl p-2 bg-xibe-surface-raised/20">
+                    <div className="max-h-56 overflow-y-auto space-y-2 border border-xibe-border/60 rounded-xl p-3 bg-xibe-surface-raised/20">
                       {models
                         .filter((m) => m.toLowerCase().includes(modelFilter.toLowerCase()))
                         .map((m) => {
@@ -559,7 +561,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                                 setSummary(all);
                                 setSection('summary');
                               }}
-                              className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-xs transition-all duration-150 cursor-pointer ${
+                              className={`flex w-full items-center justify-between rounded-lg px-4 py-3 text-left text-xs transition-all duration-150 cursor-pointer ${
                                 isCurrent
                                   ? 'bg-xibe-brand-blue/5 border border-xibe-brand-blue/20 text-xibe-brand-blue font-semibold shadow-sm'
                                   : 'text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text'
@@ -576,7 +578,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                         })}
                     </div>
                   ) : (
-                    <div className="text-center py-8 text-xs text-xibe-text-dim border border-dashed border-xibe-border/40 rounded-xl">
+                    <div className="text-center py-10 text-xs text-xibe-text-dim border border-dashed border-xibe-border/40 rounded-xl">
                       No models cached. Query endpoint directory using "Fetch Models" trigger.
                     </div>
                   )}
@@ -585,8 +587,8 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
 
               {/* Section - Base URL */}
               {section === 'baseUrl' && (
-                <div className="space-y-4 animate-fade-in">
-                  <div className="space-y-1.5">
+                <div className="space-y-6 animate-fade-in">
+                  <div className="space-y-2">
                     <label className="text-[10px] font-bold text-xibe-text-dim uppercase tracking-wider">Server Endpoint Url</label>
                     <input
                       type="text"
@@ -597,9 +599,9 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                     />
                   </div>
 
-                  <div className="bg-xibe-surface-raised/40 border border-xibe-border/40 rounded-xl p-4.5 space-y-3.5">
+                  <div className="bg-xibe-surface-raised/40 border border-xibe-border/40 rounded-xl p-5 space-y-4">
                     <h4 className="text-[10px] font-bold text-xibe-text-secondary uppercase tracking-wider">Host URL Presets</h4>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2.5">
                       {[
                         { label: 'Routing.run', url: 'https://api.routing.run/v1' },
                         { label: 'OpenAI Default', url: 'https://api.openai.com/v1' },
@@ -609,7 +611,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                         <button
                           key={preset.label}
                           onClick={() => setBaseUrl(preset.url)}
-                          className="text-[10px] bg-xibe-surface-raised border border-xibe-border/60 text-xibe-text-secondary hover:text-xibe-text hover:border-xibe-border-focus px-2.5 py-1.5 rounded-lg transition-all cursor-pointer font-semibold shadow-sm"
+                          className="text-[10px] bg-xibe-surface-raised border border-xibe-border/60 text-xibe-text-secondary hover:text-xibe-text hover:border-xibe-border-focus px-3 py-2 rounded-lg transition-all cursor-pointer font-semibold shadow-sm"
                         >
                           {preset.label}
                         </button>
@@ -617,7 +619,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                     </div>
                   </div>
 
-                  <div className="pt-1.5">
+                  <div className="pt-2.5">
                     <button
                       onClick={async () => {
                         await xibe.config.set('baseUrl', baseUrl.trim().replace(/\/+$/, ''));
@@ -625,7 +627,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                         setSummary(all);
                         setSection('summary');
                       }}
-                      className="rounded-xl bg-xibe-brand-blue px-5 py-2.5 text-xs font-semibold text-xibe-bg hover:bg-xibe-accent-hover transition-all cursor-pointer shadow-md"
+                      className="rounded-xl bg-xibe-brand-blue px-6 py-3 text-xs font-semibold text-xibe-bg hover:bg-xibe-accent-hover transition-all cursor-pointer shadow-md"
                     >
                       Save Settings
                     </button>
@@ -635,7 +637,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
 
               {/* Section - Wire Format */}
               {section === 'wireFormat' && (
-                <div className="space-y-3 animate-fade-in">
+                <div className="space-y-4.5 animate-fade-in">
                   {(['auto', 'openai', 'anthropic'] as const).map((f) => {
                     const isActive = wireFormat === f;
                     return (
@@ -648,20 +650,20 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                           setSummary(all);
                           setSection('summary');
                         }}
-                        className={`flex items-center gap-4 rounded-xl border p-4 text-left transition-all duration-200 cursor-pointer ${
+                        className={`flex items-center gap-5 rounded-xl border p-5 text-left transition-all duration-200 cursor-pointer ${
                           isActive
                             ? 'border-xibe-brand-blue/50 bg-xibe-brand-blue/5 shadow-md shadow-xibe-brand-blue/5 ring-1 ring-xibe-brand-blue/10'
                             : 'border-xibe-border/60 hover:border-xibe-border-focus hover:bg-xibe-surface-hover/30'
                         }`}
                       >
-                        <span className={`h-5 w-5 rounded-full border flex items-center justify-center shrink-0 ${isActive ? 'border-xibe-brand-blue bg-xibe-brand-blue/10 text-xibe-brand-blue' : 'border-xibe-border bg-xibe-surface-raised'}`}>
+                        <span className={`h-5.5 w-5.5 rounded-full border flex items-center justify-center shrink-0 ${isActive ? 'border-xibe-brand-blue bg-xibe-brand-blue/10 text-xibe-brand-blue' : 'border-xibe-border bg-xibe-surface-raised'}`}>
                           {isActive && <span className="h-2.5 w-2.5 rounded-full bg-xibe-brand-blue" />}
                         </span>
                         <div>
                           <div className={`text-xs font-bold ${isActive ? 'text-xibe-brand-blue' : 'text-xibe-text'}`}>
                             {f === 'auto' ? 'Auto Detect Schema' : f === 'openai' ? 'OpenAI Chat Completions Schema' : 'Anthropic Messages SDK Schema'}
                           </div>
-                          <div className="text-[10px] text-xibe-text-dim mt-0.5 font-medium leading-relaxed">
+                          <div className="text-[10px] text-xibe-text-dim mt-1 font-medium leading-relaxed">
                             {f === 'auto' ? 'Analyzes backend environment keys to formulate query schemas automatically.' : f === 'openai' ? 'Forces standard openai format. Compatible with local providers like Ollama / LMStudio.' : 'Forces standard anthropic payload structures.'}
                           </div>
                         </div>
@@ -673,7 +675,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
 
               {/* Section - Cost Mode */}
               {section === 'costMode' && (
-                <div className="space-y-3 animate-fade-in">
+                <div className="space-y-4.5 animate-fade-in">
                   {(['normal', 'economy'] as const).map((m) => {
                     const isActive = costMode === m;
                     return (
@@ -686,20 +688,20 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                           setSummary(all);
                           setSection('summary');
                         }}
-                        className={`flex items-center gap-4 rounded-xl border p-4 text-left transition-all duration-200 cursor-pointer ${
+                        className={`flex items-center gap-5 rounded-xl border p-5 text-left transition-all duration-200 cursor-pointer ${
                           isActive
                             ? 'border-xibe-brand-blue/50 bg-xibe-brand-blue/5 shadow-md shadow-xibe-brand-blue/5 ring-1 ring-xibe-brand-blue/10'
                             : 'border-xibe-border/60 hover:border-xibe-border-focus hover:bg-xibe-surface-hover/30'
                         }`}
                       >
-                        <span className={`h-5 w-5 rounded-full border flex items-center justify-center shrink-0 ${isActive ? 'border-xibe-brand-blue bg-xibe-brand-blue/10' : 'border-xibe-border bg-xibe-surface-raised'}`}>
+                        <span className={`h-5.5 w-5.5 rounded-full border flex items-center justify-center shrink-0 ${isActive ? 'border-xibe-brand-blue bg-xibe-brand-blue/10' : 'border-xibe-border bg-xibe-surface-raised'}`}>
                           {isActive && <span className="h-2.5 w-2.5 rounded-full bg-xibe-brand-blue" />}
                         </span>
                         <div>
                           <div className={`text-xs font-bold ${isActive ? 'text-xibe-brand-blue' : 'text-xibe-text'} capitalize`}>
                             {m === 'normal' ? 'Standard (Focus Performance)' : 'Economy (Focus Savings)'}
                           </div>
-                          <div className="text-[10px] text-xibe-text-dim mt-0.5 font-medium leading-relaxed">
+                          <div className="text-[10px] text-xibe-text-dim mt-1 font-medium leading-relaxed">
                             {m === 'normal' ? 'Uses your primary selected LLM model for all agent coding steps.' : 'Routes requests through the cheaper economy model to reduce tokens usage.'}
                           </div>
                         </div>
@@ -711,8 +713,8 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
 
               {/* Section - Economy Model */}
               {section === 'economyModel' && (
-                <div className="space-y-4 animate-fade-in">
-                  <div className="space-y-1.5">
+                <div className="space-y-6 animate-fade-in">
+                  <div className="space-y-2">
                     <label className="text-[10px] font-bold text-xibe-text-dim uppercase tracking-wider">Economy Model Tag</label>
                     <input
                       type="text"
@@ -723,9 +725,9 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                     />
                   </div>
 
-                  <div className="bg-xibe-surface-raised/40 border border-xibe-border/40 rounded-xl p-4.5 space-y-3.5">
+                  <div className="bg-xibe-surface-raised/40 border border-xibe-border/40 rounded-xl p-5 space-y-4">
                     <h4 className="text-[10px] font-bold text-xibe-text-secondary uppercase tracking-wider">Quick Preset Tags</h4>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2.5">
                       {[
                         'gpt-4o-mini',
                         'claude-3-5-haiku-20241022',
@@ -735,7 +737,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                         <button
                           key={preset}
                           onClick={() => setEconomyModel(preset)}
-                          className="text-[10px] font-mono bg-xibe-surface-raised border border-xibe-border/60 text-xibe-text-secondary hover:text-xibe-text hover:border-xibe-border-focus px-2.5 py-1.5 rounded-lg transition-all cursor-pointer font-semibold"
+                          className="text-[10px] font-mono bg-xibe-surface-raised border border-xibe-border/60 text-xibe-text-secondary hover:text-xibe-text hover:border-xibe-border-focus px-3.5 py-2 rounded-lg transition-all cursor-pointer font-semibold"
                         >
                           {preset}
                         </button>
@@ -743,7 +745,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                     </div>
                   </div>
 
-                  <div className="pt-1.5">
+                  <div className="pt-2.5">
                     <button
                       onClick={async () => {
                         await xibe.config.set('economyModel', economyModel.trim());
@@ -751,7 +753,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                         setSummary(all);
                         setSection('summary');
                       }}
-                      className="rounded-xl bg-xibe-brand-blue px-5 py-2.5 text-xs font-semibold text-xibe-bg hover:bg-xibe-accent-hover transition-all cursor-pointer shadow-md"
+                      className="rounded-xl bg-xibe-brand-blue px-6 py-3 text-xs font-semibold text-xibe-bg hover:bg-xibe-accent-hover transition-all cursor-pointer shadow-md"
                     >
                       Save Settings
                     </button>
