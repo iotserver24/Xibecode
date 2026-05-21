@@ -316,11 +316,13 @@ function prefixForType(type: UiLineType): string {
   }
 }
 
-function prefixColorKey(type: UiLineType): TuiThemeColorKey {
+function prefixColorKey(type: UiLineType, mode?: AgentMode): TuiThemeColorKey {
   switch (type) {
     case 'user':
       return 'briefLabelYou';
     case 'assistant':
+      if (mode === 'plan') return 'briefLabelPlan';
+      if (mode === 'review') return 'briefLabelReview';
       return 'briefLabelClaude';
     case 'tool':
       return 'suggestion';
@@ -2063,7 +2065,7 @@ function XibeCodeChatApp(props: {
             <React.Fragment key={item.id}>
               {item.type === 'assistant' ? (
                 <Box flexDirection="column" marginBottom={1}>
-                  <Text bold color={prefixColorKey('assistant')}>
+                  <Text bold color={prefixColorKey('assistant', activeMode)}>
                     {prefixForType('assistant')}:
                   </Text>
                   <Box marginLeft={2} flexDirection="column">
@@ -2072,7 +2074,7 @@ function XibeCodeChatApp(props: {
                 </Box>
               ) : (
                 <Text>
-                  <Text bold color={prefixColorKey(item.type)}>
+                  <Text bold color={prefixColorKey(item.type, activeMode)}>
                     {prefixForType(item.type)}:{' '}
                   </Text>
                   <Text color={lineColorKey(item.type)}>{item.text}</Text>
@@ -2100,7 +2102,7 @@ function XibeCodeChatApp(props: {
             <Text bold color="claudeBlue_FOR_SYSTEM_SPINNER">
               {WORK_SPINNER_FRAMES[workSpinnerFrame]}{' '}
             </Text>
-            <Text bold color="briefLabelClaude">
+            <Text bold color={prefixColorKey('assistant', activeMode)}>
               {workVerbPhrase}
             </Text>
           </Text>

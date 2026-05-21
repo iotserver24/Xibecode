@@ -58,6 +58,8 @@ export const darkTuiTheme = {
   fastModeShimmer: 'rgb(255,165,70)',
   briefLabelYou: 'rgb(122,180,232)',
   briefLabelClaude: 'rgb(88,150,240)',
+  briefLabelPlan: 'rgb(255,193,7)',
+  briefLabelReview: 'rgb(219,39,119)',
   rainbow_red: 'rgb(235,95,87)',
   rainbow_orange: 'rgb(245,139,87)',
   rainbow_yellow: 'rgb(250,195,95)',
