@@ -180,7 +180,7 @@ export default function ChatPanel({
           )}
 
           {/* Floating Pill input */}
-          <div className="relative flex flex-col rounded-3xl bg-xibe-surface border border-xibe-border-subtle focus-within:border-xibe-border-focus focus-within:bg-xibe-surface transition-all duration-200">
+          <div className="relative flex flex-col rounded-2xl bg-xibe-surface border border-transparent focus-within:border-transparent focus-within:bg-xibe-surface transition-all duration-200">
             <div className="flex items-center px-4 pt-2 pb-1 text-xs text-xibe-text-dim">
                 <span className="flex items-center gap-1.5">
                     {MODES.map((m) => (
@@ -220,7 +220,7 @@ export default function ChatPanel({
               <button
                 onClick={submit}
                 disabled={isRunning || !input.trim()}
-                className="absolute right-3 bottom-2 h-8 w-8 rounded-full flex items-center justify-center text-xibe-bg bg-xibe-text hover:opacity-90 disabled:opacity-30 disabled:bg-xibe-text-dim disabled:text-xibe-surface disabled:cursor-not-allowed transition-all duration-200"
+                className="absolute right-3 bottom-2 h-8 w-8 rounded-full flex items-center justify-center text-xibe-text-dim hover:text-xibe-text bg-transparent hover:bg-xibe-surface-hover disabled:opacity-30 disabled:bg-transparent disabled:text-xibe-text-dim disabled:cursor-not-allowed transition-all duration-200"
               >
                 <Send className="h-3.5 w-3.5 ml-0.5" />
               </button>
