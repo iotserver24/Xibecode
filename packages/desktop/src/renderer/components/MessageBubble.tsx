@@ -15,7 +15,7 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
   if (isUser) {
     return (
       <div className="flex justify-end animate-fade-in w-full group">
-        <div className="max-w-[90%] sm:max-w-[80%] rounded-2xl bg-xibe-surface-raised px-5 py-3 text-[15px] leading-relaxed text-xibe-text whitespace-pre-wrap">
+        <div className="max-w-[90%] sm:max-w-[80%] rounded-xl bg-transparent px-5 py-3 text-[15px] leading-relaxed text-xibe-text-secondary whitespace-pre-wrap">
           {content}
         </div>
       </div>
