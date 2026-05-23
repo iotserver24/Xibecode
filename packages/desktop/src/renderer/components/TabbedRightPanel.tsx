@@ -21,9 +21,9 @@ export default function TabbedRightPanel({
   const [activeTab, setActiveTab] = useState<RightTab>('folder');
 
   return (
-    <div className="flex h-full flex-col bg-xibe-surface">
+    <div className="flex h-full flex-col bg-xibe-bg border-l border-xibe-border-subtle">
       {/* Tab bar */}
-      <div className="flex items-center shrink-0">
+      <div className="flex items-center shrink-0 border-b border-xibe-border-subtle">
         <button
           onClick={() => setActiveTab('folder')}
           className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors border-b-2 ${

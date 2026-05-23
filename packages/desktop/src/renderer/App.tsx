@@ -372,7 +372,7 @@ export default function App() {
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
         {/* Left panel: Chat history + settings shortcut */}
         <aside
-          className="shrink-0 bg-xibe-surface flex flex-col overflow-hidden transition-[width] duration-200 ease-in-out border-r border-xibe-border-subtle"
+          className="shrink-0 bg-xibe-bg flex flex-col overflow-hidden transition-[width] duration-200 ease-in-out border-r border-xibe-border-subtle"
           style={{ width: leftPanelOpen ? 240 : 0 }}
         >
             <div className="flex-1 min-h-0 overflow-y-auto p-3">
