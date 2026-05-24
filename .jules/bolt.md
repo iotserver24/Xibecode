@@ -70,3 +70,6 @@
 ## 2023-10-27 - O(N) Re-renders in List Components
 **Learning:** React list components mapped from arrays (e.g. `sessions.map(...)`) will experience severe O(N) re-renders when a single element changes state if the evaluation is done inline inside the map without memoization. Passing the active check (e.g., `isActive={activeSessionId === s.id}`) down to a `React.memo` wrapper component is necessary to convert this into an O(1) re-render (only the two affected components will update).
 **Action:** When creating high-frequency updating list elements with individual active states in React, extract the items into `React.memo` components and pass simple boolean flags to prevent massive VDOM updates.
+## 2024-05-24 - [Remove Synchronous File Operations]
+**Learning:** Checking for file existence using `fs.existsSync` introduces blocking I/O on the Node.js event loop, creating micro-stutters and reducing application concurrency.
+**Action:** Always prefer asynchronous file access (e.g., `fs.promises.readFile` or `fs.promises.access`) enclosed in a `try...catch` block. This approach avoids blocking and eliminates Time-of-Check to Time-of-Use (TOCTOU) race conditions.

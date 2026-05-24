@@ -3,8 +3,7 @@
  * Keyword relevance scoring; optional env to disable.
  */
 
-import { existsSync } from 'fs';
-import { readFile, readdir } from 'fs/promises';
+import { readFile, readdir, access } from 'fs/promises';
 import { homedir } from 'os';
 import { join } from 'path';
 
@@ -75,9 +74,6 @@ async function loadMemoryFile(
   type: LoadedMemory['type'],
 ): Promise<LoadedMemory | null> {
   try {
-    if (!existsSync(filePath)) {
-      return null;
-    }
     const content = await readFile(filePath, 'utf-8');
     return {
       path: filePath,
@@ -117,11 +113,9 @@ async function loadProjectMemories(cwd: string): Promise<LoadedMemory[]> {
   }
 
   const autoDir = join(cwd, '.xibecode', 'memories');
-  if (!existsSync(autoDir)) {
-    return memories;
-  }
 
   try {
+    await access(autoDir);
     const names = await readdir(autoDir, { withFileTypes: true });
     const mdFiles = names.filter((d) => d.isFile() && d.name.endsWith('.md')).map((d) => join(autoDir, d.name));
     for (const fp of mdFiles.slice(0, MAX_AUTO_LOAD_MEMORIES)) {
