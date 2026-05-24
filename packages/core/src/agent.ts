@@ -1753,6 +1753,19 @@ export class EnhancedAgent extends EventEmitter {
         throw new Error('Streaming body not available');
       }
 
+      // When the user cancels (Esc), node-fetch aborts the Readable stream and emits an
+      // 'error' event. If no listener is attached, Node treats it as unhandled and crashes.
+      // Instead of re-throwing (which doesn't propagate from event handlers), we store the
+      // error and check it in the for-await loop, then destroy the stream to break the loop.
+      // We must attach this 'error' listener immediately before any abort signals can fire
+      // and call destroy(), preventing unhandled event crashes.
+      let streamBodyError: unknown = null;
+      body.on('error', (err: unknown) => {
+        if (isAbortError(err) || signal?.aborted || streamAborted) return;
+        streamBodyError = err;
+        (body as any).destroy();
+      });
+
       // Set up abort handler to track abort state
       abortHandler = () => {
         streamAborted = true;
@@ -1761,17 +1774,6 @@ export class EnhancedAgent extends EventEmitter {
         (body as any).destroy();
       };
       signal?.addEventListener('abort', abortHandler);
-
-      // When the user cancels (Esc), node-fetch aborts the Readable stream and emits an
-      // 'error' event. If no listener is attached, Node treats it as unhandled and crashes.
-      // Instead of re-throwing (which doesn't propagate from event handlers), we store the
-      // error and check it in the for-await loop, then destroy the stream to break the loop.
-      let streamBodyError: unknown = null;
-      body.on('error', (err: unknown) => {
-        if (isAbortError(err) || signal?.aborted || streamAborted) return;
-        streamBodyError = err;
-        (body as any).destroy();
-      });
 
       let fullText = '';
       const toolCallsAccum: Array<{ id: string; name: string; arguments: string; index: number }> = [];
