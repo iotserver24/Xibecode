@@ -2,14 +2,14 @@
 
 @theme {
   --color-xibe-bg: #09090b;
-  --color-xibe-surface: #121214;
-  --color-xibe-surface-raised: #18181b;
-  --color-xibe-surface-hover: #27272a;
-  --color-xibe-border: #27272a;
-  --color-xibe-border-subtle: #18181b;
+  --color-xibe-surface: #121212;
+  --color-xibe-surface-raised: #1e1e1e;
+  --color-xibe-surface-hover: #262626;
+  --color-xibe-border: #262626;
+  --color-xibe-border-subtle: #1e1e1e;
   --color-xibe-border-focus: #52525b;
   --color-xibe-muted: #71717a;
-  --color-xibe-text: #fafafa;
+  --color-xibe-text: #ececec;
   --color-xibe-text-secondary: #a1a1aa;
   --color-xibe-text-dim: #71717a;
   --color-xibe-accent: #e4e4e7;
