@@ -1,7 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { MessageParam, Tool, ToolUseBlock, TextBlock, ContentBlock } from '@anthropic-ai/sdk/resources/messages';
 import fetch from 'node-fetch';
-import { existsSync, readFileSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { homedir } from 'os';
@@ -759,12 +758,10 @@ export class EnhancedAgent extends EventEmitter {
       } else {
         // Fallback: read .xibecode/memory.md directly (cheap single read)
         const fallbackMd = join(process.cwd(), '.xibecode', 'memory.md');
-        if (existsSync(fallbackMd)) {
-          try {
-            const content = await readFile(fallbackMd, 'utf-8');
-            this.autoMemoryMarkdownSection = `\n\n## Project Memory\n\n${content.trim()}`;
-          } catch { /* ignore */ }
-        }
+        try {
+          const content = await readFile(fallbackMd, 'utf-8');
+          this.autoMemoryMarkdownSection = `\n\n## Project Memory\n\n${content.trim()}`;
+        } catch { /* ignore if not exist */ }
       }
 
       if (newMem.trim() && !this.autoMemoryMarkdownSection.includes(newMem.trim())) {

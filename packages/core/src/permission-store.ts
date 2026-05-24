@@ -1,5 +1,4 @@
 import * as fs from 'fs/promises';
-import { existsSync } from 'fs';
 import * as path from 'path';
 import type { PermissionMode } from './permissions.js';
 
@@ -18,10 +17,6 @@ export class PermissionStore {
   }
 
   async load(): Promise<PersistedPermissionState | null> {
-    if (!existsSync(this.storePath)) {
-      return null;
-    }
-
     try {
       const raw = await fs.readFile(this.storePath, 'utf8');
       const parsed = JSON.parse(raw) as PersistedPermissionState;

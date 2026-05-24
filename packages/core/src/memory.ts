@@ -1,5 +1,4 @@
 import * as fs from 'fs/promises';
-import { existsSync } from 'fs';
 import * as path from 'path';
 import { createHash } from 'crypto';
 import { MemoryPromotions } from './memory-promotions.js';
@@ -36,13 +35,15 @@ export class NeuralMemory {
 
         try {
             const xibeDir = path.dirname(this.memoryFile);
-            if (!existsSync(xibeDir)) {
-                await fs.mkdir(xibeDir, { recursive: true });
-            }
+            await fs.mkdir(xibeDir, { recursive: true });
 
-            if (existsSync(this.memoryFile)) {
+            try {
                 const content = await fs.readFile(this.memoryFile, 'utf-8');
                 this.memory = JSON.parse(content);
+            } catch (readError: any) {
+                if (readError.code !== 'ENOENT') {
+                    throw readError;
+                }
             }
             this.initialized = true;
         } catch (error) {

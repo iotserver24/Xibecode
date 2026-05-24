@@ -24,7 +24,15 @@ export class CodeGraph {
         if (this.isInitialized) return;
 
         const tsConfigPath = path.join(this.workingDir, 'tsconfig.json');
-        if (fs.existsSync(tsConfigPath)) {
+        let hasTsConfig = false;
+        try {
+            await fs.promises.access(tsConfigPath);
+            hasTsConfig = true;
+        } catch {
+            hasTsConfig = false;
+        }
+
+        if (hasTsConfig) {
             this.project = new Project({
                 tsConfigFilePath: tsConfigPath,
                 skipAddingFilesFromTsConfig: false,
