@@ -60,8 +60,15 @@ export interface ACPAgentCapabilities {
     http?: boolean;
     sse?: boolean;
   };
+  fsCapabilities?: {
+    readTextFile?: boolean;
+    readDirectory?: boolean;
+    writeFile?: boolean;
+    createFile?: boolean;
+  };
   sessionCapabilities?: {
     close?: Record<string, never>;
+    closeSession?: Record<string, never>;
   };
 }
 
@@ -70,6 +77,38 @@ export interface ACPAgentCapabilities {
 export interface ACPSessionNewParams {
   cwd: string;
   mcpServers?: unknown[];
+}
+
+export interface ACPSessionNewResult {
+  sessionId: string;
+  configOptions: ACPSessionConfigOption[];
+  modes: ACPSessionModeState;
+}
+
+export interface ACPSessionConfigOption {
+  id: string;
+  name: string;
+  description?: string;
+  category?: "mode" | "model" | "thought_level" | string;
+  type: "select";
+  currentValue: string;
+  options: Array<{ value: string; name: string; description?: string }>;
+}
+
+export interface ACPSessionModeState {
+  currentModeId: string;
+  availableModes: Array<{ id: string; name: string; description?: string }>;
+}
+
+export interface ACPSetConfigOptionParams {
+  sessionId: string;
+  configId: string;
+  value: string;
+}
+
+export interface ACPSetModeParams {
+  sessionId: string;
+  modeId: string;
 }
 
 export interface ACPSessionPromptParams {
@@ -148,6 +187,8 @@ export const ACP_METHODS = {
   SESSION_CANCEL: "session/cancel",
   SESSION_CLOSE: "session/close",
   SESSION_UPDATE: "session/update",
+  SESSION_SET_CONFIG_OPTION: "session/set_config_option",
+  SESSION_SET_MODE: "session/set_mode",
   CHAT: "agent/chat",
   CHAT_DELTA: "agent/chatDelta",
   SHUTDOWN: "shutdown",

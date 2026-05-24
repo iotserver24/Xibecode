@@ -2,6 +2,14 @@
 
 All notable changes to XibeCode will be documented in this file.
 
+## [1.3.16] - 2026-05-24
+
+### CLI (`xibecode`)
+
+- Bump to **1.3.16**.
+- Depend on **`xibecode-core` ^1.3.15** (npm).
+- Include Zed-compatible ACP stdio server mode via **`--acp`** with fsCapabilities support.
+
 ## [1.3.15] - 2026-05-24
 
 ### Core (`xibecode-core`)

@@ -10,6 +10,9 @@ export interface PromotedMemory {
 
 export class MemoryPromotions {
   private readonly filePath: string;
+  private cache: PromotedMemory[] | null = null;
+  private cacheExpiresAt: number = 0;
+  private static readonly CACHE_TTL_MS = 30_000; // 30 seconds
 
   constructor(private readonly workingDir: string = process.cwd()) {
     this.filePath = path.join(workingDir, '.xibecode', 'memory-promotions.json');
@@ -30,10 +33,18 @@ export class MemoryPromotions {
   }
 
   async list(): Promise<PromotedMemory[]> {
+    const now = Date.now();
+    if (this.cache !== null && now < this.cacheExpiresAt) {
+      return this.cache;
+    }
     try {
       const raw = await fs.readFile(this.filePath, 'utf8');
-      return JSON.parse(raw) as PromotedMemory[];
+      this.cache = JSON.parse(raw) as PromotedMemory[];
+      this.cacheExpiresAt = now + MemoryPromotions.CACHE_TTL_MS;
+      return this.cache;
     } catch {
+      this.cache = [];
+      this.cacheExpiresAt = now + MemoryPromotions.CACHE_TTL_MS;
       return [];
     }
   }
@@ -41,5 +52,8 @@ export class MemoryPromotions {
   private async save(entries: PromotedMemory[]): Promise<void> {
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
     await fs.writeFile(this.filePath, JSON.stringify(entries, null, 2), 'utf8');
+    // Invalidate cache after a write
+    this.cache = entries;
+    this.cacheExpiresAt = Date.now() + MemoryPromotions.CACHE_TTL_MS;
   }
 }

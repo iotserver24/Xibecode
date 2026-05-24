@@ -1,8 +1,9 @@
-# XibeCode
+
 
 AI-powered autonomous coding assistant for your terminal.
 
 [![Donate](https://img.shields.io/badge/Donate-Support%20XibeCode-ff69b4?style=for-the-badge)](https://www.anishkumar.tech/donate) [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Hi](https://img.shields.io/badge/Hi-Hello%20World-00b894?style=for-the-badge)](https://www.anishkumar.tech)
 [![Version](https://img.shields.io/npm/v/xibecode?style=for-the-badge)](https://www.npmjs.com/package/xibecode)
 [![Core](https://img.shields.io/npm/v/xibecode-core?style=for-the-badge&label=core)](https://www.npmjs.com/package/xibecode-core)
 

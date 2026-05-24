@@ -73,6 +73,14 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
   await skillManager.loadSkills();
 
   const mcpClientManager = new MCPClientManager();
+  const mcpServersPromise = config.getMCPServers().then((mcpServers) => {
+    if (Object.keys(mcpServers).length > 0) {
+      return mcpClientManager.connectAll(mcpServers, { retries: 1, backoffMs: 750 });
+    }
+  }).catch((err) => {
+    console.error('Failed to connect to MCP servers:', err);
+  });
+
   const memory = new NeuralMemory(process.cwd());
   await memory.init().catch(() => { });
   const toolExecutor = new CodingToolExecutor(process.cwd(), {
@@ -113,6 +121,8 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
       rl.close();
       break;
     }
+    // Ensure MCP servers are connected before running the agent
+    await mcpServersPromise;
     const autoSkillsShEnabled =
       process.env.XIBECODE_AUTO_SKILLS_SH === '1' || process.env.XIBECODE_AUTO_SKILLS_SH === 'true';
     let autoInstalledSkillNames: string[] = [];

@@ -67,7 +67,7 @@ export class MCPClientManager {
     }
 
     if (this.clients.has(serverName)) {
-      throw new Error(`Already connected to MCP server: ${serverName}`);
+      return;
     }
 
     try {
@@ -133,7 +133,7 @@ export class MCPClientManager {
     const skippedNeedsAuth: string[] = [];
     const failed: Array<{ name: string; error: string }> = [];
 
-    for (const [name, cfg] of Object.entries(servers)) {
+    const promises = Object.entries(servers).map(async ([name, cfg]) => {
       let attempt = 0;
       while (true) {
         attempt++;
@@ -155,7 +155,9 @@ export class MCPClientManager {
           await new Promise((r) => setTimeout(r, backoffMs * attempt));
         }
       }
-    }
+    });
+
+    await Promise.allSettled(promises);
 
     return { connected, failed, skippedNeedsAuth };
   }

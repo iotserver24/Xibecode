@@ -2581,6 +2581,14 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
   const defaultSkillsPrompt = await skillManager.buildDefaultSkillsPromptForTask('', process.cwd());
 
   const mcpClientManager = new MCPClientManager();
+  const mcpServersPromise = config.getMCPServers().then((mcpServers) => {
+    if (Object.keys(mcpServers).length > 0) {
+      return mcpClientManager.connectAll(mcpServers, { retries: 1, backoffMs: 750 });
+    }
+  }).catch((err) => {
+    console.error('Failed to connect to MCP servers:', err);
+  });
+
   const memory = new NeuralMemory(process.cwd());
   await memory.init().catch(() => { });
   const remoteExecution = resolveRemoteExecutionConfig(config, process.cwd());
@@ -2728,6 +2736,9 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     onLine: (line: UiLine) => void,
     opts?: { images?: ImageAttachment[]; signal?: AbortSignal; onVisibleOutput?: () => void },
   ): Promise<ReturnType<EnhancedAgent['getStats']>> => {
+    // Ensure MCP servers are connected before executing
+    await mcpServersPromise;
+
     const currentApiKey = config.getApiKey() || options.apiKey || '';
     const currentBaseUrl = config.getBaseUrl() || options.baseUrl;
     if (!currentApiKey) {

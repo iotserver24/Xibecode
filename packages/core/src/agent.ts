@@ -420,6 +420,14 @@ export class EnhancedAgent extends EventEmitter {
    */
   private remoteToolWorkspaceRoot?: string;
   private remoteToolSandboxId?: string;
+  /**
+   * Session-level cache for the assembled auto-memory markdown section.
+   * Avoids redundant disk IO on every prompt turn (both old + new memory systems
+   * scan the same files repeatedly). Invalidated after MEMORY_CACHE_TTL_MS.
+   */
+  private _memoryCacheSection: string | null = null;
+  private _memoryCacheExpiry: number = 0;
+  private static readonly MEMORY_CACHE_TTL_MS = 30_000; // 30 seconds
 
   private isAbortError(err: unknown): boolean {
     if (!err || typeof err !== 'object') return false;
@@ -442,6 +450,13 @@ export class EnhancedAgent extends EventEmitter {
   public clearInjectedMessages(): void {
     this.injectedMessages = [];
   }
+
+  /** Bust the memory-section cache so the next run() reloads from disk. Call this after memory-write tool calls. */
+  public invalidateMemoryCache(): void {
+    this._memoryCacheSection = null;
+    this._memoryCacheExpiry = 0;
+  }
+
 
   private recordEvidence(kind: string, detail: string): void {
     this.evidenceTrail.push({ kind, detail, ts: Date.now() });
@@ -719,36 +734,46 @@ export class EnhancedAgent extends EventEmitter {
       }
     }
 
-    this.autoMemoryMarkdownSection = '';
-    if (isAutoMemoryLoadEnabled()) {
-      try {
-        const ranked = await autoLoadProjectMemories(process.cwd(), initialPrompt, []);
-        this.autoMemoryMarkdownSection = formatMemoriesForContext(ranked);
-      } catch {
-        /* non-fatal */
-      }
-    }
-    if (!this.autoMemoryMarkdownSection.trim()) {
-      const fallbackMd = join(process.cwd(), '.xibecode', 'memory.md');
-      if (existsSync(fallbackMd)) {
-        try {
-          const content = await readFile(fallbackMd, 'utf-8');
-          this.autoMemoryMarkdownSection = `\n\n## Project Memory\n\n${content.trim()}`;
-        } catch {
-          /* ignore */
+    // ─── Memory loading with session-level TTL cache ───────────────────────────
+    // Both autoLoadProjectMemories and autoMemManager.getContextMemories scan the
+    // same .xibecode/ files on every prompt. Cache the result for 30 s so that
+    // routine conversational turns (which don't change memory files) skip the IO.
+    const _now = Date.now();
+    if (this._memoryCacheSection !== null && _now < this._memoryCacheExpiry) {
+      this.autoMemoryMarkdownSection = this._memoryCacheSection;
+    } else {
+      this.autoMemoryMarkdownSection = '';
+      // Run both memory subsystems in parallel to halve wall-clock overhead
+      const [oldMemResult, newMemResult] = await Promise.allSettled([
+        isAutoMemoryLoadEnabled()
+          ? autoLoadProjectMemories(process.cwd(), initialPrompt, []).then(formatMemoriesForContext)
+          : Promise.resolve(''),
+        this.autoMemManager ? this.autoMemManager.getContextMemories(initialPrompt) : Promise.resolve(''),
+      ]);
+
+      const oldMem = oldMemResult.status === 'fulfilled' ? oldMemResult.value : '';
+      const newMem = newMemResult.status === 'fulfilled' ? newMemResult.value : '';
+
+      if (oldMem.trim()) {
+        this.autoMemoryMarkdownSection = oldMem;
+      } else {
+        // Fallback: read .xibecode/memory.md directly (cheap single read)
+        const fallbackMd = join(process.cwd(), '.xibecode', 'memory.md');
+        if (existsSync(fallbackMd)) {
+          try {
+            const content = await readFile(fallbackMd, 'utf-8');
+            this.autoMemoryMarkdownSection = `\n\n## Project Memory\n\n${content.trim()}`;
+          } catch { /* ignore */ }
         }
       }
-    }
-    // Also fetch context from the new AutoMemoryManager (port from OpenClaude)
-    if (this.autoMemManager) {
-      try {
-        const autoMemContext = await this.autoMemManager.getContextMemories(initialPrompt);
-        if (autoMemContext.trim() && !this.autoMemoryMarkdownSection.includes(autoMemContext.trim())) {
-          this.autoMemoryMarkdownSection += `\n\n## Auto-Memories\n\n${autoMemContext.trim()}`;
-        }
-      } catch {
-        /* non-fatal */
+
+      if (newMem.trim() && !this.autoMemoryMarkdownSection.includes(newMem.trim())) {
+        this.autoMemoryMarkdownSection += `\n\n## Auto-Memories\n\n${newMem.trim()}`;
       }
+
+      // Store in cache
+      this._memoryCacheSection = this.autoMemoryMarkdownSection;
+      this._memoryCacheExpiry = _now + EnhancedAgent.MEMORY_CACHE_TTL_MS;
     }
 
     if (opts?.images && opts.images.length > 0) {
@@ -1322,6 +1347,12 @@ export class EnhancedAgent extends EventEmitter {
       if (['write_file', 'edit_file', 'edit_lines', 'verified_edit'].includes(toolUse.name)) {
         const input = toolUse.input as { path?: string };
         if (typeof input?.path === 'string') this.filesChanged.add(input.path);
+      }
+
+      // Bust the per-session memory cache whenever the agent writes to memory
+      // so the next run() turn reloads from disk.
+      if (['update_memory', 'remember_lesson'].includes(toolUse.name) && result?.success !== false) {
+        this.invalidateMemoryCache();
       }
 
       const verification = await this.postEditVerify(toolExecutor, toolUse, result);
