@@ -17,6 +17,7 @@ import { whatsNewCommand } from './commands/whats-new.js';
 import { resolveSessionBySandboxId } from './utils/cloud-gateway.js';
 import { ConfigManager } from './utils/config.js';
 import { resolveRemoteExecutionConfig } from './utils/remote-execution.js';
+import { startACPServer } from './acp/acp-server.js';
 import dotenv from 'dotenv';
 import { createRequire } from 'module';
 
@@ -331,8 +332,16 @@ mcpCmd
   .description('Authenticate with Smithery')
   .action(() => mcpCommand('login', []));
 
-// Launch chat if no command provided (stay local unless user set a subcommand like `cloud`)
-if (!process.argv.slice(2).length) {
+// If --acp is present, boot as a headless JSON-RPC 2.0 server over stdio.
+const acpArgIdx = process.argv.indexOf('--acp');
+if (acpArgIdx >= 2) {
+  const profileIdx = process.argv.indexOf('--profile');
+  const profile = profileIdx >= 0 && profileIdx + 1 < process.argv.length
+    ? process.argv[profileIdx + 1]
+    : undefined;
+  startACPServer(profile);
+} else if (!process.argv.slice(2).length) {
+  // Launch chat if no command provided (stay local unless user set a subcommand like `cloud`)
   process.env.XIBECODE_SANDBOX_MODE = 'local';
   chatCommand({});
 } else {
