@@ -15,7 +15,7 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
   if (isUser) {
     return (
       <div className="flex justify-end animate-fade-in w-full group">
-        <div className="max-w-[90%] sm:max-w-[80%] rounded-2xl bg-xibe-surface-raised px-5 py-3 text-[15px] leading-relaxed text-xibe-text whitespace-pre-wrap">
+        <div className="max-w-[90%] sm:max-w-[80%] rounded-xl bg-xibe-surface-hover px-4 py-2.5 text-[15px] leading-relaxed text-xibe-text whitespace-pre-wrap">
           {content}
         </div>
       </div>
@@ -30,18 +30,18 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
         prose-blockquote:my-4 prose-blockquote:border-l-2 prose-blockquote:border-xibe-border prose-blockquote:pl-4 prose-blockquote:text-xibe-text-dim
         prose-a:text-xibe-text-secondary hover:prose-a:text-xibe-text prose-a:underline prose-a:underline-offset-2
         prose-strong:text-xibe-text prose-strong:font-semibold
-        prose-code:text-xibe-text-secondary prose-code:bg-xibe-surface-raised prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:font-medium prose-code:before:content-none prose-code:after:content-none
+        prose-code:text-xibe-text-secondary prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:font-medium prose-code:before:content-none prose-code:after:content-none
         prose-h1:text-xl prose-h2:text-lg prose-h3:text-base prose-h1:font-semibold prose-h2:font-semibold prose-h3:font-semibold">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
             pre: ({ children }) => (
-              <pre className="overflow-x-auto rounded-xl bg-xibe-surface-raised border border-xibe-border-subtle p-4 text-[13px] font-mono leading-relaxed my-4">{children}</pre>
+              <pre className="overflow-x-auto rounded bg-[#131316] p-4 text-[13px] font-mono leading-relaxed my-4 border border-xibe-border-subtle">{children}</pre>
             ),
             code: ({ className, children }) => {
               const isInline = !className;
               return isInline ? (
-                <code className="rounded-md bg-xibe-surface-raised px-1.5 py-0.5 text-[13px] font-mono text-xibe-text-secondary">{children}</code>
+                <code className="rounded bg-[#131316] px-1 py-0.5 text-[13px] font-mono text-xibe-text-secondary border border-xibe-border-subtle/50">{children}</code>
               ) : (
                 <code className={`${className ?? ''} text-[13px] font-mono`}>{children}</code>
               );
