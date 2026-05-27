@@ -14,8 +14,8 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
 
   if (isUser) {
     return (
-      <div className="flex justify-end animate-fade-in w-full group">
-        <div className="max-w-[90%] sm:max-w-[80%] rounded-2xl bg-xibe-surface-raised px-5 py-3 text-[15px] leading-relaxed text-xibe-text whitespace-pre-wrap">
+      <div className="flex justify-end animate-fade-in w-full group mb-4">
+        <div className="max-w-[90%] sm:max-w-[80%] rounded-xl bg-xibe-surface-raised px-4 py-2.5 text-[15px] leading-relaxed text-xibe-text whitespace-pre-wrap border border-xibe-border-subtle">
           {content}
         </div>
       </div>
@@ -23,7 +23,7 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
   }
 
   return (
-    <div className="animate-fade-in flex flex-col w-full group">
+    <div className="animate-fade-in flex flex-col w-full group mb-4">
       <div className="prose prose-invert max-w-none text-[15px] leading-relaxed text-xibe-text
         prose-p:my-1.5 prose-headings:my-3 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5
         prose-pre:my-3 prose-pre:bg-transparent prose-pre:p-0
