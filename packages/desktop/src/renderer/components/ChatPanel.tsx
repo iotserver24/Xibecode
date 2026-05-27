@@ -118,23 +118,22 @@ export default function ChatPanel({
               </div>
 
               {needsSetup ? (
-                <button onClick={onOpenSetup} className="rounded-full bg-xibe-accent px-8 py-2.5 text-sm font-medium text-xibe-bg hover:bg-xibe-accent-hover transition-colors">
+                <button onClick={onOpenSetup} className="rounded-xl bg-xibe-accent px-6 py-2 text-sm font-medium text-xibe-bg hover:bg-xibe-accent-hover transition-colors">
                   Complete Setup
                 </button>
               ) : (
                 <div className="w-full max-w-2xl space-y-4">
                   <div className="flex flex-wrap justify-center gap-2 mb-6">
                     {[
-                      { text: 'Build a REST API', icon: <Zap className="h-3.5 w-3.5" /> },
-                      { text: 'Fix a bug', icon: <BookOpen className="h-3.5 w-3.5" /> },
-                      { text: 'Set up a project', icon: <Terminal className="h-3.5 w-3.5" /> }
+                      { text: 'Build a REST API' },
+                      { text: 'Fix a bug' },
+                      { text: 'Set up a project' }
                     ].map((q) => (
                       <button
                         key={q.text}
                         onClick={() => onSendMessage(q.text)}
-                        className="flex items-center gap-2 rounded-full bg-xibe-surface px-3.5 py-1.5 text-[13px] text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors border border-xibe-border-subtle"
+                        className="flex items-center gap-2 rounded-lg bg-transparent px-3 py-1.5 text-[13px] text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors border border-xibe-border-subtle hover:border-xibe-border-focus"
                       >
-                        <span className="text-xibe-text-dim">{q.icon}</span>
                         {q.text}
                       </button>
                     ))}
@@ -179,8 +178,8 @@ export default function ChatPanel({
             </div>
           )}
 
-          {/* Floating Pill input */}
-          <div className="relative flex flex-col rounded-3xl bg-xibe-surface border border-xibe-border-subtle focus-within:border-xibe-border-focus focus-within:bg-xibe-surface transition-all duration-200">
+          {/* Flat input */}
+          <div className="relative flex flex-col rounded-xl bg-xibe-bg border border-xibe-border-focus focus-within:border-xibe-text-dim/50 transition-all duration-200">
             <div className="flex items-center px-4 pt-2 pb-1 text-xs text-xibe-text-dim">
                 <span className="flex items-center gap-1.5">
                     {MODES.map((m) => (
