@@ -28,7 +28,7 @@ export default function TabbedRightPanel({
           onClick={() => setActiveTab('folder')}
           className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors border-b-2 ${
             activeTab === 'folder'
-              ? 'border-xibe-brand-blue text-xibe-brand-blue'
+              ? 'border-xibe-text text-xibe-text'
               : 'border-transparent text-xibe-text-dim hover:text-xibe-text'
           }`}
         >
@@ -39,7 +39,7 @@ export default function TabbedRightPanel({
           onClick={() => setActiveTab('web')}
           className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors border-b-2 ${
             activeTab === 'web'
-              ? 'border-xibe-brand-blue text-xibe-brand-blue'
+              ? 'border-xibe-text text-xibe-text'
               : 'border-transparent text-xibe-text-dim hover:text-xibe-text'
           }`}
         >
