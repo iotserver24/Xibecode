@@ -96,7 +96,7 @@ export default function ChatPanel({
         <ToolCallCard key={msg.id} toolName={msg.toolName} toolInput={msg.toolInput} toolOutput={msg.toolOutput} timestamp={msg.timestamp} />
       ) : msg.role === 'info' ? (
         <div key={msg.id} className="flex justify-center py-2">
-          <span className="text-[11px] font-medium text-xibe-text-dim bg-xibe-surface px-3 py-1 rounded-full border border-xibe-border-subtle">{msg.content}</span>
+          <span className="text-[11px] font-medium text-xibe-text-dim bg-xibe-surface px-3 py-1 rounded-md border border-xibe-border-subtle">{msg.content}</span>
         </div>
       ) : msg.role === 'error' ? (
         <div key={msg.id} className="text-sm text-xibe-error bg-xibe-error/10 border border-xibe-error/20 rounded-xl px-4 py-3">{msg.content}</div>
@@ -118,7 +118,7 @@ export default function ChatPanel({
               </div>
 
               {needsSetup ? (
-                <button onClick={onOpenSetup} className="rounded-full bg-xibe-accent px-8 py-2.5 text-sm font-medium text-xibe-bg hover:bg-xibe-accent-hover transition-colors">
+                <button onClick={onOpenSetup} className="rounded-md bg-xibe-accent px-8 py-2.5 text-sm font-medium text-xibe-bg hover:bg-xibe-accent-hover transition-colors">
                   Complete Setup
                 </button>
               ) : (
@@ -132,7 +132,7 @@ export default function ChatPanel({
                       <button
                         key={q.text}
                         onClick={() => onSendMessage(q.text)}
-                        className="flex items-center gap-2 rounded-full bg-xibe-surface px-3.5 py-1.5 text-[13px] text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors border border-xibe-border-subtle"
+                        className="flex items-center gap-2 rounded-md bg-xibe-surface px-3.5 py-1.5 text-[13px] text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors border border-xibe-border-subtle"
                       >
                         <span className="text-xibe-text-dim">{q.icon}</span>
                         {q.text}
@@ -180,7 +180,7 @@ export default function ChatPanel({
           )}
 
           {/* Floating Pill input */}
-          <div className="relative flex flex-col rounded-3xl bg-xibe-surface border border-xibe-border-subtle focus-within:border-xibe-border-focus focus-within:bg-xibe-surface transition-all duration-200">
+          <div className="relative flex flex-col rounded-md border-t border-xibe-border-subtle bg-xibe-bg transition-all duration-200">
             <div className="flex items-center px-4 pt-2 pb-1 text-xs text-xibe-text-dim">
                 <span className="flex items-center gap-1.5">
                     {MODES.map((m) => (
@@ -188,7 +188,7 @@ export default function ChatPanel({
                           key={m.id}
                           onClick={() => onModeSwitch(m.id, `Switched to ${m.label}`)}
                           className={cn(
-                            "rounded-full px-2 py-0.5 font-medium transition-colors duration-200",
+                            "rounded-md px-2 py-0.5 font-medium transition-colors duration-200",
                             modeState.current === m.id
                               ? "bg-xibe-surface-hover text-xibe-text"
                               : "text-xibe-text-dim hover:text-xibe-text"
@@ -220,7 +220,7 @@ export default function ChatPanel({
               <button
                 onClick={submit}
                 disabled={isRunning || !input.trim()}
-                className="absolute right-3 bottom-2 h-8 w-8 rounded-full flex items-center justify-center text-xibe-bg bg-xibe-text hover:opacity-90 disabled:opacity-30 disabled:bg-xibe-text-dim disabled:text-xibe-surface disabled:cursor-not-allowed transition-all duration-200"
+                className="absolute right-3 bottom-2 h-8 w-8 rounded-md flex items-center justify-center text-xibe-bg bg-xibe-text hover:opacity-90 disabled:opacity-30 disabled:bg-xibe-text-dim disabled:text-xibe-surface disabled:cursor-not-allowed transition-all duration-200"
               >
                 <Send className="h-3.5 w-3.5 ml-0.5" />
               </button>
