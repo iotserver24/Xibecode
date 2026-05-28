@@ -36,31 +36,42 @@ export class FileService {
       const entries = await fs.readdir(dirPath, { withFileTypes: true });
       const result: FileEntry[] = [];
 
-      for (const entry of entries) {
-        if (entry.name.startsWith('.') && entry.name !== '.env.example') {
-          continue;
-        }
+      const filteredEntries = entries.filter((entry) => {
+        return !(entry.name.startsWith('.') && entry.name !== '.env.example');
+      });
 
-        const fullPath = path.join(dirPath, entry.name);
-        let size: number | undefined;
-        let modified: Date | undefined;
+      // ⚡ Bolt: Implemented bounded concurrency (chunk size 50) instead of sequential `await`s.
+      // This reduces I/O bottlenecks when statting many files in a directory, avoiding OS EMFILE limits.
+      const CONCURRENCY_LIMIT = 50;
+      for (let i = 0; i < filteredEntries.length; i += CONCURRENCY_LIMIT) {
+        const chunk = filteredEntries.slice(i, i + CONCURRENCY_LIMIT);
 
-        try {
-          const stat = await fs.stat(fullPath);
-          size = stat.size;
-          modified = stat.mtime;
-        } catch {
-          // Skip entries we can't stat
-        }
+        const chunkResults = await Promise.all(
+          chunk.map(async (entry) => {
+            const fullPath = path.join(dirPath, entry.name);
+            let size: number | undefined;
+            let modified: Date | undefined;
 
-        result.push({
-          name: entry.name,
-          path: fullPath,
-          isDirectory: entry.isDirectory(),
-          isFile: entry.isFile(),
-          size,
-          modified,
-        });
+            try {
+              const stat = await fs.stat(fullPath);
+              size = stat.size;
+              modified = stat.mtime;
+            } catch {
+              // Skip entries we can't stat
+            }
+
+            return {
+              name: entry.name,
+              path: fullPath,
+              isDirectory: entry.isDirectory(),
+              isFile: entry.isFile(),
+              size,
+              modified,
+            };
+          })
+        );
+
+        result.push(...chunkResults);
       }
 
       result.sort((a, b) => {

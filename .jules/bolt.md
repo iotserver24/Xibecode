@@ -73,3 +73,7 @@
 ## 2024-05-24 - [Remove Synchronous File Operations]
 **Learning:** Checking for file existence using `fs.existsSync` introduces blocking I/O on the Node.js event loop, creating micro-stutters and reducing application concurrency.
 **Action:** Always prefer asynchronous file access (e.g., `fs.promises.readFile` or `fs.promises.access`) enclosed in a `try...catch` block. This approach avoids blocking and eliminates Time-of-Check to Time-of-Use (TOCTOU) race conditions.
+
+## 2024-05-28 - Bounded Concurrency for file-service listDirectory
+**Learning:** Sequential execution of array iterations with `await fs.stat` inside a `for...of` loop creates massive I/O bottlenecks when listing large directories, which slows down file explorers significantly.
+**Action:** Always process file system statistics concurrently over arbitrary file lists by employing bounded concurrency with `Promise.all`, which safely accelerates file iteration without exceeding OS open-file limits.
