@@ -91,7 +91,7 @@ const ChatHistoryItem = memo(function ChatHistoryItem({
         "relative flex w-full items-center justify-between gap-2 rounded-lg pr-2 py-2.5 text-left transition-all duration-150 group border border-transparent select-none cursor-pointer",
         isGeneral ? "pl-4" : "pl-10",
         isActive
-          ? "text-xibe-text font-medium bg-xibe-surface-hover/75 border-xibe-border/40 shadow-sm"
+          ? "text-xibe-text font-medium bg-xibe-surface-hover border-transparent"
           : "text-xibe-text-secondary hover:bg-xibe-surface-hover/30 hover:text-xibe-text"
       )}
     >
@@ -181,13 +181,13 @@ const ChatHistory = memo(function ChatHistory({ activeSessionId, onSelectSession
       <div className="space-y-2.5 mb-5 shrink-0">
         <button
           onClick={onNewChat}
-          className="flex w-full items-center gap-2.5 rounded-lg border border-xibe-border/60 bg-xibe-surface-raised/40 hover:bg-xibe-surface-hover/80 hover:border-xibe-border-focus/50 px-3 py-2.5 text-[13px] font-medium text-xibe-text transition-all duration-200 cursor-pointer select-none group"
+          className="flex w-full items-center gap-2.5 rounded-lg border border-transparent bg-transparent hover:bg-xibe-surface-hover px-3 py-2.5 text-[13px] font-medium text-xibe-text transition-all duration-200 cursor-pointer select-none group"
         >
           <Plus className="h-4 w-4 text-xibe-brand-purple group-hover:scale-110 transition-transform duration-200" />
           <span className="font-sans">New Conversation</span>
         </button>
 
-        <div className="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-medium text-xibe-text bg-xibe-surface-hover/40 border border-xibe-border/20 select-none cursor-pointer">
+        <div className="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-medium text-xibe-text bg-transparent hover:bg-xibe-surface-hover border border-transparent select-none cursor-pointer">
           <History className="h-4 w-4 text-xibe-brand-purple" />
           <span className="font-sans">Conversation History</span>
         </div>
