@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 
 /**
  * Compare semver release cores (major.minor.patch), ignoring prerelease tags.
@@ -35,23 +35,22 @@ function cachePath(): string {
   return join(homedir(), '.xibecode', CACHE_NAME);
 }
 
-function readCache(): UpdateCheckCache | null {
+async function readCache(): Promise<UpdateCheckCache | null> {
   if (updateCheckDisabled()) return null;
   try {
     const p = cachePath();
-    if (!existsSync(p)) return null;
-    const raw = readFileSync(p, 'utf8');
+    const raw = await readFile(p, 'utf8');
     return JSON.parse(raw) as UpdateCheckCache;
   } catch {
     return null;
   }
 }
 
-function writeCache(data: UpdateCheckCache): void {
+async function writeCache(data: UpdateCheckCache): Promise<void> {
   try {
     const dir = join(homedir(), '.xibecode');
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(cachePath(), JSON.stringify(data), 'utf8');
+    await mkdir(dir, { recursive: true });
+    await writeFile(cachePath(), JSON.stringify(data), 'utf8');
   } catch {
     // best-effort
   }
@@ -93,7 +92,7 @@ export async function getNpmLatestVersion(options?: {
 }): Promise<{ latest: string; fromCache: boolean }> {
   const cacheTtlMs = options?.cacheTtlMs ?? 48 * 60 * 60 * 1000;
   const now = Date.now();
-  const cached = readCache();
+  const cached = await readCache();
 
   if (
     !options?.forceRefresh &&
@@ -105,10 +104,10 @@ export async function getNpmLatestVersion(options?: {
 
   try {
     const latest = await fetchLatestNpmVersion({ timeoutMs: options?.timeoutMs });
-    writeCache({ checkedAt: now, latest });
+    await writeCache({ checkedAt: now, latest });
     return { latest, fromCache: false };
   } catch {
-    writeCache({ checkedAt: now, latest: cached?.latest });
+    await writeCache({ checkedAt: now, latest: cached?.latest });
     if (cached?.latest) {
       return { latest: cached.latest, fromCache: true };
     }
