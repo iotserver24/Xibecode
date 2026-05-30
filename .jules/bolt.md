@@ -73,3 +73,7 @@
 ## 2024-05-24 - [Remove Synchronous File Operations]
 **Learning:** Checking for file existence using `fs.existsSync` introduces blocking I/O on the Node.js event loop, creating micro-stutters and reducing application concurrency.
 **Action:** Always prefer asynchronous file access (e.g., `fs.promises.readFile` or `fs.promises.access`) enclosed in a `try...catch` block. This approach avoids blocking and eliminates Time-of-Check to Time-of-Use (TOCTOU) race conditions.
+
+## 2024-05-30 - Prevent O(N*M) VDOM Re-renders in batch event processor
+**Learning:** In React components that process batches of events mapping to an array of items (like `handleAgentEvents`), doing `array.length - 1` backward scans sequentially *inside* the event batch loop causes O(N*M) overhead (where N=messages, M=batch size), leading to severe micro-stuttering in the UI when processing rapid streams.
+**Action:** When updating a large target array from a batch, calculate target item indices before the event processing loop begins. Then, maintain and update those indices purely dynamically within the loop to keep the time complexity strictly at O(N + M).
