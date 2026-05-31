@@ -132,7 +132,7 @@ export default function ChatPanel({
                       <button
                         key={q.text}
                         onClick={() => onSendMessage(q.text)}
-                        className="flex items-center gap-2 rounded-full bg-xibe-surface px-3.5 py-1.5 text-[13px] text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors border border-xibe-border-subtle"
+                        className="flex items-center gap-2 rounded-md bg-transparent px-3 py-2 text-[13px] text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors border border-xibe-border-subtle shadow-sm"
                       >
                         <span className="text-xibe-text-dim">{q.icon}</span>
                         {q.text}
@@ -180,7 +180,7 @@ export default function ChatPanel({
           )}
 
           {/* Floating Pill input */}
-          <div className="relative flex flex-col rounded-3xl bg-xibe-surface border border-xibe-border-subtle focus-within:border-xibe-border-focus focus-within:bg-xibe-surface transition-all duration-200">
+          <div className="relative flex flex-col rounded-xl bg-xibe-surface border border-xibe-border-subtle focus-within:border-xibe-border-focus shadow-sm transition-all duration-200">
             <div className="flex items-center px-4 pt-2 pb-1 text-xs text-xibe-text-dim">
                 <span className="flex items-center gap-1.5">
                     {MODES.map((m) => (
