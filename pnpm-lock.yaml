@@ -19,9 +19,6 @@ importers:
 
   .:
     devDependencies:
-      playwright:
-        specifier: ^1.59.1
-        version: 1.59.1
       turbo:
         specifier: ^2.5.0
         version: 2.9.7
@@ -217,6 +214,9 @@ importers:
       electron-builder:
         specifier: ^26.0.12
         version: 26.8.1(electron-builder-squirrel-windows@26.8.1)
+      playwright:
+        specifier: ^1.59.1
+        version: 1.59.1
       postcss:
         specifier: ^8.5.3
         version: 8.5.13
