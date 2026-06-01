@@ -114,7 +114,7 @@ export default function ChatPanel({
           <div className={`min-h-full ${CHAT_GUTTER}`}>
             <div className={`${CHAT_WIDTH} animate-fade-in flex min-h-full flex-col items-center justify-center text-center`}>
               <div className="mb-8">
-                <h1 className="text-3xl font-medium text-xibe-text tracking-tight">How can I help you today?</h1>
+                <h1 className="text-2xl font-medium text-xibe-text/90 tracking-tight">What do you want to build?</h1>
               </div>
 
               {needsSetup ? (
@@ -180,7 +180,7 @@ export default function ChatPanel({
           )}
 
           {/* Floating Pill input */}
-          <div className="relative flex flex-col rounded-3xl bg-xibe-surface border border-xibe-border-subtle focus-within:border-xibe-border-focus focus-within:bg-xibe-surface transition-all duration-200">
+          <div className="relative flex flex-col rounded-xl bg-xibe-surface-raised/50 border border-transparent focus-within:border-xibe-border-focus transition-all duration-200">
             <div className="flex items-center px-4 pt-2 pb-1 text-xs text-xibe-text-dim">
                 <span className="flex items-center gap-1.5">
                     {MODES.map((m) => (
