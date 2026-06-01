@@ -73,3 +73,7 @@
 ## 2024-05-24 - [Remove Synchronous File Operations]
 **Learning:** Checking for file existence using `fs.existsSync` introduces blocking I/O on the Node.js event loop, creating micro-stutters and reducing application concurrency.
 **Action:** Always prefer asynchronous file access (e.g., `fs.promises.readFile` or `fs.promises.access`) enclosed in a `try...catch` block. This approach avoids blocking and eliminates Time-of-Check to Time-of-Use (TOCTOU) race conditions.
+
+## 2024-06-01 - [handleAgentEvents Optimization]
+**Learning:** Processing multiple events in a large chat history can lead to an O(N*M) bottleneck when backwards searching (`findIndex` equivalent) for the last active state inside a batch loop. Streaming chunks create large batches, compounding the issue.
+**Action:** Always pre-calculate and cache target indices before processing a batch, updating them incrementally (to achieve O(N + M)) rather than rescanning the entire message list for each event in the batch.
