@@ -151,8 +151,8 @@ importers:
         specifier: ^20.10.0
         version: 20.19.39
       '@types/picomatch':
-        specifier: ^3.0.2
-        version: 3.0.2
+        specifier: ^4.0.3
+        version: 4.0.3
       vitest:
         specifier: ^1.6.1
         version: 1.6.1(@types/node@20.19.39)(lightningcss@1.32.0)
@@ -1443,8 +1443,8 @@ packages:
   '@types/node@25.6.0':
     resolution: {integrity: sha512-+qIYRKdNYJwY3vRCZMdJbPLJAtGjQBudzZzdzwQYkEPQd+PJGixUL5QfvCLDaULoLv+RhT3LDkwEfKaAkgSmNQ==}
 
-  '@types/picomatch@3.0.2':
-    resolution: {integrity: sha512-n0i8TD3UDB7paoMMxA3Y65vUncFJXjcUf7lQY7YyKGl6031FNjfsLs6pdLFCy2GNFxItPJG8GvvpbZc2skH7WA==}
+  '@types/picomatch@4.0.3':
+    resolution: {integrity: sha512-iG0T6+nYJ9FAPmx9SsUlnwcq1ZVRuCXcVEvWnntoPlrOpwtSTKNDC9uVAxTsC3PUvJ+99n4RpAcNgBbHX3JSnQ==}
 
   '@types/plist@3.0.5':
     resolution: {integrity: sha512-E6OCaRmAe4WDmWNsL/9RMqdkkzDCY1etutkflWk4c+AcjDU07Pcz1fQwTX0TQz+Pxqn9i4L1TU3UFpjnrcDgxA==}
@@ -5175,7 +5175,7 @@ snapshots:
       undici-types: 7.19.2
     optional: true
 
-  '@types/picomatch@3.0.2': {}
+  '@types/picomatch@4.0.3': {}
 
   '@types/plist@3.0.5':
     dependencies:
