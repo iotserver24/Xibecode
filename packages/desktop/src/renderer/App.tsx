@@ -78,12 +78,12 @@ export default function App() {
     setMessages((prev) => {
       const updated = [...prev];
 
+      // Optimization: Cache target indices for 'isStreaming' and pending 'tool_call' events before the batch processing loop to reduce array search complexity from O(N * M) to O(N + M)
       let lastStreamingIdx = -1;
-      let lastToolIdx = -1;
-      for (let i = updated.length - 1; i >= 0; i--) {
-        if (lastStreamingIdx === -1 && updated[i].role === 'assistant' && updated[i].isStreaming) lastStreamingIdx = i;
-        if (lastToolIdx === -1 && updated[i].role === 'tool' && updated[i].toolName && !updated[i].toolOutput) lastToolIdx = i;
-        if (lastStreamingIdx !== -1 && lastToolIdx !== -1) break;
+      const pendingToolIndices: number[] = [];
+      for (let i = 0; i < updated.length; i++) {
+        if (updated[i].role === 'assistant' && updated[i].isStreaming) lastStreamingIdx = i;
+        if (updated[i].role === 'tool' && updated[i].toolName && !updated[i].toolOutput) pendingToolIndices.push(i);
       }
 
       for (const event of batch) {
@@ -119,14 +119,14 @@ export default function App() {
             break;
           }
           case 'tool_call': {
-            lastToolIdx = updated.length;
+            pendingToolIndices.push(updated.length);
             updated.push({ id: uid(), role: 'tool', content: '', toolName: d?.name ?? 'unknown', toolInput: d?.input, timestamp: event.timestamp });
             break;
           }
           case 'tool_result': {
-            if (lastToolIdx >= 0) {
-              updated[lastToolIdx] = { ...updated[lastToolIdx], toolOutput: d, content: typeof d === 'string' ? d : JSON.stringify(d, null, 2) };
-              lastToolIdx = -1;
+            const toolIdx = pendingToolIndices.pop();
+            if (toolIdx !== undefined && toolIdx >= 0) {
+              updated[toolIdx] = { ...updated[toolIdx], toolOutput: d, content: typeof d === 'string' ? d : JSON.stringify(d, null, 2) };
             }
             break;
           }
