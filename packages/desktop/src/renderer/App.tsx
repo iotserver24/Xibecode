@@ -78,59 +78,60 @@ export default function App() {
     setMessages((prev) => {
       const updated = [...prev];
 
-      // Optimization: use reverse for loop to find items near the end instead of O(N) findIndex/reverse
-      const findLastAssistantStreaming = () => {
-        for (let i = updated.length - 1; i >= 0; i--) {
-          if (updated[i].role === 'assistant' && updated[i].isStreaming) return i;
-        }
-        return -1;
-      };
+      // Optimization: pre-compute indices to prevent O(N*M) batch processing bottleneck
+      let lastAssistantStreamingIdx = -1;
+      const pendingToolIndices: number[] = [];
 
-      const findLastToolCall = () => {
-        for (let i = updated.length - 1; i >= 0; i--) {
-          if (updated[i].role === 'tool' && updated[i].toolName && !updated[i].toolOutput) return i;
+      for (let i = 0; i < updated.length; i++) {
+        if (updated[i].role === 'assistant' && updated[i].isStreaming) {
+          lastAssistantStreamingIdx = i;
+        } else if (updated[i].role === 'tool' && updated[i].toolName && !updated[i].toolOutput) {
+          pendingToolIndices.push(i);
         }
-        return -1;
-      };
+      }
 
       for (const event of batch) {
         const d = event.data as any;
         switch (event.type) {
-          case 'stream_text': {
-            const text = d?.text ?? '';
-            if (!text) break;
-            const last = findLastAssistantStreaming();
-            if (last >= 0) updated[last] = { ...updated[last], content: updated[last].content + text };
-            else updated.push({ id: uid(), role: 'assistant', content: text, timestamp: event.timestamp, isStreaming: true });
-            break;
-          }
+          case 'stream_text':
           case 'response': {
             const text = d?.text ?? '';
             if (!text) break;
-            const last = findLastAssistantStreaming();
-            if (last >= 0) updated[last] = { ...updated[last], content: updated[last].content + text };
-            else updated.push({ id: uid(), role: 'assistant', content: text, timestamp: event.timestamp, isStreaming: true });
+            if (lastAssistantStreamingIdx >= 0) {
+              updated[lastAssistantStreamingIdx] = {
+                ...updated[lastAssistantStreamingIdx],
+                content: updated[lastAssistantStreamingIdx].content + text
+              };
+            } else {
+              updated.push({ id: uid(), role: 'assistant', content: text, timestamp: event.timestamp, isStreaming: true });
+              lastAssistantStreamingIdx = updated.length - 1;
+            }
             break;
           }
           case 'stream_end': {
-            const last = findLastAssistantStreaming();
-            if (last >= 0) updated[last] = { ...updated[last], isStreaming: false };
+            if (lastAssistantStreamingIdx >= 0) {
+              updated[lastAssistantStreamingIdx] = { ...updated[lastAssistantStreamingIdx], isStreaming: false };
+              lastAssistantStreamingIdx = -1;
+            }
             break;
           }
           case 'tool_call': {
             updated.push({ id: uid(), role: 'tool', content: '', toolName: d?.name ?? 'unknown', toolInput: d?.input, timestamp: event.timestamp });
+            pendingToolIndices.push(updated.length - 1);
             break;
           }
           case 'tool_result': {
-            const i = findLastToolCall();
-            if (i >= 0) {
+            const i = pendingToolIndices.pop();
+            if (i !== undefined && i >= 0) {
               updated[i] = { ...updated[i], toolOutput: d, content: typeof d === 'string' ? d : JSON.stringify(d, null, 2) };
             }
             break;
           }
           case 'complete': {
-            const last = findLastAssistantStreaming();
-            if (last >= 0) updated[last] = { ...updated[last], isStreaming: false };
+            if (lastAssistantStreamingIdx >= 0) {
+              updated[lastAssistantStreamingIdx] = { ...updated[lastAssistantStreamingIdx], isStreaming: false };
+              lastAssistantStreamingIdx = -1;
+            }
             setIsRunning(false);
             break;
           }

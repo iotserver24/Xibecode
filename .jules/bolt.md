@@ -73,3 +73,7 @@
 ## 2024-05-24 - [Remove Synchronous File Operations]
 **Learning:** Checking for file existence using `fs.existsSync` introduces blocking I/O on the Node.js event loop, creating micro-stutters and reducing application concurrency.
 **Action:** Always prefer asynchronous file access (e.g., `fs.promises.readFile` or `fs.promises.access`) enclosed in a `try...catch` block. This approach avoids blocking and eliminates Time-of-Check to Time-of-Use (TOCTOU) race conditions.
+
+## 2024-05-25 - O(N*M) Batch Processing Bottleneck
+**Learning:** When processing a batch of `M` events (e.g., `handleAgentEvents`), using an inner `O(N)` loop (like a reverse `for` loop to find the last target index in an array of size `N`) inside the batch loop creates an `O(N*M)` time complexity. This causes severe performance degradation as the event stream and message history grow.
+**Action:** Replace the inner search loop by pre-computing target indices outside the loop and dynamically updating them. For multiple potential targets (e.g., multiple pending `tool_call`s), use an array as a stack (`pendingToolIndices`) to track indices in `O(1)` time per event, achieving an overall `O(N+M)` time complexity.
