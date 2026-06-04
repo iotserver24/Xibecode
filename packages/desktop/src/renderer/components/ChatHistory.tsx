@@ -88,19 +88,13 @@ const ChatHistoryItem = memo(function ChatHistoryItem({
     <button
       onClick={() => onSelect(session.id)}
       className={cn(
-        "relative flex w-full items-center justify-between gap-2 rounded-lg pr-2 py-2.5 text-left transition-all duration-150 group border border-transparent select-none cursor-pointer",
+        "relative flex w-full items-center justify-between gap-2 rounded-md pr-2 py-2.5 text-left transition-all duration-150 group border border-transparent select-none cursor-pointer",
         isGeneral ? "pl-4" : "pl-10",
         isActive
           ? "text-xibe-text font-medium bg-xibe-surface-hover/75 border-xibe-border/40 shadow-sm"
           : "text-xibe-text-secondary hover:bg-xibe-surface-hover/30 hover:text-xibe-text"
       )}
     >
-      {isActive && (
-        <span className={cn(
-          "absolute top-2.5 bottom-2.5 w-[3px] rounded-r-md bg-xibe-brand-purple animate-fade-in",
-          isGeneral ? "left-0" : "left-3.5"
-        )} />
-      )}
       
       <span className="flex-1 truncate text-[13px] leading-tight font-sans">
         {session.title}
@@ -178,21 +172,21 @@ const ChatHistory = memo(function ChatHistory({ activeSessionId, onSelectSession
   return (
     <div className="flex h-full flex-col">
       {/* Top navigation actions */}
-      <div className="space-y-2.5 mb-5 shrink-0">
+      <div className="space-y-1 mb-5 shrink-0">
         <button
           onClick={onNewChat}
-          className="flex w-full items-center gap-2.5 rounded-lg border border-xibe-border/60 bg-xibe-surface-raised/40 hover:bg-xibe-surface-hover/80 hover:border-xibe-border-focus/50 px-3 py-2.5 text-[13px] font-medium text-xibe-text transition-all duration-200 cursor-pointer select-none group"
+          className="flex w-full items-center gap-2.5 rounded-md border border-xibe-border/60 bg-xibe-surface-raised/40 hover:bg-xibe-surface-hover/80 hover:border-xibe-border-focus/50 px-3 py-2 text-[13px] font-medium text-xibe-text transition-all duration-200 cursor-pointer select-none group"
         >
-          <Plus className="h-4 w-4 text-xibe-brand-purple group-hover:scale-110 transition-transform duration-200" />
+          <Plus className="h-4 w-4 text-xibe-text group-hover:scale-110 transition-transform duration-200" />
           <span className="font-sans">New Conversation</span>
         </button>
 
-        <div className="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-medium text-xibe-text bg-xibe-surface-hover/40 border border-xibe-border/20 select-none cursor-pointer">
-          <History className="h-4 w-4 text-xibe-brand-purple" />
+        <div className="flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium text-xibe-text bg-xibe-surface-hover/40 border border-transparent select-none cursor-pointer">
+          <History className="h-4 w-4 text-xibe-text" />
           <span className="font-sans">Conversation History</span>
         </div>
 
-        <div className="flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-medium text-xibe-text-secondary hover:bg-xibe-surface-hover/30 hover:text-xibe-text transition-colors select-none cursor-pointer">
+        <div className="flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium text-xibe-text-secondary hover:bg-xibe-surface-hover/30 hover:text-xibe-text transition-colors select-none cursor-pointer">
           <Clock className="h-4 w-4 text-xibe-text-dim" />
           <span className="font-sans">Scheduled Tasks</span>
         </div>
@@ -201,7 +195,7 @@ const ChatHistory = memo(function ChatHistory({ activeSessionId, onSelectSession
       <div className="h-[1px] bg-xibe-border/20 mb-6 shrink-0" />
 
       {/* Session list */}
-      <div className="flex-1 overflow-y-auto space-y-7 min-h-0 pr-1 select-none">
+      <div className="flex-1 overflow-y-auto space-y-4 min-h-0 pr-1 select-none">
         {grouped.folders.length === 0 && grouped.general.length === 0 && (
           <div className="flex flex-col items-center justify-center h-32 text-center">
             <MessageSquare className="h-6 w-6 text-xibe-text-dim/20 mb-2" />
@@ -218,13 +212,13 @@ const ChatHistory = memo(function ChatHistory({ activeSessionId, onSelectSession
             >
               <Folder className={cn(
                 "h-4 w-4 shrink-0 transition-colors",
-                collapsedFolders[folder.name] ? "text-xibe-text-dim/50" : "text-xibe-text-dim group-hover:text-xibe-brand-purple"
+                collapsedFolders[folder.name] ? "text-xibe-text-dim/50" : "text-xibe-text-dim group-hover:text-xibe-text"
               )} />
               <span className="flex-1 truncate font-sans">{folder.name}</span>
             </div>
             
             {!collapsedFolders[folder.name] && (
-              <div className="space-y-2.5 mt-2 ml-1">
+              <div className="space-y-0.5 mt-2 ml-1">
                 {folder.items.map((s) => (
                   <ChatHistoryItem
                     key={s.id}
@@ -246,7 +240,7 @@ const ChatHistory = memo(function ChatHistory({ activeSessionId, onSelectSession
             <div className="px-3 text-[10px] font-bold uppercase tracking-wider text-xibe-text-dim/40 select-none mb-1.5">
               Conversations
             </div>
-            <div className="space-y-2.5">
+            <div className="space-y-0.5">
               {grouped.general.map((s) => (
                 <ChatHistoryItem
                   key={s.id}
