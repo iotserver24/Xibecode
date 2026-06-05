@@ -14,8 +14,9 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
 
   if (isUser) {
     return (
-      <div className="flex justify-end animate-fade-in w-full group">
-        <div className="max-w-[90%] sm:max-w-[80%] rounded-2xl bg-xibe-surface-raised px-5 py-3 text-[15px] leading-relaxed text-xibe-text whitespace-pre-wrap">
+      <div className="flex w-full group animate-fade-in my-2">
+        <div className="w-6 h-6 rounded bg-xibe-surface-raised text-xibe-text-dim flex items-center justify-center text-xs font-bold shrink-0 mt-1 mr-4">U</div>
+        <div className="text-[15px] leading-relaxed text-xibe-text whitespace-pre-wrap flex-1 mt-1">
           {content}
         </div>
       </div>
@@ -23,8 +24,10 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
   }
 
   return (
-    <div className="animate-fade-in flex flex-col w-full group">
-      <div className="prose prose-invert max-w-none text-[15px] leading-relaxed text-xibe-text
+    <div className="animate-fade-in flex w-full group my-2">
+      <div className="w-6 h-6 rounded bg-xibe-brand-blue text-xibe-bg flex items-center justify-center text-xs font-bold shrink-0 mt-1 mr-4">X</div>
+      <div className="flex flex-col flex-1 mt-1">
+        <div className="prose prose-invert max-w-none text-[15px] leading-relaxed text-xibe-text
         prose-p:my-1.5 prose-headings:my-3 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5
         prose-pre:my-3 prose-pre:bg-transparent prose-pre:p-0
         prose-blockquote:my-4 prose-blockquote:border-l-2 prose-blockquote:border-xibe-border prose-blockquote:pl-4 prose-blockquote:text-xibe-text-dim
@@ -36,12 +39,12 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
           remarkPlugins={[remarkGfm]}
           components={{
             pre: ({ children }) => (
-              <pre className="overflow-x-auto rounded-xl bg-xibe-surface-raised border border-xibe-border-subtle p-4 text-[13px] font-mono leading-relaxed my-4">{children}</pre>
+              <pre className="overflow-x-auto rounded-none bg-transparent border-y border-xibe-border-subtle py-4 my-4 text-[13px] font-mono leading-relaxed">{children}</pre>
             ),
             code: ({ className, children }) => {
               const isInline = !className;
               return isInline ? (
-                <code className="rounded-md bg-xibe-surface-raised px-1.5 py-0.5 text-[13px] font-mono text-xibe-text-secondary">{children}</code>
+                <code className="rounded-md bg-transparent px-1.5 py-0.5 text-[13px] font-mono text-xibe-text-secondary">{children}</code>
               ) : (
                 <code className={`${className ?? ''} text-[13px] font-mono`}>{children}</code>
               );
@@ -52,6 +55,7 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
         </ReactMarkdown>
       </div>
       {isStreaming && <span className="inline-block h-4 w-2 animate-pulse rounded-sm bg-xibe-text-dim/50 ml-1 mt-1" />}
+      </div>
     </div>
   );
 });

@@ -180,7 +180,7 @@ export default function ChatPanel({
           )}
 
           {/* Floating Pill input */}
-          <div className="relative flex flex-col rounded-3xl bg-xibe-surface border border-xibe-border-subtle focus-within:border-xibe-border-focus focus-within:bg-xibe-surface transition-all duration-200">
+          <div className="relative flex flex-col rounded-xl bg-transparent border border-xibe-border-subtle focus-within:border-xibe-border-focus transition-all duration-200">
             <div className="flex items-center px-4 pt-2 pb-1 text-xs text-xibe-text-dim">
                 <span className="flex items-center gap-1.5">
                     {MODES.map((m) => (

@@ -16,7 +16,7 @@ const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutpu
   const outputStr = toolOutput ? (typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput, null, 2)) : '';
 
   return (
-    <div className="rounded-xl border border-xibe-border-subtle overflow-hidden animate-fade-in my-3 group">
+    <div className="rounded-lg bg-transparent border-l-2 border-xibe-border-subtle pl-2 ml-7 my-3 group animate-fade-in overflow-hidden">
       <button
         onClick={() => setOpen(!open)}
         className="flex w-full items-center gap-3 px-2.5 py-1 text-left hover:bg-xibe-surface-hover transition-colors"
@@ -51,7 +51,7 @@ const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutpu
                 <span className="text-[10px] font-bold uppercase tracking-widest text-xibe-text-dim">Input</span>
                 <div className="h-px flex-1 bg-xibe-border-subtle/50" />
               </div>
-              <pre className="overflow-x-auto rounded-lg bg-xibe-bg border border-xibe-border-subtle p-3 text-[12px] font-mono text-xibe-text leading-relaxed">{inputStr}</pre>
+              <pre className="overflow-x-auto rounded-lg bg-transparent border border-xibe-border-subtle p-3 text-[12px] font-mono text-xibe-text leading-relaxed">{inputStr}</pre>
             </div>
           )}
           {outputStr && (
@@ -60,7 +60,7 @@ const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutpu
                 <span className="text-[10px] font-bold uppercase tracking-widest text-xibe-text-dim">Output</span>
                 <div className="h-px flex-1 bg-xibe-border-subtle/50" />
               </div>
-              <pre className="overflow-x-auto rounded-lg bg-xibe-bg border border-xibe-border-subtle p-3 text-[12px] font-mono text-xibe-text-secondary leading-relaxed max-h-64">{outputStr.length > 5000 ? outputStr.slice(0, 5000) + '\n\n...[Output truncated]...' : outputStr}</pre>
+              <pre className="overflow-x-auto rounded-lg bg-transparent border border-xibe-border-subtle p-3 text-[12px] font-mono text-xibe-text-secondary leading-relaxed max-h-64">{outputStr.length > 5000 ? outputStr.slice(0, 5000) + '\n\n...[Output truncated]...' : outputStr}</pre>
             </div>
           )}
         </div>
