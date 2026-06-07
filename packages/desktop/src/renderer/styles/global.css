@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
 @theme {
-  --color-xibe-bg: #09090b;
-  --color-xibe-surface: #121214;
-  --color-xibe-surface-raised: #18181b;
-  --color-xibe-surface-hover: #27272a;
-  --color-xibe-border: #27272a;
-  --color-xibe-border-subtle: #18181b;
+  --color-xibe-bg: #111111;
+  --color-xibe-surface: #111111;
+  --color-xibe-surface-raised: #1a1a1a;
+  --color-xibe-surface-hover: #1f1f1f;
+  --color-xibe-border: #2a2a2a;
+  --color-xibe-border-subtle: #1f1f1f;
   --color-xibe-border-focus: #52525b;
   --color-xibe-muted: #71717a;
   --color-xibe-text: #fafafa;
