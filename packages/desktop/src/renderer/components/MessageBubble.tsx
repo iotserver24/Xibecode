@@ -14,8 +14,11 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
 
   if (isUser) {
     return (
-      <div className="flex justify-end animate-fade-in w-full group">
-        <div className="max-w-[90%] sm:max-w-[80%] rounded-2xl bg-xibe-surface-raised px-5 py-3 text-[15px] leading-relaxed text-xibe-text whitespace-pre-wrap">
+      <div className="flex gap-4 animate-fade-in w-full group py-4">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-xibe-surface-raised border border-xibe-border-subtle text-xs font-medium text-xibe-text-secondary">
+          U
+        </div>
+        <div className="text-[15px] leading-relaxed text-xibe-text whitespace-pre-wrap flex-1 min-w-0 mt-0.5">
           {content}
         </div>
       </div>
@@ -23,8 +26,12 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
   }
 
   return (
-    <div className="animate-fade-in flex flex-col w-full group">
-      <div className="prose prose-invert max-w-none text-[15px] leading-relaxed text-xibe-text
+    <div className="flex gap-4 animate-fade-in w-full group py-4">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-xibe-surface-raised border border-xibe-border-subtle text-xs font-medium text-xibe-text-secondary">
+        X
+      </div>
+      <div className="flex-1 min-w-0 flex flex-col">
+        <div className="prose prose-invert max-w-none text-[15px] leading-relaxed text-xibe-text
         prose-p:my-1.5 prose-headings:my-3 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5
         prose-pre:my-3 prose-pre:bg-transparent prose-pre:p-0
         prose-blockquote:my-4 prose-blockquote:border-l-2 prose-blockquote:border-xibe-border prose-blockquote:pl-4 prose-blockquote:text-xibe-text-dim
@@ -50,8 +57,9 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
         >
           {content}
         </ReactMarkdown>
+        {isStreaming && <span className="inline-block h-4 w-2 animate-pulse rounded-sm bg-xibe-text-dim/50 ml-1 mt-1" />}
       </div>
-      {isStreaming && <span className="inline-block h-4 w-2 animate-pulse rounded-sm bg-xibe-text-dim/50 ml-1 mt-1" />}
+      </div>
     </div>
   );
 });

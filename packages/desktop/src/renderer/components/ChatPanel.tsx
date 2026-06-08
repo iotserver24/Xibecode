@@ -180,17 +180,17 @@ export default function ChatPanel({
           )}
 
           {/* Floating Pill input */}
-          <div className="relative flex flex-col rounded-3xl bg-xibe-surface border border-xibe-border-subtle focus-within:border-xibe-border-focus focus-within:bg-xibe-surface transition-all duration-200">
-            <div className="flex items-center px-4 pt-2 pb-1 text-xs text-xibe-text-dim">
-                <span className="flex items-center gap-1.5">
+          <div className="relative flex flex-col bg-transparent border-t border-xibe-border-subtle pt-2 focus-within:border-xibe-border-focus transition-all duration-200">
+            <div className="flex items-center gap-2 mb-2 text-xs text-xibe-text-dim">
+                <span className="flex items-center gap-3">
                     {MODES.map((m) => (
                         <button
                           key={m.id}
                           onClick={() => onModeSwitch(m.id, `Switched to ${m.label}`)}
                           className={cn(
-                            "rounded-full px-2 py-0.5 font-medium transition-colors duration-200",
+                            "font-medium transition-colors duration-200",
                             modeState.current === m.id
-                              ? "bg-xibe-surface-hover text-xibe-text"
+                              ? "text-xibe-text"
                               : "text-xibe-text-dim hover:text-xibe-text"
                           )}
                         >
@@ -213,7 +213,7 @@ export default function ChatPanel({
               placeholder={isRunning ? 'Thinking...' : 'Ask anything or type / for commands'}
               disabled={isRunning}
               rows={1}
-              className="flex-1 resize-none bg-transparent pl-4 pr-12 pb-3.5 pt-1 text-[15px] leading-relaxed text-xibe-text placeholder-xibe-text-dim/50 focus:outline-none disabled:opacity-40"
+              className="flex-1 resize-none bg-transparent py-3 pr-12 text-[15px] leading-relaxed text-xibe-text placeholder-xibe-text-dim/50 focus:outline-none disabled:opacity-40"
               style={{ minHeight: '36px', maxHeight: '400px' }}
               onInput={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 400) + 'px'; }}
             />
