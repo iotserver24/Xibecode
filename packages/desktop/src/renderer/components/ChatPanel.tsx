@@ -114,7 +114,7 @@ export default function ChatPanel({
           <div className={`min-h-full ${CHAT_GUTTER}`}>
             <div className={`${CHAT_WIDTH} animate-fade-in flex min-h-full flex-col items-center justify-center text-center`}>
               <div className="mb-8">
-                <h1 className="text-3xl font-medium text-xibe-text tracking-tight">How can I help you today?</h1>
+                <h1 className="text-2xl font-medium text-xibe-text tracking-tight">How can I help you today?</h1>
               </div>
 
               {needsSetup ? (
@@ -132,7 +132,7 @@ export default function ChatPanel({
                       <button
                         key={q.text}
                         onClick={() => onSendMessage(q.text)}
-                        className="flex items-center gap-2 rounded-full bg-xibe-surface px-3.5 py-1.5 text-[13px] text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors border border-xibe-border-subtle"
+                        className="flex items-center gap-2 rounded-md bg-transparent px-3.5 py-1.5 text-[13px] text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors border border-xibe-border-subtle"
                       >
                         <span className="text-xibe-text-dim">{q.icon}</span>
                         {q.text}
@@ -180,7 +180,7 @@ export default function ChatPanel({
           )}
 
           {/* Floating Pill input */}
-          <div className="relative flex flex-col rounded-3xl bg-xibe-surface border border-xibe-border-subtle focus-within:border-xibe-border-focus focus-within:bg-xibe-surface transition-all duration-200">
+          <div className="relative flex flex-col border-t border-xibe-border/40 bg-transparent transition-all duration-200">
             <div className="flex items-center px-4 pt-2 pb-1 text-xs text-xibe-text-dim">
                 <span className="flex items-center gap-1.5">
                     {MODES.map((m) => (
@@ -188,9 +188,9 @@ export default function ChatPanel({
                           key={m.id}
                           onClick={() => onModeSwitch(m.id, `Switched to ${m.label}`)}
                           className={cn(
-                            "rounded-full px-2 py-0.5 font-medium transition-colors duration-200",
+                            "text-sm px-2 py-1 font-medium transition-colors duration-200 border-b-2 border-transparent",
                             modeState.current === m.id
-                              ? "bg-xibe-surface-hover text-xibe-text"
+                              ? "bg-xibe-surface-hover text-xibe-text border-xibe-brand-blue"
                               : "text-xibe-text-dim hover:text-xibe-text"
                           )}
                         >
@@ -220,7 +220,7 @@ export default function ChatPanel({
               <button
                 onClick={submit}
                 disabled={isRunning || !input.trim()}
-                className="absolute right-3 bottom-2 h-8 w-8 rounded-full flex items-center justify-center text-xibe-bg bg-xibe-text hover:opacity-90 disabled:opacity-30 disabled:bg-xibe-text-dim disabled:text-xibe-surface disabled:cursor-not-allowed transition-all duration-200"
+                className="absolute right-3 bottom-2 h-8 w-8 flex items-center justify-center text-xibe-text-dim hover:text-xibe-text disabled:opacity-30 disabled:text-xibe-text-dim disabled:cursor-not-allowed transition-all duration-200"
               >
                 <Send className="h-3.5 w-3.5 ml-0.5" />
               </button>
