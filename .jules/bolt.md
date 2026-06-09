@@ -73,3 +73,6 @@
 ## 2024-05-24 - [Remove Synchronous File Operations]
 **Learning:** Checking for file existence using `fs.existsSync` introduces blocking I/O on the Node.js event loop, creating micro-stutters and reducing application concurrency.
 **Action:** Always prefer asynchronous file access (e.g., `fs.promises.readFile` or `fs.promises.access`) enclosed in a `try...catch` block. This approach avoids blocking and eliminates Time-of-Check to Time-of-Use (TOCTOU) race conditions.
+## 2024-06-11 - Cache target indices for high-frequency loops
+**Learning:** In high-frequency, continuous loops that handle unbounded streams of events like `handleAgentEvents`, searching arrays for specific statuses with `findIndex` or looping through arrays manually over and over causes severe O(N*M) time complexity and massive garbage collection spikes. The latency adds up linearly on every state change and degrades render performance significantly.
+**Action:** Always pre-calculate index lookups using variables and bounded loops (e.g. `let activeStreamingIdx = -1`) dynamically to eliminate nested O(N) calls, especially when handling arbitrary or batched UI events. Use data structures like arrays or stacks for variables that can occur multiple times in a stream, such as tool calls or events.
