@@ -78,20 +78,20 @@ export default function App() {
     setMessages((prev) => {
       const updated = [...prev];
 
-      // Optimization: use reverse for loop to find items near the end instead of O(N) findIndex/reverse
-      const findLastAssistantStreaming = () => {
-        for (let i = updated.length - 1; i >= 0; i--) {
-          if (updated[i].role === 'assistant' && updated[i].isStreaming) return i;
-        }
-        return -1;
-      };
+      // ⚡ Bolt: Cache target indices before the batch loop to prevent O(N*M) scanning
+      // Pre-scan to find the active assistant streaming index and all pending tool calls
+      let activeAssistantIdx = -1;
+      const pendingToolIndices: number[] = [];
 
-      const findLastToolCall = () => {
-        for (let i = updated.length - 1; i >= 0; i--) {
-          if (updated[i].role === 'tool' && updated[i].toolName && !updated[i].toolOutput) return i;
+      for (let i = updated.length - 1; i >= 0; i--) {
+        if (activeAssistantIdx === -1 && updated[i].role === 'assistant' && updated[i].isStreaming) {
+          activeAssistantIdx = i;
         }
-        return -1;
-      };
+        // Collect all unfulfilled tool calls (pushing to front means last tool call is at end of array)
+        if (updated[i].role === 'tool' && updated[i].toolName && !updated[i].toolOutput) {
+          pendingToolIndices.unshift(i);
+        }
+      }
 
       for (const event of batch) {
         const d = event.data as any;
@@ -99,38 +99,50 @@ export default function App() {
           case 'stream_text': {
             const text = d?.text ?? '';
             if (!text) break;
-            const last = findLastAssistantStreaming();
-            if (last >= 0) updated[last] = { ...updated[last], content: updated[last].content + text };
-            else updated.push({ id: uid(), role: 'assistant', content: text, timestamp: event.timestamp, isStreaming: true });
+            if (activeAssistantIdx >= 0) {
+              updated[activeAssistantIdx] = { ...updated[activeAssistantIdx], content: updated[activeAssistantIdx].content + text };
+            } else {
+              activeAssistantIdx = updated.length;
+              updated.push({ id: uid(), role: 'assistant', content: text, timestamp: event.timestamp, isStreaming: true });
+            }
             break;
           }
           case 'response': {
             const text = d?.text ?? '';
             if (!text) break;
-            const last = findLastAssistantStreaming();
-            if (last >= 0) updated[last] = { ...updated[last], content: updated[last].content + text };
-            else updated.push({ id: uid(), role: 'assistant', content: text, timestamp: event.timestamp, isStreaming: true });
+            if (activeAssistantIdx >= 0) {
+              updated[activeAssistantIdx] = { ...updated[activeAssistantIdx], content: updated[activeAssistantIdx].content + text };
+            } else {
+              activeAssistantIdx = updated.length;
+              updated.push({ id: uid(), role: 'assistant', content: text, timestamp: event.timestamp, isStreaming: true });
+            }
             break;
           }
           case 'stream_end': {
-            const last = findLastAssistantStreaming();
-            if (last >= 0) updated[last] = { ...updated[last], isStreaming: false };
+            if (activeAssistantIdx >= 0) {
+              updated[activeAssistantIdx] = { ...updated[activeAssistantIdx], isStreaming: false };
+              activeAssistantIdx = -1;
+            }
             break;
           }
           case 'tool_call': {
+            pendingToolIndices.push(updated.length);
             updated.push({ id: uid(), role: 'tool', content: '', toolName: d?.name ?? 'unknown', toolInput: d?.input, timestamp: event.timestamp });
             break;
           }
           case 'tool_result': {
-            const i = findLastToolCall();
+            // Pop the most recent pending tool call (LIFO)
+            const i = pendingToolIndices.length > 0 ? pendingToolIndices.pop()! : -1;
             if (i >= 0) {
               updated[i] = { ...updated[i], toolOutput: d, content: typeof d === 'string' ? d : JSON.stringify(d, null, 2) };
             }
             break;
           }
           case 'complete': {
-            const last = findLastAssistantStreaming();
-            if (last >= 0) updated[last] = { ...updated[last], isStreaming: false };
+            if (activeAssistantIdx >= 0) {
+              updated[activeAssistantIdx] = { ...updated[activeAssistantIdx], isStreaming: false };
+              activeAssistantIdx = -1;
+            }
             setIsRunning(false);
             break;
           }
