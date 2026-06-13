@@ -73,3 +73,6 @@
 ## 2024-05-24 - [Remove Synchronous File Operations]
 **Learning:** Checking for file existence using `fs.existsSync` introduces blocking I/O on the Node.js event loop, creating micro-stutters and reducing application concurrency.
 **Action:** Always prefer asynchronous file access (e.g., `fs.promises.readFile` or `fs.promises.access`) enclosed in a `try...catch` block. This approach avoids blocking and eliminates Time-of-Check to Time-of-Use (TOCTOU) race conditions.
+## 2025-06-13 - Optimize handleAgentEvents complexity
+**Learning:** In React event handlers that process batched items (like `handleAgentEvents` processing `HostedAgentEvent[]`), doing repeated array reverse-searches inside the batch loop causes O(N*M) performance drops (N=message history length, M=batch size).
+**Action:** Always pre-calculate and cache target indices before processing a batch loop and update them dynamically within the loop to achieve O(N+M) performance. For events that occur multiple times (like tool calls), use a stack array instead of a scalar to prevent dropping events.
