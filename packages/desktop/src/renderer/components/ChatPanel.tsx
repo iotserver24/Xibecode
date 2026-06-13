@@ -95,11 +95,15 @@ export default function ChatPanel({
       msg.role === 'tool' && msg.toolName ? (
         <ToolCallCard key={msg.id} toolName={msg.toolName} toolInput={msg.toolInput} toolOutput={msg.toolOutput} timestamp={msg.timestamp} />
       ) : msg.role === 'info' ? (
-        <div key={msg.id} className="flex justify-center py-2">
-          <span className="text-[11px] font-medium text-xibe-text-dim bg-xibe-surface px-3 py-1 rounded-full border border-xibe-border-subtle">{msg.content}</span>
+        <div key={msg.id} className="flex gap-4 py-1.5 items-center">
+          <div className="h-7 w-7 shrink-0" />
+          <span className="text-[12px] font-medium text-xibe-text-dim">{msg.content}</span>
         </div>
       ) : msg.role === 'error' ? (
-        <div key={msg.id} className="text-sm text-xibe-error bg-xibe-error/10 border border-xibe-error/20 rounded-xl px-4 py-3">{msg.content}</div>
+        <div key={msg.id} className="flex gap-4 py-1.5">
+          <div className="h-7 w-7 shrink-0" />
+          <div className="flex-1 min-w-0 text-sm text-xibe-error bg-xibe-error/10 border border-xibe-error/20 rounded px-4 py-3">{msg.content}</div>
+        </div>
       ) : (
         <MessageBubble key={msg.id} role={msg.role as 'user' | 'assistant'} content={msg.content} isStreaming={msg.isStreaming} timestamp={msg.timestamp} />
       ),
@@ -148,14 +152,17 @@ export default function ChatPanel({
             <div className={`${CHAT_WIDTH} space-y-6 py-8`}>
               {renderedMessages}
               {isRunning && (
-                <div className="flex items-center gap-2 text-xs text-xibe-text-dim animate-fade-in pl-2">
-                  <div className="flex gap-1">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-bounce" style={{ animationDelay: '300ms' }} />
+                <div className="flex gap-4 py-1.5 items-center">
+                  <div className="h-7 w-7 shrink-0" />
+                  <div className="flex items-center gap-2 text-xs text-xibe-text-dim animate-fade-in">
+                    <div className="flex gap-1">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                    <SpinnerVerbDisplay isRunning={isRunning} className="ml-1" />
+                    <ChatPanelTimer isRunning={isRunning} />
                   </div>
-                  <SpinnerVerbDisplay isRunning={isRunning} className="ml-1" />
-                  <ChatPanelTimer isRunning={isRunning} />
                 </div>
               )}
               <div ref={bottomRef} className="h-2" />
@@ -179,9 +186,9 @@ export default function ChatPanel({
             </div>
           )}
 
-          {/* Floating Pill input */}
-          <div className="relative flex flex-col rounded-3xl bg-xibe-surface border border-xibe-border-subtle focus-within:border-xibe-border-focus focus-within:bg-xibe-surface transition-all duration-200">
-            <div className="flex items-center px-4 pt-2 pb-1 text-xs text-xibe-text-dim">
+          {/* Flat input */}
+          <div className="relative flex flex-col border-t border-xibe-border-subtle bg-xibe-bg transition-all duration-200">
+            <div className="flex items-center px-4 pt-3 pb-1 text-xs text-xibe-text-dim">
                 <span className="flex items-center gap-1.5">
                     {MODES.map((m) => (
                         <button
@@ -220,7 +227,7 @@ export default function ChatPanel({
               <button
                 onClick={submit}
                 disabled={isRunning || !input.trim()}
-                className="absolute right-3 bottom-2 h-8 w-8 rounded-full flex items-center justify-center text-xibe-bg bg-xibe-text hover:opacity-90 disabled:opacity-30 disabled:bg-xibe-text-dim disabled:text-xibe-surface disabled:cursor-not-allowed transition-all duration-200"
+                className="absolute right-3 bottom-2 h-8 w-8 rounded flex items-center justify-center text-xibe-text bg-xibe-surface hover:bg-xibe-surface-hover disabled:opacity-30 disabled:bg-transparent disabled:text-xibe-text-dim disabled:cursor-not-allowed transition-all duration-200"
               >
                 <Send className="h-3.5 w-3.5 ml-0.5" />
               </button>
