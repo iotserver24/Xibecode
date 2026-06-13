@@ -16,11 +16,13 @@ const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutpu
   const outputStr = toolOutput ? (typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput, null, 2)) : '';
 
   return (
-    <div className="rounded-xl border border-xibe-border-subtle overflow-hidden animate-fade-in my-3 group">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-3 px-2.5 py-1 text-left hover:bg-xibe-surface-hover transition-colors"
-      >
+    <div className="flex gap-4 animate-fade-in my-1 w-full group">
+      <div className="h-7 w-7 shrink-0" />
+      <div className="flex-1 min-w-0 border-l-2 border-xibe-border-subtle/40 pl-4 py-0.5">
+        <button
+          onClick={() => setOpen(!open)}
+          className="flex w-full items-center gap-3 py-1 text-left hover:bg-xibe-surface-hover/50 rounded-md transition-colors"
+        >
         <ChevronRight className={cn("h-4 w-4 shrink-0 transition-transform text-xibe-text-dim", open && "rotate-90")} />
 
         <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -44,7 +46,7 @@ const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutpu
       </button>
 
       {open && (
-        <div className="border-t border-xibe-border-subtle px-4 py-3 space-y-4 animate-fade-in bg-transparent">
+        <div className="mt-2 space-y-4 animate-fade-in">
           {inputStr && (
             <div>
               <div className="flex items-center gap-2 mb-2">
@@ -65,6 +67,7 @@ const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutpu
           )}
         </div>
       )}
+      </div>
     </div>
   );
 });

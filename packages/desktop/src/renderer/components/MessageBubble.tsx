@@ -14,8 +14,9 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
 
   if (isUser) {
     return (
-      <div className="flex justify-end animate-fade-in w-full group">
-        <div className="max-w-[90%] sm:max-w-[80%] rounded-2xl bg-xibe-surface-raised px-5 py-3 text-[15px] leading-relaxed text-xibe-text whitespace-pre-wrap">
+      <div className="flex gap-4 animate-fade-in w-full group py-1.5">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-xibe-surface-raised border border-xibe-border-subtle font-mono text-[11px] font-bold text-xibe-text-dim">U</div>
+        <div className="flex-1 min-w-0 pt-0.5 text-[15px] leading-relaxed text-xibe-text whitespace-pre-wrap">
           {content}
         </div>
       </div>
@@ -23,7 +24,9 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
   }
 
   return (
-    <div className="animate-fade-in flex flex-col w-full group">
+    <div className="flex gap-4 animate-fade-in w-full group py-1.5">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-transparent border border-xibe-border-subtle font-mono text-[11px] font-bold text-xibe-text">X</div>
+      <div className="flex-1 min-w-0 pt-0.5">
       <div className="prose prose-invert max-w-none text-[15px] leading-relaxed text-xibe-text
         prose-p:my-1.5 prose-headings:my-3 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5
         prose-pre:my-3 prose-pre:bg-transparent prose-pre:p-0
@@ -52,6 +55,7 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
         </ReactMarkdown>
       </div>
       {isStreaming && <span className="inline-block h-4 w-2 animate-pulse rounded-sm bg-xibe-text-dim/50 ml-1 mt-1" />}
+      </div>
     </div>
   );
 });
