@@ -73,3 +73,7 @@
 ## 2024-05-24 - [Remove Synchronous File Operations]
 **Learning:** Checking for file existence using `fs.existsSync` introduces blocking I/O on the Node.js event loop, creating micro-stutters and reducing application concurrency.
 **Action:** Always prefer asynchronous file access (e.g., `fs.promises.readFile` or `fs.promises.access`) enclosed in a `try...catch` block. This approach avoids blocking and eliminates Time-of-Check to Time-of-Use (TOCTOU) race conditions.
+
+## 2024-05-18 - Optimize Batch Processing of Dependent Events
+**Learning:** In the `handleAgentEvents` function, multiple events inside a single batch could target the same item (e.g., `tool_call` then `tool_result`). Processing batches using an O(N) backward search for the "last matching item" inside the event loop results in an overall O(N*M) time complexity. Using scalar caching (e.g., `lastToolIndex = 5`) fails when a single batch contains multiple independent tool calls, leading to dropped state updates or out-of-order execution because the scalar cache gets overwritten before the previous tool is resolved.
+**Action:** When caching event targets that can occur multiple times per batch (like `tool_result` events targeting multiple preceding `tool_call`s), use an array or stack (e.g., `pendingToolIndices.push/pop`) instead of a simple scalar cache. This drops time complexity to O(N+M) while safely preserving the resolution order and handling all multi-event batch edge cases.
