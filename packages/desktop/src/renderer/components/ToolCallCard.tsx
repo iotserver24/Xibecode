@@ -16,10 +16,10 @@ const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutpu
   const outputStr = toolOutput ? (typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput, null, 2)) : '';
 
   return (
-    <div className="rounded-xl border border-xibe-border-subtle overflow-hidden animate-fade-in my-3 group">
+    <div className="animate-fade-in my-1 group pl-11">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-3 px-2.5 py-1 text-left hover:bg-xibe-surface-hover transition-colors"
+        className="flex w-full items-center gap-3 py-1 text-left hover:bg-xibe-surface-hover/50 rounded transition-colors"
       >
         <ChevronRight className={cn("h-4 w-4 shrink-0 transition-transform text-xibe-text-dim", open && "rotate-90")} />
 
@@ -28,7 +28,7 @@ const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutpu
           <span className="font-mono text-[13px] font-medium text-xibe-brand-blue truncate">{toolName}</span>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0 pr-2">
           {done ? (
             <div className="flex items-center gap-1 text-xibe-brand-green/80 bg-xibe-brand-green/10 px-2 py-0.5 rounded border border-xibe-brand-green/20">
               <CheckCircle2 className="h-3 w-3" />
@@ -44,14 +44,14 @@ const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutpu
       </button>
 
       {open && (
-        <div className="border-t border-xibe-border-subtle px-4 py-3 space-y-4 animate-fade-in bg-transparent">
+        <div className="border-l-2 border-xibe-border-subtle pl-4 ml-2 my-2 py-1 space-y-4 animate-fade-in bg-transparent">
           {inputStr && (
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-xibe-text-dim">Input</span>
                 <div className="h-px flex-1 bg-xibe-border-subtle/50" />
               </div>
-              <pre className="overflow-x-auto rounded-lg bg-xibe-bg border border-xibe-border-subtle p-3 text-[12px] font-mono text-xibe-text leading-relaxed">{inputStr}</pre>
+              <pre className="overflow-x-auto rounded bg-transparent border border-xibe-border-subtle p-3 text-[12px] font-mono text-xibe-text leading-relaxed">{inputStr}</pre>
             </div>
           )}
           {outputStr && (
@@ -60,7 +60,7 @@ const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutpu
                 <span className="text-[10px] font-bold uppercase tracking-widest text-xibe-text-dim">Output</span>
                 <div className="h-px flex-1 bg-xibe-border-subtle/50" />
               </div>
-              <pre className="overflow-x-auto rounded-lg bg-xibe-bg border border-xibe-border-subtle p-3 text-[12px] font-mono text-xibe-text-secondary leading-relaxed max-h-64">{outputStr.length > 5000 ? outputStr.slice(0, 5000) + '\n\n...[Output truncated]...' : outputStr}</pre>
+              <pre className="overflow-x-auto rounded bg-transparent border border-xibe-border-subtle p-3 text-[12px] font-mono text-xibe-text-secondary leading-relaxed max-h-64">{outputStr.length > 5000 ? outputStr.slice(0, 5000) + '\n\n...[Output truncated]...' : outputStr}</pre>
             </div>
           )}
         </div>
