@@ -372,7 +372,7 @@ export default function App() {
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
         {/* Left panel: Chat history + settings shortcut */}
         <aside
-          className="shrink-0 bg-[#0c0c0f] flex flex-col overflow-hidden transition-[width] duration-200 ease-in-out border-r border-xibe-border/40"
+          className="shrink-0 bg-xibe-bg flex flex-col overflow-hidden transition-[width] duration-200 ease-in-out border-r border-xibe-border-subtle"
           style={{ width: leftPanelOpen ? 240 : 0 }}
         >
             <div className="flex-1 min-h-0 flex flex-col p-3.5 pb-2">
@@ -383,10 +383,10 @@ export default function App() {
               />
             </div>
             {/* Settings shortcut at bottom */}
-            <div className="shrink-0 p-3 border-t border-xibe-border/30 bg-[#0c0c0f]/80 backdrop-blur-sm">
+            <div className="shrink-0 p-3 border-t border-xibe-border-subtle bg-xibe-bg">
               <button
                 onClick={() => setSettingsOpen(true)}
-                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium text-xibe-text-secondary hover:bg-xibe-surface-hover/60 hover:text-xibe-text transition-all duration-200 group border border-transparent hover:border-xibe-border/30"
+                className="flex w-full items-center gap-2.5 rounded px-3 py-2 text-[13px] font-medium text-xibe-text-secondary hover:bg-xibe-surface-hover/50 hover:text-xibe-text transition-all duration-200 group border border-transparent"
               >
                 <Settings className="h-4 w-4 text-xibe-text-dim group-hover:text-xibe-brand-purple group-hover:rotate-45 transition-transform duration-300" />
                 <span>Settings</span>
