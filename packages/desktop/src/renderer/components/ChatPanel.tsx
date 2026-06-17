@@ -180,7 +180,7 @@ export default function ChatPanel({
           )}
 
           {/* Floating Pill input */}
-          <div className="relative flex flex-col rounded-3xl bg-xibe-surface border border-xibe-border-subtle focus-within:border-xibe-border-focus focus-within:bg-xibe-surface transition-all duration-200">
+          <div className="relative flex flex-col bg-xibe-surface-raised rounded-xl border border-xibe-border-subtle focus-within:border-xibe-border-focus transition-colors duration-200 shadow-sm">
             <div className="flex items-center px-4 pt-2 pb-1 text-xs text-xibe-text-dim">
                 <span className="flex items-center gap-1.5">
                     {MODES.map((m) => (
@@ -188,10 +188,10 @@ export default function ChatPanel({
                           key={m.id}
                           onClick={() => onModeSwitch(m.id, `Switched to ${m.label}`)}
                           className={cn(
-                            "rounded-full px-2 py-0.5 font-medium transition-colors duration-200",
+                            "rounded px-1.5 py-0.5 font-medium transition-colors duration-200",
                             modeState.current === m.id
                               ? "bg-xibe-surface-hover text-xibe-text"
-                              : "text-xibe-text-dim hover:text-xibe-text"
+                              : "text-xibe-text-dim hover:text-xibe-text hover:bg-xibe-surface-hover/50"
                           )}
                         >
                           {m.label}
@@ -220,7 +220,7 @@ export default function ChatPanel({
               <button
                 onClick={submit}
                 disabled={isRunning || !input.trim()}
-                className="absolute right-3 bottom-2 h-8 w-8 rounded-full flex items-center justify-center text-xibe-bg bg-xibe-text hover:opacity-90 disabled:opacity-30 disabled:bg-xibe-text-dim disabled:text-xibe-surface disabled:cursor-not-allowed transition-all duration-200"
+                className="absolute right-3 bottom-2.5 h-7 w-7 rounded flex items-center justify-center text-xibe-text-dim hover:bg-xibe-surface-hover hover:text-xibe-text disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-xibe-text-dim transition-colors"
               >
                 <Send className="h-3.5 w-3.5 ml-0.5" />
               </button>
