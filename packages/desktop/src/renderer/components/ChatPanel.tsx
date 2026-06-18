@@ -179,18 +179,18 @@ export default function ChatPanel({
             </div>
           )}
 
-          {/* Floating Pill input */}
-          <div className="relative flex flex-col rounded-3xl bg-xibe-surface border border-xibe-border-subtle focus-within:border-xibe-border-focus focus-within:bg-xibe-surface transition-all duration-200">
-            <div className="flex items-center px-4 pt-2 pb-1 text-xs text-xibe-text-dim">
+          {/* Borderless input area */}
+          <div className="relative flex flex-col bg-transparent border-t border-xibe-border-subtle/50 transition-all duration-200">
+            <div className="flex items-center px-2 pt-2 pb-1 text-xs text-xibe-text-dim">
                 <span className="flex items-center gap-1.5">
                     {MODES.map((m) => (
                         <button
                           key={m.id}
                           onClick={() => onModeSwitch(m.id, `Switched to ${m.label}`)}
                           className={cn(
-                            "rounded-full px-2 py-0.5 font-medium transition-colors duration-200",
+                            "rounded-sm px-2 py-0.5 font-medium transition-colors duration-200",
                             modeState.current === m.id
-                              ? "bg-xibe-surface-hover text-xibe-text"
+                              ? "bg-xibe-surface-hover/80 text-xibe-text"
                               : "text-xibe-text-dim hover:text-xibe-text"
                           )}
                         >
@@ -213,22 +213,22 @@ export default function ChatPanel({
               placeholder={isRunning ? 'Thinking...' : 'Ask anything or type / for commands'}
               disabled={isRunning}
               rows={1}
-              className="flex-1 resize-none bg-transparent pl-4 pr-12 pb-3.5 pt-1 text-[15px] leading-relaxed text-xibe-text placeholder-xibe-text-dim/50 focus:outline-none disabled:opacity-40"
+              className="flex-1 resize-none bg-transparent pl-2 pr-12 pb-3.5 pt-1 text-[15px] leading-relaxed text-xibe-text placeholder-xibe-text-dim/50 focus:outline-none disabled:opacity-40"
               style={{ minHeight: '36px', maxHeight: '400px' }}
               onInput={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 400) + 'px'; }}
             />
               <button
                 onClick={submit}
                 disabled={isRunning || !input.trim()}
-                className="absolute right-3 bottom-2 h-8 w-8 rounded-full flex items-center justify-center text-xibe-bg bg-xibe-text hover:opacity-90 disabled:opacity-30 disabled:bg-xibe-text-dim disabled:text-xibe-surface disabled:cursor-not-allowed transition-all duration-200"
+                className="absolute right-1 bottom-2 h-7 w-7 rounded-sm flex items-center justify-center text-xibe-bg bg-xibe-text hover:opacity-90 disabled:opacity-30 disabled:bg-xibe-text-dim disabled:text-xibe-surface disabled:cursor-not-allowed transition-all duration-200"
               >
-                <Send className="h-3.5 w-3.5 ml-0.5" />
+                <Send className="h-3 w-3 ml-0.5" />
               </button>
             </div>
           </div>
-          <div className="mt-2 text-center">
-            <p className="text-[11px] font-medium text-xibe-text-dim/40">
-              <span className="hidden sm:inline">Use <kbd className="font-sans px-1 rounded bg-xibe-surface-raised/50">Enter</kbd> to send, <kbd className="font-sans px-1 rounded bg-xibe-surface-raised/50">Shift + Enter</kbd> for new line</span>
+          <div className="mt-1 text-center">
+            <p className="text-[10px] font-medium text-xibe-text-dim/40">
+              <span className="hidden sm:inline">Use <kbd className="font-sans px-1 rounded-sm bg-xibe-surface-raised/30">Enter</kbd> to send, <kbd className="font-sans px-1 rounded-sm bg-xibe-surface-raised/30">Shift + Enter</kbd> for new line</span>
             </p>
           </div>
         </div>
