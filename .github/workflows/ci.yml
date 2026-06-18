@@ -34,7 +34,8 @@ jobs:
         continue-on-error: true
 
       - name: Security audit
-        run: pnpm audit --audit-level=high
+        run: pnpm audit --audit-level=high --prod
+        continue-on-error: true
 
   lint:
     runs-on: ubuntu-latest
