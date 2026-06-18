@@ -134,7 +134,7 @@ export default function App() {
             break;
           }
           case 'tool_result': {
-            const i = pendingToolIndices.shift(); // FIFO order for tool results
+            const i = pendingToolIndices.pop(); // LIFO order for tool results
             if (i !== undefined && i >= 0) {
               updated[i] = { ...updated[i], toolOutput: d, content: typeof d === 'string' ? d : JSON.stringify(d, null, 2) };
             }
