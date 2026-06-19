@@ -14,8 +14,9 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
 
   if (isUser) {
     return (
-      <div className="flex justify-end animate-fade-in w-full group">
-        <div className="max-w-[90%] sm:max-w-[80%] rounded-2xl bg-xibe-surface-raised px-5 py-3 text-[15px] leading-relaxed text-xibe-text whitespace-pre-wrap">
+      <div className="flex animate-fade-in w-full group gap-4">
+        <div className="h-6 w-6 rounded flex items-center justify-center bg-xibe-surface-hover text-xibe-text text-[11px] font-bold shrink-0 mt-1">U</div>
+        <div className="flex-1 text-[15px] leading-relaxed text-xibe-text whitespace-pre-wrap mt-1">
           {content}
         </div>
       </div>
@@ -23,8 +24,9 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
   }
 
   return (
-    <div className="animate-fade-in flex flex-col w-full group">
-      <div className="prose prose-invert max-w-none text-[15px] leading-relaxed text-xibe-text
+    <div className="animate-fade-in flex w-full group gap-4">
+      <div className="h-6 w-6 rounded flex items-center justify-center bg-xibe-text text-xibe-bg text-[11px] font-bold shrink-0 mt-1">X</div>
+      <div className="flex-1 mt-1 prose prose-invert max-w-none text-[15px] leading-relaxed text-xibe-text
         prose-p:my-1.5 prose-headings:my-3 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5
         prose-pre:my-3 prose-pre:bg-transparent prose-pre:p-0
         prose-blockquote:my-4 prose-blockquote:border-l-2 prose-blockquote:border-xibe-border prose-blockquote:pl-4 prose-blockquote:text-xibe-text-dim
@@ -36,7 +38,7 @@ const MessageBubble = memo(function MessageBubble({ role, content, isStreaming }
           remarkPlugins={[remarkGfm]}
           components={{
             pre: ({ children }) => (
-              <pre className="overflow-x-auto rounded-xl bg-xibe-surface-raised border border-xibe-border-subtle p-4 text-[13px] font-mono leading-relaxed my-4">{children}</pre>
+              <pre className="overflow-x-auto rounded-xl bg-transparent p-0 py-2 text-[13px] font-mono leading-relaxed my-4">{children}</pre>
             ),
             code: ({ className, children }) => {
               const isInline = !className;
