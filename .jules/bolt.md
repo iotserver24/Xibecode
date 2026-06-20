@@ -73,3 +73,7 @@
 ## 2024-05-24 - [Remove Synchronous File Operations]
 **Learning:** Checking for file existence using `fs.existsSync` introduces blocking I/O on the Node.js event loop, creating micro-stutters and reducing application concurrency.
 **Action:** Always prefer asynchronous file access (e.g., `fs.promises.readFile` or `fs.promises.access`) enclosed in a `try...catch` block. This approach avoids blocking and eliminates Time-of-Check to Time-of-Use (TOCTOU) race conditions.
+
+## 2024-05-18 - [Agent Token Estimation Memoization]
+**Learning:** `estimateConversationTokens` in `EnhancedAgent` recalculates the tokens for the entire message history on every call (up to 3x per turn), performing expensive string operations and `JSON.stringify` on all blocks including large `tool_result`s.
+**Action:** Use a `WeakMap` to memoize the token count of `MessageParam` objects since they are immutable, reducing O(N) string manipulation to O(1) map lookups.

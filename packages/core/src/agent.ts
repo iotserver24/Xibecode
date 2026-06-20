@@ -358,6 +358,7 @@ function retryDelayMs(attempt: number, baseMs = 2000, maxMs = 30000): number {
 export class EnhancedAgent extends EventEmitter {
   private client: Anthropic;
   private messages: MessageParam[] = [];
+  private messageTokenCache = new WeakMap<MessageParam, number>();
   private loopDetector = new LoopDetector();
   private thinkFilter = new ThinkTagFilter();
   private config: Required<Omit<AgentConfig, 'sessionMemory' | 'contextHintFiles' | 'planningModel' | 'executionModel' | 'mindsetAdaptive' | 'strictTextOnlyCompletion' | 'defaultSkillsPrompt' | 'requestFormat' | 'completionEvidenceMode' | 'postEditVerification' | 'memoryRecallMinScore' | 'remoteToolWorkspaceRoot' | 'remoteToolSandboxId'>> & { customProviderFormat: 'openai' | 'anthropic'; requestFormat: 'auto' | 'openai' | 'anthropic'; sessionMemory?: SessionMemory | null; contextHintFiles: string[]; planningModel?: string; executionModel?: string; mindsetAdaptive?: boolean; strictTextOnlyCompletion: boolean; completionEvidenceMode: 'off' | 'balanced' | 'strict'; postEditVerification: 'off' | 'balanced' | 'strict'; memoryRecallMinScore: number };
@@ -465,6 +466,9 @@ export class EnhancedAgent extends EventEmitter {
   }
 
   private estimateMessageTokens(message: MessageParam): number {
+    const cached = this.messageTokenCache.get(message);
+    if (cached !== undefined) return cached;
+
     const text = (() => {
       if (typeof message.content === 'string') return message.content;
       if (!Array.isArray(message.content)) return '';
@@ -483,7 +487,9 @@ export class EnhancedAgent extends EventEmitter {
         .join('\n');
     })();
     // Rough estimate for modern tokenizers across mixed text/code.
-    return Math.ceil(text.length / 4);
+    const tokens = Math.ceil(text.length / 4);
+    this.messageTokenCache.set(message, tokens);
+    return tokens;
   }
 
   private estimateConversationTokens(): number {
