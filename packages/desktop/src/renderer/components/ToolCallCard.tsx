@@ -16,10 +16,10 @@ const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutpu
   const outputStr = toolOutput ? (typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput, null, 2)) : '';
 
   return (
-    <div className="rounded-xl border border-xibe-border-subtle overflow-hidden animate-fade-in my-3 group">
+    <div className="animate-fade-in my-3 group border-l-2 border-xibe-border-subtle ml-[22px]">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-3 px-2.5 py-1 text-left hover:bg-xibe-surface-hover transition-colors"
+        className="flex w-full items-center gap-3 px-2.5 py-1 text-left transition-colors"
       >
         <ChevronRight className={cn("h-4 w-4 shrink-0 transition-transform text-xibe-text-dim", open && "rotate-90")} />
 
@@ -30,12 +30,12 @@ const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutpu
 
         <div className="flex items-center gap-1.5 shrink-0">
           {done ? (
-            <div className="flex items-center gap-1 text-xibe-brand-green/80 bg-xibe-brand-green/10 px-2 py-0.5 rounded border border-xibe-brand-green/20">
+            <div className="flex items-center gap-1 text-xibe-brand-green/80 px-2 py-0.5">
               <CheckCircle2 className="h-3 w-3" />
               <span className="text-[10px] font-medium uppercase tracking-wider">Done</span>
             </div>
           ) : (
-            <div className="flex items-center gap-1 text-xibe-accent bg-xibe-accent/10 px-2 py-0.5 rounded border border-xibe-accent/20">
+            <div className="flex items-center gap-1 text-xibe-accent px-2 py-0.5">
               <Loader2 className="h-3 w-3 animate-spin" />
               <span className="text-[10px] font-medium uppercase tracking-wider">Running</span>
             </div>
@@ -44,7 +44,7 @@ const ToolCallCard = memo(function ToolCallCard({ toolName, toolInput, toolOutpu
       </button>
 
       {open && (
-        <div className="border-t border-xibe-border-subtle px-4 py-3 space-y-4 animate-fade-in bg-transparent">
+        <div className="px-4 py-3 space-y-4 animate-fade-in bg-transparent ml-2">
           {inputStr && (
             <div>
               <div className="flex items-center gap-2 mb-2">
