@@ -95,11 +95,13 @@ export default function ChatPanel({
       msg.role === 'tool' && msg.toolName ? (
         <ToolCallCard key={msg.id} toolName={msg.toolName} toolInput={msg.toolInput} toolOutput={msg.toolOutput} timestamp={msg.timestamp} />
       ) : msg.role === 'info' ? (
-        <div key={msg.id} className="flex justify-center py-2">
-          <span className="text-[11px] font-medium text-xibe-text-dim bg-xibe-surface px-3 py-1 rounded-full border border-xibe-border-subtle">{msg.content}</span>
+        <div key={msg.id} className="flex items-center gap-3 py-1.5 ml-10">
+          <div className="h-px flex-1 bg-xibe-border-subtle/50" />
+          <span className="text-[11px] font-medium text-xibe-text-dim tracking-wide">{msg.content}</span>
+          <div className="h-px flex-1 bg-xibe-border-subtle/50" />
         </div>
       ) : msg.role === 'error' ? (
-        <div key={msg.id} className="text-sm text-xibe-error bg-xibe-error/10 border border-xibe-error/20 rounded-xl px-4 py-3">{msg.content}</div>
+        <div key={msg.id} className="text-[13px] text-xibe-error/90 bg-transparent border-l-2 border-xibe-error/30 pl-4 py-2 ml-10 my-2">{msg.content}</div>
       ) : (
         <MessageBubble key={msg.id} role={msg.role as 'user' | 'assistant'} content={msg.content} isStreaming={msg.isStreaming} timestamp={msg.timestamp} />
       ),
@@ -112,18 +114,18 @@ export default function ChatPanel({
       <div className="min-h-0 flex-1 overflow-y-auto scroll-smooth">
         {messages.length === 0 ? (
           <div className={`min-h-full ${CHAT_GUTTER}`}>
-            <div className={`${CHAT_WIDTH} animate-fade-in flex min-h-full flex-col items-center justify-center text-center`}>
+            <div className={`${CHAT_WIDTH} animate-fade-in flex min-h-full flex-col justify-center`}>
               <div className="mb-8">
-                <h1 className="text-3xl font-medium text-xibe-text tracking-tight">How can I help you today?</h1>
+                <h1 className="text-2xl font-medium text-xibe-text tracking-tight">How can I help you today?</h1>
               </div>
 
               {needsSetup ? (
-                <button onClick={onOpenSetup} className="rounded-full bg-xibe-accent px-8 py-2.5 text-sm font-medium text-xibe-bg hover:bg-xibe-accent-hover transition-colors">
+                <button onClick={onOpenSetup} className="rounded bg-xibe-text px-6 py-2 text-[13px] font-medium text-xibe-bg hover:opacity-90 transition-opacity w-fit">
                   Complete Setup
                 </button>
               ) : (
                 <div className="w-full max-w-2xl space-y-4">
-                  <div className="flex flex-wrap justify-center gap-2 mb-6">
+                  <div className="flex flex-wrap gap-2 mb-6">
                     {[
                       { text: 'Build a REST API', icon: <Zap className="h-3.5 w-3.5" /> },
                       { text: 'Fix a bug', icon: <BookOpen className="h-3.5 w-3.5" /> },
@@ -132,7 +134,7 @@ export default function ChatPanel({
                       <button
                         key={q.text}
                         onClick={() => onSendMessage(q.text)}
-                        className="flex items-center gap-2 rounded-full bg-xibe-surface px-3.5 py-1.5 text-[13px] text-xibe-text-secondary hover:bg-xibe-surface-hover hover:text-xibe-text transition-colors border border-xibe-border-subtle"
+                        className="flex items-center gap-2 rounded bg-xibe-surface-hover px-3 py-1.5 text-[13px] text-xibe-text-secondary hover:text-xibe-text hover:bg-xibe-border-subtle transition-colors border border-transparent"
                       >
                         <span className="text-xibe-text-dim">{q.icon}</span>
                         {q.text}
@@ -145,20 +147,20 @@ export default function ChatPanel({
           </div>
         ) : (
           <div className={CHAT_GUTTER}>
-            <div className={`${CHAT_WIDTH} space-y-6 py-8`}>
+            <div className={`${CHAT_WIDTH} space-y-0 py-8`}>
               {renderedMessages}
               {isRunning && (
-                <div className="flex items-center gap-2 text-xs text-xibe-text-dim animate-fade-in pl-2">
+                <div className="flex items-center gap-2 text-[13px] text-xibe-text-dim animate-fade-in py-3 ml-10">
                   <div className="flex gap-1">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-pulse" style={{ animationDelay: '0ms' }} />
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-pulse" style={{ animationDelay: '150ms' }} />
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-xibe-text-dim/60 animate-pulse" style={{ animationDelay: '300ms' }} />
                   </div>
-                  <SpinnerVerbDisplay isRunning={isRunning} className="ml-1" />
+                  <SpinnerVerbDisplay isRunning={isRunning} className="ml-2" />
                   <ChatPanelTimer isRunning={isRunning} />
                 </div>
               )}
-              <div ref={bottomRef} className="h-2" />
+              <div ref={bottomRef} className="h-4" />
             </div>
           </div>
         )}
@@ -169,9 +171,9 @@ export default function ChatPanel({
         <div className={`relative ${CHAT_WIDTH}`}>
           {/* Command dropdown above input */}
           {isSlashMode && filteredCmds.length > 0 && (
-            <div className="absolute bottom-full mb-2 w-full rounded-xl border border-xibe-border-subtle bg-xibe-surface/95 backdrop-blur-md overflow-hidden animate-slide-up z-20">
+            <div className="absolute bottom-full mb-2 w-full rounded-md border border-xibe-border-subtle bg-xibe-surface/95 backdrop-blur-md overflow-hidden animate-slide-up z-20 shadow-xl">
               {filteredCmds.slice(0, 6).map((cmd, i) => (
-                <button key={cmd.name} onClick={() => { setInput(cmd.name + ' '); inputRef.current?.focus(); }} className={`flex w-full items-center justify-between px-4 py-2.5 text-left text-sm transition-colors ${i === selectedCmd ? 'bg-xibe-surface-hover text-xibe-text' : 'text-xibe-text-secondary hover:bg-xibe-surface-hover/50'}`}>
+                <button key={cmd.name} onClick={() => { setInput(cmd.name + ' '); inputRef.current?.focus(); }} className={`flex w-full items-center justify-between px-3 py-2 text-left text-[13px] transition-colors ${i === selectedCmd ? 'bg-xibe-surface-hover text-xibe-text' : 'text-xibe-text-secondary hover:bg-xibe-surface-hover/50'}`}>
                   <span className="font-mono font-medium text-xibe-text">{cmd.name}</span>
                   <span className="text-xs text-xibe-text-dim truncate ml-4">{cmd.description}</span>
                 </button>
@@ -179,19 +181,19 @@ export default function ChatPanel({
             </div>
           )}
 
-          {/* Floating Pill input */}
-          <div className="relative flex flex-col rounded-3xl bg-xibe-surface border border-xibe-border-subtle focus-within:border-xibe-border-focus focus-within:bg-xibe-surface transition-all duration-200">
-            <div className="flex items-center px-4 pt-2 pb-1 text-xs text-xibe-text-dim">
-                <span className="flex items-center gap-1.5">
+          {/* Minimalist flat input */}
+          <div className="relative flex flex-col bg-xibe-bg border-t border-xibe-border-subtle transition-all duration-200 mt-2">
+            <div className="flex items-center pt-3 pb-1 text-xs text-xibe-text-dim">
+                <span className="flex items-center gap-1">
                     {MODES.map((m) => (
                         <button
                           key={m.id}
                           onClick={() => onModeSwitch(m.id, `Switched to ${m.label}`)}
                           className={cn(
-                            "rounded-full px-2 py-0.5 font-medium transition-colors duration-200",
+                            "rounded px-2 py-0.5 font-medium transition-colors duration-200 text-[11px] uppercase tracking-wide",
                             modeState.current === m.id
                               ? "bg-xibe-surface-hover text-xibe-text"
-                              : "text-xibe-text-dim hover:text-xibe-text"
+                              : "text-xibe-text-dim hover:text-xibe-text hover:bg-xibe-surface-hover/50"
                           )}
                         >
                           {m.label}
@@ -213,22 +215,22 @@ export default function ChatPanel({
               placeholder={isRunning ? 'Thinking...' : 'Ask anything or type / for commands'}
               disabled={isRunning}
               rows={1}
-              className="flex-1 resize-none bg-transparent pl-4 pr-12 pb-3.5 pt-1 text-[15px] leading-relaxed text-xibe-text placeholder-xibe-text-dim/50 focus:outline-none disabled:opacity-40"
-              style={{ minHeight: '36px', maxHeight: '400px' }}
+              className="flex-1 resize-none bg-transparent py-3 pr-12 text-[14px] leading-relaxed text-xibe-text placeholder-xibe-text-dim/50 focus:outline-none disabled:opacity-40"
+              style={{ minHeight: '44px', maxHeight: '400px' }}
               onInput={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 400) + 'px'; }}
             />
               <button
                 onClick={submit}
                 disabled={isRunning || !input.trim()}
-                className="absolute right-3 bottom-2 h-8 w-8 rounded-full flex items-center justify-center text-xibe-bg bg-xibe-text hover:opacity-90 disabled:opacity-30 disabled:bg-xibe-text-dim disabled:text-xibe-surface disabled:cursor-not-allowed transition-all duration-200"
+                className="absolute right-0 bottom-2.5 h-7 w-7 rounded flex items-center justify-center text-xibe-bg bg-xibe-text hover:opacity-90 disabled:opacity-30 disabled:bg-xibe-text-dim disabled:text-xibe-surface disabled:cursor-not-allowed transition-all duration-200"
               >
                 <Send className="h-3.5 w-3.5 ml-0.5" />
               </button>
             </div>
           </div>
-          <div className="mt-2 text-center">
-            <p className="text-[11px] font-medium text-xibe-text-dim/40">
-              <span className="hidden sm:inline">Use <kbd className="font-sans px-1 rounded bg-xibe-surface-raised/50">Enter</kbd> to send, <kbd className="font-sans px-1 rounded bg-xibe-surface-raised/50">Shift + Enter</kbd> for new line</span>
+          <div className="mt-1 flex justify-between">
+            <p className="text-[10px] text-xibe-text-dim/50">
+              <span className="hidden sm:inline">Use <kbd className="font-mono">Enter</kbd> to send, <kbd className="font-mono">Shift + Enter</kbd> for new line</span>
             </p>
           </div>
         </div>
