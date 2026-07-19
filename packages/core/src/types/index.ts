@@ -6,7 +6,16 @@
  * @module types
  */
 
-export { PROVIDER_CONFIGS, type ProviderType } from './provider.js';
+export {
+  PROVIDER_CONFIGS,
+  SETUP_PROVIDER_PRIORITY,
+  listSetupProviders,
+  resolveProviderEnvApiKey,
+  type ProviderType,
+  type ProviderWireFormat,
+  type ProviderConfigEntry,
+  type SetupProviderOption,
+} from './provider.js';
 export { type MCPServerConfig, type MCPServersConfig, type MCPServerConfigLegacy } from './mcp.js';
 export { type ImageAttachment } from './attachments.js';
 export { type TodoStatus, type TodoItem, type TodoDocument } from './todo.js';

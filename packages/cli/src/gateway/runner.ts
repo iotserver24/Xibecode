@@ -93,7 +93,7 @@ export class GatewayRunner {
       provider: job.provider,
       apiKey: job.apiKey,
       baseUrl: job.baseUrl,
-      maxIterations: 50,
+      maxIterations: 0,
       onEvent: (type, data) => {
         if (type === 'warning' || type === 'error') {
           this.log(

@@ -169,7 +169,7 @@ export class TelegramAdapter implements MessagingAdapter {
           if (!chatId || !userId) continue;
 
           if (this.allowed && !this.allowed.has(userId) && !this.allowed.has(chatId)) {
-            // Pairing fallback (Hermes-style)
+            // Pairing fallback 
             try {
               const { isPaired, requestPairing } = await import('./pairing.js');
               if (await isPaired('telegram', userId)) {

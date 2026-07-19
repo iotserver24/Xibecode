@@ -143,7 +143,7 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
         apiKey,
         baseUrl,
         model,
-        maxIterations: 150,
+        maxIterations: config.get('maxIterations') ?? 0,
         verbose: false,
         provider,
         customProviderFormat: config.get('customProviderFormat'),

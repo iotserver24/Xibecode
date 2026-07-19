@@ -323,10 +323,17 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
   const model = options.model || config.getModel(useEconomy);
   const baseUrl = options.baseUrl || config.getBaseUrl();
   const provider = (options.provider as 'anthropic' | 'openai' | undefined) || config.get('provider');
-  let parsedIterations = parseInt(options.maxIterations);
-  if (parsedIterations <= 0) parsedIterations = 150;
+  // 0 or negative = unlimited (core treats <= 0 as Infinity)
+  let parsedIterations = Number.parseInt(String(options.maxIterations), 10);
+  if (Number.isNaN(parsedIterations)) {
+    const fromConfig = config.get('maxIterations');
+    parsedIterations =
+      typeof fromConfig === 'number' ? fromConfig : 0;
+  }
   const maxIterations = useEconomy
-    ? Math.min(parsedIterations, config.getEconomyMaxIterations())
+    ? parsedIterations <= 0
+      ? config.getEconomyMaxIterations()
+      : Math.min(parsedIterations, config.getEconomyMaxIterations())
     : parsedIterations;
   const testCommandOverride = config.get('testCommandOverride');
 

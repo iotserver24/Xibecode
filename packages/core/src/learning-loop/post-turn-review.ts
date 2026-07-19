@@ -1,5 +1,5 @@
 /**
- * Background post-turn review (Hermes self-improvement loop).
+ * Background post-turn review .
  * Heuristic extraction + optional LLM aux review + write-approval staging.
  */
 

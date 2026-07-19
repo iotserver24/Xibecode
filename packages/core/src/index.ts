@@ -7,7 +7,16 @@
  */
 
 // ─── Types ─────────────────────────────────────────────────────
-export { PROVIDER_CONFIGS, type ProviderType } from './types/index.js';
+export {
+  PROVIDER_CONFIGS,
+  SETUP_PROVIDER_PRIORITY,
+  listSetupProviders,
+  resolveProviderEnvApiKey,
+  type ProviderType,
+  type ProviderWireFormat,
+  type ProviderConfigEntry,
+  type SetupProviderOption,
+} from './types/index.js';
 export { type MCPServerConfig, type MCPServersConfig, type MCPServerConfigLegacy } from './types/index.js';
 export { type ImageAttachment } from './types/index.js';
 export { type TodoStatus, type TodoItem, type TodoDocument } from './types/index.js';

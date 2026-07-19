@@ -89,7 +89,7 @@ export interface AgentConfig {
   /** E2B sandbox id for preview URL context. */
   remoteToolSandboxId?: string;
   /**
-   * Fallback provider endpoints (Hermes-style). On rate limits, outages, or
+   * Fallback provider endpoints for connection reliability. On rate limits, outages, or
    * auth failures after same-endpoint retries, rotate to the next endpoint.
    */
   fallbackProviders?: ProviderEndpoint[];
@@ -391,7 +391,7 @@ export class EnhancedAgent extends EventEmitter {
   private activeSkill: { name: string; instructions: string } | null = null;
   private defaultSkillsPrompt: string = '';
   private memory: NeuralMemory;
-  /** Hermes-style bounded MEMORY.md / USER.md (learning loop). */
+  /** Bounded curated MEMORY.md / USER.md (learning loop). */
   private curatedMemory: CuratedMemoryStore;
   private learningInitialPrompt: string = '';
   private toolsUsedThisRun: Set<string> = new Set();
@@ -616,11 +616,16 @@ export class EnhancedAgent extends EventEmitter {
     this.client = new Anthropic(clientConfig);
     // Prefer explicit provider override from config, otherwise auto-detect
     this.provider = providerOverride ?? config.provider ?? this.detectProvider(config.model);
+    // maxIterations <= 0 means unlimited (Infinity). Finite positive caps the loop.
+    const rawMaxIterations = config.maxIterations ?? 0;
+    const resolvedMaxIterations =
+      rawMaxIterations <= 0 ? Number.POSITIVE_INFINITY : rawMaxIterations;
+
     this.config = {
       apiKey: config.apiKey,
       baseUrl: config.baseUrl ?? '',
       model: config.model,
-      maxIterations: config.maxIterations ?? 150,
+      maxIterations: resolvedMaxIterations,
       verbose: config.verbose ?? false,
       mode: config.mode ?? 'agent',
       provider: this.provider,
@@ -921,7 +926,9 @@ export class EnhancedAgent extends EventEmitter {
 
       this.emit('iteration', {
         current: this.iterationCount,
-        total: this.config.maxIterations,
+        total: Number.isFinite(this.config.maxIterations)
+          ? this.config.maxIterations
+          : 0, // 0 = unlimited in UI
       });
 
       this.emit('thinking', { message: 'AI is thinking...' });
@@ -1363,7 +1370,10 @@ export class EnhancedAgent extends EventEmitter {
       }
     }
 
-    if (this.iterationCount >= this.config.maxIterations) {
+    if (
+      Number.isFinite(this.config.maxIterations) &&
+      this.iterationCount >= this.config.maxIterations
+    ) {
       this.emit('warning', {
         message: `Reached maximum iterations (${this.config.maxIterations})`,
       });

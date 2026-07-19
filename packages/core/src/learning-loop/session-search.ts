@@ -1,5 +1,5 @@
 /**
- * Lightweight session search across past XibeCode sessions (Hermes session_search analogue).
+ * Lightweight session search across past XibeCode sessions .
  * Scans ~/.xibecode/sessions and ~/.xibecode/projects JSONL/JSON without SQLite.
  */
 

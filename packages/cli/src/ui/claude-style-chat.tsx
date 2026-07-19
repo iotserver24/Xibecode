@@ -6,7 +6,7 @@ import { Box, Static, Text, createRoot, useApp, useInput } from '../ink.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { TuiThemeColorKey } from '../utils/tui-theme.js';
-import { ConfigManager, ProviderType, PROVIDER_CONFIGS } from '../utils/config.js';
+import { ConfigManager, ProviderType, PROVIDER_CONFIGS, listSetupProviders } from '../utils/config.js';
 import { EnhancedAgent } from 'xibecode-core';
 
 const pkg = createRequire(import.meta.url)('../../package.json');
@@ -1704,30 +1704,15 @@ function XibeCodeChatApp(props: {
         format?: RequestWireFormat;
         note?: string;
       }> = [
-        {
-          label: 'Routing.run (recommended) (cheapest opensource model provider)',
-          value: 'routingrun',
-          baseUrl: PROVIDER_CONFIGS.routingrun.baseUrl,
-          format: 'openai',
-        },
-        {
-          label: 'zenllm.org (recommended) (best ai provider with 200+ models)',
-          value: 'zenllm',
-          baseUrl: PROVIDER_CONFIGS.zenllm.baseUrl,
-          format: 'openai',
-        },
-        { label: 'OpenAI', value: 'openai', baseUrl: PROVIDER_CONFIGS.openai.baseUrl, format: 'openai' },
-        { label: 'Anthropic', value: 'anthropic', baseUrl: PROVIDER_CONFIGS.anthropic.baseUrl, format: 'anthropic' },
-        { label: 'OpenRouter', value: 'openrouter', baseUrl: PROVIDER_CONFIGS.openrouter.baseUrl, format: 'openai' },
-        { label: 'Groq', value: 'groq', baseUrl: PROVIDER_CONFIGS.groq.baseUrl, format: 'openai' },
-        { label: 'DeepSeek', value: 'deepseek', baseUrl: PROVIDER_CONFIGS.deepseek.baseUrl, format: 'openai' },
-        { label: 'Google (Gemini)', value: 'google', baseUrl: PROVIDER_CONFIGS.google.baseUrl, format: 'openai' },
-        { label: 'xAI (Grok)', value: 'grok', baseUrl: PROVIDER_CONFIGS.grok.baseUrl, format: 'openai' },
-        { label: 'Moonshot (Kimi)', value: 'kimi', baseUrl: PROVIDER_CONFIGS.kimi.baseUrl, format: 'anthropic' },
-        { label: 'Zhipu AI (z.ai)', value: 'zai', baseUrl: PROVIDER_CONFIGS.zai.baseUrl, format: 'anthropic' },
+        ...listSetupProviders().map((p) => ({
+          label: p.label,
+          value: p.id as ProviderType,
+          baseUrl: p.baseUrl || undefined,
+          format: p.format as RequestWireFormat,
+        })),
         {
           label: 'Custom (paste your own Base URL)',
-          value: 'custom',
+          value: 'custom' as const,
           note: 'Lets you paste any OpenAI-compatible endpoint',
         },
       ];
@@ -2644,7 +2629,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
         apiKey: creds.apiKey,
         baseUrl: creds.baseUrl,
         model: modelName,
-        maxIterations: 150,
+        maxIterations: config.get('maxIterations') ?? 0,
         verbose: false,
         provider,
         customProviderFormat,

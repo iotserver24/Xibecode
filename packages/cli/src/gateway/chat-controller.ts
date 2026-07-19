@@ -189,7 +189,7 @@ export class ChatController {
         workdir,
         profile: this.options.profile,
         history,
-        maxIterations: 80,
+        maxIterations: 0,
         systemPrefix: codingSystemPrefix(workdir),
         signal: abort.signal,
         onEvent: (type, data) => {

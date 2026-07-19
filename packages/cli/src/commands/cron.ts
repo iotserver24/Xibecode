@@ -1,5 +1,5 @@
 /**
- * xibecode cron — manage scheduled agent tasks (Hermes-style).
+ * xibecode cron — manage scheduled agent tasks .
  */
 
 import chalk from 'chalk';

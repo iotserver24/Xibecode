@@ -1,5 +1,5 @@
 /**
- * DM pairing codes for gateway access (Hermes-style alternative to allowlists).
+ * DM pairing codes for gateway access (optional alternative to allowlists).
  */
 
 import { promises as fs } from 'fs';

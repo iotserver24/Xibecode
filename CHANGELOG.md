@@ -2,6 +2,47 @@
 
 All notable changes to XibeCode will be documented in this file.
 
+## [1.4.0] - 2026-07-19
+
+### Release
+
+- **`xibecode-core` 1.4.0** and **`xibecode` 1.4.0** (aligned).
+- CLI depends on **`xibecode-core` ^1.4.0**.
+
+### Agent loops
+
+- **Unlimited iterations by default** — `maxIterations: 0` (or `-d 0`) means no hard turn cap.
+- Core normalizes `<= 0` to unlimited; finite positive values still enforce a cap.
+- Chat, gateway, cron, and ACP use the same semantics (no accidental 50/80/150 clamps).
+- Economy mode still applies `economyMaxIterations` as a cost bound.
+
+### Providers
+
+- Expanded **provider catalog** (Routing.run, zenllm.org, OpenRouter, DeepSeek, Gemini, Grok, Z.AI, Kimi, MiniMax, Fireworks, Novita, Hugging Face, OpenCode, Kilo, NVIDIA NIM, Xiaomi MiMo, StepFun, Arcee, GMI, LM Studio, Azure Foundry, and more).
+- Shared `listSetupProviders()` for setup wizard, chat TUI, and ACP.
+- Generic API-key resolution from each provider’s env key(s).
+
+### Gateway lifecycle (unchanged API, documented)
+
+- Keep **`xibecode gateway --install|--start|--stop|--status`** for the 24/7 process.
+- In-chat **`/stop`** aborts the current coding run only.
+
+### Setup & docs
+
+- Interactive **`xibecode setup`** (model / gateway / agent) with plain numbered menus.
+- Site docs (xibeai.in): agent engine, providers, setup, gateway, cron, learning loop notes.
+
+## [1.3.23] - 2026-07-19
+
+### CLI
+
+- **`xibecode setup`** — interactive setup wizard for easier onboarding:
+  - `xibecode setup` — full wizard (model → 24/7 gateway → agent defaults)
+  - `xibecode setup model` / `setup gateway` / `setup agent` — section-only
+  - `xibecode setup --quick` — model + Telegram gateway
+  - `xibecode setup --non-interactive` — print flag/env guidance for CI/headless
+  - Writes `~/.xibecode/gateway.env`, optional systemd install/start
+
 ## [1.3.22] - 2026-07-19
 
 ### Release
@@ -9,7 +50,7 @@ All notable changes to XibeCode will be documented in this file.
 - **`xibecode-core` 1.3.22** and **`xibecode` 1.3.22** (aligned versions).
 - CLI depends on **`xibecode-core` ^1.3.22**.
 
-Includes the 24/7 coding gateway (Telegram / Discord / Slack, cron, delivery ledger, circuit breakers, DM pairing), provider failover pool, and Hermes-style learning loop (curated MEMORY/USER, LLM post-turn review, write-approval, session FTS, skill learner).
+Includes the 24/7 coding gateway (Telegram / Discord / Slack, cron, delivery ledger, circuit breakers, DM pairing), provider failover pool, and learning loop (curated MEMORY/USER, LLM post-turn review, write-approval, session FTS, skill learner).
 
 ## [1.3.20] - 2026-07-19
 

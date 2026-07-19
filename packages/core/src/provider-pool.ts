@@ -1,7 +1,7 @@
 /**
  * Provider pool — multi-endpoint failover for higher connection reliability.
  *
- * Inspired by Hermes Agent credential pools + fallback_providers:
+ * Provider credential pool and fallback endpoints:
  * when the primary API key is rate-limited or a provider is down, rotate
  * to the next credential or fall over to an alternate provider/model.
  *

@@ -27,7 +27,7 @@ import {
   type AgentMode,
   type ProviderType,
 } from "xibecode-core";
-import { ConfigManager, PROVIDER_CONFIGS } from "../utils/config.js";
+import { ConfigManager, PROVIDER_CONFIGS, listSetupProviders } from "../utils/config.js";
 import { builtInSkillsDir } from "../utils/built-in-skills-dir.js";
 import {
   type ACPRequest,
@@ -157,27 +157,12 @@ type SetupProviderOption = {
 };
 
 const SETUP_PROVIDERS: SetupProviderOption[] = [
-  {
-    label: "Routing.run (recommended) (cheapest opensource model provider)",
-    value: "routingrun",
-    baseUrl: PROVIDER_CONFIGS.routingrun.baseUrl,
-    format: "openai",
-  },
-  {
-    label: "zenllm.org (recommended) (best ai provider with 200+ models)",
-    value: "zenllm",
-    baseUrl: PROVIDER_CONFIGS.zenllm.baseUrl,
-    format: "openai",
-  },
-  { label: "OpenAI", value: "openai", baseUrl: PROVIDER_CONFIGS.openai.baseUrl, format: "openai" },
-  { label: "Anthropic", value: "anthropic", baseUrl: PROVIDER_CONFIGS.anthropic.baseUrl, format: "anthropic" },
-  { label: "OpenRouter", value: "openrouter", baseUrl: PROVIDER_CONFIGS.openrouter.baseUrl, format: "openai" },
-  { label: "Groq", value: "groq", baseUrl: PROVIDER_CONFIGS.groq.baseUrl, format: "openai" },
-  { label: "DeepSeek", value: "deepseek", baseUrl: PROVIDER_CONFIGS.deepseek.baseUrl, format: "openai" },
-  { label: "Google (Gemini)", value: "google", baseUrl: PROVIDER_CONFIGS.google.baseUrl, format: "openai" },
-  { label: "xAI (Grok)", value: "grok", baseUrl: PROVIDER_CONFIGS.grok.baseUrl, format: "openai" },
-  { label: "Moonshot (Kimi)", value: "kimi", baseUrl: PROVIDER_CONFIGS.kimi.baseUrl, format: "anthropic" },
-  { label: "Zhipu AI (z.ai)", value: "zai", baseUrl: PROVIDER_CONFIGS.zai.baseUrl, format: "anthropic" },
+  ...listSetupProviders().map((p) => ({
+    label: p.label,
+    value: p.id as ProviderType,
+    baseUrl: p.baseUrl || undefined,
+    format: p.format,
+  })),
   {
     label: "Custom (paste your own Base URL)",
     value: "custom",
@@ -1521,7 +1506,7 @@ async function runAgentTurn(args: {
         apiKey,
         baseUrl,
         model,
-        maxIterations: 150,
+        maxIterations: 0,
         verbose: false,
         mode: args.mode || "agent",
         provider,
@@ -1769,7 +1754,7 @@ async function handleChat(
         apiKey,
         baseUrl,
         model,
-        maxIterations: 150,
+        maxIterations: 0,
         verbose: false,
         provider: provider,
         requestFormat: "auto",

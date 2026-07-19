@@ -1,5 +1,5 @@
 /**
- * Hermes-style bounded curated memory:
+ * Bounded curated memory:
  *   MEMORY.md  — environment / project / lessons (agent notes)
  *   USER.md    — user preferences / profile
  *

@@ -7,6 +7,7 @@ import { chatCommand } from "./commands/chat.js";
 import { cloudPullCommand } from "./commands/cloud-pull.js";
 import { resumeCommand } from "./commands/resume.js";
 import { configCommand } from "./commands/config.js";
+import { setupCommand } from "./commands/setup.js";
 import { mcpCommand } from "./commands/mcp.js";
 import { diagnosticsCommand } from "./commands/diagnostics.js";
 import { skillsCommand } from "./commands/skills.js";
@@ -75,8 +76,8 @@ program
   .option("--provider <provider>", "Model API format: anthropic or openai")
   .option(
     "-d, --max-iterations <number>",
-    "Maximum iterations (0 = unlimited, default 150)",
-    "150",
+    "Maximum iterations (0 = unlimited, default 0)",
+    "0",
   )
   .option("-v, --verbose", "Show detailed logs", false)
   .option(
@@ -121,8 +122,8 @@ program
   .option("--provider <provider>", "Model API format: anthropic or openai")
   .option(
     "-d, --max-iterations <number>",
-    "Maximum iterations (0 = unlimited, default 150)",
-    "150",
+    "Maximum iterations (0 = unlimited, default 0)",
+    "0",
   )
   .option("-v, --verbose", "Show detailed logs", false)
   .option(
@@ -313,6 +314,31 @@ resumeCmd
     },
   );
 
+// Interactive setup wizard
+program
+  .command("setup")
+  .description(
+    "Interactive setup wizard (model, 24/7 gateway / Telegram, agent defaults)",
+  )
+  .argument(
+    "[section]",
+    "Optional section: model | gateway | agent (omit for full wizard)",
+  )
+  .option(
+    "--profile <name>",
+    "Config profile to use (default: configured default profile)",
+  )
+  .option("--quick", "Quick path: model + Telegram gateway only", false)
+  .option(
+    "--non-interactive",
+    "Print non-interactive setup commands (no prompts)",
+    false,
+  )
+  .option("--reset", "Reset profile config before setup", false)
+  .action((section: string | undefined, options) => {
+    setupCommand(section, options);
+  });
+
 // Configuration
 program
   .command("config")
@@ -497,7 +523,7 @@ mcpCmd
   .description("Authenticate with Smithery")
   .action(() => mcpCommand("login", []));
 
-// ── 24/7 Gateway (Hermes-style long-running process) ──
+// ── 24/7 Gateway (long-running messaging + cron process) ──
 program
   .command("gateway")
   .description(

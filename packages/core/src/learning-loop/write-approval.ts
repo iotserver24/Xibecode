@@ -1,5 +1,5 @@
 /**
- * Write-approval gate for memory and skill mutations (Hermes-style).
+ * Write-approval gate for memory and skill mutations .
  * When enabled, writes are staged under ~/.xibecode/pending/ for review.
  */
 

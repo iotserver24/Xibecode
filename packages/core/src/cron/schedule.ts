@@ -1,5 +1,5 @@
 /**
- * Schedule parsing for cron jobs (Hermes-compatible formats).
+ * Schedule parsing for cron jobs (interval and 5-field cron formats).
  *
  * Supports:
  *   - Relative one-shot: "30m", "2h", "1d"

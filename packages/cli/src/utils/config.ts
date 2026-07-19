@@ -2,9 +2,26 @@ import Conf from 'conf';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs/promises';
-import { MCPServersFileManager, PROVIDER_CONFIGS, type ProviderType, type MCPServerConfig, type MCPServersConfig, type MCPServerConfigLegacy } from 'xibecode-core';
+import {
+  MCPServersFileManager,
+  PROVIDER_CONFIGS,
+  resolveProviderEnvApiKey,
+  listSetupProviders,
+  type ProviderType,
+  type MCPServerConfig,
+  type MCPServersConfig,
+  type MCPServerConfigLegacy,
+} from 'xibecode-core';
 
-export { PROVIDER_CONFIGS, type ProviderType, type MCPServerConfig, type MCPServersConfig, type MCPServerConfigLegacy };
+export {
+  PROVIDER_CONFIGS,
+  resolveProviderEnvApiKey,
+  listSetupProviders,
+  type ProviderType,
+  type MCPServerConfig,
+  type MCPServersConfig,
+  type MCPServerConfigLegacy,
+};
 
 /**
  * Built-in cloud defaults for distributed CLI binaries.
@@ -87,7 +104,7 @@ export interface XibeCodeConfig {
    */
   sandboxSyncRespectGitignore?: boolean;
   /**
-   * Fallback provider endpoints for higher connection reliability (Hermes-style).
+   * Fallback provider endpoints for higher connection reliability.
    * Each entry: { provider, model, apiKey, baseUrl? } or "provider|model|apiKey".
    * Also set via env XIBECODE_FALLBACK_PROVIDERS (comma-separated pipe specs).
    */
@@ -151,7 +168,7 @@ export class ConfigManager {
       configName: `profile-${resolvedProfile}`,
       defaults: {
         model: 'claude-sonnet-4-5-20250929',
-        maxIterations: 50,
+        maxIterations: 0, // 0 = unlimited agent loops
         defaultVerbose: false,
         preferredPackageManager: 'pnpm',
         enableDryRunByDefault: false,
@@ -255,35 +272,28 @@ export class ConfigManager {
    * you can switch providers just by changing the model id.
    */
   getApiKey(): string | undefined {
+    const stored = this.get('apiKey');
+    if (stored?.trim()) return stored.trim();
+
     const provider = this.get('provider');
-
-    if (provider === 'anthropic') {
-      return (
-        this.get('apiKey') || // generic key
-        process.env.ANTHROPIC_API_KEY
-      );
+    if (provider && provider !== 'custom') {
+      const fromProvider = resolveProviderEnvApiKey(provider);
+      if (fromProvider) return fromProvider;
     }
 
-    if (provider === 'openai') {
-      return (
-        this.get('apiKey') || // generic key
-        process.env.OPENAI_API_KEY
-      );
+    // Fallback: scan every known provider env key
+    for (const cfg of Object.values(PROVIDER_CONFIGS)) {
+      const primary = process.env[cfg.envKey]?.trim();
+      if (primary) return primary;
+      const extra = 'envKeys' in cfg ? cfg.envKeys : undefined;
+      if (extra) {
+        for (const k of extra) {
+          const v = process.env[k]?.trim();
+          if (v) return v;
+        }
+      }
     }
-
-    // Fallback when provider is not set: try both styles
-    return this.get('apiKey') ||
-      process.env.ANTHROPIC_API_KEY ||
-      process.env.OPENAI_API_KEY ||
-      process.env.DEEPSEEK_API_KEY ||
-      process.env.ZAI_API_KEY ||
-      process.env.ALIBABA_API_KEY ||
-      process.env.MOONSHOT_API_KEY ||
-      process.env.XAI_API_KEY ||
-      process.env.GROQ_API_KEY ||
-      process.env.OPENROUTER_API_KEY ||
-      process.env.ROUTINGRUN_API_KEY ||
-      process.env.ZENLLM_API_KEY;
+    return undefined;
   }
 
   /**
@@ -294,21 +304,35 @@ export class ConfigManager {
     const configBaseUrl = this.get('baseUrl');
     if (configBaseUrl) return configBaseUrl;
 
-    // 2. Check for provider-specific environment variables for backward compatibility
-    // checking them *before* assertions significantly simplifies things
     const provider = this.get('provider');
 
+    // 2. Provider-specific BASE_URL env vars (common patterns)
     if (provider === 'anthropic') {
       return process.env.ANTHROPIC_BASE_URL || PROVIDER_CONFIGS.anthropic.baseUrl;
     }
-
     if (provider === 'openai') {
       return process.env.OPENAI_BASE_URL || PROVIDER_CONFIGS.openai.baseUrl;
     }
+    if (provider === 'openrouter' && process.env.OPENROUTER_BASE_URL) {
+      return process.env.OPENROUTER_BASE_URL;
+    }
+    if ((provider === 'grok' || provider === 'xai') && process.env.XAI_BASE_URL) {
+      return process.env.XAI_BASE_URL;
+    }
+    if (provider === 'google' && process.env.GEMINI_BASE_URL) {
+      return process.env.GEMINI_BASE_URL;
+    }
+    if (provider === 'azure-foundry' && process.env.AZURE_FOUNDRY_BASE_URL) {
+      return process.env.AZURE_FOUNDRY_BASE_URL;
+    }
+    if (provider === 'lmstudio' && process.env.LM_BASE_URL) {
+      return process.env.LM_BASE_URL;
+    }
 
-    // 3. For other known providers, return their default
+    // 3. Known provider defaults
     if (provider && provider !== 'custom' && PROVIDER_CONFIGS[provider as keyof typeof PROVIDER_CONFIGS]) {
-      return PROVIDER_CONFIGS[provider as keyof typeof PROVIDER_CONFIGS].baseUrl;
+      const base = PROVIDER_CONFIGS[provider as keyof typeof PROVIDER_CONFIGS].baseUrl;
+      return base || undefined;
     }
 
     // 4. Fallback/Default

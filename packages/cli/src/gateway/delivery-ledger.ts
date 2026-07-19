@@ -1,5 +1,5 @@
 /**
- * At-least-once delivery ledger for gateway outbound messages (Hermes-style).
+ * At-least-once delivery ledger for gateway outbound messages .
  * Survives crash between produce and platform ACK.
  */
 

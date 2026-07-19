@@ -44,24 +44,38 @@ pnpm link --global --dir packages/cli
 ## Quick Start
 
 ```bash
-# Configure once
-xibecode config --set-key YOUR_API_KEY
+# Interactive setup (providers, key, optional 24/7 gateway)
+xibecode setup
 
 # Interactive terminal mode
 xibecode chat
 
-# Autonomous run
+# Autonomous run (unlimited iterations by default; -d N to cap)
 xibecode run "Create an Express API with auth"
+xibecode run "Quick fix" -d 40
 
 # Run and open a PR
 xibecode run-pr "Fix the TypeScript errors in src/agent.ts"
 ```
 
+Docs: [https://xibeai.in/docs](https://xibeai.in/docs)
+
 ## Commands
+
+### `xibecode setup`
+
+Onboarding wizard: model/provider, 24/7 gateway, agent defaults.
+
+```bash
+xibecode setup
+xibecode setup model
+xibecode setup gateway
+xibecode setup --quick
+```
 
 ### `xibecode run`
 
-Autonomous coding workflow.
+Autonomous coding workflow. **`-d 0` = unlimited** agent loops (default).
 
 ```bash
 xibecode run "Build a REST API with Express"
@@ -69,7 +83,7 @@ xibecode run "Fix the TypeScript errors" --verbose
 xibecode run --file task.txt
 ```
 
-Options: `-f, --file`, `-m, --model`, `--mode`, `-b, --base-url`, `-k, --api-key`, `--provider`, `-d, --max-iterations`, `-v, --verbose`, `--cost-mode`, `--dry-run`, `--changed-only`
+Options: `-f, --file`, `-m, --model`, `--mode`, `-b, --base-url`, `-k, --api-key`, `--provider`, `-d, --max-iterations` (0 = unlimited), `-v, --verbose`, `--cost-mode`, `--dry-run`, `--changed-only`
 
 ### `xibecode run-pr`
 
@@ -94,6 +108,22 @@ xibecode chat --model claude-opus-4-5-20251101
 ```
 
 Options: `-m, --model`, `-b, --base-url`, `-k, --api-key`, `--provider`, `--cost-mode`, `--theme`, `--session`, `--profile`
+
+### `xibecode gateway`
+
+24/7 messaging + cron process (Telegram / Discord / Slack).
+
+```bash
+xibecode gateway --workdir /path/to/repo
+xibecode gateway --install --workdir /path/to/repo
+xibecode gateway --start
+xibecode gateway --stop
+xibecode gateway --status
+```
+
+### `xibecode cron` / `xibecode pair`
+
+Scheduled jobs (requires gateway running) and DM pairing for the messaging gateway.
 
 ### `xibecode config`
 

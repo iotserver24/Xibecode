@@ -1,6 +1,6 @@
 /**
  * Cron scheduler — tick due jobs and invoke a runner callback.
- * Used by the long-running gateway process (Hermes-style).
+ * Used by the long-running gateway process .
  *
  * @module cron/scheduler
  */

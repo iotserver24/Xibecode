@@ -98,7 +98,7 @@ export async function runHeadlessAgent(
   const provider =
     (options.provider as ProviderType | undefined) ||
     (config.get('provider') as ProviderType | undefined);
-  const maxIterations = options.maxIterations ?? config.get('maxIterations') ?? 80;
+  const maxIterations = options.maxIterations ?? config.get('maxIterations') ?? 0;
 
   let defaultSkillsPrompt = options.systemPrefix || '';
   let skillManager: SkillManager | undefined;
