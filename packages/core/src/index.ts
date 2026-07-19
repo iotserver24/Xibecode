@@ -29,6 +29,79 @@ export {
 // ─── Agent ─────────────────────────────────────────────────────
 export { EnhancedAgent } from './agent.js';
 
+// ─── Provider pool (failover / higher connection reliability) ──
+export {
+  ProviderPool,
+  parseFallbackProviders,
+  shouldFailoverProvider,
+  type ProviderEndpoint,
+} from './provider-pool.js';
+
+// ─── Cron (scheduled agent tasks for 24/7 gateway) ─────────────
+export {
+  parseSchedule,
+  nextRunAt,
+  defaultRepeat,
+  listJobs,
+  getJob,
+  createJob,
+  updateJob,
+  removeJob,
+  pauseJob,
+  resumeJob,
+  dueJobs,
+  completeJobRun,
+  withTickLock,
+  jobsPath,
+  outputDir,
+  startCronScheduler,
+  type ParsedSchedule,
+  type ScheduleKind,
+  type CronJob,
+  type CronDelivery,
+  type CronStore,
+  type CreateJobInput,
+  type JobRunResult,
+  type CronJobRunner,
+  type SchedulerOptions,
+} from './cron/index.js';
+
+// ─── Learning loop (curated memory, session search, skill learn) ──
+export {
+  CuratedMemoryStore,
+  searchSessions,
+  draftSkillFromRun,
+  saveLearnedSkill,
+  shouldLearnSkill,
+  learnedSkillsDir,
+  runPostTurnReview,
+  stageWrite,
+  listPending,
+  getPending,
+  rejectPending,
+  rejectAll,
+  setWriteApproval,
+  isWriteApprovalEnabledAsync,
+  approvePending,
+  approveAll,
+  indexSessionDocument,
+  indexSessionFile,
+  ftsSearch,
+  llmPostTurnReview,
+  resolveReviewLlmConfig,
+  type CuratedTarget,
+  type CuratedMemoryConfig,
+  type SessionHit,
+  type LearnedSkillDraft,
+  type SkillLearnResult,
+  type ReviewStats,
+  type ReviewResult,
+  type PendingWrite,
+  type PendingKind,
+  type LlmReviewSuggestion,
+  type LlmReviewConfig,
+} from './learning-loop/index.js';
+
 // ─── Agent Stream ───────────────────────────────────────────────
 export { AgentStream } from './agent-stream.js';
 

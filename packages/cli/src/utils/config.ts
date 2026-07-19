@@ -86,6 +86,34 @@ export interface XibeCodeConfig {
    * When false, archive the current directory with tar --exclude only (legacy).
    */
   sandboxSyncRespectGitignore?: boolean;
+  /**
+   * Fallback provider endpoints for higher connection reliability (Hermes-style).
+   * Each entry: { provider, model, apiKey, baseUrl? } or "provider|model|apiKey".
+   * Also set via env XIBECODE_FALLBACK_PROVIDERS (comma-separated pipe specs).
+   */
+  fallbackProviders?: Array<{
+    id?: string;
+    provider?: string;
+    model: string;
+    apiKey: string;
+    baseUrl?: string;
+  } | string>;
+  /** Telegram bot token for `xibecode gateway` messaging. */
+  telegramBotToken?: string;
+  /** Default Telegram home chat for cron delivery. */
+  telegramHomeChatId?: string;
+  /** Discord bot token for gateway. */
+  discordBotToken?: string;
+  /** Discord home channel id for cron delivery. */
+  discordHomeChatId?: string;
+  /** Slack bot token (xoxb-). */
+  slackBotToken?: string;
+  /** Slack app-level token (xapp-) for Socket Mode. */
+  slackAppToken?: string;
+  /** Slack home channel id for cron delivery. */
+  slackHomeChatId?: string;
+  /** Default workdir for gateway / cron agent runs. */
+  gatewayWorkdir?: string;
 }
 
 type XibeCodeMetaConfig = {

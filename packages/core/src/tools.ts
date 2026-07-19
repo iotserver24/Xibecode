@@ -798,6 +798,27 @@ export class CodingToolExecutor implements ToolExecutor {
         return { success: true, message: 'Lesson learned and saved to neural memory.' };
       }
 
+      case 'curated_memory': {
+        return this.curatedMemoryAction(p);
+      }
+
+      case 'session_search': {
+        if (!p.query || typeof p.query !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: query' };
+        }
+        return this.sessionSearchAction(p.query, p.limit);
+      }
+
+      case 'save_skill': {
+        if (!p.name || typeof p.name !== 'string') {
+          return { error: true, success: false, message: 'Missing name' };
+        }
+        if (!p.content || typeof p.content !== 'string') {
+          return { error: true, success: false, message: 'Missing content (skill body markdown)' };
+        }
+        return this.saveSkillAction(p.name, p.description, p.content, p.tags);
+      }
+
       case 'take_screenshot':
       case 'get_console_logs':
       case 'run_visual_test':
@@ -1738,6 +1759,63 @@ export class CodingToolExecutor implements ToolExecutor {
           },
           required: ['trigger', 'action', 'outcome']
         }
+      },
+      {
+        name: 'curated_memory',
+        description:
+          'Manage durable MEMORY.md (agent notes) and USER.md (user profile) with char limits. Always injected next session. Actions: add, replace, remove. target: memory|user.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['add', 'replace', 'remove'],
+              description: 'Memory action',
+            },
+            target: {
+              type: 'string',
+              enum: ['memory', 'user'],
+              description: 'memory = environment/lessons; user = preferences/profile',
+            },
+            content: {
+              type: 'string',
+              description: 'New entry text (add/replace)',
+            },
+            old_text: {
+              type: 'string',
+              description: 'Unique substring of entry to replace/remove',
+            },
+          },
+          required: ['action', 'target'],
+        },
+      },
+      {
+        name: 'session_search',
+        description:
+          'Search past XibeCode sessions (full-text style) when you need details from prior conversations not in MEMORY.md.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Search keywords' },
+            limit: { type: 'number', description: 'Max hits (default 8)' },
+          },
+          required: ['query'],
+        },
+      },
+      {
+        name: 'save_skill',
+        description:
+          'Save a reusable coding procedure as a learned skill (~/.xibecode/skills/learned/). Use after a non-trivial successful workflow you may need again.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Skill slug (lowercase-hyphen)' },
+            description: { type: 'string', description: 'Short description (≤120 chars)' },
+            content: { type: 'string', description: 'Skill body markdown: When to Use, Procedure, Pitfalls' },
+            tags: { type: 'array', items: { type: 'string' } },
+          },
+          required: ['name', 'content'],
+        },
       },
       {
         name: 'synthesize_tool',
@@ -3758,6 +3836,109 @@ export class CodingToolExecutor implements ToolExecutor {
     } catch (error: any) {
       return { error: true, success: false, message: `Fetch failed: ${error.message}` };
     }
+  }
+
+  // ── Learning loop tools ────────────────────────────────────
+  private async curatedMemoryAction(p: any): Promise<any> {
+    const {
+      CuratedMemoryStore,
+      isWriteApprovalEnabledAsync,
+      stageWrite,
+    } = await import('./learning-loop/index.js');
+    const store = new CuratedMemoryStore();
+    const action = String(p.action || '');
+    const target = (p.target === 'user' ? 'user' : 'memory') as 'memory' | 'user';
+    const needsApproval = await isWriteApprovalEnabledAsync('memory');
+
+    if (needsApproval && (action === 'add' || action === 'replace' || action === 'remove')) {
+      const staged = await stageWrite(
+        'memory',
+        `${action} ${target}: ${String(p.content || p.old_text || '').slice(0, 80)}`,
+        {
+          action,
+          target,
+          content: p.content,
+          old_text: p.old_text,
+        },
+        'tool',
+      );
+      return {
+        success: true,
+        staged: true,
+        id: staged.id,
+        message: `Staged for approval (id=${staged.id}). Operator: xibecode memory approve ${staged.id}`,
+      };
+    }
+
+    if (action === 'add') {
+      if (!p.content) return { error: true, success: false, message: 'content required for add' };
+      return store.add(target, String(p.content));
+    }
+    if (action === 'replace') {
+      if (!p.old_text || !p.content) {
+        return { error: true, success: false, message: 'old_text and content required for replace' };
+      }
+      return store.replace(target, String(p.old_text), String(p.content));
+    }
+    if (action === 'remove') {
+      if (!p.old_text) return { error: true, success: false, message: 'old_text required for remove' };
+      return store.remove(target, String(p.old_text));
+    }
+    return { error: true, success: false, message: 'action must be add|replace|remove' };
+  }
+
+  private async sessionSearchAction(query: string, limit?: number): Promise<any> {
+    const { searchSessions } = await import('./learning-loop/index.js');
+    const hits = await searchSessions(query, { limit: limit ?? 8 });
+    return {
+      success: true,
+      count: hits.length,
+      hits: hits.map((h) => ({
+        sessionId: h.sessionId,
+        score: h.score,
+        snippet: h.snippet,
+        path: h.path,
+        updated: h.updated,
+      })),
+    };
+  }
+
+  private async saveSkillAction(
+    name: string,
+    description: string | undefined,
+    content: string,
+    tags?: string[],
+  ): Promise<any> {
+    const {
+      saveLearnedSkill,
+      isWriteApprovalEnabledAsync,
+      stageWrite,
+    } = await import('./learning-loop/index.js');
+    const slug = name.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
+    const draft = {
+      name: slug,
+      description: (description || name).slice(0, 120),
+      content,
+      tags: tags || ['learned'],
+    };
+    if (await isWriteApprovalEnabledAsync('skill')) {
+      const staged = await stageWrite(
+        'skill',
+        `skill: ${slug}`,
+        draft,
+        'tool',
+      );
+      return {
+        success: true,
+        staged: true,
+        id: staged.id,
+        message: `Skill write staged (id=${staged.id}). Approve: xibecode memory approve ${staged.id}`,
+      };
+    }
+    const result = await saveLearnedSkill(draft);
+    return result.created
+      ? { success: true, ...result }
+      : { error: true, success: false, message: result.reason || 'failed to save skill' };
   }
 
   // ── update_memory: persist project knowledge ───────────────

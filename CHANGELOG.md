@@ -2,6 +2,80 @@
 
 All notable changes to XibeCode will be documented in this file.
 
+## [1.3.22] - 2026-07-19
+
+### Release
+
+- **`xibecode-core` 1.3.22** and **`xibecode` 1.3.22** (aligned versions).
+- CLI depends on **`xibecode-core` ^1.3.22**.
+
+Includes the 24/7 coding gateway (Telegram / Discord / Slack, cron, delivery ledger, circuit breakers, DM pairing), provider failover pool, and Hermes-style learning loop (curated MEMORY/USER, LLM post-turn review, write-approval, session FTS, skill learner).
+
+## [1.3.20] - 2026-07-19
+
+### Full learning loop + gateway reliability
+
+#### Core (`xibecode-core` **1.3.18**)
+- **LLM post-turn review** (optional cheap model via `XIBECODE_REVIEW_*` / OpenAI / OpenRouter keys)
+- **Write-approval** staging for memory/skills (`XIBECODE_MEMORY_WRITE_APPROVAL`, `memory approval on`)
+- **Session FTS index** (JS inverted + optional `node:sqlite` FTS5)
+- Curated MEMORY/USER, skill learner, tools: `curated_memory`, `session_search`, `save_skill`
+
+#### CLI (`xibecode` **1.3.20**)
+- `memory pending|approve|reject|approval`
+- `pair list|approve|revoke` — DM pairing codes for Telegram/Discord/Slack
+- Gateway: **delivery ledger**, **circuit breakers**, **pairing**, redelivery on restart
+
+## [1.3.19] - 2026-07-19
+
+### Learning loop (Hermes-style, coding-focused)
+
+#### Core (`xibecode-core` **1.3.17**)
+- **Curated memory** — `MEMORY.md` + `USER.md` under `~/.xibecode/memories/` with char limits (frozen snapshot in system prompt).
+- **Post-turn review** — after each completed run: extract preferences/lessons, update curated + neural memory, optionally create a learned skill.
+- **Session search** — keyword search over past sessions (`session_search` tool).
+- **Skill learner** — auto-save complex successful workflows to `~/.xibecode/skills/learned/`.
+- Tools: `curated_memory`, `session_search`, `save_skill` (plus existing `remember_lesson` / `update_memory`).
+
+#### CLI (`xibecode` **1.3.19**)
+- `xibecode memory curated` — show MEMORY/USER
+- `xibecode memory sessions <query>` — search past chats
+- `xibecode memory skills` — list learned skills
+
+## [1.3.18] - 2026-07-19
+
+### CLI (`xibecode`) — coding-focused 24/7 gateway
+
+- Bump to **1.3.18**.
+- **Telegram polish**: tool progress (edit-in-place), Markdown code replies, `/stop`, `/workdir`, `/progress`, message queue while busy, document attach hints.
+- **Discord** adapter (Gateway WebSocket + REST). Env: `DISCORD_BOT_TOKEN`, `DISCORD_ALLOWED_USERS`, `DISCORD_HOME_CHANNEL` (enable Message Content Intent).
+- **Slack** adapter (Socket Mode). Env: `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_ALLOWED_USERS`, `SLACK_HOME_CHANNEL`.
+- Shared **ChatController** for all platforms — coding system prompt, per-chat workdir, abortable agent runs.
+- Cron delivery targets: `telegram`, `discord`, `slack` (and `platform:chatId`).
+
+## [1.3.17] - 2026-07-19
+
+### CLI (`xibecode`)
+
+- Bump to **1.3.17**.
+- Depend on **`xibecode-core` ^1.3.16**.
+- **`xibecode gateway`** — Hermes-style 24/7 daemon:
+  - Cron scheduler (60s tick)
+  - Telegram long-polling messaging adapter
+  - Per-chat session continuity under `~/.xibecode/gateway/sessions/`
+  - **`--install`** writes a systemd user unit for always-on operation
+  - **`--start` / `--stop` / `--status`** control the user service
+- **`xibecode cron`** — manage scheduled agent jobs (`list`, `create`, `remove`, `pause`, `resume`, `show`, `edit`)
+- Config keys: `fallbackProviders`, `telegramBotToken`, `telegramHomeChatId`, `gatewayWorkdir`
+- Env: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USERS`, `TELEGRAM_HOME_CHANNEL`, `XIBECODE_FALLBACK_PROVIDERS`, `GATEWAY_ALLOW_ALL_USERS`
+
+### Core (`xibecode-core`)
+
+- Bump to **1.3.16**.
+- **Provider pool / failover** (`ProviderPool`, `parseFallbackProviders`) — rotate API keys / providers on rate limits, outages, and auth failures for higher connection reliability.
+- **`EnhancedAgent`** accepts `fallbackProviders` and automatically fails over mid-run.
+- **Cron subsystem** — schedule parser (`30m`, `every 2h`, `0 9 * * *`, ISO), atomic job store (`~/.xibecode/cron/jobs.json`), tick lock, output ledger, `startCronScheduler`.
+
 ## [1.3.16] - 2026-05-24
 
 ### CLI (`xibecode`)

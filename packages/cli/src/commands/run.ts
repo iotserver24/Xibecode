@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import { createRequire } from 'module';
-import { EnhancedAgent } from 'xibecode-core';
+import { EnhancedAgent, parseFallbackProviders } from 'xibecode-core';
 import { CodingToolExecutor } from 'xibecode-core';
 import { PluginManager } from 'xibecode-core';
 import { MCPClientManager } from 'xibecode-core';
@@ -305,6 +305,11 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
     sessionMemoryLoadPromise,
   ]);
 
+  const fallbackProviders = parseFallbackProviders(
+    (config.getAll() as any).fallbackProviders,
+    process.env.XIBECODE_FALLBACK_PROVIDERS,
+  );
+
   const agent = new EnhancedAgent(
     {
       apiKey,
@@ -328,6 +333,7 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
       defaultSkillsPrompt,
       remoteToolWorkspaceRoot: remoteToolWorkspaceRootForAgent(remoteExecution),
       remoteToolSandboxId: remoteExecution?.e2bSandboxId,
+      fallbackProviders,
     },
     provider as any);
   // Inject memory into agent (we'll need to update Agent to accept it or just let it use its own? Better to share same instance)

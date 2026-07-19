@@ -545,6 +545,8 @@ function XibeCodeChatApp(props: {
   const historyIndexRef = useRef(-1);
   const savedInputRef = useRef('');
   const cachedFileEntriesRef = useRef<FileEntry[]>([]);
+  const isRunningRef = useRef(false);
+  const questionsStateRef = useRef<QuestionsState>(null);
   /** Exact ⟦@path⟧ strings inserted via the file picker — edits inside remove the whole token */
   const lockedPickTagsRef = useRef<Set<string>>(new Set());
   const sessionMessagesRef = useRef<MessageParam[]>(
@@ -552,6 +554,14 @@ function XibeCodeChatApp(props: {
   );
 
   const lastBgLineByTask = useRef<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    isRunningRef.current = isRunning;
+  }, [isRunning]);
+
+  useEffect(() => {
+    questionsStateRef.current = questionsState;
+  }, [questionsState]);
 
   useEffect(() => {
     if (!isRunning) return;
@@ -1448,13 +1458,15 @@ function XibeCodeChatApp(props: {
     }
 
     // During an active run, Esc always means "abort run" (takes priority over question UI).
-    if (isRunning && key.escape) {
-      if (questionsState) {
+    // Read from refs so fast keypresses don't depend on a stale render snapshot.
+    if (key.escape && isRunningRef.current) {
+      if (questionsStateRef.current) {
         setQuestionsState(null);
       }
       if (abortControllerRef.current && abortReasonRef.current === 'none') {
         abortReasonRef.current = 'user';
         abortControllerRef.current.abort();
+        pushLine({ type: 'info', text: 'Cancelling...' });
       }
       return;
     }

@@ -63,6 +63,16 @@ export class SkillManager {
         } catch {
             // User skills directory doesn't exist, skip
         }
+
+        // Agent-learned skills from the learning loop
+        try {
+            const { learnedSkillsDir } = await import('./learning-loop/skill-learner.js');
+            const learned = learnedSkillsDir();
+            await fs.access(learned);
+            await this.loadSkillsFromDirectory(learned, 'user');
+        } catch {
+            // No learned skills yet
+        }
     }
 
     private async loadSkillsFromDirectory(dir: string, source: 'built-in' | 'user'): Promise<void> {

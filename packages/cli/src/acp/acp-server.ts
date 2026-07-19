@@ -1465,16 +1465,19 @@ async function runAgentTurn(args: {
       }
     }
 
-    if (session?.mcpConnectPromise) {
-      await session.mcpConnectPromise;
-    } else {
-      try {
-        const mcpServers = await args.config.getMCPServers();
-        if (Object.keys(mcpServers).length > 0) {
-          await mcpClientManager.connectAll(mcpServers, { retries: 1, backoffMs: 750 });
+    if (!session?.mcpConnectPromise) {
+      const connectPromise = (async () => {
+        try {
+          const mcpServers = await args.config.getMCPServers();
+          if (Object.keys(mcpServers).length > 0) {
+            await mcpClientManager.connectAll(mcpServers, { retries: 1, backoffMs: 750 });
+          }
+        } catch {
+          // non-critical
         }
-      } catch {
-        // non-critical
+      })();
+      if (session) {
+        session.mcpConnectPromise = connectPromise;
       }
     }
 
@@ -1488,7 +1491,7 @@ async function runAgentTurn(args: {
 
     await withTimeout(
       Promise.all([memoryInitPromise, sessionMemoryPromise]),
-      800,
+      250,
       undefined,
       "memory warmup",
     );
@@ -1502,7 +1505,7 @@ async function runAgentTurn(args: {
     })();
     const defaultSkillsPrompt = await withTimeout(
       defaultSkillsPromise,
-      1500,
+      350,
       "",
       "skills prompt",
     );
@@ -1651,17 +1654,16 @@ async function handleChat(
     if (!mcpClientManager) {
       mcpClientManager = new MCPClientManager();
       chatSession.mcpClientManager = mcpClientManager;
-      chatSession.mcpConnectPromise = config.getMCPServers().then((mcpServers) => {
-        if (Object.keys(mcpServers).length > 0) {
-          return mcpClientManager!.connectAll(mcpServers, { retries: 1, backoffMs: 750 });
+      chatSession.mcpConnectPromise = (async () => {
+        try {
+          const mcpServers = await config.getMCPServers();
+          if (Object.keys(mcpServers).length > 0) {
+            await mcpClientManager!.connectAll(mcpServers, { retries: 1, backoffMs: 750 });
+          }
+        } catch (err) {
+          console.error("[acp] Failed to connect MCP servers in background for chat:", err);
         }
-      }).catch((err) => {
-        console.error("[acp] Failed to connect MCP servers in background for chat:", err);
-      });
-    }
-
-    if (chatSession.mcpConnectPromise) {
-      await chatSession.mcpConnectPromise;
+      })();
     }
     const setupMessages: string[] = [];
     const handledSetup = await handleSetupFlow({
@@ -1737,7 +1739,7 @@ async function handleChat(
 
     await withTimeout(
       Promise.all([memoryInitPromise, sessionMemoryPromise]),
-      800,
+      250,
       undefined,
       "memory warmup",
     );
@@ -1751,7 +1753,7 @@ async function handleChat(
     })();
     const defaultSkillsPrompt = await withTimeout(
       defaultSkillsPromise,
-      1500,
+      350,
       "",
       "skills prompt",
     );

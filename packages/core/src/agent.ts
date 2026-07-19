@@ -29,6 +29,15 @@ import { PermissionRuleManager } from './permission-rules/permission-rules.js';
 import { HooksManager } from './hooks/hooks.js';
 import { AutoMemoryManager } from './auto-memory/auto-memory.js';
 import { microcompact, shouldAutoCompact, resetMicrocompactCircuitBreaker, estimateTokenCount } from './microcompact.js';
+import {
+  ProviderPool,
+  shouldFailoverProvider,
+  type ProviderEndpoint,
+} from './provider-pool.js';
+import {
+  CuratedMemoryStore,
+  runPostTurnReview,
+} from './learning-loop/index.js';
 
 /** Reasoning tier for hierarchical (AX-lite) behavior: strategic = plan only, tactical = per-step decisions, operational = tool use. */
 export type ReasoningTier = 'strategic' | 'tactical' | 'operational';
@@ -79,6 +88,11 @@ export interface AgentConfig {
   remoteToolWorkspaceRoot?: string;
   /** E2B sandbox id for preview URL context. */
   remoteToolSandboxId?: string;
+  /**
+   * Fallback provider endpoints (Hermes-style). On rate limits, outages, or
+   * auth failures after same-endpoint retries, rotate to the next endpoint.
+   */
+  fallbackProviders?: ProviderEndpoint[];
 }
 
 export interface AgentEvent {
@@ -360,7 +374,9 @@ export class EnhancedAgent extends EventEmitter {
   private messages: MessageParam[] = [];
   private loopDetector = new LoopDetector();
   private thinkFilter = new ThinkTagFilter();
-  private config: Required<Omit<AgentConfig, 'sessionMemory' | 'contextHintFiles' | 'planningModel' | 'executionModel' | 'mindsetAdaptive' | 'strictTextOnlyCompletion' | 'defaultSkillsPrompt' | 'requestFormat' | 'completionEvidenceMode' | 'postEditVerification' | 'memoryRecallMinScore' | 'remoteToolWorkspaceRoot' | 'remoteToolSandboxId'>> & { customProviderFormat: 'openai' | 'anthropic'; requestFormat: 'auto' | 'openai' | 'anthropic'; sessionMemory?: SessionMemory | null; contextHintFiles: string[]; planningModel?: string; executionModel?: string; mindsetAdaptive?: boolean; strictTextOnlyCompletion: boolean; completionEvidenceMode: 'off' | 'balanced' | 'strict'; postEditVerification: 'off' | 'balanced' | 'strict'; memoryRecallMinScore: number };
+  private config: Required<Omit<AgentConfig, 'sessionMemory' | 'contextHintFiles' | 'planningModel' | 'executionModel' | 'mindsetAdaptive' | 'strictTextOnlyCompletion' | 'defaultSkillsPrompt' | 'requestFormat' | 'completionEvidenceMode' | 'postEditVerification' | 'memoryRecallMinScore' | 'remoteToolWorkspaceRoot' | 'remoteToolSandboxId' | 'fallbackProviders'>> & { customProviderFormat: 'openai' | 'anthropic'; requestFormat: 'auto' | 'openai' | 'anthropic'; sessionMemory?: SessionMemory | null; contextHintFiles: string[]; planningModel?: string; executionModel?: string; mindsetAdaptive?: boolean; strictTextOnlyCompletion: boolean; completionEvidenceMode: 'off' | 'balanced' | 'strict'; postEditVerification: 'off' | 'balanced' | 'strict'; memoryRecallMinScore: number; fallbackProviders: ProviderEndpoint[] };
+  /** Multi-endpoint pool for connection reliability / failover. */
+  private providerPool: ProviderPool | null = null;
   private iterationCount = 0;
   private toolCallCount = 0;
   private filesChanged: Set<string> = new Set();
@@ -375,6 +391,10 @@ export class EnhancedAgent extends EventEmitter {
   private activeSkill: { name: string; instructions: string } | null = null;
   private defaultSkillsPrompt: string = '';
   private memory: NeuralMemory;
+  /** Hermes-style bounded MEMORY.md / USER.md (learning loop). */
+  private curatedMemory: CuratedMemoryStore;
+  private learningInitialPrompt: string = '';
+  private toolsUsedThisRun: Set<string> = new Set();
   private injectedMessages: string[] = [];
   /** Current reasoning tier (AX-lite): strategic = plan, tactical = step decisions, operational = tools. */
   private currentTier: ReasoningTier = 'tactical';
@@ -594,6 +614,8 @@ export class EnhancedAgent extends EventEmitter {
     }
 
     this.client = new Anthropic(clientConfig);
+    // Prefer explicit provider override from config, otherwise auto-detect
+    this.provider = providerOverride ?? config.provider ?? this.detectProvider(config.model);
     this.config = {
       apiKey: config.apiKey,
       baseUrl: config.baseUrl ?? '',
@@ -601,7 +623,7 @@ export class EnhancedAgent extends EventEmitter {
       maxIterations: config.maxIterations ?? 150,
       verbose: config.verbose ?? false,
       mode: config.mode ?? 'agent',
-      provider: config.provider ?? this.detectProvider(config.model),
+      provider: this.provider,
       customProviderFormat: config.customProviderFormat ?? 'openai',
       requestFormat: config.requestFormat ?? 'auto',
       planFirst: config.planFirst ?? false,
@@ -614,11 +636,32 @@ export class EnhancedAgent extends EventEmitter {
       completionEvidenceMode: config.completionEvidenceMode ?? 'balanced',
       postEditVerification: config.postEditVerification ?? 'balanced',
       memoryRecallMinScore: config.memoryRecallMinScore ?? 2,
+      fallbackProviders: config.fallbackProviders ?? [],
     };
     this.defaultSkillsPrompt = config.defaultSkillsPrompt ?? '';
     this.remoteToolWorkspaceRoot = config.remoteToolWorkspaceRoot?.trim() || undefined;
     this.remoteToolSandboxId = config.remoteToolSandboxId?.trim() || undefined;
     this.mindsetAdaptive = this.config.mindsetAdaptive ?? false;
+
+    // Build failover pool when fallbacks are configured
+    if (config.fallbackProviders?.length) {
+      try {
+        this.providerPool = ProviderPool.fromPrimaryAndFallbacks(
+          {
+            id: 'primary',
+            apiKey: config.apiKey,
+            model: config.model,
+            provider: this.provider,
+            baseUrl: config.baseUrl,
+            requestFormat: config.requestFormat,
+            customProviderFormat: config.customProviderFormat,
+          },
+          config.fallbackProviders,
+        );
+      } catch {
+        this.providerPool = null;
+      }
+    }
 
     // Initialize mode state and orchestrator
     this.modeState = createModeState(this.config.mode);
@@ -628,14 +671,14 @@ export class EnhancedAgent extends EventEmitter {
       autoApprovalPolicy: 'prompt-only',
       allowAutoEscalation: true,
     });
-    // Prefer explicit provider override from config, otherwise auto-detect
-    this.provider = providerOverride ?? config.provider ?? this.detectProvider(this.config.model);
 
     // Load project memory if it exists
     this.sessionMemory = config.sessionMemory ?? null;
     this.contextHintFiles = config.contextHintFiles ?? [];
     this.memory = new NeuralMemory();
     this.memory.init().catch(console.error);
+    this.curatedMemory = new CuratedMemoryStore();
+    this.curatedMemory.freezeSnapshot().catch(() => { /* non-fatal */ });
 
     // Initialize settings, permission rules, hooks, and auto-memory
     this.settingsManager = new SettingsManager({ cwd: process.cwd() });
@@ -645,6 +688,33 @@ export class EnhancedAgent extends EventEmitter {
 
     // Load settings and hooks asynchronously (non-blocking)
     this.initializeFeatures().catch(() => { /* non-fatal */ });
+  }
+
+  /**
+   * Switch live credentials / model / base URL to a pool endpoint
+   * (used during failover for higher connection reliability).
+   */
+  private applyProviderEndpoint(endpoint: ProviderEndpoint): void {
+    this.config.apiKey = endpoint.apiKey;
+    this.config.model = endpoint.model;
+    if (endpoint.baseUrl !== undefined) {
+      this.config.baseUrl = endpoint.baseUrl || '';
+    }
+    if (endpoint.customProviderFormat) {
+      this.config.customProviderFormat = endpoint.customProviderFormat;
+    }
+    if (endpoint.requestFormat) {
+      this.config.requestFormat = endpoint.requestFormat;
+    }
+    this.provider =
+      endpoint.provider ?? this.detectProvider(endpoint.model);
+    this.config.provider = this.provider;
+
+    const clientConfig: any = { apiKey: endpoint.apiKey };
+    if (this.config.baseUrl) {
+      clientConfig.baseURL = this.config.baseUrl;
+    }
+    this.client = new Anthropic(clientConfig);
   }
 
   detectProvider(model: string): ProviderType {
@@ -723,6 +793,8 @@ export class EnhancedAgent extends EventEmitter {
     this.questionsPendingFlag = false;
     this.activeToolExecutor = toolExecutor;
     this.pendingAssistantTranscriptUuid = generateUuid();
+    this.learningInitialPrompt = initialPrompt;
+    this.toolsUsedThisRun = new Set();
 
     if (this.pendingAssistantTranscriptUuid) {
       if (typeof toolExecutor?.setActiveFileHistoryMessageId === 'function') {
@@ -882,6 +954,7 @@ export class EnhancedAgent extends EventEmitter {
             response = result.message;
             streamed = result.streamed;
             const persona = result.persona;
+            this.providerPool?.markSuccess();
             break;
           } catch (apiError: any) {
             if (opts?.signal?.aborted || this.isAbortError(apiError)) {
@@ -891,6 +964,28 @@ export class EnhancedAgent extends EventEmitter {
             const retryable = isRetryableError(apiError);
             const rateLimit = isRateLimitError(apiError);
             this.emit('error', { message: 'API Error', error: apiError.message });
+
+            // Provider-pool failover: after same-endpoint retries, or immediately
+            // on auth/quota-style failures, rotate to the next endpoint.
+            const tryFailover =
+              this.providerPool &&
+              this.providerPool.size() > 1 &&
+              shouldFailoverProvider(apiError) &&
+              (!retryable || attempt >= maxApiRetries);
+
+            if (tryFailover) {
+              const next = this.providerPool!.rotate(
+                String((apiError as any)?.message || 'failover'),
+              );
+              if (next) {
+                this.applyProviderEndpoint(next);
+                this.emit('warning', {
+                  message: `Failing over to ${next.id || next.provider || 'backup'} (${next.model}) after: ${(apiError as any)?.message || apiError}`,
+                });
+                attempt = 0; // reset retry counter on new endpoint
+                continue;
+              }
+            }
 
             if (!retryable) {
               // Non-retryable error (auth, bad request, etc.) — fail immediately
@@ -908,6 +1003,18 @@ export class EnhancedAgent extends EventEmitter {
               });
               await new Promise((r) => setTimeout(r, delay));
             } else {
+              // Last chance: try next provider in pool
+              if (this.providerPool && this.providerPool.size() > 1) {
+                const next = this.providerPool.rotate('max-retries');
+                if (next) {
+                  this.applyProviderEndpoint(next);
+                  this.emit('warning', {
+                    message: `Max retries on current endpoint — switching to ${next.id || next.model}`,
+                  });
+                  attempt = 0;
+                  continue;
+                }
+              }
               this.emit('warning', {
                 message: `Max retries (${maxApiRetries}) exceeded for retryable error.`,
               });
@@ -1339,6 +1446,7 @@ export class EnhancedAgent extends EventEmitter {
     }
 
     try {
+      this.toolsUsedThisRun.add(toolUse.name);
       let result = await toolExecutor.execute(toolUse.name, toolUse.input);
 
       if (['write_file', 'edit_file', 'edit_lines', 'verified_edit'].includes(toolUse.name)) {
@@ -1348,8 +1456,12 @@ export class EnhancedAgent extends EventEmitter {
 
       // Bust the per-session memory cache whenever the agent writes to memory
       // so the next run() turn reloads from disk.
-      if (['update_memory', 'remember_lesson'].includes(toolUse.name) && result?.success !== false) {
+      if (
+        ['update_memory', 'remember_lesson', 'curated_memory'].includes(toolUse.name) &&
+        result?.success !== false
+      ) {
         this.invalidateMemoryCache();
+        void this.curatedMemory?.freezeSnapshot?.();
       }
 
       const verification = await this.postEditVerify(toolExecutor, toolUse, result);
@@ -2050,7 +2162,16 @@ ${this.defaultSkillsPrompt ? `${this.defaultSkillsPrompt}\n\n` : ''}
 5. **Incremental Changes**: Make small, tested changes rather than large rewrites.
 6. **Error Recovery & Loop Avoidance**: If a tool fails, DO NOT call it again with the same parameters. Analyze the error, verify your assumptions (using read/search tools), and try a COMPLETELY different approach.
 7. **Web Research**: Use \`web_search\` and \`fetch_url\` when you need documentation, error solutions, or up-to-date info.
-8. **Remember Important Things**: Use \`update_memory\` to save project knowledge for future sessions.${this.autoMemoryMarkdownSection ? `
+8. **Remember Important Things** (learning loop):
+   - \`curated_memory\` — durable facts in MEMORY.md / USER.md (bounded; always in context next session)
+   - \`remember_lesson\` / \`update_memory\` — project lessons and .xibecode/memory.md
+   - \`session_search\` — find past conversations when you need details not in memory
+   - \`save_skill\` — save a reusable coding procedure after a non-trivial successful workflow
+   Save proactively: user preferences, project conventions, fixes that took real work.
+${(() => {
+  const curated = this.curatedMemory?.formatForSystemPrompt?.() || '';
+  return curated ? `\n${curated}\n` : '';
+})()}${this.autoMemoryMarkdownSection ? `
 
 The following markdown memories were selected for this session (keyword-ranked; verify critical facts):
 
@@ -2678,6 +2799,48 @@ ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
       } catch {
         /* non-fatal */
       }
+    }
+
+    // Learning loop: curated memory + optional skill creation
+    try {
+      let finalText = '';
+      for (let i = this.messages.length - 1; i >= 0; i--) {
+        const m = this.messages[i]!;
+        if (m.role !== 'assistant') continue;
+        if (typeof m.content === 'string') {
+          finalText = m.content;
+          break;
+        }
+        if (Array.isArray(m.content)) {
+          finalText = m.content
+            .filter((b: any) => b?.type === 'text')
+            .map((b: any) => b.text)
+            .join('\n');
+          if (finalText) break;
+        }
+      }
+
+      const review = await runPostTurnReview({
+        messages: this.messages,
+        stats: {
+          toolCalls: this.toolCallCount,
+          filesChanged: this.filesChanged.size,
+          iterations: this.iterationCount,
+          changedFiles: Array.from(this.filesChanged),
+          toolsUsed: Array.from(this.toolsUsedThisRun),
+          initialPrompt: this.learningInitialPrompt,
+          finalText,
+        },
+        curated: this.curatedMemory,
+        neural: this.memory,
+        learnSkills: true,
+      });
+
+      for (const n of review.notifications) {
+        this.emit('warning', { message: n });
+      }
+    } catch {
+      /* non-fatal */
     }
   }
 

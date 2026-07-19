@@ -8,7 +8,7 @@ import { SkillManager } from 'xibecode-core';
 import { builtInSkillsDir } from '../utils/built-in-skills-dir.js';
 import { MCPClientManager } from 'xibecode-core';
 import { CodingToolExecutor, NeuralMemory } from 'xibecode-core';
-import { EnhancedAgent, AgentStream } from 'xibecode-core';
+import { EnhancedAgent, AgentStream, parseFallbackProviders } from 'xibecode-core';
 import { SessionManager } from 'xibecode-core';
 import {
   attachRemoteExecution,
@@ -151,6 +151,10 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
         defaultSkillsPrompt,
         remoteToolWorkspaceRoot: remoteToolWorkspaceRootForAgent(remoteExecution),
         remoteToolSandboxId: remoteToolSandboxIdForAgent(remoteExecution),
+        fallbackProviders: parseFallbackProviders(
+          (config.getAll() as any).fallbackProviders,
+          process.env.XIBECODE_FALLBACK_PROVIDERS,
+        ),
       },
       provider,
     );

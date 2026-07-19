@@ -15,6 +15,9 @@ import { hooksCommand } from "./commands/hooks.js";
 import { memoryCommand } from "./commands/memory.js";
 import { whatsNewCommand } from "./commands/whats-new.js";
 import { modelsCmd } from "./commands/models.js";
+import { gatewayCommand } from "./commands/gateway.js";
+import { cronCommand } from "./commands/cron.js";
+import { pairCommand } from "./commands/pair.js";
 import { resolveSessionBySandboxId } from "./utils/cloud-gateway.js";
 import { ConfigManager } from "./utils/config.js";
 import { resolveRemoteExecutionConfig } from "./utils/remote-execution.js";
@@ -493,6 +496,57 @@ mcpCmd
   .command("login")
   .description("Authenticate with Smithery")
   .action(() => mcpCommand("login", []));
+
+// ── 24/7 Gateway (Hermes-style long-running process) ──
+program
+  .command("gateway")
+  .description(
+    "Run the 24/7 coding gateway: cron + Telegram / Discord / Slack",
+  )
+  .option(
+    "--profile <name>",
+    "Config profile to use (default: configured default profile)",
+  )
+  .option(
+    "--workdir <path>",
+    "Default working directory for agent runs and cron jobs",
+  )
+  .option(
+    "--cron-only",
+    "Only run the cron scheduler (no messaging adapters)",
+    false,
+  )
+  .option(
+    "--install",
+    "Install a systemd user service for 24/7 operation",
+    false,
+  )
+  .option("--start", "Start the systemd user service", false)
+  .option("--stop", "Stop the systemd user service", false)
+  .option("--status", "Show systemd user service status", false)
+  .action((opts) => gatewayCommand(opts));
+
+// Cron job management
+program
+  .command("cron")
+  .description("Manage scheduled agent tasks (requires `xibecode gateway` running)")
+  .argument("[action]", "list | create | remove | pause | resume | show | edit", "list")
+  .argument("[args...]", "Action arguments (schedule + prompt for create, id for others)")
+  .option("--name <name>", "Job name")
+  .option("--deliver <target>", "local | telegram | telegram:CHAT_ID (default local)")
+  .option("--workdir <path>", "Working directory for the job")
+  .option("-m, --model <model>", "Pin model for this job")
+  .option("--provider <provider>", "Pin provider for this job")
+  .option("--schedule <schedule>", "Schedule string (for create/edit)")
+  .option("--prompt <prompt>", "Prompt text (for create/edit)")
+  .action((action, args, opts) => cronCommand(action, args || [], opts));
+
+program
+  .command("pair")
+  .description("Approve DM pairing codes for the messaging gateway")
+  .argument("[action]", "list | approve | revoke", "list")
+  .argument("[args...]", "approve <platform> <code> | revoke <platform> <userId>")
+  .action((action, args) => pairCommand(action, args || []));
 
 // If --acp is present, boot as a headless JSON-RPC 2.0 server over stdio.
 const acpArgIdx = process.argv.indexOf("--acp");
