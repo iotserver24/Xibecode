@@ -15,6 +15,7 @@ import { settingsCommand } from "./commands/settings.js";
 import { hooksCommand } from "./commands/hooks.js";
 import { memoryCommand } from "./commands/memory.js";
 import { whatsNewCommand } from "./commands/whats-new.js";
+import { updateCommand } from "./commands/update.js";
 import { modelsCmd } from "./commands/models.js";
 import { gatewayCommand } from "./commands/gateway.js";
 import { cronCommand } from "./commands/cron.js";
@@ -25,11 +26,15 @@ import { resolveRemoteExecutionConfig } from "./utils/remote-execution.js";
 import { startACPServer } from "./acp/acp-server.js";
 import dotenv from "dotenv";
 import { createRequire } from "module";
+import { loadSecretEnvFiles } from "./utils/xibecode-home.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
 
+// CWD .env first, then ~/.xibecode secrets (daemon.env / gateway.env).
+// Existing process.env wins (systemd EnvironmentFile / shell exports).
 dotenv.config();
+loadSecretEnvFiles();
 
 type ChatCliOptions = Parameters<typeof chatCommand>[0];
 
@@ -463,6 +468,32 @@ program
   .description("Compare your CLI version to npm and show the changelog link")
   .action(async () => {
     await whatsNewCommand();
+  });
+
+program
+  .command("update")
+  .description(
+    "Check or apply CLI update from npm (opt-in; E2B/Vectra Cloud uses dashboard confirm)",
+  )
+  .option("--check", "Only check npm for a newer version (default)", false)
+  .option("--apply", "Install update (requires --yes for non-interactive)", false)
+  .option("--version <semver>", "Exact version to install (with --apply)")
+  .option("--yes", "Confirm non-interactive apply", false)
+  .option(
+    "--restart",
+    "After apply in E2B/hosted, auto-relaunch the daemon (default on E2B)",
+    false,
+  )
+  .option("--json", "Machine-readable output", false)
+  .action(async (opts) => {
+    await updateCommand({
+      check: opts.check || (!opts.apply && !opts.version),
+      apply: opts.apply || Boolean(opts.version),
+      version: opts.version,
+      yes: opts.yes,
+      restart: opts.restart,
+      json: opts.json,
+    });
   });
 
 // MCP Server Management

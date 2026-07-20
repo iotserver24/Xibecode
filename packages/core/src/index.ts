@@ -17,6 +17,30 @@ export {
   type ProviderConfigEntry,
   type SetupProviderOption,
 } from './types/index.js';
+
+// ─── Models catalog (live /models + curated fallbacks) ─────────
+export {
+  fetchProviderModels,
+  resolveProviderEndpoint,
+  listProviderCatalog,
+  listAllProvidersCatalog,
+  CURATED_PROVIDER_MODELS,
+  type FetchModelsOptions,
+  type FetchModelsResult,
+} from './models-catalog.js';
+
+// ─── models.dev (109+ providers community registry) ────────────
+export {
+  fetchModelsDevRegistry,
+  listModelsDevProviders,
+  getModelsDevProvider,
+  modelsDevModelIds,
+  resolveModelsDevEndpoint,
+  normalizeModelsDevId,
+  wireFormatFromNpm,
+  type ModelsDevProvider,
+  type ModelsDevModel,
+} from './models-dev.js';
 export { type MCPServerConfig, type MCPServersConfig, type MCPServerConfigLegacy } from './types/index.js';
 export { type ImageAttachment } from './types/index.js';
 export { type TodoStatus, type TodoItem, type TodoDocument } from './types/index.js';

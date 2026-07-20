@@ -35,7 +35,7 @@
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { existsSync, renameSync, mkdirSync, constants as fsConstants } from 'fs';
+import { existsSync, renameSync, mkdirSync, readFileSync } from 'fs';
 
 const DIR_MODE = 0o700;
 
@@ -174,6 +174,54 @@ export const gatewayHome = daemonHome;
 export function secretEnvFiles(home = getXibecodeHome()): string[] {
   const p = paths(home);
   return [p.envFile, p.daemonEnv, p.gatewayEnv];
+}
+
+/**
+ * Load `~/.xibecode/.env`, `daemon.env`, and legacy `gateway.env` into process.env.
+ * Does not overwrite keys already set in the environment (systemd / shell win).
+ * Returns paths that were successfully loaded.
+ */
+export function loadSecretEnvFiles(home = getXibecodeHome()): string[] {
+  const loaded: string[] = [];
+  for (const file of secretEnvFiles(home)) {
+    if (!existsSync(file)) continue;
+    try {
+      const raw = readFileSync(file, 'utf-8');
+      for (const line of raw.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eq = trimmed.indexOf('=');
+        if (eq <= 0) continue;
+        const key = trimmed.slice(0, eq).trim();
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+        let val = trimmed.slice(eq + 1).trim();
+        if (
+          (val.startsWith('"') && val.endsWith('"')) ||
+          (val.startsWith("'") && val.endsWith("'"))
+        ) {
+          val = val.slice(1, -1);
+        }
+        if (process.env[key] === undefined) {
+          process.env[key] = val;
+        }
+      }
+      loaded.push(file);
+    } catch {
+      /* ignore unreadable env files */
+    }
+  }
+  return loaded;
+}
+
+/** Redact bot tokens / API keys from log lines (Telegram URLs embed the token). */
+export function redactSecrets(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/bot\d+:[A-Za-z0-9_-]+/g, 'bot***')
+    .replace(/\b(sk-[A-Za-z0-9_-]{8,})/g, 'sk-***')
+    .replace(/\b(xox[baprs]-[A-Za-z0-9-]+)/g, 'xox***')
+    .replace(/\b(xapp-[A-Za-z0-9-]+)/g, 'xapp-***')
+    .replace(/(api[_-]?key|token|password|secret)\s*[:=]\s*\S+/gi, '$1=***');
 }
 
 /** Primary path to write new daemon secrets. */

@@ -133,14 +133,15 @@ export async function gatewayCommand(options: GatewayCliOptions): Promise<void> 
 
   // Foreground daemon
   console.log(chalk.cyan(`${DAEMON_PRODUCT_NAME} — 24/7 coding agent`));
-  console.log(chalk.dim('  cron + Telegram / Discord / Slack'));
+  console.log(chalk.dim('  cron + Telegram / Discord / Slack + skills'));
   console.log(chalk.dim(`  home: ${home}`));
   console.log(chalk.dim(`  daemon state: ${p.daemon}`));
   console.log(chalk.dim('  Ctrl+C to stop\n'));
-  console.log(chalk.white(`Env (put in ${secretPath}):`));
+  console.log(chalk.white(`Env (loaded from ${secretPath} if present):`));
   console.log(chalk.dim('  TELEGRAM_BOT_TOKEN + TELEGRAM_ALLOWED_USERS'));
   console.log(chalk.dim('  DISCORD_BOT_TOKEN + DISCORD_ALLOWED_USERS  (Message Content Intent on)'));
   console.log(chalk.dim('  SLACK_BOT_TOKEN + SLACK_APP_TOKEN + SLACK_ALLOWED_USERS'));
+  console.log(chalk.dim('  Skills: /skills · /skill <name> · agent list_skills/view_skill'));
   console.log('');
 
   const runner = new GatewayRunner({

@@ -10,21 +10,20 @@ const pkg = createRequire(import.meta.url)('../../package.json');
 async function fetchModelsFromEndpoint(opts: {
   baseUrl: string;
   apiKey: string;
+  provider?: string;
+  format?: 'openai' | 'anthropic';
 }): Promise<string[]> {
-  const normalizedBase = opts.baseUrl.replace(/\/+$/, '');
-
-  const res = await fetch(`${normalizedBase}/models`, {
-    headers: {
-      Authorization: `Bearer ${opts.apiKey}`,
-      'Content-Type': 'application/json',
-    },
+  const { fetchProviderModels } = await import('xibecode-core');
+  const result = await fetchProviderModels({
+    baseUrl: opts.baseUrl,
+    apiKey: opts.apiKey,
+    format: opts.format,
+    provider: opts.provider,
   });
-  if (!res.ok) throw new Error(`GET /models failed (${res.status})`);
-  const payload = (await res.json()) as { data?: Array<{ id?: string }> };
-  const models = (payload.data ?? []).map((m) => m.id ?? '').filter(Boolean);
-  const unique = Array.from(new Set(models)).filter(Boolean).sort((a, b) => a.localeCompare(b));
-  if (!unique.length) throw new Error('No models returned from /models');
-  return unique;
+  if (!result.models.length) {
+    throw new Error(result.error || 'No models returned from /models');
+  }
+  return result.models;
 }
 
 interface ConfigOptions {
@@ -114,36 +113,58 @@ export async function configCommand(options: ConfigOptions) {
 
   if (options.setProvider) {
     const provider = options.setProvider.toLowerCase();
-    const allowed = [
-      'anthropic',
-      'openai',
-      'deepseek',
-      'zai',
-      'kimi',
-      'grok',
-      'openrouter',
-      'google',
-      'routingrun',
-      'zenllm',
-      'auto',
-    ];
-
-    if (!allowed.includes(provider)) {
-      ui.error(
-        `Invalid provider "${options.setProvider}". Valid values: ${allowed.join(
-          ', ',
-        )}`,
-      );
-      process.exit(1);
-    }
+    const { PROVIDER_CONFIGS, resolveModelsDevEndpoint } = await import(
+      'xibecode-core'
+    );
+    const builtinIds = Object.keys(PROVIDER_CONFIGS);
 
     if (provider === 'auto') {
       config.delete('provider');
       ui.success('Provider reset to auto-detect.');
-    } else {
-      config.set('provider', provider as any);
-      ui.success(`Provider set to: ${provider}`);
+      return;
     }
+
+    // Built-in first-class providers
+    if (builtinIds.includes(provider)) {
+      const cfg = PROVIDER_CONFIGS[provider as keyof typeof PROVIDER_CONFIGS];
+      config.set('provider', provider as any);
+      if (cfg.baseUrl) config.set('baseUrl', cfg.baseUrl);
+      if (cfg.defaultModel) config.set('model', cfg.defaultModel);
+      if (cfg.format) config.set('customProviderFormat', cfg.format);
+      ui.success(`Provider set to: ${provider} (${cfg.name})`);
+      if (cfg.baseUrl) ui.info(`Base URL → ${cfg.baseUrl}`);
+      if (cfg.defaultModel) ui.info(`Default model → ${cfg.defaultModel}`);
+      const keyUrl = 'apiKeyUrl' in cfg ? (cfg as { apiKeyUrl?: string }).apiKeyUrl : undefined;
+      ui.info(`Env key: ${cfg.envKey}${keyUrl ? ` · ${keyUrl}` : ''}`);
+      return;
+    }
+
+    // models.dev / Hermes-style community providers
+    try {
+      const mdev = await resolveModelsDevEndpoint(provider);
+      if (mdev) {
+        config.set('provider', provider as any);
+        if (mdev.baseUrl) config.set('baseUrl', mdev.baseUrl);
+        if (mdev.defaultModel) config.set('model', mdev.defaultModel);
+        config.set('customProviderFormat', mdev.format);
+        ui.success(`Provider set to: ${provider} (${mdev.name}) [models.dev]`);
+        if (mdev.baseUrl) ui.info(`Base URL → ${mdev.baseUrl}`);
+        else ui.warning('No public API URL in models.dev — set with --set-url');
+        if (mdev.defaultModel) ui.info(`Default model → ${mdev.defaultModel}`);
+        if (mdev.envKeys.length) {
+          ui.info(`Env keys: ${mdev.envKeys.join(', ')}`);
+        }
+        return;
+      }
+    } catch {
+      /* fall through */
+    }
+
+    ui.error(
+      `Unknown provider "${options.setProvider}". ` +
+        `List: xibecode models --providers --all`,
+    );
+    process.exit(1);
     return;
   }
 

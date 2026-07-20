@@ -7,6 +7,7 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import {
   globalProcessRegistry,
+  SkillManager,
   type DangerousApprovalChoice,
   type DangerousApprovalRequest,
 } from 'xibecode-core';
@@ -43,6 +44,7 @@ import {
   ledgerMarkFailed,
 } from './delivery-ledger.js';
 import { ConfigManager } from '../utils/config.js';
+import { builtInSkillsDir } from '../utils/built-in-skills-dir.js';
 
 const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -961,7 +963,190 @@ export class ChatController {
       return;
     }
 
+    if (cmd === 'skills' || cmd === 'skill') {
+      await this.handleSkillsSlash(msg, cmd, arg, reply);
+      return;
+    }
+
+    if (cmd === 'update') {
+      await this.handleUpdateSlash(msg, arg, reply);
+      return;
+    }
+
     await reply(`Unknown \`/${cmd}\`. Try \`/help\`.`);
+  }
+
+  /**
+   * E2B/hosted: ask → `/update yes` installs npm package and auto-restarts daemon.
+   */
+  private async handleUpdateSlash(
+    msg: InboundMessage,
+    arg: string,
+    reply: (text: string) => Promise<void>,
+  ): Promise<void> {
+    const {
+      applySelfUpdate,
+      checkCliUpdate,
+      formatUpdateOffer,
+      isE2bHostedRuntime,
+    } = await import('../utils/self-update.js');
+
+    const sub = arg.trim().toLowerCase();
+    const confirm =
+      sub === 'yes' ||
+      sub === 'y' ||
+      sub === 'apply' ||
+      sub === 'confirm' ||
+      sub === 'ok' ||
+      sub === 'install';
+    const deny = sub === 'no' || sub === 'n' || sub === 'dismiss' || sub === 'later';
+
+    if (deny) {
+      await reply('OK — skipped. Ask again anytime with `/update`.');
+      return;
+    }
+
+    if (!confirm) {
+      const avail = await checkCliUpdate({ forceRefresh: false });
+      await reply(formatUpdateOffer(avail));
+      // Buttons send as plain text "yes"/"no" via choice picker → handle as /update yes
+      const adapter = this.options.getAdapter(msg.platform);
+      if (avail.updateAvailable && adapter?.sendChoicePicker) {
+        try {
+          await adapter.sendChoicePicker(
+            msg.chatId,
+            'Install update and auto-restart daemon?',
+            [
+              { value: '/update yes', label: 'Update & restart' },
+              { value: '/update no', label: 'Not now' },
+            ],
+            'up',
+          );
+        } catch {
+          /* text offer already sent */
+        }
+      }
+      return;
+    }
+
+    // Confirm path
+    await reply('Updating CLI… then auto-restarting daemon (this may take a minute).');
+    const hosted = isE2bHostedRuntime();
+    const result = await applySelfUpdate({
+      restartDaemon: hosted, // E2B: install + relaunch self
+    });
+
+    if (!result.ok) {
+      await reply(
+        `Update failed: ${result.error || 'unknown'}\n\`${(result.logs || '').slice(0, 400)}\``,
+      );
+      return;
+    }
+
+    if (result.logs === 'already_latest') {
+      await reply(`Already on latest · \`${result.from}\``);
+      return;
+    }
+
+    await reply(
+      `Updated \`${result.from}\` → \`${result.verified}\`` +
+        (result.restarted
+          ? '\nRestarting daemon… brb.'
+          : '\nRestart the daemon from the dashboard if channels go quiet.'),
+    );
+  }
+
+  /** Hermes-style /skills list and /skill <name> view. */
+  private async handleSkillsSlash(
+    msg: InboundMessage,
+    cmd: string,
+    arg: string,
+    reply: (text: string) => Promise<void>,
+  ): Promise<void> {
+    const workdir =
+      (await getOrCreateSession(msg.platform, msg.chatId)).workdir ||
+      this.options.defaultWorkdir();
+    const manager = new SkillManager(
+      workdir,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      builtInSkillsDir,
+    );
+    try {
+      await manager.loadSkills();
+    } catch (err: any) {
+      await reply(`Failed to load skills: ${err?.message || err}`);
+      return;
+    }
+
+    // /skill <name> or /skills show <name>
+    const showName =
+      cmd === 'skill'
+        ? arg.trim()
+        : /^show\s+/i.test(arg)
+          ? arg.replace(/^show\s+/i, '').trim()
+          : '';
+
+    if (showName) {
+      const result = manager.viewSkill(showName);
+      if (!result.ok) {
+        await reply(result.message);
+        return;
+      }
+      const s = result.skill;
+      const body = [
+        `**${s.name}**${s.provenance ? ` _(${s.provenance})_` : ''}`,
+        s.description ? `_${s.description}_` : '',
+        '',
+        s.instructions.trim().slice(0, 3500),
+        s.instructions.length > 3500 ? '\n…(truncated; agent can view_skill for full body)' : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
+      await reply(body);
+      return;
+    }
+
+    // /skills search <q> or /skills <q>
+    let query = '';
+    const tokens = arg.trim();
+    if (/^search\s+/i.test(tokens)) {
+      query = tokens.replace(/^search\s+/i, '').trim();
+    } else if (tokens && !/^list$/i.test(tokens)) {
+      query = tokens;
+    }
+
+    const catalog = manager.listSkillsCatalog({
+      query: query || undefined,
+      limit: 40,
+    });
+    if (!catalog.length) {
+      await reply(
+        query
+          ? `No skills match \`${query}\`.`
+          : 'No skills found. Add under `.xibecode/skills` or `~/.xibecode/skills`.',
+      );
+      return;
+    }
+    const lines = catalog.map(
+      (s) =>
+        `• **${s.name}**${s.provenance ? ` _(${s.provenance})_` : ''}${
+          s.description ? ` — ${s.description.slice(0, 80)}` : ''
+        }`,
+    );
+    await reply(
+      [
+        `**Skills (${catalog.length}${query ? ` matching "${query}"` : ''})**`,
+        '',
+        ...lines,
+        '',
+        '`/skill <name>` — full instructions',
+        '`/skills search <query>` — filter',
+        'During coding, the agent uses `list_skills` + `view_skill`.',
+      ].join('\n'),
+    );
   }
 
   /** Map "1" / "2" to choice text when ask_user offered options. */
@@ -1102,37 +1287,27 @@ export class ChatController {
 }
 
 async function fetchModelsList(cfg: ConfigManager): Promise<string[]> {
+  const { fetchProviderModels, PROVIDER_CONFIGS } = await import('xibecode-core');
   const apiKey = cfg.getApiKey();
   const baseUrl = (cfg.getBaseUrl() || '').replace(/\/+$/, '');
   if (!baseUrl) throw new Error('no base URL configured');
-
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 10_000);
-  try {
-    const res = await fetch(`${baseUrl}/models`, {
-      headers: {
-        Authorization: `Bearer ${apiKey ?? ''}`,
-        'Content-Type': 'application/json',
-      },
-      signal: ctrl.signal,
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const payload = (await res.json()) as any;
-    if (Array.isArray(payload?.data)) {
-      return payload.data
-        .map((m: any) => (typeof m?.id === 'string' ? m.id : null))
-        .filter(Boolean) as string[];
-    }
-    if (typeof payload?.data?.id === 'string') return [payload.data.id];
-    if (Array.isArray(payload)) {
-      return payload
-        .map((m: any) => (typeof m === 'string' ? m : m?.id))
-        .filter((x: unknown): x is string => typeof x === 'string');
-    }
-    return [];
-  } finally {
-    clearTimeout(timer);
+  const provider = (cfg.get('provider') as string | undefined) || undefined;
+  const format =
+    (cfg.get('customProviderFormat') as 'openai' | 'anthropic' | undefined) ||
+    (provider && provider !== 'custom' && PROVIDER_CONFIGS[provider as keyof typeof PROVIDER_CONFIGS]
+      ? PROVIDER_CONFIGS[provider as keyof typeof PROVIDER_CONFIGS].format
+      : 'openai');
+  const result = await fetchProviderModels({
+    baseUrl,
+    apiKey,
+    format,
+    provider,
+    timeoutMs: 10_000,
+  });
+  if (!result.models.length && result.error) {
+    throw new Error(result.error);
   }
+  return result.models;
 }
 
 export async function loadGatewayConfig(): Promise<Record<string, any>> {

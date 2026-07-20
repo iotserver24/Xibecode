@@ -24,8 +24,10 @@ import {
   ensureXibecodeHomeSync,
   getXibecodeHome,
   gatewayHome,
+  loadSecretEnvFiles,
   paths,
   primarySecretEnvPath,
+  redactSecrets,
 } from '../utils/xibecode-home.js';
 import { ChatController, loadGatewayConfig, saveGatewayConfig } from './chat-controller.js';
 import { isSilent, wrapCron } from './format.js';
@@ -62,9 +64,28 @@ export class GatewayRunner {
   }
 
   private log(msg: string): void {
-    const line = `[daemon ${new Date().toISOString()}] ${msg}`;
+    const line = `[daemon ${new Date().toISOString()}] ${redactSecrets(msg)}`;
     console.log(line);
     void this.appendLog(line);
+  }
+
+  private async writePidFile(): Promise<void> {
+    try {
+      const p = paths();
+      await fs.mkdir(p.daemon, { recursive: true });
+      await fs.writeFile(p.daemonPid, String(process.pid), 'utf-8');
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private async clearPidFile(): Promise<void> {
+    try {
+      const p = paths();
+      await fs.unlink(p.daemonPid).catch(() => {});
+    } catch {
+      /* ignore */
+    }
   }
 
   private async appendLog(line: string): Promise<void> {
@@ -257,11 +278,21 @@ export class GatewayRunner {
 
   async start(): Promise<void> {
     await ensureXibecodeHome();
+    // Foreground runs need secrets from ~/.xibecode/*.env (systemd uses EnvironmentFile).
+    const envLoaded = loadSecretEnvFiles();
     await fs.mkdir(gatewayHome(), { recursive: true });
+    await this.writePidFile();
     this.log(`${DAEMON_PRODUCT_NAME} starting (pid ${process.pid})`);
     this.log(`home ${getXibecodeHome()}`);
     this.log(`daemon ${gatewayHome()}`);
     this.log(`workdir ${this.defaultWorkdir()}`);
+    if (envLoaded.length) {
+      this.log(`loaded secrets from ${envLoaded.map((f) => path.basename(f)).join(', ')}`);
+    } else {
+      this.log(
+        `no secret env files found — put TELEGRAM_BOT_TOKEN etc. in ${primarySecretEnvPath()}`,
+      );
+    }
 
     this.stopCron = startCronScheduler({
       intervalMs: this.options.cronIntervalMs ?? 60_000,
@@ -326,6 +357,9 @@ export class GatewayRunner {
         ...[...this.breakers.values()].map((b) => b.statusLine()),
       ],
     });
+
+    // E2B/hosted: notify home chats if a newer CLI is on npm (never auto-install)
+    void this.maybeNotifyCliUpdate();
 
     if (this.adapters.size === 0) {
       this.log(
@@ -396,7 +430,43 @@ export class GatewayRunner {
     this.stopCron = null;
     for (const a of this.adapters.values()) a.stop();
     this.adapters.clear();
+    void this.clearPidFile();
     this.log('stopped');
+  }
+
+  /**
+   * On E2B/hosted: if npm has a newer xibecode, ping home channels once.
+   * User must reply `/update yes` (or use dashboard) — never silent install.
+   */
+  private async maybeNotifyCliUpdate(): Promise<void> {
+    try {
+      const {
+        checkCliUpdate,
+        formatUpdateOffer,
+        isE2bHostedRuntime,
+      } = await import('../utils/self-update.js');
+      if (!isE2bHostedRuntime()) return;
+      const avail = await checkCliUpdate({ forceRefresh: false });
+      if (!avail.updateAvailable) {
+        this.log(`cli version ${avail.current} (up to date or check skipped)`);
+        return;
+      }
+      this.log(
+        `cli update available: ${avail.latest} (running ${avail.current}) — user must /update yes`,
+      );
+      const text = formatUpdateOffer(avail);
+      for (const adapter of this.adapters.values()) {
+        const home = adapter.homeChannel;
+        if (!home) continue;
+        try {
+          await adapter.sendMessage(home, text);
+        } catch (err: any) {
+          this.log(`update notify ${adapter.name}: ${err?.message || err}`);
+        }
+      }
+    } catch (err: any) {
+      this.log(`cli update check: ${err?.message || err}`);
+    }
   }
 }
 

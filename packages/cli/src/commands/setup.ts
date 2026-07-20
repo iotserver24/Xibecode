@@ -264,7 +264,11 @@ async function setupModel(config: ConfigManager): Promise<void> {
     provider !== 'auto'
       ? PROVIDER_CONFIGS[provider as keyof typeof PROVIDER_CONFIGS]
       : undefined;
-  const hint = pcfg?.apiKeyUrl ? `Get a key: ${pcfg.apiKeyUrl}` : 'Paste your API key';
+  const pcfgKeyUrl =
+    pcfg && 'apiKeyUrl' in pcfg
+      ? (pcfg as { apiKeyUrl?: string }).apiKeyUrl
+      : undefined;
+  const hint = pcfgKeyUrl ? `Get a key: ${pcfgKeyUrl}` : 'Paste your API key';
 
   const existingKey = config.getApiKey();
   let enterNew = true;

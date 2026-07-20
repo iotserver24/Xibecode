@@ -995,6 +995,51 @@ export class CodingToolExecutor implements ToolExecutor {
         return this.saveSkillAction(p.name, p.description, p.content, p.tags);
       }
 
+      case 'list_skills': {
+        // Ensure skills are loaded (daemon/chat may call before loadSkills)
+        try {
+          await this.skillManager.loadSkills();
+        } catch {
+          /* best-effort */
+        }
+        const catalog = this.skillManager.listSkillsCatalog({
+          query: typeof p.query === 'string' ? p.query : undefined,
+          limit: typeof p.limit === 'number' ? p.limit : undefined,
+        });
+        return {
+          success: true,
+          count: catalog.length,
+          skills: catalog,
+          hint: 'Call view_skill with a skill name to load full instructions before applying them.',
+        };
+      }
+
+      case 'view_skill': {
+        const name = typeof p.name === 'string' ? p.name : typeof p.skill === 'string' ? p.skill : '';
+        if (!name.trim()) {
+          return { error: true, success: false, message: 'Missing required parameter: name (skill name)' };
+        }
+        try {
+          await this.skillManager.loadSkills();
+        } catch {
+          /* best-effort */
+        }
+        const result = this.skillManager.viewSkill(name);
+        if (!result.ok) {
+          return { error: true, success: false, message: result.message };
+        }
+        const s = result.skill;
+        return {
+          success: true,
+          name: s.name,
+          description: s.description,
+          provenance: s.provenance,
+          tags: s.tags,
+          instructions: s.instructions,
+          filePath: s.filePath,
+        };
+      }
+
       case 'take_screenshot':
       case 'get_console_logs':
       case 'run_visual_test':
@@ -1209,7 +1254,7 @@ export class CodingToolExecutor implements ToolExecutor {
       }
 
       default:
-        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, synthesize_tool, take_screenshot, get_console_logs, run_visual_test, check_accessibility, measure_performance, test_responsive, capture_network, search_skills_sh, install_skill_from_skills_sh, preview_app, delegate_subtask, run_swarm` };
+        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, synthesize_tool, list_skills, view_skill, save_skill, take_screenshot, get_console_logs, run_visual_test, check_accessibility, measure_performance, test_responsive, capture_network, search_skills_sh, install_skill_from_skills_sh, preview_app, delegate_subtask, run_swarm` };
     }
     } catch (err: any) {
       return { error: true, success: false, message: err?.message ?? String(err) };
@@ -2072,6 +2117,39 @@ export class CodingToolExecutor implements ToolExecutor {
             tags: { type: 'array', items: { type: 'string' } },
           },
           required: ['name', 'content'],
+        },
+      },
+      {
+        name: 'list_skills',
+        description:
+          'List installed skills (metadata only — progressive disclosure). Use when you need domain workflows beyond the system prompt. Then call view_skill to load full instructions for a chosen skill.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'Optional filter on name/description/tags',
+            },
+            limit: {
+              type: 'number',
+              description: 'Max results (default 200)',
+            },
+          },
+        },
+      },
+      {
+        name: 'view_skill',
+        description:
+          'Load full instructions for a skill by name (after list_skills). Apply the procedure in this turn; do not invent steps that are not in the skill.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            name: {
+              type: 'string',
+              description: 'Skill name (e.g. "debug-production", "react-next-patterns")',
+            },
+          },
+          required: ['name'],
         },
       },
       {

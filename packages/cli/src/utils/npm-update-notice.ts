@@ -27,8 +27,87 @@ export type UpdateCheckCache = {
 };
 
 export function updateCheckDisabled(): boolean {
-  const v = process.env.XIBECODE_DISABLE_UPDATE_CHECK;
+  const v =
+    process.env.XIBECODE_DISABLE_UPDATE_CHECK ||
+    process.env.XIBECODE_DISABLE_AUTO_UPDATE;
   return v === '1' || v === 'true';
+}
+
+/**
+ * True when running inside E2B / Vectra Cloud / hosted sandbox templates.
+ * Used to avoid silent self-updates; dashboard/hosting drives opt-in upgrades.
+ */
+export function isE2bHostedRuntime(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.XIBECODE_HOSTED === '1' || env.XIBECODE_HOSTED === 'true') return true;
+  if (env.XIBECODE_SANDBOX_MODE === 'e2b') return true;
+  if (env.E2B === '1' || env.E2B === 'true') return true;
+  if (env.E2B_SANDBOX_ID || env.E2B_SANDBOX) return true;
+  // Template layout: workspace + home under /home/user
+  try {
+    if (
+      existsSync('/home/user/workspace') &&
+      (env.HOME === '/home/user' || env.USER === 'user')
+    ) {
+      return true;
+    }
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+export type UpdateAvailability = {
+  current: string;
+  latest: string;
+  updateAvailable: boolean;
+  fromCache: boolean;
+  hosted: boolean;
+  disabled: boolean;
+};
+
+/**
+ * Compare current package version to npm latest (cached).
+ * Never installs — check only.
+ */
+export async function checkUpdateAvailable(
+  currentVersion: string,
+  options?: { forceRefresh?: boolean; cacheTtlMs?: number; timeoutMs?: number },
+): Promise<UpdateAvailability> {
+  const hosted = isE2bHostedRuntime();
+  if (updateCheckDisabled()) {
+    return {
+      current: currentVersion,
+      latest: currentVersion,
+      updateAvailable: false,
+      fromCache: false,
+      hosted,
+      disabled: true,
+    };
+  }
+  try {
+    const { latest, fromCache } = await getNpmLatestVersion({
+      forceRefresh: options?.forceRefresh,
+      cacheTtlMs: options?.cacheTtlMs,
+      timeoutMs: options?.timeoutMs,
+    });
+    return {
+      current: currentVersion,
+      latest,
+      updateAvailable: compareSemverCore(latest, currentVersion) > 0,
+      fromCache,
+      hosted,
+      disabled: false,
+    };
+  } catch {
+    return {
+      current: currentVersion,
+      latest: currentVersion,
+      updateAvailable: false,
+      fromCache: false,
+      hosted,
+      disabled: false,
+    };
+  }
 }
 
 function cachePath(): string {

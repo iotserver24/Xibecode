@@ -32,6 +32,8 @@ export class SkillManager {
     private builtInSkills: Skill[] = [];
     private builtInSkillsDir: string;
     private userSkillsDir: string;
+    /** Global user skills: ~/.xibecode/skills (Hermes-style home). */
+    private homeSkillsDir: string;
     private marketplace: MarketplaceClient;
     private skillsSh: SkillsShClient;
     private aiConfig: AISynthesisConfig;
@@ -41,6 +43,10 @@ export class SkillManager {
         this.builtInSkillsDir = builtInSkillsDir || path.join(__dirname, '..', '..', 'skills');
         // User-defined skills in project
         this.userSkillsDir = path.join(workingDir, '.xibecode', 'skills');
+        const home =
+            process.env.XIBECODE_HOME?.trim() ||
+            path.join(process.env.HOME || process.env.USERPROFILE || '', '.xibecode');
+        this.homeSkillsDir = path.join(home, 'skills');
         this.marketplace = new MarketplaceClient();
         this.skillsSh = new SkillsShClient();
         this.aiConfig = {
@@ -52,53 +58,114 @@ export class SkillManager {
     }
 
     async loadSkills(): Promise<void> {
+        this.skills.clear();
         this.builtInSkills = [];
-        // Load built-in skills
+        // Load built-in skills (flat .md)
         await this.loadSkillsFromDirectory(this.builtInSkillsDir, 'built-in');
 
-        // Load user skills (if directory exists)
-        try {
-            await fs.access(this.userSkillsDir);
-            await this.loadSkillsFromDirectory(this.userSkillsDir, 'user');
-        } catch {
-            // User skills directory doesn't exist, skip
-        }
+        // Project skills: flat .md + nested SKILL.md (agentskills / Hermes layout)
+        await this.loadSkillsTree(this.userSkillsDir, 'user');
+
+        // Global home skills (~/.xibecode/skills)
+        await this.loadSkillsTree(this.homeSkillsDir, 'user');
 
         // Agent-learned skills from the learning loop
         try {
             const { learnedSkillsDir } = await import('./learning-loop/skill-learner.js');
             const learned = learnedSkillsDir();
-            await fs.access(learned);
-            await this.loadSkillsFromDirectory(learned, 'user');
+            await this.loadSkillsTree(learned, 'user');
         } catch {
             // No learned skills yet
         }
     }
 
+    /**
+     * Load skills from a tree: top-level `*.md` plus recursive `SKILL.md` dirs
+     * (Hermes / agentskills.io layout).
+     */
+    private async loadSkillsTree(dir: string, source: 'built-in' | 'user'): Promise<void> {
+        try {
+            await fs.access(dir);
+        } catch {
+            return;
+        }
+        await this.loadSkillsFromDirectory(dir, source);
+        await this.loadSkillMdRecursive(dir, source, 0);
+    }
+
     private async loadSkillsFromDirectory(dir: string, source: 'built-in' | 'user'): Promise<void> {
         try {
-            const files = await fs.readdir(dir);
-            const skillFiles = files.filter(f => f.endsWith('.md'));
+            const files = await fs.readdir(dir, { withFileTypes: true });
+            const skillFiles = files.filter((f) => f.isFile() && f.name.endsWith('.md') && f.name.toUpperCase() !== 'SKILL.MD');
 
             for (const file of skillFiles) {
-                const filePath = path.join(dir, file);
-                const content = await fs.readFile(filePath, 'utf-8');
-                const skill = this.parseSkillFile(content, file, {
-                    provenance: source === 'built-in' ? 'built-in' : 'user',
-                    filePath,
-                });
-                if (skill) {
-                    this.skills.set(skill.name, skill);
-                    if (source === 'built-in') {
-                        this.builtInSkills.push(skill);
-                    }
-                }
+                // Skip lock/readme-style files that aren't skills
+                if (/^(readme|changelog|license|skills-lock)/i.test(file.name)) continue;
+                const filePath = path.join(dir, file.name);
+                await this.registerSkillFile(filePath, file.name, source);
             }
         } catch (error) {
             // Directory doesn't exist or can't be read
             if (source === 'built-in') {
                 console.warn(`Warning: Could not load built-in skills from ${dir}`);
             }
+        }
+    }
+
+    /** Walk subdirs for SKILL.md (max depth 6). */
+    private async loadSkillMdRecursive(
+        dir: string,
+        source: 'built-in' | 'user',
+        depth: number,
+    ): Promise<void> {
+        if (depth > 6) return;
+        let entries: Array<{ name: string; isDirectory: () => boolean }>;
+        try {
+            entries = await fs.readdir(dir, { withFileTypes: true });
+        } catch {
+            return;
+        }
+        for (const ent of entries) {
+            if (!ent.isDirectory()) continue;
+            if (ent.name.startsWith('.') && ent.name !== '.agents') continue;
+            if (['node_modules', 'dist', 'build', '.git'].includes(ent.name)) continue;
+            const sub = path.join(dir, ent.name);
+            const skillMd = path.join(sub, 'SKILL.md');
+            try {
+                await fs.access(skillMd);
+                await this.registerSkillFile(skillMd, `${ent.name}.md`, source);
+            } catch {
+                /* no SKILL.md at this level */
+            }
+            await this.loadSkillMdRecursive(sub, source, depth + 1);
+        }
+    }
+
+    private async registerSkillFile(
+        filePath: string,
+        filename: string,
+        source: 'built-in' | 'user',
+    ): Promise<void> {
+        try {
+            const content = await fs.readFile(filePath, 'utf-8');
+            const skill = this.parseSkillFile(content, filename, {
+                provenance: source === 'built-in' ? 'built-in' : 'user',
+                filePath,
+            });
+            if (!skill) return;
+            // Prefer first registration; project/user overrides built-in of same name
+            const existing = this.skills.get(skill.name);
+            if (existing?.provenance === 'built-in' && source === 'user') {
+                this.skills.set(skill.name, skill);
+                return;
+            }
+            if (existing) return;
+            this.skills.set(skill.name, skill);
+            if (source === 'built-in') {
+                this.builtInSkills.push(skill);
+            }
+        } catch {
+            /* skip unreadable */
         }
     }
 
@@ -199,16 +266,70 @@ export class SkillManager {
         const maxTotal = 28_000;
         const intro =
             selectionSummary +
-            '\n\nApply the subsections below when they fit the work. For more domain skills, use `search_skills_sh` or add files under `.xibecode/skills`.\n\n';
+            '\n\nApply the subsections below when they fit the work. For more skills, call `list_skills` then `view_skill` (progressive load), or `search_skills_sh` / add files under `.xibecode/skills` or `~/.xibecode/skills`.\n\n';
         const sorted = [...selected].sort((a, b) => a.name.localeCompare(b.name));
         const parts = sorted.map((s) => `### ${s.name}\n*${s.description}*\n\n${s.instructions}`);
         let body = `## Default bundled skills\n\n${intro}` + parts.join('\n\n---\n\n');
         if (body.length > maxTotal) {
             body =
                 body.slice(0, maxTotal) +
-                '\n\n[Bundled skills truncated for length; follow the skill titles above and general best practices.]';
+                '\n\n[Bundled skills truncated for length; use list_skills / view_skill for full catalog.]';
         }
         return body;
+    }
+
+    /**
+     * Metadata-only catalog (Hermes skills_list tier-1).
+     * Used by the list_skills tool and /skills slash command.
+     */
+    listSkillsCatalog(opts?: { query?: string; limit?: number }): Array<{
+        name: string;
+        description: string;
+        provenance?: string;
+        tags?: string[];
+    }> {
+        let items = this.listSkills();
+        const q = opts?.query?.trim().toLowerCase();
+        if (q) {
+            items = items.filter(
+                (s) =>
+                    s.name.toLowerCase().includes(q) ||
+                    s.description.toLowerCase().includes(q) ||
+                    s.tags?.some((t) => t.toLowerCase().includes(q)),
+            );
+        }
+        items = items.sort((a, b) => a.name.localeCompare(b.name));
+        const limit = opts?.limit && opts.limit > 0 ? opts.limit : 200;
+        return items.slice(0, limit).map((s) => ({
+            name: s.name,
+            description: s.description,
+            provenance: s.provenance,
+            tags: s.tags,
+        }));
+    }
+
+    /**
+     * Full skill body (Hermes skill_view tier-2).
+     */
+    viewSkill(name: string): { ok: true; skill: Skill } | { ok: false; message: string } {
+        const key = name.trim();
+        if (!key) return { ok: false, message: 'Missing skill name' };
+        // exact, then case-insensitive
+        let skill = this.getSkill(key);
+        if (!skill) {
+            const lower = key.toLowerCase();
+            skill = this.listSkills().find((s) => s.name.toLowerCase() === lower);
+        }
+        if (!skill) {
+            const partial = this.searchSkills(key).slice(0, 5).map((s) => s.name);
+            return {
+                ok: false,
+                message: partial.length
+                    ? `Skill not found: ${key}. Did you mean: ${partial.join(', ')}?`
+                    : `Skill not found: ${key}. Use list_skills to browse.`,
+            };
+        }
+        return { ok: true, skill };
     }
 
     searchSkills(query: string): Skill[] {

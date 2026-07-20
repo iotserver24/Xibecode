@@ -74,7 +74,10 @@ export class TelegramEngine implements MessagingAdapter {
   constructor(config: TelegramConfig, log?: (m: string) => void) {
     this.token = config.botToken;
     this.homeChannel = config.homeChatId || process.env.TELEGRAM_HOME_CHANNEL;
-    this.log = log || ((m) => console.log(`[telegram] ${m}`));
+    // Always redact bot tokens that node-fetch may put in error messages
+    const baseLog = log || ((m) => console.log(`[telegram] ${m}`));
+    this.log = (m) =>
+      baseLog(String(m).replace(/bot\d+:[A-Za-z0-9_-]+/g, 'bot***'));
     if (config.allowedUsers?.length) {
       this.allowed = new Set(
         config.allowedUsers.map((s) => s.trim()).filter(Boolean),
@@ -496,15 +499,15 @@ export class TelegramEngine implements MessagingAdapter {
     while (!this.stopped) {
       this.pollAbort = new AbortController();
       try {
-        const url = new URL(this.apiUrl('getUpdates'));
-        url.searchParams.set('timeout', '30');
-        url.searchParams.set('offset', String(this.offset));
-        url.searchParams.set(
-          'allowed_updates',
-          JSON.stringify(['message', 'callback_query']),
-        );
-        const res = await fetch(url.toString(), {
-          method: 'GET',
+        // POST body (not GET query) — avoids embedding the bot token in error URLs
+        const res = await fetch(this.apiUrl('getUpdates'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            timeout: 30,
+            offset: this.offset,
+            allowed_updates: ['message', 'callback_query'],
+          }),
           signal: this.pollAbort.signal as any,
         });
         if (!res.ok) {

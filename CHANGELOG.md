@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.4.30] - 2026-07-20
+
+### Release
+
+- **`xibecode-core` 1.4.30** and **`xibecode` 1.4.30**.
+- CLI depends on **`xibecode-core` ^1.4.30**.
+
+### E2B / Vectra Cloud — opt-in CLI update
+
+- `xibecode update --check` / `--apply --yes [--version] [--restart]` (never silent).
+- E2B detect (`isE2bHostedRuntime`); daemon notifies home chats when npm is newer.
+- Messaging: `/update`, `/update yes` (install + **auto-restart** daemon), `/update no`.
+- Hosting contract: `GET/POST …/cli-version` and `…/cli-update` (dashboard banner).
+- Disable: `XIBECODE_DISABLE_UPDATE_CHECK=1` or `XIBECODE_DISABLE_AUTO_UPDATE=1`.
+- Template pin example: `xibecode@1.4.30` (new sandboxes still need template rebuild).
+
+### Providers & models (Hermes-aligned)
+
+- Built-in provider catalog expanded; **models.dev** registry (100+ providers) for catalogs.
+- Shared `fetchProviderModels` (live `/models` + models.dev + curated fallback).
+- Anthropic-style headers for `/models`; filter non-chat models by default.
+
+### Daemon / skills
+
+- Load `daemon.env` / `gateway.env` on CLI boot; PID file; secret redaction in logs.
+- Skills: home + nested `SKILL.md`, tools `list_skills` / `view_skill`, `/skills` slash.
+
 All notable changes to XibeCode will be documented in this file.
 
 ## [1.4.2] - 2026-07-20

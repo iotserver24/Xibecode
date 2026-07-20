@@ -54,6 +54,11 @@ const TOOL_EMOJI: Record<string, string> = {
   fetch_url: '🌐',
   remember_lesson: '🧠',
   update_memory: '🧠',
+  list_skills: '🧩',
+  view_skill: '🧩',
+  save_skill: '🧩',
+  search_skills_sh: '🧩',
+  install_skill_from_skills_sh: '🧩',
   delegate_subtask: '🐝',
   run_swarm: '🐝',
 };
@@ -235,6 +240,7 @@ export function codingSystemPrefix(
     '- When stuck repeating the same failing command, stop, explain what failed, and ask or try a different approach.',
     '- Keep replies scannable in chat: short summary first, then details / code blocks.',
     '- If a task is done, say what changed and how to verify. Avoid fluff.',
+    '- Skills: use list_skills / view_skill for domain workflows (tests, debug, React, etc.) when relevant. Follow loaded skill steps with tools.',
   ];
   if (rigor !== 'yolo') {
     lines.push(
@@ -281,6 +287,9 @@ export const GATEWAY_BOT_COMMANDS: ReadonlyArray<{
   { command: 'level', description: 'Rigor: yolo | default | strict' },
   { command: 'model', description: 'Show or set model (/model name)' },
   { command: 'models', description: 'List models from API' },
+  { command: 'skills', description: 'List skills (or /skills search q)' },
+  { command: 'skill', description: 'Show a skill: /skill <name>' },
+  { command: 'update', description: 'CLI update: /update · /update yes' },
   { command: 'sethome', description: 'Set this chat as cron home' },
   { command: 'once', description: 'Allow a pending dangerous command once' },
   { command: 'session', description: 'Allow pending command for this session' },
@@ -313,8 +322,15 @@ export const HELP_TEXT = [
   '• `default` — ask on dangerous cmds (recommended)',
   '• `strict` — stronger anti-hallucination + verify after edits',
   '',
+  '**Skills** (progressive load, Hermes-style):',
+  '• `/skills` — list installed skills',
+  '• `/skills search <query>` — filter',
+  '• `/skill <name>` — show full skill body',
+  '• Agent tools during runs: `list_skills` + `view_skill`',
+  '',
   'Send a normal message to start or continue a coding task.',
   'Example: `Fix the failing tests in packages/cli`',
+  'Example: `Use the debug-production skill on this error: …`',
   '',
   'On Telegram, type `/` to pick a command from the menu.',
 ].join('\n');
