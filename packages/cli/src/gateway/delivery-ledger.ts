@@ -36,8 +36,10 @@ async function load(): Promise<LedgerEntry[]> {
 }
 
 async function save(entries: LedgerEntry[]): Promise<void> {
-  await fs.mkdir(gatewayHome(), { recursive: true });
-  const tmp = `${ledgerPath()}.${process.pid}.tmp`;
+  const dir = gatewayHome();
+  await fs.mkdir(dir, { recursive: true });
+  const dest = ledgerPath();
+  const tmp = `${dest}.${process.pid}.${Date.now()}.tmp`;
   // prune delivered > 7d, abandoned
   const week = Date.now() - 7 * 86_400_000;
   const kept = entries.filter((e) => {
@@ -46,7 +48,18 @@ async function save(entries: LedgerEntry[]): Promise<void> {
     return true;
   });
   await fs.writeFile(tmp, JSON.stringify({ entries: kept }, null, 2), 'utf-8');
-  await fs.rename(tmp, ledgerPath());
+  try {
+    await fs.rename(tmp, dest);
+  } catch (err: any) {
+    // Race / missing parent: retry once, then direct write
+    await fs.mkdir(dir, { recursive: true });
+    try {
+      await fs.rename(tmp, dest);
+    } catch {
+      await fs.writeFile(dest, JSON.stringify({ entries: kept }, null, 2), 'utf-8');
+      await fs.unlink(tmp).catch(() => {});
+    }
+  }
 }
 
 export async function ledgerRecordPending(

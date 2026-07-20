@@ -236,7 +236,24 @@ export { BackgroundAgentManager, type BackgroundTask } from './background-agent.
 export { ToolOrchestrator } from './tool-orchestrator.js';
 
 // ─── Safety ────────────────────────────────────────────────────
-export { type RiskLevel, type RiskAssessment, SafetyChecker, sanitizePath, sanitizeUrl } from './utils/safety.js';
+export {
+  type RiskLevel,
+  type RiskAssessment,
+  type DangerousApprovalChoice,
+  type DangerousApprovalRequest,
+  type DangerousApprovalHandler,
+  SafetyChecker,
+  sanitizePath,
+  sanitizeUrl,
+} from './utils/safety.js';
+
+export {
+  ProcessRegistry,
+  globalProcessRegistry,
+  looksLikeLongLivedCommand,
+  type ProcessSession,
+  type SpawnBackgroundOptions,
+} from './process-registry.js';
 
 // ─── Core Utils ────────────────────────────────────────────────
 export { GitUtils } from './utils/git.js';

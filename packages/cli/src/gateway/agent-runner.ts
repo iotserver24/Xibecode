@@ -10,9 +10,16 @@ import {
   parseFallbackProviders,
   type ProviderEndpoint,
   type ProviderType,
+  type DangerousApprovalHandler,
 } from 'xibecode-core';
+
+export type AskUserHandler = (req: {
+  question: string;
+  choices?: string[];
+}) => Promise<string>;
 import { ConfigManager } from '../utils/config.js';
 import { builtInSkillsDir } from '../utils/built-in-skills-dir.js';
+import { daemonHome } from '../utils/xibecode-home.js';
 import * as path from 'path';
 import * as os from 'os';
 
@@ -30,6 +37,16 @@ export interface HeadlessRunOptions {
   onEvent?: (type: string, data: any) => void;
   /** Abort mid-run (gateway /stop). */
   signal?: AbortSignal;
+  /** Pause high-risk tools until the user approves (Telegram / Discord / Slack). */
+  onDangerousApproval?: DangerousApprovalHandler;
+  /** Pause for clarify / ask_user (Hermes-style). */
+  onAskUser?: AskUserHandler;
+  /**
+   * Gateway rigor: yolo | default | strict
+   * Controls completion evidence + post-edit verification.
+   * (Approval prompts are still controlled by onDangerousApproval presence.)
+   */
+  rigorLevel?: 'yolo' | 'default' | 'strict';
 }
 
 export interface HeadlessRunResult {
@@ -125,10 +142,36 @@ export async function runHeadlessAgent(
 
   const fallbackProviders = resolveFallbacks(config);
 
+  const rigor = options.rigorLevel || 'default';
+  const completionEvidenceMode =
+    rigor === 'yolo' ? 'off' : rigor === 'strict' ? 'strict' : 'balanced';
+  const postEditVerification =
+    rigor === 'strict' ? 'balanced' : rigor === 'yolo' ? 'off' : 'off';
+
+  // YOLO skips the approval callback entirely even if the caller passed one.
+  const onDangerousApproval =
+    rigor === 'yolo' ? undefined : options.onDangerousApproval;
+
   const toolExecutor = new CodingToolExecutor(workdir, {
     dryRun: false,
     skillManager,
+    onDangerousApproval,
+    onAskUser: options.onAskUser,
+    abortSignal: options.signal,
   });
+
+  // Keep interrupt wired if signal is provided after construction
+  if (options.signal) {
+    toolExecutor.setAbortSignal(options.signal);
+    const onAbort = () => {
+      try {
+        toolExecutor.interruptActiveCommands();
+      } catch {
+        /* ignore */
+      }
+    };
+    options.signal.addEventListener('abort', onAbort);
+  }
 
   const agent = new EnhancedAgent(
     {
@@ -143,8 +186,10 @@ export async function runHeadlessAgent(
       requestFormat: config.get('requestFormat') ?? 'auto',
       defaultSkillsPrompt,
       fallbackProviders,
-      completionEvidenceMode: 'balanced',
-      postEditVerification: 'off',
+      completionEvidenceMode,
+      postEditVerification,
+      // Prefer ending with real tool evidence rather than pure prose claims
+      strictTextOnlyCompletion: rigor === 'strict',
     },
     provider as any,
   );
@@ -249,6 +294,7 @@ export async function runHeadlessAgent(
   }
 }
 
+/** Runtime root for Xibe Daemon (~/.xibecode/daemon; migrates from gateway/). */
 export function gatewayHome(): string {
-  return path.join(os.homedir(), '.xibecode', 'gateway');
+  return daemonHome();
 }

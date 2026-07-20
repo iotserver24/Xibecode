@@ -17,6 +17,7 @@ import chalk from 'chalk';
 import inquirer from 'inquirer';
 import { ConfigManager, PROVIDER_CONFIGS, listSetupProviders } from '../utils/config.js';
 import { installSystemdUserService } from '../gateway/runner.js';
+import { primarySecretEnvPath } from '../utils/xibecode-home.js';
 
 const pkg = createRequire(import.meta.url)('../../package.json');
 
@@ -33,7 +34,7 @@ type SectionKey = 'model' | 'gateway' | 'agent';
 
 const SECTIONS: Array<{ key: SectionKey; label: string }> = [
   { key: 'model', label: 'Model & Provider' },
-  { key: 'gateway', label: '24/7 Gateway (Telegram / Discord / Slack)' },
+  { key: 'gateway', label: 'Xibe Daemon 24/7 (Telegram / Discord / Slack)' },
   { key: 'agent', label: 'Agent defaults' },
 ];
 
@@ -70,12 +71,12 @@ function printNonInteractiveGuidance(reason?: string): void {
   console.log(chalk.cyan('  xibecode config --set-model claude-sonnet-4-5-20250929'));
   console.log(chalk.cyan('  xibecode config --show'));
   console.log('');
-  console.log(chalk.white('Telegram 24/7 (edit ~/.xibecode/gateway.env):'));
+  console.log(chalk.white(`Telegram 24/7 (edit ~/.xibecode/daemon.env or gateway.env):`));
   console.log(chalk.dim('  TELEGRAM_BOT_TOKEN=...'));
   console.log(chalk.dim('  TELEGRAM_ALLOWED_USERS=your_user_id'));
   console.log(chalk.dim('  ANTHROPIC_API_KEY=...   # if not in profile'));
   console.log('');
-  console.log(chalk.cyan('  xibecode gateway --install --workdir /path/to/repo'));
+  console.log(chalk.cyan('  xibecode daemon --install --workdir /path/to/repo'));
   console.log(chalk.cyan('  systemctl --user enable --now xibecode-gateway'));
   console.log('');
   console.log(chalk.dim("Run 'xibecode setup' in an interactive terminal for the full wizard."));
@@ -83,7 +84,7 @@ function printNonInteractiveGuidance(reason?: string): void {
 }
 
 function gatewayEnvPath(): string {
-  return path.join(os.homedir(), '.xibecode', 'gateway.env');
+  return primarySecretEnvPath();
 }
 
 async function readGatewayEnv(): Promise<Record<string, string>> {
@@ -408,7 +409,7 @@ async function setupModel(config: ConfigManager): Promise<void> {
 }
 
 async function setupGateway(config: ConfigManager): Promise<void> {
-  console.log(chalk.bold.white('2) 24/7 Gateway (messaging)\n'));
+  console.log(chalk.bold.white('2) Xibe Daemon — 24/7 messaging\n'));
   console.log(
     chalk.dim(
       'Talk to XibeCode from Telegram while it codes on this machine.\n' +
@@ -449,7 +450,7 @@ async function setupGateway(config: ConfigManager): Promise<void> {
     if (botToken?.trim()) {
       config.set('telegramBotToken', botToken.trim());
     }
-    console.log(chalk.green('✓ Telegram written to ~/.xibecode/gateway.env\n'));
+    console.log(chalk.green(`✓ Telegram written to ${gatewayEnvPath()}\n`));
   }
 
   const morePlatforms = await askYesNo('Also configure Discord and/or Slack?', false);
@@ -565,13 +566,13 @@ async function setupGateway(config: ConfigManager): Promise<void> {
       }
     } catch (err: any) {
       console.log(chalk.yellow(`Service install skipped: ${err?.message || err}`));
-      console.log(chalk.dim('You can still run: xibecode gateway --workdir ...\n'));
+      console.log(chalk.dim('You can still run: xibecode daemon --workdir ...\n'));
     }
   } else {
-    console.log(chalk.dim('\nLater: xibecode gateway --install --workdir /path/to/repo\n'));
+    console.log(chalk.dim('\nLater: xibecode daemon --install --workdir /path/to/repo\n'));
   }
 
-  console.log(chalk.green('✓ Gateway section done.\n'));
+  console.log(chalk.green('✓ Xibe Daemon section done.\n'));
 }
 
 async function setupAgent(config: ConfigManager): Promise<void> {
@@ -641,10 +642,10 @@ function printDoneSummary(config: ConfigManager): void {
   console.log(chalk.white('Next steps:'));
   console.log(chalk.cyan('  xibecode chat') + chalk.dim('              # local interactive coding'));
   console.log(
-    chalk.cyan('  xibecode gateway') + chalk.dim('           # 24/7 foreground (Telegram etc.)'),
+    chalk.cyan('  xibecode daemon') + chalk.dim('            # Xibe Daemon 24/7 (Telegram etc.)'),
   );
   console.log(
-    chalk.cyan('  xibecode gateway --status') + chalk.dim('  # if you installed the service'),
+    chalk.cyan('  xibecode daemon --status') + chalk.dim('   # if you installed the service'),
   );
   console.log(
     chalk.cyan('  xibecode pair list') + chalk.dim('         # approve pairing codes from DMs'),

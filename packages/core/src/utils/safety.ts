@@ -6,6 +6,22 @@ import * as path from 'path';
 
 export type RiskLevel = 'low' | 'medium' | 'high';
 
+/** User choice when a high-risk tool needs confirmation (gateway / interactive). */
+export type DangerousApprovalChoice = 'once' | 'session' | 'always' | 'deny';
+
+export interface DangerousApprovalRequest {
+  toolName: string;
+  reason: string;
+  level: RiskLevel;
+  command?: string;
+  path?: string;
+  warnings?: string[];
+}
+
+export type DangerousApprovalHandler = (
+  req: DangerousApprovalRequest,
+) => Promise<DangerousApprovalChoice>;
+
 /**
  * Resolve a file path against a working directory and ensure it stays inside it (no path traversal).
  * Use for all user-provided paths before file operations.
@@ -159,22 +175,33 @@ export class SafetyChecker {
   assessCommandRisk(command: string): RiskLevel {
     const cmd = command.toLowerCase().trim();
 
-    // High-risk commands
+    // High-risk commands (gateway will pause for approval when handler is set)
     const highRiskPatterns = [
       /rm\s+-rf/,
+      /rm\s+--recursive/,
       /git\s+reset\s+--hard/,
       /git\s+push\s+--force/,
       /git\s+push\s+-f/,
+      /git\s+clean\s+-[a-z]*f/,
       /dd\s+if=/,
       /mkfs/,
-      /format/,
       /:\(\)\{.*\}/,  // Fork bomb pattern
       /chmod\s+777/,
       /chown\s+-R/,
       /sudo\s+rm/,
+      /sudo\s+/,
       /> \/dev\//,
       /curl.*\|\s*(bash|sh)/,
       /wget.*\|\s*(bash|sh)/,
+      /docker\s+(rm|rmi|kill|stop|system\s+prune)/,
+      /npm\s+publish/,
+      /pnpm\s+publish/,
+      /kill\s+-9/,
+      /pkill\s+-9/,
+      /shutdown\b/,
+      /reboot\b/,
+      /mkfs\b/,
+      /drop\s+(table|database)\b/,
     ];
 
     for (const pattern of highRiskPatterns) {

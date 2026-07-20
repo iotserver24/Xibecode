@@ -523,39 +523,48 @@ mcpCmd
   .description("Authenticate with Smithery")
   .action(() => mcpCommand("login", []));
 
-// ── 24/7 Gateway (long-running messaging + cron process) ──
-program
-  .command("gateway")
-  .description(
-    "Run the 24/7 coding gateway: cron + Telegram / Discord / Slack",
-  )
-  .option(
-    "--profile <name>",
-    "Config profile to use (default: configured default profile)",
-  )
-  .option(
-    "--workdir <path>",
-    "Default working directory for agent runs and cron jobs",
-  )
-  .option(
-    "--cron-only",
-    "Only run the cron scheduler (no messaging adapters)",
-    false,
-  )
-  .option(
-    "--install",
-    "Install a systemd user service for 24/7 operation",
-    false,
-  )
-  .option("--start", "Start the systemd user service", false)
-  .option("--stop", "Stop the systemd user service", false)
-  .option("--status", "Show systemd user service status", false)
-  .action((opts) => gatewayCommand(opts));
+// ── Xibe Daemon (24/7 messaging + cron process) ──
+function registerDaemonCommand(name: string, description: string) {
+  program
+    .command(name)
+    .description(description)
+    .option(
+      "--profile <name>",
+      "Config profile to use (default: configured default profile)",
+    )
+    .option(
+      "--workdir <path>",
+      "Default working directory for agent runs and cron jobs",
+    )
+    .option(
+      "--cron-only",
+      "Only run the cron scheduler (no messaging adapters)",
+      false,
+    )
+    .option(
+      "--install",
+      "Install a systemd user service for 24/7 operation",
+      false,
+    )
+    .option("--start", "Start the systemd user service", false)
+    .option("--stop", "Stop the systemd user service", false)
+    .option("--status", "Show systemd user service status", false)
+    .action((opts) => gatewayCommand(opts));
+}
+
+registerDaemonCommand(
+  "daemon",
+  "Xibe Daemon — 24/7 coding agent (cron + Telegram / Discord / Slack)",
+);
+registerDaemonCommand(
+  "gateway",
+  "Alias for `xibecode daemon` (24/7 coding agent)",
+);
 
 // Cron job management
 program
   .command("cron")
-  .description("Manage scheduled agent tasks (requires `xibecode gateway` running)")
+  .description("Manage scheduled agent tasks (requires `xibecode daemon` running)")
   .argument("[action]", "list | create | remove | pause | resume | show | edit", "list")
   .argument("[args...]", "Action arguments (schedule + prompt for create, id for others)")
   .option("--name <name>", "Job name")

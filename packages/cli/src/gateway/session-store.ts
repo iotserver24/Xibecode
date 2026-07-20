@@ -23,6 +23,15 @@ export interface GatewaySession {
   workdir?: string;
   /** Show tool progress bubbles (default true). */
   progressEnabled?: boolean;
+  /**
+   * Gateway rigor level (anti-hallucination / approvals):
+   * - yolo: no approval prompts; loose completion evidence
+   * - default: ask on dangerous cmds; balanced evidence
+   * - strict: ask + strict evidence + post-edit verify
+   */
+  rigorLevel?: 'yolo' | 'default' | 'strict';
+  /** Per-chat model override (`/model`). Empty = use profile default. */
+  model?: string;
   updatedAt: number;
   createdAt: number;
 }
@@ -77,12 +86,21 @@ export async function getOrCreateSession(
 export async function updateSessionMeta(
   platform: string,
   chatId: string,
-  patch: Partial<Pick<GatewaySession, 'workdir' | 'progressEnabled' | 'title'>>,
+  patch: Partial<
+    Pick<
+      GatewaySession,
+      'workdir' | 'progressEnabled' | 'title' | 'rigorLevel' | 'model'
+    >
+  >,
 ): Promise<GatewaySession> {
   const session = await getOrCreateSession(platform, chatId);
   if (patch.workdir !== undefined) session.workdir = patch.workdir;
   if (patch.progressEnabled !== undefined) session.progressEnabled = patch.progressEnabled;
   if (patch.title !== undefined) session.title = patch.title;
+  if (patch.rigorLevel !== undefined) session.rigorLevel = patch.rigorLevel;
+  if (patch.model !== undefined) {
+    session.model = patch.model || undefined;
+  }
   session.updatedAt = Date.now();
   await saveSession(session);
   return session;

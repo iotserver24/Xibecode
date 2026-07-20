@@ -1,0 +1,6 @@
+Portions of this Telegram gateway engine are adapted from Hermes Agent
+(https://github.com/NousResearch/hermes-agent), Copyright (c) 2025 Nous Research,
+licensed under the MIT License.
+
+See the Hermes LICENSE for the full permission notice. Changes for XibeCode
+(TypeScript port, Xibe wiring) are Copyright XibeCode contributors.

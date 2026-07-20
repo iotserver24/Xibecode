@@ -145,7 +145,10 @@ export class ConfigManager {
   private profileName: string;
 
   constructor(profile?: string) {
-    this.configPath = path.join(os.homedir(), '.xibecode');
+    // Prefer XIBECODE_HOME (same root as Xibe Daemon / profiles)
+    this.configPath =
+      process.env.XIBECODE_HOME?.trim() ||
+      path.join(os.homedir(), '.xibecode');
     this.mcpFileManager = new MCPServersFileManager();
 
     this.metaStore = new Conf<XibeCodeMetaConfig>({

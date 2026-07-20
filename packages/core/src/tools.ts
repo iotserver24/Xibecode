@@ -10,6 +10,11 @@ import { FileEditor } from './editor.js';
 import { GitUtils } from './utils/git.js';
 import { TestRunnerDetector } from './utils/testRunner.js';
 import { SafetyChecker, sanitizePath, sanitizeUrl } from './utils/safety.js';
+import {
+  globalProcessRegistry,
+  looksLikeLongLivedCommand,
+  type ProcessRegistry,
+} from './process-registry.js';
 import type { MCPServerConfig } from './types/index.js';
 import { PluginManager } from './plugins.js';
 import { MCPClientManager } from './mcp-client.js';
@@ -177,6 +182,18 @@ export class CodingToolExecutor implements ToolExecutor {
   private mcpOAuth = new McpOAuthFlowManager();
   private fileHistoryState: FileHistoryState = createFileHistoryState();
   private activeFileHistoryMessageId: UUID | null = null;
+  /** Optional gate for high-risk tools (used by 24/7 gateway messaging). */
+  private onDangerousApproval?: import('./utils/safety.js').DangerousApprovalHandler;
+  /** Optional ask-user gate (gateway clarify / ask). */
+  private onAskUser?: (req: {
+    question: string;
+    choices?: string[];
+  }) => Promise<string>;
+  private sessionApprovedKeys = new Set<string>();
+  private alwaysApprovedKeys = new Set<string>();
+  private processRegistry: ProcessRegistry = globalProcessRegistry;
+  /** Abort signal for interrupting foreground commands (/stop). */
+  private abortSignal?: AbortSignal;
 
   /**
    * Creates a new CodingToolExecutor instance
@@ -221,9 +238,19 @@ export class CodingToolExecutor implements ToolExecutor {
       permissionManager?: PermissionManager;
       initialFileHistoryState?: FileHistoryState;
       remoteExecution?: RemoteExecutionConfig;
+      /** When set, high-risk tools pause until the handler returns once/session/always/deny. */
+      onDangerousApproval?: import('./utils/safety.js').DangerousApprovalHandler;
+      /** When set, ask_user tool waits for a human reply (gateway / CLI). */
+      onAskUser?: (req: { question: string; choices?: string[] }) => Promise<string>;
+      processRegistry?: ProcessRegistry;
+      abortSignal?: AbortSignal;
     }
   ) {
     this.workingDir = workingDir;
+    this.onDangerousApproval = options?.onDangerousApproval;
+    this.onAskUser = options?.onAskUser;
+    if (options?.processRegistry) this.processRegistry = options.processRegistry;
+    this.abortSignal = options?.abortSignal;
     this.contextManager = new ContextManager(workingDir);
     this.fileEditor = new FileEditor(workingDir, {
       beforeMutate: async (fullPath: string) => {
@@ -307,6 +334,16 @@ export class CodingToolExecutor implements ToolExecutor {
   }
 
   private currentMode: AgentMode = 'agent';
+
+  /** Bind abort signal so /stop can kill in-flight shell commands. */
+  setAbortSignal(signal?: AbortSignal): void {
+    this.abortSignal = signal;
+  }
+
+  /** Kill foreground shell children (gateway /stop interrupt). */
+  interruptActiveCommands(): number {
+    return this.processRegistry.killAllForeground('SIGTERM');
+  }
 
   /**
    * Set the current agent mode
@@ -510,6 +547,42 @@ export class CodingToolExecutor implements ToolExecutor {
       }
     }
 
+    // Gateway / interactive: pause on high-risk tools until the user approves
+    if (riskAssessment.level === 'high' && this.onDangerousApproval) {
+      const approvalKey = this.approvalKey(toolName, p);
+      if (
+        !this.sessionApprovedKeys.has(approvalKey) &&
+        !this.alwaysApprovedKeys.has(approvalKey)
+      ) {
+        const reason =
+          riskAssessment.reasons[0] ||
+          riskAssessment.warnings[0] ||
+          'High-risk operation';
+        const choice = await this.onDangerousApproval({
+          toolName,
+          reason,
+          level: riskAssessment.level,
+          command: typeof p.command === 'string' ? p.command : undefined,
+          path: typeof p.path === 'string' ? p.path : undefined,
+          warnings: riskAssessment.warnings,
+        });
+        if (choice === 'deny') {
+          return {
+            error: true,
+            success: false,
+            message: `Denied by user: ${reason}`,
+            denied: true,
+            blocked: true,
+          };
+        }
+        if (choice === 'session') this.sessionApprovedKeys.add(approvalKey);
+        if (choice === 'always') {
+          this.alwaysApprovedKeys.add(approvalKey);
+          this.sessionApprovedKeys.add(approvalKey);
+        }
+      }
+    }
+
     try {
     if (this.dynamicTools.has(toolName)) {
       return this.runDynamicTool(toolName, p);
@@ -609,7 +682,110 @@ export class CodingToolExecutor implements ToolExecutor {
         if (!p.command || typeof p.command !== 'string') {
           return { error: true, success: false, message: 'Missing required parameter: command (string)' };
         }
-        return this.runCommand(p.command, p.cwd, p.input, p.timeout, p.max_output_chars);
+        return this.runCommand(p.command, p.cwd, p.input, p.timeout, p.max_output_chars, {
+          background: p.background === true,
+        });
+      }
+
+      case 'check_process': {
+        const id = typeof p.process_id === 'string' ? p.process_id : typeof p.id === 'string' ? p.id : '';
+        if (!id) {
+          return {
+            error: true,
+            success: false,
+            message: 'Missing process_id. Use the id returned by a background run_command.',
+          };
+        }
+        const polled = this.processRegistry.poll(id, {
+          tail: typeof p.tail === 'number' ? p.tail : 4000,
+        });
+        if (!polled.found || !polled.session) {
+          return { error: true, success: false, message: `Unknown process_id: ${id}` };
+        }
+        const s = polled.session;
+        return {
+          success: true,
+          process_id: s.id,
+          status: s.status,
+          pid: s.pid,
+          command: s.command,
+          cwd: s.cwd,
+          exitCode: s.exitCode,
+          uptime_ms: (s.finishedAt || Date.now()) - s.startedAt,
+          stdout_tail: polled.stdoutTail,
+          stderr_tail: polled.stderrTail,
+          error: s.error,
+        };
+      }
+
+      case 'kill_process': {
+        const id = typeof p.process_id === 'string' ? p.process_id : typeof p.id === 'string' ? p.id : '';
+        if (!id) {
+          return { error: true, success: false, message: 'Missing process_id' };
+        }
+        const result = this.processRegistry.kill(id);
+        return {
+          success: result.ok,
+          error: result.ok ? false : true,
+          message: result.message,
+          process_id: id,
+        };
+      }
+
+      case 'list_processes': {
+        const onlyRunning = p.running !== false;
+        const list = this.processRegistry.list(onlyRunning).map((s) => ({
+          process_id: s.id,
+          status: s.status,
+          pid: s.pid,
+          command: s.command.slice(0, 120),
+          uptime_ms: (s.finishedAt || Date.now()) - s.startedAt,
+        }));
+        return { success: true, processes: list, count: list.length };
+      }
+
+      case 'ask_user': {
+        if (!p.question || typeof p.question !== 'string') {
+          return {
+            error: true,
+            success: false,
+            message: 'Missing required parameter: question (string)',
+          };
+        }
+        if (!this.onAskUser) {
+          return {
+            error: true,
+            success: false,
+            message:
+              'ask_user is only available in interactive gateway/chat. Rephrase as a final reply instead.',
+          };
+        }
+        let choices: string[] | undefined;
+        if (Array.isArray(p.choices)) {
+          choices = p.choices
+            .map((c: any) => (typeof c === 'string' ? c.trim() : ''))
+            .filter(Boolean)
+            .slice(0, 4);
+          if (!choices.length) choices = undefined;
+        }
+        try {
+          const answer = await this.onAskUser({
+            question: p.question.trim(),
+            choices,
+          });
+          return {
+            success: true,
+            question: p.question.trim(),
+            answer: String(answer || '').trim(),
+            choices,
+          };
+        } catch (err: any) {
+          return {
+            error: true,
+            success: false,
+            message: err?.message || 'ask_user failed or timed out',
+          };
+        }
       }
 
       case 'create_directory': {
@@ -1074,6 +1250,16 @@ export class CodingToolExecutor implements ToolExecutor {
    * @category Tool Management
    * @since 0.1.0
    */
+  private approvalKey(toolName: string, params: Record<string, any>): string {
+    if (typeof params.command === 'string') {
+      return `${toolName}:cmd:${params.command.trim()}`;
+    }
+    if (typeof params.path === 'string') {
+      return `${toolName}:path:${params.path}`;
+    }
+    return `${toolName}:${JSON.stringify(params).slice(0, 200)}`;
+  }
+
   getTools(): Tool[] {
     const coreTools: Tool[] = [
       {
@@ -1343,7 +1529,7 @@ export class CodingToolExecutor implements ToolExecutor {
       },
       {
         name: 'run_command',
-        description: `Execute shell command. Platform: ${this.platform}. Commands have a timeout (default 120s). IMPORTANT: Always use non-interactive flags when available (e.g. --yes, --default, -y). For interactive prompts, use the "input" parameter to send stdin (newline-separated answers). Example: npx create-next-app@latest myapp --yes --typescript --tailwind --app --use-pnpm`,
+        description: `Execute shell command. Platform: ${this.platform}. Default timeout 120s for foreground. For long-lived processes (dev servers: pnpm/npm run dev, vite, next dev, watchers) set background=true — the command returns immediately with a process_id; use check_process to read logs and kill_process to stop. Long-lived commands are auto-backgrounded if you forget. Prefer non-interactive flags (--yes, -y). Do NOT hang on \`pnpm run dev\` in foreground.`,
         input_schema: {
           type: 'object',
           properties: {
@@ -1361,7 +1547,12 @@ export class CodingToolExecutor implements ToolExecutor {
             },
             timeout: {
               type: 'number',
-              description: 'Timeout in seconds (default: 120). Increase for long-running commands like installs.',
+              description: 'Foreground timeout in seconds (default: 120). Ignored when background=true.',
+            },
+            background: {
+              type: 'boolean',
+              description:
+                'Run detached in the background (for servers/watchers). Returns process_id immediately. Use check_process / kill_process.',
             },
             max_output_chars: {
               type: 'number',
@@ -1369,6 +1560,72 @@ export class CodingToolExecutor implements ToolExecutor {
             },
           },
           required: ['command'],
+        },
+      },
+      {
+        name: 'check_process',
+        description:
+          'Poll a background process started with run_command(background=true). Returns status, exit code, and stdout/stderr tails.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            process_id: {
+              type: 'string',
+              description: 'Process id from background run_command (e.g. proc_…)',
+            },
+            tail: {
+              type: 'number',
+              description: 'Max characters of log tail (default 4000)',
+            },
+          },
+          required: ['process_id'],
+        },
+      },
+      {
+        name: 'kill_process',
+        description: 'Stop a background process by process_id.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            process_id: {
+              type: 'string',
+              description: 'Process id from background run_command',
+            },
+          },
+          required: ['process_id'],
+        },
+      },
+      {
+        name: 'list_processes',
+        description: 'List tracked background shell processes for this daemon.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            running: {
+              type: 'boolean',
+              description: 'If true (default), only running processes',
+            },
+          },
+        },
+      },
+      {
+        name: 'ask_user',
+        description:
+          'Ask the human a clarifying question and wait for their reply (gateway chat). Use when you need a decision before continuing. Optional up to 4 choices; user can also type a custom answer.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            question: {
+              type: 'string',
+              description: 'Question to ask the user',
+            },
+            choices: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Optional multiple-choice options (max 4)',
+            },
+          },
+          required: ['question'],
         },
       },
       {
@@ -2694,9 +2951,91 @@ export class CodingToolExecutor implements ToolExecutor {
     return this.runCommand(def.script, this.workingDir, undefined, 60);
   }
 
-  private async runCommand(command: string, cwd?: string, input?: string, timeout?: number, maxOutputChars?: number): Promise<any> {
+  private async runCommand(
+    command: string,
+    cwd?: string,
+    input?: string,
+    timeout?: number,
+    maxOutputChars?: number,
+    opts?: { background?: boolean },
+  ): Promise<any> {
+    const workDir = cwd ? this.resolvePath(cwd) : this.workingDir;
+    const outputLimit = Math.max(1000, maxOutputChars ?? DEFAULT_COMMAND_OUTPUT_CHARS);
+
+    // Auto-background long-lived servers (pnpm dev, vite, etc.) so the agent
+    // does not hang forever — Hermes-style process sessions.
+    let background = opts?.background === true;
+    let autoBackground = false;
+    if (!background && looksLikeLongLivedCommand(command)) {
+      background = true;
+      autoBackground = true;
+    }
+
+    if (background) {
+      // Remote sandbox: fall back to nohup-style one-shot (no process registry remote yet)
+      if (this.remoteExecutionClient) {
+        let remoteCwd: string | undefined;
+        if (cwd) {
+          remoteCwd = this.isSandboxFullMode() ? cwd : this.resolvePath(cwd);
+        } else if (this.isSandboxFullMode()) {
+          remoteCwd = this.remoteExecutionClient.getWorkspaceRoot();
+        } else {
+          remoteCwd = this.workingDir;
+        }
+        const bgCmd = `nohup sh -c ${JSON.stringify(command)} > /tmp/xibecode-bg-$$.log 2>&1 & echo $!`;
+        const result = await this.remoteExecutionClient.runCommand({
+          command: bgCmd,
+          cwd: remoteCwd,
+          timeout: 30,
+          maxOutputChars: 2000,
+        });
+        const pid = String(result.stdout ?? '').trim().split('\n').pop();
+        return {
+          success: true,
+          background: true,
+          auto_background: autoBackground,
+          remote: true,
+          pid,
+          message:
+            `Started in background on remote (pid ${pid || '?'}). ` +
+            (autoBackground
+              ? 'Auto-backgrounded long-lived command so the agent can continue. '
+              : '') +
+            'Check logs on the remote host; use short health probes instead of waiting on the server process.',
+          command,
+        };
+      }
+
+      const session = this.processRegistry.spawnBackground({
+        command,
+        cwd: workDir,
+        platform: this.platform,
+      });
+      // Brief settle so early crash stderr is captured
+      await new Promise((r) => setTimeout(r, 400));
+      const polled = this.processRegistry.poll(session.id, { tail: 2000 });
+      const s = polled.session || session;
+      return {
+        success: s.status !== 'error',
+        background: true,
+        auto_background: autoBackground,
+        process_id: s.id,
+        pid: s.pid,
+        status: s.status,
+        command: s.command,
+        cwd: s.cwd,
+        stdout_tail: polled.stdoutTail || '',
+        stderr_tail: polled.stderrTail || '',
+        message:
+          (autoBackground
+            ? 'Auto-backgrounded long-lived command (dev server/watcher) so the agent is not blocked. '
+            : 'Started in background. ') +
+          `process_id=${s.id}. Use check_process to read logs, kill_process to stop. ` +
+          'Verify readiness with a short probe (curl, list port) — do not re-run the same server command.',
+      };
+    }
+
     if (this.remoteExecutionClient) {
-      const outputLimit = Math.max(1000, maxOutputChars ?? DEFAULT_COMMAND_OUTPUT_CHARS);
       let remoteCwd: string | undefined;
       if (cwd) {
         remoteCwd = this.isSandboxFullMode() ? cwd : this.resolvePath(cwd);
@@ -2724,10 +3063,8 @@ export class CodingToolExecutor implements ToolExecutor {
       };
     }
 
-    const workDir = cwd ? this.resolvePath(cwd) : this.workingDir;
     const timeoutMs = (timeout || 120) * 1000;
     const shell = this.platform === 'win32' ? 'powershell.exe' : '/bin/sh';
-    const outputLimit = Math.max(1000, maxOutputChars ?? DEFAULT_COMMAND_OUTPUT_CHARS);
 
     return new Promise((resolve) => {
       const child = spawn(shell, this.platform === 'win32' ? ['-Command', command] : ['-c', command], {
@@ -2736,15 +3073,20 @@ export class CodingToolExecutor implements ToolExecutor {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
+      const releaseFg = this.processRegistry.trackForeground(child);
+
       let stdout = '';
       let stderr = '';
       let timedOut = false;
+      let interrupted = false;
       let settled = false;
 
       const finish = (result: any) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        if (onAbort) this.abortSignal?.removeEventListener('abort', onAbort);
+        releaseFg();
 
         const compactedStdout = compactCommandOutput(String(result.stdout ?? '').trim(), outputLimit);
         const compactedStderr = compactCommandOutput(String(result.stderr ?? '').trim(), outputLimit);
@@ -2757,16 +3099,41 @@ export class CodingToolExecutor implements ToolExecutor {
           originalStdoutLength: compactedStdout.originalLength,
           originalStderrLength: compactedStderr.originalLength,
           platform: this.platform,
+          interrupted,
         });
       };
 
       const timer = setTimeout(() => {
         timedOut = true;
-        child.kill('SIGTERM');
+        try {
+          child.kill('SIGTERM');
+        } catch {
+          /* ignore */
+        }
       }, timeoutMs);
 
-      child.stdout.on('data', (data: Buffer) => { stdout += data.toString(); });
-      child.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
+      const onAbort = () => {
+        interrupted = true;
+        try {
+          child.kill('SIGTERM');
+        } catch {
+          /* ignore */
+        }
+      };
+      if (this.abortSignal) {
+        if (this.abortSignal.aborted) {
+          onAbort();
+        } else {
+          this.abortSignal.addEventListener('abort', onAbort);
+        }
+      }
+
+      child.stdout.on('data', (data: Buffer) => {
+        stdout += data.toString();
+      });
+      child.stderr.on('data', (data: Buffer) => {
+        stderr += data.toString();
+      });
 
       if (input) {
         child.stdin.write(input.replace(/\\n/g, '\n'));
@@ -2774,14 +3141,21 @@ export class CodingToolExecutor implements ToolExecutor {
       child.stdin.end();
 
       child.on('close', (code: number | null) => {
+        let errOut = stderr;
+        if (interrupted) {
+          errOut = `${stderr}\nCommand interrupted by user (/stop).`.trim();
+        } else if (timedOut) {
+          errOut =
+            `${stderr}\nCommand timed out after ${timeout || 120}s. ` +
+            `For installs increase timeout; for dev servers use background=true (auto for pnpm/npm run dev).`.trim();
+        }
         finish({
           stdout,
-          stderr: timedOut
-            ? `${stderr}\nCommand timed out after ${timeout || 120}s. Try increasing the timeout parameter, or use non-interactive flags like --yes to avoid prompts.`
-            : stderr,
-          success: !timedOut && code === 0,
+          stderr: errOut,
+          success: !timedOut && !interrupted && code === 0,
           exitCode: code,
           timedOut,
+          interrupted,
         });
       });
 
@@ -2792,6 +3166,7 @@ export class CodingToolExecutor implements ToolExecutor {
           success: false,
           exitCode: undefined,
           timedOut,
+          interrupted,
         });
       });
     });

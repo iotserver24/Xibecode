@@ -13,6 +13,10 @@ type SandboxLike = {
   };
   kill?: (opts?: { requestTimeoutMs?: number }) => Promise<void>;
   close?: () => Promise<void>;
+  pause?: (opts?: Record<string, unknown>) => Promise<boolean>;
+  setTimeout?: (timeoutMs: number, opts?: Record<string, unknown>) => Promise<void>;
+  connect?: (opts?: Record<string, unknown>) => Promise<SandboxLike>;
+  getInfo?: () => Promise<{ state?: string }>;
 };
 
 type SessionRecord = {
@@ -21,6 +25,12 @@ type SessionRecord = {
   sandboxId: string;
   createdAt: number;
   updatedAt: number;
+  /** Wall-clock start of the current continuous *running* window (resets after 23h pause/resume). */
+  continuousRunStartedAt: number;
+  /** How many times we completed a 23h continuous-run reset. */
+  cycleCount: number;
+  lastCycleResetAt?: number;
+  cycleResetting?: boolean;
   cwd?: string;
   strategy: 'host_only' | 'sandbox_full';
   workspaceRoot: string;
@@ -55,12 +65,32 @@ type MoveRequest = {
 const port = Number(process.env.PORT || 8787);
 const authToken = process.env.XIBECODE_GATEWAY_TOKEN?.trim() || '';
 const sandboxTemplate = process.env.XIBECODE_E2B_TEMPLATE?.trim() || '';
-/** Inactivity window (ms) before lifecycle action; default 15m. E2B SDK default is 5m.
- * After timeout with lifecycle `pause`, sandbox pauses (not killed) and auto-resumes on next SDK/HTTP activity. */
+/**
+ * Inactivity window (ms) before lifecycle action; default 15m (E2B default is 5m).
+ * With onTimeout=pause + autoResume, idle sandboxes freeze and wake on next SDK/HTTP activity.
+ */
 const sandboxTimeoutMs = Math.max(
   60_000,
   Number(process.env.XIBECODE_E2B_SANDBOX_TIMEOUT_MS || 15 * 60 * 1000),
 );
+/**
+ * E2B Pro continuous *running* cap is 24h. Pause+resume resets that window.
+ * Default 23h so we cycle before the hard limit kills the run.
+ * Set XIBECODE_E2B_MAX_CONTINUOUS_MS=0 to disable the 23h cycle (idle pause still works).
+ */
+const maxContinuousMs = (() => {
+  const raw = process.env.XIBECODE_E2B_MAX_CONTINUOUS_MS;
+  if (raw === '0' || raw === 'off' || raw === 'false') return 0;
+  const n = Number(raw || 23 * 60 * 60 * 1000);
+  return Number.isFinite(n) && n > 0 ? Math.max(60_000, n) : 23 * 60 * 60 * 1000;
+})();
+const lifecycleOnTimeout =
+  process.env.XIBECODE_E2B_ON_TIMEOUT?.trim().toLowerCase() === 'kill'
+    ? ('kill' as const)
+    : ('pause' as const);
+const lifecycleAutoResume =
+  process.env.XIBECODE_E2B_AUTO_RESUME?.trim().toLowerCase() !== 'false' &&
+  lifecycleOnTimeout === 'pause';
 const previewDomain = process.env.XIBECODE_E2B_PREVIEW_DOMAIN?.trim() || 'e2b.dev';
 const maxExportBytes = Math.max(
   1,
@@ -68,6 +98,11 @@ const maxExportBytes = Math.max(
 ) * 1024 * 1024;
 const sessions = new Map<string, SessionRecord>();
 const defaultWorkspaceRoot = process.env.XIBECODE_SANDBOX_WORKSPACE_ROOT?.trim() || '/home/user/workspace';
+const cycleWaiters = new Map<string, Promise<void>>();
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 function shQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -138,11 +173,102 @@ async function readJson<T>(req: IncomingMessage): Promise<T> {
   return JSON.parse(raw) as T;
 }
 
+/**
+ * Before the E2B 24h continuous-run hard limit: pause (full memory+fs), then connect
+ * to resume. That resets the continuous window so long agent sessions can keep going.
+ */
+async function resetContinuousRunCycle(session: SessionRecord, reason: string): Promise<void> {
+  const existing = cycleWaiters.get(session.sessionId);
+  if (existing) {
+    await existing;
+    return;
+  }
+
+  const job = (async () => {
+    session.cycleResetting = true;
+    const elapsedH = (
+      (Date.now() - session.continuousRunStartedAt) /
+      3_600_000
+    ).toFixed(2);
+    console.log(
+      `[xibecode-e2b-gateway] continuous-run cycle (${reason}): pause→resume sandbox=${session.sandboxId} after ${elapsedH}h`,
+    );
+    try {
+      // 1) Pause — preserves filesystem + memory (default keepMemory)
+      if (typeof session.sandbox.pause === 'function') {
+        await session.sandbox.pause();
+      } else {
+        await Sandbox.pause(session.sandboxId);
+      }
+
+      // 2) Resume — resets E2B continuous runtime window (Pro ~24h)
+      const resumed = await Sandbox.connect(session.sandboxId, {
+        timeoutMs: sandboxTimeoutMs,
+      });
+      session.sandbox = resumed as unknown as SandboxLike;
+      session.continuousRunStartedAt = Date.now();
+      session.cycleCount += 1;
+      session.lastCycleResetAt = Date.now();
+      session.updatedAt = Date.now();
+      console.log(
+        `[xibecode-e2b-gateway] continuous-run cycle #${session.cycleCount} done sandbox=${session.sandboxId}`,
+      );
+    } catch (err) {
+      console.error(
+        `[xibecode-e2b-gateway] continuous-run cycle failed sandbox=${session.sandboxId}:`,
+        (err as Error)?.message || err,
+      );
+      throw err;
+    } finally {
+      session.cycleResetting = false;
+      cycleWaiters.delete(session.sessionId);
+    }
+  })();
+
+  cycleWaiters.set(session.sessionId, job);
+  await job;
+}
+
+/** Extend idle TTL + enforce 23h continuous-run reset if needed. */
+async function touchSession(session: SessionRecord): Promise<void> {
+  session.updatedAt = Date.now();
+
+  // Keep inactivity auto-pause clock fresh while the agent is working
+  try {
+    if (typeof session.sandbox.setTimeout === 'function') {
+      await session.sandbox.setTimeout(sandboxTimeoutMs);
+    } else {
+      await Sandbox.setTimeout(session.sandboxId, sandboxTimeoutMs);
+    }
+  } catch {
+    // Paused (idle auto-pause) — connect resumes and resets E2B continuous-run window
+    try {
+      const resumed = await Sandbox.connect(session.sandboxId, {
+        timeoutMs: sandboxTimeoutMs,
+      });
+      session.sandbox = resumed as unknown as SandboxLike;
+      session.continuousRunStartedAt = Date.now();
+      console.log(
+        `[xibecode-e2b-gateway] reconnected paused sandbox=${session.sandboxId} (idle auto-pause resume)`,
+      );
+    } catch {
+      /* best-effort; next op may auto-resume via lifecycle.autoResume */
+    }
+  }
+
+  if (maxContinuousMs > 0) {
+    const elapsed = Date.now() - session.continuousRunStartedAt;
+    if (elapsed >= maxContinuousMs) {
+      await resetContinuousRunCycle(session, `>=${maxContinuousMs}ms`);
+    }
+  }
+}
+
 async function createSession(input: { sessionId?: string; cwd?: string; strategy?: string; workspaceRoot?: string }): Promise<SessionRecord> {
   const sessionId = input.sessionId?.trim() || randomUUID();
   const existing = sessions.get(sessionId);
   if (existing) {
-    existing.updatedAt = Date.now();
+    await touchSession(existing);
     return existing;
   }
 
@@ -150,8 +276,8 @@ async function createSession(input: { sessionId?: string; cwd?: string; strategy
     ...(sandboxTemplate ? { template: sandboxTemplate } : {}),
     timeoutMs: sandboxTimeoutMs,
     lifecycle: {
-      onTimeout: 'pause' as const,
-      autoResume: true,
+      onTimeout: lifecycleOnTimeout,
+      autoResume: lifecycleAutoResume,
     },
   };
 
@@ -159,12 +285,15 @@ async function createSession(input: { sessionId?: string; cwd?: string; strategy
   const sandboxId = sandbox.sandboxId || randomUUID();
   const strategy = input.strategy?.trim() === 'sandbox_full' ? 'sandbox_full' : 'host_only';
   const requestedWorkspaceRoot = input.workspaceRoot?.trim() || input.cwd?.trim() || defaultWorkspaceRoot;
+  const now = Date.now();
   const session: SessionRecord = {
     sessionId,
     sandbox,
     sandboxId,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt: now,
+    updatedAt: now,
+    continuousRunStartedAt: now,
+    cycleCount: 0,
     cwd: strategy === 'host_only' ? input.cwd?.trim() || undefined : undefined,
     strategy,
     workspaceRoot: requestedWorkspaceRoot,
@@ -192,6 +321,7 @@ async function createSession(input: { sessionId?: string; cwd?: string; strategy
 }
 
 async function runInSession(session: SessionRecord, input: ExecRequest): Promise<Record<string, unknown>> {
+  await touchSession(session);
   const timeoutMs = Math.max(1, Number(input.timeout || 120)) * 1000;
   let cwd = input.cwd || session.cwd || session.workspaceRoot || '/home/user';
   if (session.strategy === 'sandbox_full' && cwd && !pathPosix.isAbsolute(cwd)) {
@@ -514,6 +644,16 @@ const server = createServer(async (req, res) => {
         sessions: sessions.size,
         hasE2BKey: Boolean(process.env.E2B_API_KEY),
         authRequired: Boolean(authToken),
+        lifecycle: {
+          onTimeout: lifecycleOnTimeout,
+          autoResume: lifecycleAutoResume,
+          inactivityTimeoutMs: sandboxTimeoutMs,
+          maxContinuousMs,
+          maxContinuousHours:
+            maxContinuousMs > 0
+              ? Math.round((maxContinuousMs / 3_600_000) * 100) / 100
+              : 0,
+        },
       });
       return;
     }
@@ -532,6 +672,10 @@ const server = createServer(async (req, res) => {
         workspaceRoot: session.workspaceRoot,
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
+        continuousRunStartedAt: session.continuousRunStartedAt,
+        continuousRunAgeMs: Date.now() - session.continuousRunStartedAt,
+        cycleCount: session.cycleCount,
+        lastCycleResetAt: session.lastCycleResetAt,
       }));
       sendJson(res, 200, { success: true, sessions: data });
       return;
@@ -550,6 +694,7 @@ const server = createServer(async (req, res) => {
         return;
       }
       session.updatedAt = Date.now();
+      await touchSession(session);
       sendJson(res, 200, {
         success: true,
         sessionId: session.sessionId,
@@ -557,6 +702,8 @@ const server = createServer(async (req, res) => {
         strategy: session.strategy,
         cwd: session.cwd,
         workspaceRoot: session.workspaceRoot,
+        continuousRunStartedAt: session.continuousRunStartedAt,
+        cycleCount: session.cycleCount,
       });
       return;
     }
@@ -571,6 +718,14 @@ const server = createServer(async (req, res) => {
         strategy: session.strategy,
         cwd: session.cwd,
         workspaceRoot: session.workspaceRoot,
+        continuousRunStartedAt: session.continuousRunStartedAt,
+        cycleCount: session.cycleCount,
+        lifecycle: {
+          onTimeout: lifecycleOnTimeout,
+          autoResume: lifecycleAutoResume,
+          inactivityTimeoutMs: sandboxTimeoutMs,
+          maxContinuousMs,
+        },
       });
       return;
     }
@@ -816,8 +971,31 @@ const server = createServer(async (req, res) => {
   }
 });
 
+// Proactive 23h continuous-run check even if traffic is sparse
+if (maxContinuousMs > 0) {
+  const tickMs = Math.min(
+    5 * 60 * 1000,
+    Math.max(30_000, Math.floor(maxContinuousMs / 48)),
+  );
+  setInterval(() => {
+    for (const session of sessions.values()) {
+      const elapsed = Date.now() - session.continuousRunStartedAt;
+      if (elapsed < maxContinuousMs) continue;
+      void resetContinuousRunCycle(session, 'background-tick').catch((err) => {
+        console.error(
+          `[xibecode-e2b-gateway] background cycle failed session=${session.sessionId}:`,
+          (err as Error)?.message || err,
+        );
+      });
+    }
+  }, tickMs).unref?.();
+}
+
 server.listen(port, '0.0.0.0', () => {
   console.log(`[xibecode-e2b-gateway] listening on http://0.0.0.0:${port}`);
+  console.log(
+    `[xibecode-e2b-gateway] lifecycle onTimeout=${lifecycleOnTimeout} autoResume=${lifecycleAutoResume} inactivityMs=${sandboxTimeoutMs} maxContinuousMs=${maxContinuousMs}`,
+  );
   if (!process.env.E2B_API_KEY) {
     console.warn('[xibecode-e2b-gateway] Warning: E2B_API_KEY is not set yet.');
   }

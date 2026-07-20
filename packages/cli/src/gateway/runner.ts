@@ -1,9 +1,11 @@
 /**
- * XibeCode Gateway — coding-focused 24/7 process.
+ * Xibe Daemon — coding-focused 24/7 process.
  *
  * - Cron scheduler
  * - Telegram / Discord / Slack messaging
  * - Shared coding chat controller (progress, /stop, workdir)
+ *
+ * Data lives under ~/.xibecode/daemon/ (see utils/xibecode-home.ts).
  */
 
 import { promises as fs } from 'fs';
@@ -15,7 +17,16 @@ import {
   type JobRunResult,
 } from 'xibecode-core';
 import { ConfigManager } from '../utils/config.js';
-import { gatewayHome } from './agent-runner.js';
+import {
+  DAEMON_PRODUCT_NAME,
+  DAEMON_SERVICE_NAME,
+  ensureXibecodeHome,
+  ensureXibecodeHomeSync,
+  getXibecodeHome,
+  gatewayHome,
+  paths,
+  primarySecretEnvPath,
+} from '../utils/xibecode-home.js';
 import { ChatController, loadGatewayConfig, saveGatewayConfig } from './chat-controller.js';
 import { isSilent, wrapCron } from './format.js';
 import { TelegramAdapter } from './telegram.js';
@@ -25,6 +36,9 @@ import type { MessagingAdapter, PlatformName } from './types.js';
 import { runHeadlessAgent } from './agent-runner.js';
 import { CircuitBreaker } from './circuit-breaker.js';
 import { ledgerPendingRedeliveries, ledgerMarkDelivered, ledgerMarkSending, ledgerMarkFailed } from './delivery-ledger.js';
+
+// re-export for callers that imported gatewayHome from runner historically
+export { gatewayHome };
 
 export interface GatewayOptions {
   profile?: string;
@@ -48,7 +62,7 @@ export class GatewayRunner {
   }
 
   private log(msg: string): void {
-    const line = `[gateway ${new Date().toISOString()}] ${msg}`;
+    const line = `[daemon ${new Date().toISOString()}] ${msg}`;
     console.log(line);
     void this.appendLog(line);
   }
@@ -57,6 +71,8 @@ export class GatewayRunner {
     try {
       const dir = path.join(gatewayHome(), 'logs');
       await fs.mkdir(dir, { recursive: true });
+      await fs.appendFile(path.join(dir, 'daemon.log'), line + '\n', 'utf-8');
+      // keep legacy filename for existing log tail scripts
       await fs.appendFile(path.join(dir, 'gateway.log'), line + '\n', 'utf-8');
     } catch {
       /* ignore */
@@ -66,6 +82,7 @@ export class GatewayRunner {
   private defaultWorkdir(): string {
     return (
       this.options.workdir ||
+      process.env.XIBECODE_DAEMON_WORKDIR ||
       process.env.XIBECODE_GATEWAY_WORKDIR ||
       (this.config.getAll() as any).gatewayWorkdir ||
       process.cwd()
@@ -239,8 +256,11 @@ export class GatewayRunner {
   }
 
   async start(): Promise<void> {
+    await ensureXibecodeHome();
     await fs.mkdir(gatewayHome(), { recursive: true });
-    this.log(`starting (pid ${process.pid})`);
+    this.log(`${DAEMON_PRODUCT_NAME} starting (pid ${process.pid})`);
+    this.log(`home ${getXibecodeHome()}`);
+    this.log(`daemon ${gatewayHome()}`);
     this.log(`workdir ${this.defaultWorkdir()}`);
 
     this.stopCron = startCronScheduler({
@@ -345,21 +365,33 @@ export class GatewayRunner {
       this.stopping = true;
       this.log('shutdown signal');
       this.stop();
+      // Agent timers / ask_user promises can keep Node alive after polls end.
+      setTimeout(() => process.exit(0), 1500).unref?.();
     };
     process.on('SIGINT', onSig);
     process.on('SIGTERM', onSig);
 
-    // Run all adapters concurrently
+    // Run all adapters concurrently. ChatController.handle must return quickly
+    // for coding tasks (fire-and-forget) so platform polls keep accepting /stop etc.
     await Promise.all(
       [...this.adapters.values()].map((adapter) =>
         adapter.runLoop(async (msg) => {
-          await this.chat!.handle(msg);
+          try {
+            await this.chat!.handle(msg);
+          } catch (err: any) {
+            this.log(`chat handle error: ${err?.message || err}`);
+          }
         }),
       ),
     );
   }
 
   stop(): void {
+    try {
+      this.chat?.stopAll();
+    } catch {
+      /* ignore */
+    }
     this.stopCron?.();
     this.stopCron = null;
     for (const a of this.adapters.values()) a.stop();
@@ -368,15 +400,18 @@ export class GatewayRunner {
   }
 }
 
-/** Write a systemd user unit for 24/7 gateway. */
+/** Write a systemd user unit for Xibe Daemon (24/7). */
 export async function installSystemdUserService(opts?: {
   profile?: string;
   workdir?: string;
 }): Promise<string> {
-  const home = os.homedir();
-  const unitDir = path.join(home, '.config', 'systemd', 'user');
+  ensureXibecodeHomeSync();
+  const xcHome = getXibecodeHome();
+  const p = paths(xcHome);
+  const userHome = os.homedir();
+  const unitDir = path.join(userHome, '.config', 'systemd', 'user');
   await fs.mkdir(unitDir, { recursive: true });
-  const unitPath = path.join(unitDir, 'xibecode-gateway.service');
+  const unitPath = path.join(unitDir, `${DAEMON_SERVICE_NAME}.service`);
 
   let xibecodeBin = 'xibecode';
   try {
@@ -385,31 +420,61 @@ export async function installSystemdUserService(opts?: {
       encoding: 'utf-8',
     }).trim();
   } catch {
-    xibecodeBin = path.join(home, '.local', 'share', 'pnpm', 'xibecode');
+    xibecodeBin = path.join(userHome, '.local', 'share', 'pnpm', 'xibecode');
   }
 
   const workdir = opts?.workdir || process.cwd();
   const profileFlag = opts?.profile ? ` --profile ${opts.profile}` : '';
+  const secretEnv = primarySecretEnvPath(xcHome);
 
+  // TimeoutStopSec: agent loops used to ignore SIGTERM for ~90s (systemd default).
   const unit = `[Unit]
-Description=XibeCode Gateway (24/7 coding agent + cron + Telegram/Discord/Slack)
+Description=Xibe Daemon (24/7 coding agent + cron + Telegram/Discord/Slack)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 WorkingDirectory=${workdir}
-ExecStart=${xibecodeBin} gateway${profileFlag} --workdir ${workdir}
+ExecStart=${xibecodeBin} daemon${profileFlag} --workdir ${workdir}
 Restart=always
 RestartSec=5
+TimeoutStopSec=15
+KillMode=mixed
 Environment=NODE_ENV=production
-EnvironmentFile=-${home}/.xibecode/gateway.env
-EnvironmentFile=-${home}/.xibecode/.env
+Environment=XIBECODE_HOME=${xcHome}
+EnvironmentFile=-${secretEnv}
+EnvironmentFile=-${p.daemonEnv}
+EnvironmentFile=-${p.gatewayEnv}
+EnvironmentFile=-${p.envFile}
 
 [Install]
 WantedBy=default.target
 `;
 
   await fs.writeFile(unitPath, unit, 'utf-8');
+  // Keep legacy unit name as a thin redirect for users who already enabled xibecode-gateway
+  const legacyPath = path.join(unitDir, 'xibecode-gateway.service');
+  const legacy = `[Unit]
+Description=Xibe Daemon (legacy unit name → ${DAEMON_SERVICE_NAME})
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=${workdir}
+ExecStart=${xibecodeBin} daemon${profileFlag} --workdir ${workdir}
+Restart=always
+RestartSec=5
+TimeoutStopSec=15
+KillMode=mixed
+Environment=NODE_ENV=production
+Environment=XIBECODE_HOME=${xcHome}
+EnvironmentFile=-${secretEnv}
+EnvironmentFile=-${p.envFile}
+
+[Install]
+WantedBy=default.target
+`;
+  await fs.writeFile(legacyPath, legacy, 'utf-8');
   return unitPath;
 }

@@ -143,7 +143,8 @@ export async function searchSessions(
     [
       path.join(home, '.xibecode', 'sessions'),
       path.join(home, '.xibecode', 'projects'),
-      path.join(home, '.xibecode', 'gateway', 'sessions'),
+      path.join(home, '.xibecode', 'daemon', 'sessions'),
+      path.join(home, '.xibecode', 'gateway', 'sessions'), // legacy
     ];
 
   const files: string[] = [];

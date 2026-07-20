@@ -2,6 +2,38 @@
 
 All notable changes to XibeCode will be documented in this file.
 
+## [1.4.2] - 2026-07-20
+
+### Release
+
+- **`xibecode-core` 1.4.2** and **`xibecode` 1.4.2** (aligned).
+- CLI depends on **`xibecode-core` ^1.4.2**.
+
+### Gateway (24/7 Telegram / Discord / Slack)
+
+- Hermes-style Telegram UX: slash command menu, live tool progress, mid-run slash handling, `/stop`, message queue, `ask_user` with numbered options + arrow-key-friendly pickers.
+- Model picker (`/model` / `/models`) with interactive inline keyboards (not text-only).
+- Rigor levels (`yolo` / `default` / `strict`) stored per session and applied to tool safety.
+- Dangerous-command approval prompts; process registry for background long-running commands.
+- Delivery ledger + non-blocking poll loop fixes (no hang on mid-run slash or stuck `ask_user`).
+- Quiet daemon stop when `xibecode-daemon` unit is not loaded.
+- MarkdownV2 helpers and Telegram engine module under `gateway/telegram/`.
+
+### E2B gateway lifecycle
+
+- Idle **auto-pause** (`onTimeout=pause`) and **auto-resume** on next request.
+- **23h continuous-run cycle**: pause → connect before E2B’s ~24h hard limit, then continue.
+- Health/sessions expose lifecycle fields (`cycleCount`, continuous-run age).
+
+### Core
+
+- `process-registry` for tracked shell processes.
+- Tool safety + mode tweaks so plan/review still allow command execution where appropriate.
+
+### Sandbox template
+
+- Custom template defaults target **4 vCPU / 8 GB RAM** (hosting tier); pin global CLI to `xibecode@1.4.2`.
+
 ## [1.4.0] - 2026-07-19
 
 ### Release

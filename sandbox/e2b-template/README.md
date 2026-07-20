@@ -1,6 +1,6 @@
 # E2B Custom Sandbox Template
 
-This template is intended for XibeCode `sandbox_full` mode so command execution and workspace files both live inside E2B.
+This template is intended for XibeCode `sandbox_full` mode so command execution and workspace files both live inside E2B. It is also the default image for **hosted** instances (4 vCPU / 8 GB).
 
 ## Includes
 
@@ -11,22 +11,43 @@ This template is intended for XibeCode `sandbox_full` mode so command execution 
 - Build tooling: `python3`, `make`, `g++`
 - Default workspace path: `/home/user/workspace`
 
+## Resources (hosting tier)
+
+| Resource | Value |
+|----------|--------|
+| CPU      | 4 cores |
+| Memory   | 8192 MB (8 GB) |
+
+These are set at **template build** time via `--cpu-count` / `--memory-mb`.
+
 ## Build and publish
 
 From the repo root (requires Docker and `E2B_API_KEY` in the environment):
 
 ```bash
-pnpm dlx @e2b/cli@latest template build -p sandbox/e2b-template -d Dockerfile -n xibecode-full-sandbox
-pnpm dlx @e2b/cli@latest template publish -p sandbox/e2b-template -y
+# Load key (example)
+set -a && source packages/e2b-gateway/.env && set +a
+
+pnpm dlx @e2b/cli@latest template create xibecode-full-sandbox \
+  -p sandbox/e2b-template \
+  -d Dockerfile \
+  --cpu-count 4 \
+  --memory-mb 8192
 ```
 
-This template is registered as **template id** `9piviazh0jkh5kzb93jd`, **alias** `xibecode-full-sandbox` (published name may show as `iotserver24/xibecode-full-sandbox` in the CLI). Either form works with `Sandbox.create(...)` and the gateway env below.
+Legacy alias (deprecated):
+
+```bash
+pnpm dlx @e2b/cli@latest template build -p sandbox/e2b-template -d Dockerfile -n xibecode-full-sandbox
+```
+
+Template **alias**: `xibecode-full-sandbox` (id is written into `e2b.toml` after build). Either form works with `Sandbox.create(...)` and the gateway env below.
 
 Set on the gateway:
 
 ```bash
-export XIBECODE_E2B_TEMPLATE="9piviazh0jkh5kzb93jd"
-# or: export XIBECODE_E2B_TEMPLATE="xibecode-full-sandbox"
+export XIBECODE_E2B_TEMPLATE="xibecode-full-sandbox"
+# or the concrete template id from e2b.toml
 ```
 
 Optional workspace root override:

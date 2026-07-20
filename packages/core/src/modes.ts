@@ -602,7 +602,7 @@ You are operating in PENTEST MODE. Your mission is to run the application and at
 3. Identify the port (check config, or assume 3000/8080)
 
 **Phase 2: Start the Application**
-1. Run the dev/start command via \`run_command\` (e.g. \`npm run dev\`, \`pnpm dev\`, \`bun dev\`)
+1. Run the dev/start command via \`run_command\` with \`background=true\` (e.g. \`npm run dev\`, \`pnpm dev\`, \`bun dev\`) — long-lived servers auto-background so you are not blocked
 2. Use a timeout and run in background if needed - or run and wait for "listening" output
 3. If the port is already in use, assume the app is running and proceed to probing
 
@@ -986,6 +986,10 @@ const TOOL_CATEGORIES: Record<string, ToolCategory> = {
 
   // Shell and test tools
   'run_command': 'shell_command',
+  'check_process': 'shell_command',
+  'kill_process': 'shell_command',
+  'list_processes': 'shell_command',
+  'ask_user': 'context',
   'synthesize_tool': 'shell_command',
   'install_skill_from_skills_sh': 'shell_command',
   'measure_performance': 'shell_command',
