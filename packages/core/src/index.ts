@@ -18,6 +18,14 @@ export {
   type SetupProviderOption,
 } from './types/index.js';
 
+// ─── Stop hooks (Claude-style verify-on-stop) ──────────────────
+export {
+  evaluateStopHooks,
+  type StopHookMode,
+  type StopHookInput,
+  type StopHookResult,
+} from './stop-hooks.js';
+
 // ─── Models catalog (live /models + curated fallbacks) ─────────
 export {
   fetchProviderModels,

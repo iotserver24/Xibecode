@@ -10,6 +10,8 @@ export function chunkForChat(text: string, max = 3900): string[] {
   if (text.length <= max) return [text];
   const chunks: string[] = [];
   let rest = text;
+  let part = 0;
+  const totalHint = Math.ceil(text.length / max);
   while (rest.length > max) {
     let cut = rest.lastIndexOf('\n', max);
     if (cut < max * 0.4) cut = rest.lastIndexOf(' ', max);
@@ -20,10 +22,29 @@ export function chunkForChat(text: string, max = 3900): string[] {
       const close = rest.indexOf('```', fence + 3);
       if (close > 0 && close < max + 200) cut = Math.min(close + 3, rest.length);
     }
-    chunks.push(rest.slice(0, cut));
+    let piece = rest.slice(0, cut);
+    // Hermes: never leave chunk marker on a fence line
+    if (/```\s*$/.test(piece)) {
+      piece = piece.replace(/\s*$/, '') + '\n';
+    }
+    part += 1;
+    if (totalHint > 1) {
+      piece = piece.replace(/\s*$/, '') + `\n(${part}/~${totalHint})`;
+    }
+    // If marker landed after fence, move it
+    piece = piece.replace(/```\s*(\(\d+\/~\d+\))\s*$/m, '```\n$1');
+    chunks.push(piece);
     rest = rest.slice(cut).replace(/^\n+/, '');
   }
-  if (rest) chunks.push(rest);
+  if (rest) {
+    part += 1;
+    let last = rest;
+    if (totalHint > 1 && part > 1) {
+      last = last.replace(/\s*$/, '') + `\n(${part}/~${totalHint})`;
+    }
+    last = last.replace(/```\s*(\(\d+\/~\d+\))\s*$/m, '```\n$1');
+    chunks.push(last);
+  }
   return chunks;
 }
 

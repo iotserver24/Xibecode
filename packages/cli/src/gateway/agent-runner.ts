@@ -145,8 +145,9 @@ export async function runHeadlessAgent(
   const rigor = options.rigorLevel || 'default';
   const completionEvidenceMode =
     rigor === 'yolo' ? 'off' : rigor === 'strict' ? 'strict' : 'balanced';
+  // Claude-style: verify edits by default; yolo stays fast
   const postEditVerification =
-    rigor === 'strict' ? 'balanced' : rigor === 'yolo' ? 'off' : 'off';
+    rigor === 'yolo' ? 'off' : rigor === 'strict' ? 'strict' : 'balanced';
 
   // YOLO skips the approval callback entirely even if the caller passed one.
   const onDangerousApproval =

@@ -393,46 +393,34 @@ export class ChatController {
     const rigor: GatewayRigorLevel = session.rigorLevel || 'default';
     const basen = path.basename(workdir);
 
-    let progressMsgId: string | undefined;
-    let lastProgressFlush = 0;
     let lastActivityAt = Date.now();
     const toolLines: string[] = [];
     const startedPhrase = statusPhrase(Date.now());
     const MAX_CRITICAL = 6;
 
-    const renderProgressBody = (footer?: string) => {
-      const header = `💻 **${startedPhrase}** \`${basen}\` · ${rigor}`;
-      const lines = toolLines.slice(-8);
-      const parts = [header, ...lines];
-      if (footer) parts.push(footer);
-      return parts.join('\n');
-    };
+    const { GatewayStreamConsumer } = await import('./stream-consumer.js');
+    const stream = new GatewayStreamConsumer({
+      adapter,
+      chatId: msg.chatId,
+      threadId: msg.threadId,
+      progressHeader: `💻 **${startedPhrase}** \`${basen}\` · ${rigor}`,
+      enabled: progressOn,
+    });
 
     const flushProgress = async (footer?: string) => {
-      if (!progressOn || !adapter.sendOrEditProgress) return;
-      lastProgressFlush = Date.now();
-      progressMsgId = await adapter.sendOrEditProgress(
-        msg.chatId,
-        renderProgressBody(footer),
-        progressMsgId,
-        { threadId: msg.threadId },
-      );
+      await stream.flushProgress(footer);
     };
 
     /** Append a real tool/warning line (Hermes-style: tools only, no step N/0). */
     const pushProgress = async (line: string, opts?: { replaceLast?: boolean }) => {
       lastActivityAt = Date.now();
       activeRun.lastToolLine = line;
-      if (!progressOn || !adapter.sendOrEditProgress) return;
       if (opts?.replaceLast && toolLines.length > 0) {
         toolLines[toolLines.length - 1] = line;
       } else {
         toolLines.push(line);
       }
-      const now = Date.now();
-      // Throttle Telegram edits (~1.2s) but keep latest line content
-      if (now - lastProgressFlush < 1200) return;
-      await flushProgress();
+      await stream.pushToolLine(line, opts);
     };
 
     const typingTimer = setInterval(() => {
@@ -445,7 +433,9 @@ export class ChatController {
       // Heartbeat: if quiet >25s, show "still working" so chat doesn't look dead
       if (Date.now() - lastActivityAt > 25_000 && progressOn) {
         const secs = Math.round((Date.now() - activeRun.startedAt) / 1000);
-        void flushProgress(`_still working… ${secs}s · ${activeRun.toolCount || 0} tools_`);
+        void flushProgress(
+          `_still working… ${secs}s · ${activeRun.toolCount || 0} tools_`,
+        );
         lastActivityAt = Date.now();
       }
     }, 4000);
@@ -648,10 +638,16 @@ export class ChatController {
             void pushProgress(formatToolResult(name, success, preview), {
               replaceLast: true,
             });
+          } else if (type === 'stream_text' || type === 'stream_delta') {
+            const t = typeof data?.text === 'string' ? data.text : '';
+            if (t) {
+              lastActivityAt = Date.now();
+              void stream.onDelta(t);
+            }
           } else if (type === 'warning') {
             const w = String(data?.message || '');
             this.options.log(`${msg.platform} warning: ${w}`);
-            const isCritical = /CRITICAL|Loop detected|near-identical|blocked finalize/i.test(
+            const isCritical = /CRITICAL|Loop detected|near-identical|blocked finalize|Stop-hook/i.test(
               w,
             );
             if (isCritical) {
@@ -659,9 +655,11 @@ export class ChatController {
               // Short user-visible note (not the full CRITICAL dump every time)
               const short = w.includes('near-identical')
                 ? '⚠️ Stuck repeating the same tool — changing approach…'
-                : w.includes('TASK_COMPLETE') || w.includes('finalize')
-                  ? '⚠️ Verifying completion evidence…'
-                  : `⚠️ ${w.slice(0, 120)}`;
+                : w.includes('Stop-hook')
+                  ? '⚠️ Verifying before finish…'
+                  : w.includes('TASK_COMPLETE') || w.includes('finalize')
+                    ? '⚠️ Verifying completion evidence…'
+                    : `⚠️ ${w.slice(0, 120)}`;
               void pushProgress(short);
               // Auto-stop runaway loops so the chat doesn't freeze forever
               if ((activeRun.criticalWarnings || 0) >= MAX_CRITICAL) {
@@ -686,7 +684,7 @@ export class ChatController {
         },
       });
 
-      // Flush any pending tool lines before final reply
+      // Flush progress bubble, then send final answer (Hermes finalize path)
       await flushProgress(
         result.cancelled
           ? '_stopped_'
@@ -694,6 +692,7 @@ export class ChatController {
             ? '_done_'
             : '_error_',
       );
+      stream.close();
 
       const reply = result.cancelled
         ? `⏹ Stopped.\n${result.text || ''}`.trim()
@@ -708,6 +707,11 @@ export class ChatController {
       }
       await appendTurn(msg.platform, msg.chatId, text, reply);
     } finally {
+      try {
+        stream.close();
+      } catch {
+        /* ignore */
+      }
       clearInterval(typingTimer);
       if (activeRun.pendingApproval) {
         activeRun.pendingApproval.resolve('deny');

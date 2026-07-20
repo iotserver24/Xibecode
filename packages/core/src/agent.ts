@@ -421,6 +421,8 @@ export class EnhancedAgent extends EventEmitter {
   private evidenceTrail: Array<{ kind: string; detail: string; ts: number }> = [];
   /** Tracks consecutive completion-gate rejections to avoid infinite nudge loops. */
   private completionGateRetries = 0;
+  /** Tracks Claude-style stop-hook nudges (capped separately from completion gate). */
+  private stopHookRetries = 0;
   /** Set to true when [[TASK_COMPLETE]] is detected so the loop breaks immediately. */
   private taskCompletedFlag = false;
   /** Set to true when [[QUESTIONS:...]] is detected so the loop pauses for user answers. */
@@ -794,6 +796,7 @@ export class EnhancedAgent extends EventEmitter {
     this.loopDetector.reset();
     this.evidenceTrail = [];
     this.completionGateRetries = 0;
+    this.stopHookRetries = 0;
     this.taskCompletedFlag = false;
     this.questionsPendingFlag = false;
     this.activeToolExecutor = toolExecutor;
@@ -1247,6 +1250,41 @@ export class EnhancedAgent extends EventEmitter {
         if (toolUseBlocks.length === 0) {
           const hasTaskComplete = textBlocks.some((b) => parseTaskComplete(b.text) != null);
           const hasEvidence = this.hasRecentGroundedEvidence();
+          const assistantText = textBlocks.map((b) => b.text || '').join('\n');
+
+          // Claude-style stop-hooks: last defense before finalize
+          try {
+            const { evaluateStopHooks } = await import('./stop-hooks.js');
+            const stopMode =
+              this.config.completionEvidenceMode === 'off'
+                ? 'off'
+                : this.config.completionEvidenceMode === 'strict'
+                  ? 'strict'
+                  : 'balanced';
+            const stop = evaluateStopHooks({
+              mode: stopMode,
+              assistantText,
+              toolCallCount: this.toolCallCount,
+              filesChanged: Array.from(this.filesChanged),
+              recentEvidence: this.evidenceTrail.map((e) => `${e.kind}:${e.detail}`),
+              hasRecentGroundedEvidence: hasEvidence,
+              stopHookRetries: this.stopHookRetries,
+            });
+            if (stop.preventContinuation && stop.nudgeMessage) {
+              this.stopHookRetries++;
+              this.emit('warning', {
+                message: `Stop-hook blocked finalize: ${stop.reason || 'need evidence'}`,
+              });
+              this.messages.push({
+                role: 'user',
+                content: stop.nudgeMessage,
+              });
+              continue;
+            }
+          } catch {
+            /* stop-hooks optional */
+          }
+
           if (this.shouldEnforceCompletionEvidence()) {
             // In balanced mode, skip the gate when the agent hasn't made any
             // tool calls — it just answered a question and the user can
