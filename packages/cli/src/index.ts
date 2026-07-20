@@ -614,6 +614,11 @@ program
   .argument("[args...]", "approve <platform> <code> | revoke <platform> <userId>")
   .action((action, args) => pairCommand(action, args || []));
 
+// `xibecode acp` → same as --acp (Hermes-style entry for IDE hosts)
+if (process.argv[2] === "acp") {
+  process.argv.splice(2, 1, "--acp");
+}
+
 // If --acp is present, boot as a headless JSON-RPC 2.0 server over stdio.
 const acpArgIdx = process.argv.indexOf("--acp");
 if (acpArgIdx >= 2) {

@@ -191,12 +191,114 @@ export class AgentService extends EventEmitter {
   }
 
   /**
+   * Prefer ACP → CLI when enabled (IDE shares one harness with terminal).
+   * Set xibecode.useAcp=true or env XIBECODE_EXT_ACP=1.
+   */
+  private preferAcp(): boolean {
+    try {
+      const cfg = vscode.workspace.getConfiguration('xibecode');
+      if (cfg.get<boolean>('useAcp') === true) return true;
+    } catch {
+      /* ignore */
+    }
+    return (
+      process.env.XIBECODE_EXT_ACP === '1' ||
+      process.env.XIBECODE_EXT_ACP === 'true'
+    );
+  }
+
+  private async runViaAcp(prompt: string): Promise<void> {
+    const { AcpClient } = await import('./acp-client.js');
+    const client = new AcpClient({ cwd: this.cwd });
+    this.running = true;
+    this.runStartTime = Date.now();
+    this.emit('status', 'running');
+    this.emit('event', {
+      type: 'status',
+      data: { message: 'Starting xibecode --acp…' },
+    });
+
+    const onEvent = (ev: any) => {
+      if (ev.type === 'text') {
+        this.emit('event', { type: 'stream_text', data: { text: ev.text } });
+      } else if (ev.type === 'tool_start') {
+        this.emit('event', {
+          type: 'tool_call',
+          data: { name: ev.name, input: ev.input },
+        });
+      } else if (ev.type === 'tool_end') {
+        this.emit('event', {
+          type: 'tool_result',
+          data: {
+            name: ev.name,
+            success: ev.success,
+            result: ev.result,
+          },
+        });
+      } else if (ev.type === 'permission_request') {
+        void vscode.window
+          .showWarningMessage(
+            `XibeCode wants to run dangerous tool: ${ev.toolName}\n${ev.detail || ''}`,
+            'Allow once',
+            'Deny',
+          )
+          .then((choice) => {
+            void client.respondPermission(
+              ev.requestId,
+              choice === 'Allow once' ? 'once' : 'deny',
+            );
+          });
+      } else if (ev.type === 'error') {
+        this.emit('event', { type: 'error', data: { message: ev.message } });
+      }
+    };
+    client.on('event', onEvent);
+
+    try {
+      await client.start();
+      this.history.push({
+        role: 'user',
+        content: prompt,
+        timestamp: Date.now(),
+      });
+      const content = await client.prompt(prompt);
+      this.history.push({
+        role: 'assistant',
+        content: content || '(no response)',
+        timestamp: Date.now(),
+      });
+      this.emit('event', {
+        type: 'response',
+        data: { text: content || '' },
+      });
+      this.emit('event', { type: 'complete', data: {} });
+      await this.saveSession();
+    } catch (err: any) {
+      this.emit('event', {
+        type: 'error',
+        data: { message: err?.message || String(err) },
+      });
+    } finally {
+      client.off('event', onEvent);
+      await client.shutdown().catch(() => {});
+      this.running = false;
+      this.emit('status', 'idle');
+    }
+  }
+
+  /**
    * Run a single user prompt through the agent.
    * Streams events back via the EventEmitter.
    */
   async run(prompt: string): Promise<void> {
     if (this.running) {
       this.emit('event', { type: 'error', data: { message: 'Agent is already running.' } });
+      return;
+    }
+
+    // ACP path: share CLI harness (Claude stop-hooks, skills, providers)
+    if (this.preferAcp()) {
+      await this.runViaAcp(prompt);
       return;
     }
 

@@ -26,6 +26,15 @@ export {
   type StopHookResult,
 } from './stop-hooks.js';
 
+// ─── Tool result budget + batch summaries ─────────────────────
+export {
+  applyToolResultBudget,
+  formatToolBatchSummary,
+  extractPathFromToolInput,
+  type ToolResultBlock,
+  type ToolBatchItem,
+} from './tool-result-budget.js';
+
 // ─── Models catalog (live /models + curated fallbacks) ─────────
 export {
   fetchProviderModels,

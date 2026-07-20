@@ -47,15 +47,73 @@ import {
   type ACPChatResult,
   type ACPChatDeltaParams,
   type ACPChatMessage,
+  type ACPPermissionRequestParams,
+  type ACPPermissionChoice,
   ACP_ERROR_CODES,
   ACP_METHODS,
 } from "./acp-types.js";
+import type { DangerousApprovalHandler } from "xibecode-core";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../../package.json") as { version?: string };
 const VERSION = pkg.version ?? "0.0.0";
 const NAME = "xibecode";
 const MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
+
+/** Pending dangerous-tool approvals (Hermes/Claude ACP-style). */
+const pendingPermissions = new Map<
+  string,
+  { resolve: (c: ACPPermissionChoice) => void; createdAt: number }
+>();
+let permissionSeq = 0;
+
+function createAcpApprovalHandler(sessionId: string): DangerousApprovalHandler {
+  return async (req) => {
+    const requestId = `perm-${++permissionSeq}`;
+    sendNotification(ACP_METHODS.SESSION_UPDATE, {
+      sessionId,
+      sessionUpdate: "permission_request",
+      requestId,
+      toolName: req.toolName,
+      detail: req.command || req.path || req.reason || "",
+      choices: ["once", "session", "always", "deny"],
+    });
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingPermissions.delete(requestId);
+        resolve("deny");
+      }, 5 * 60 * 1000);
+      pendingPermissions.set(requestId, {
+        resolve: (c) => {
+          clearTimeout(timer);
+          resolve(c);
+        },
+        createdAt: Date.now(),
+      });
+    });
+  };
+}
+
+function handlePermissionResponse(
+  id: number | string | null,
+  params: ACPPermissionRequestParams,
+) {
+  const requestId = params?.requestId;
+  const choice = (params?.choice || "deny") as ACPPermissionChoice;
+  const pending = requestId ? pendingPermissions.get(requestId) : undefined;
+  if (pending) {
+    pendingPermissions.delete(requestId!);
+    pending.resolve(
+      ["once", "session", "always", "deny"].includes(choice) ? choice : "deny",
+    );
+    sendResponse(id, { ok: true });
+  } else {
+    sendResponse(id, undefined, {
+      code: ACP_ERROR_CODES.INVALID_PARAMS,
+      message: "Unknown or expired permission requestId",
+    });
+  }
+}
 
 // ─── Helpers ───────────────────────────────────────────────
 
@@ -208,6 +266,12 @@ async function handleRequest(req: ACPRequest, config: ConfigManager) {
 
       case ACP_METHODS.CANCEL:
         return handleCancel(id);
+
+      case ACP_METHODS.SESSION_PERMISSION:
+        return handlePermissionResponse(
+          id,
+          params as ACPPermissionRequestParams,
+        );
 
       case ACP_METHODS.SHUTDOWN:
         return handleShutdown(id);
@@ -1499,6 +1563,9 @@ async function runAgentTurn(args: {
       mcpClientManager,
       skillManager,
       memory,
+      onDangerousApproval: createAcpApprovalHandler(
+        args.conversationId || "default",
+      ),
     });
 
     const agent = new EnhancedAgent(
@@ -1513,6 +1580,9 @@ async function runAgentTurn(args: {
         requestFormat: "auto",
         defaultSkillsPrompt,
         sessionMemory,
+        // Same harness defaults as CLI run / gateway (Claude-style)
+        completionEvidenceMode: "balanced",
+        postEditVerification: "balanced",
       },
       provider,
     );
@@ -1747,6 +1817,7 @@ async function handleChat(
       mcpClientManager,
       skillManager,
       memory,
+      onDangerousApproval: createAcpApprovalHandler("chat"),
     });
 
     const agent = new EnhancedAgent(
@@ -1760,6 +1831,8 @@ async function handleChat(
         requestFormat: "auto",
         defaultSkillsPrompt,
         sessionMemory,
+        completionEvidenceMode: "balanced",
+        postEditVerification: "balanced",
       },
       provider,
     );

@@ -189,8 +189,20 @@ export const ACP_METHODS = {
   SESSION_UPDATE: "session/update",
   SESSION_SET_CONFIG_OPTION: "session/set_config_option",
   SESSION_SET_MODE: "session/set_mode",
+  /** Client → server: respond to a dangerous-tool permission prompt */
+  SESSION_PERMISSION: "session/permission",
   CHAT: "agent/chat",
   CHAT_DELTA: "agent/chatDelta",
   SHUTDOWN: "shutdown",
   CANCEL: "agent/cancel",
 } as const;
+
+export type ACPPermissionChoice = "once" | "session" | "always" | "deny";
+
+export interface ACPPermissionRequestParams {
+  sessionId?: string;
+  requestId: string;
+  toolName: string;
+  detail?: string;
+  choice: ACPPermissionChoice;
+}

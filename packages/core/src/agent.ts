@@ -1344,8 +1344,13 @@ export class EnhancedAgent extends EventEmitter {
           break;
         }
 
-        // Execute tools
-        const toolResults = [];
+        // Execute tools (read-only tools may run concurrently via ToolOrchestrator)
+        const toolResults: Array<{
+          type: 'tool_result';
+          tool_use_id: string;
+          content: string;
+          is_error?: true;
+        }> = [];
 
         const updates = await this.toolOrchestrator.executeBatches(
           toolUseBlocks,
@@ -1377,6 +1382,56 @@ export class EnhancedAgent extends EventEmitter {
               /* non-fatal */
             }
           }
+        }
+
+        // Claude-style tool-result budget + batch summary for next model turn
+        try {
+          const {
+            applyToolResultBudget,
+            formatToolBatchSummary,
+            extractPathFromToolInput,
+          } = await import('./tool-result-budget.js');
+          const budgeted = applyToolResultBudget(
+            toolResults.map((r) => ({
+              type: 'tool_result' as const,
+              tool_use_id: r.tool_use_id,
+              content: r.content,
+              is_error: r.is_error ? true : undefined,
+            })),
+          );
+          toolResults.length = 0;
+          for (const r of budgeted.results) {
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: r.tool_use_id,
+              content: r.content,
+              ...(r.is_error ? { is_error: true as const } : {}),
+            });
+          }
+          if (budgeted.trimmed > 0) {
+            this.emit('warning', {
+              message: `Tool-result budget trimmed ${budgeted.trimmed} result(s) (total ${budgeted.totalChars} chars)`,
+            });
+          }
+          const summary = formatToolBatchSummary(
+            updates.map((u) => ({
+              name: u.toolUse.name,
+              success: u.success,
+              path: extractPathFromToolInput(u.toolUse.input),
+            })),
+          );
+          if (summary) {
+            this.emit('warning', {
+              message: summary,
+            });
+            // Keep for model context as a short text note after tool results
+            (toolResults as any).push({
+              type: 'text' as const,
+              text: `[SYSTEM] ${summary}`,
+            });
+          }
+        } catch {
+          /* budget optional */
         }
 
         // Add injected messages if any exist

@@ -194,6 +194,18 @@
           "default": 150,
           "description": "Maximum agent iterations per task (0 = unlimited)",
           "scope": "application"
+        },
+        "xibecode.useAcp": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run chat via `xibecode --acp` (shares CLI harness, stop-hooks, tools). Disable to use in-process agent.",
+          "scope": "application"
+        },
+        "xibecode.cliPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to xibecode/xc binary for ACP mode (empty = PATH)",
+          "scope": "application"
         }
       }
     }
