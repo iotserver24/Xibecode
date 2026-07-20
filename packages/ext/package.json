@@ -1,7 +1,7 @@
 {
   "name": "xibecode-vscode",
   "displayName": "XibeCode",
-  "description": "AI-powered autonomous coding assistant — XibeCode agent inside VS Code",
+  "description": "AI-powered autonomous coding assistant \u2014 XibeCode agent inside VS Code",
   "version": "1.0.9",
   "publisher": "iotserver24",
   "license": "Apache-2.0",
@@ -222,7 +222,7 @@
   "dependencies": {
     "@types/marked": "^6.0.0",
     "marked": "^11.2.0",
-    "xibecode-core": "^1.3.13"
+    "xibecode-core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

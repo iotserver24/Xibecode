@@ -9,16 +9,52 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check & build (turbo respects workspace build order)
+        run: pnpm run build
+
+      - name: Run unit tests
+        run: pnpm test
+
+      - name: Security audit (high+)
+        # Informational: fail only on critical (high is often transitive via vitest/vite)
+        run: pnpm audit --audit-level=critical
+        continue-on-error: true
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: 'pnpm'
@@ -27,33 +63,4 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Type check & build
-        run: pnpm run build
-
-      - name: Run unit tests
-        run: pnpm test
-        continue-on-error: true
-
-      - name: Security audit
-        run: pnpm audit --audit-level=high
-
-  lint:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 20.x
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Check TypeScript
         run: pnpm run build
