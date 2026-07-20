@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.5.1] - 2026-07-20
+
+### Gateway / Telegram media
+
+- **MEDIA:/path** tags in agent replies are uploaded natively (Hermes-style): Telegram `sendPhoto` / `sendVideo` / `sendVoice` / `sendDocument` via multipart/form-data ([Bot API](https://core.telegram.org/bots/api#sending-files)).
+- Photo dimension/format failures fall back to `sendDocument` (no host path leaked on failure).
+- `[[as_document]]` / `[[audio_as_voice]]` directives supported.
+- Cron/home delivery also strips tags and sends attachments.
+
+### Screenshots of generated sites
+
+- **`take_screenshot`** is implemented (no bundled Playwright): prefers `agent-browser`, then headless Chrome/Chromium; localhost allowed.
+- Tool result includes a **`MEDIA:`** line for the gateway so users receive the PNG in chat.
+- Gateway system prompt + agent mode docs: build site → background server → screenshot → MEDIA in final reply.
+
+### CI
+
+- Workspace `xibecode-core` links + turbo build order (from prior fix).
+
 ## [1.5.0] - 2026-07-20
 
 ### Release

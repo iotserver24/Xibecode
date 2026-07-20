@@ -73,6 +73,8 @@ const TOOL_EMOJI: Record<string, string> = {
   git_show_diff: '🌿',
   web_search: '🌐',
   fetch_url: '🌐',
+  take_screenshot: '📸',
+  preview_app: '📸',
   remember_lesson: '🧠',
   update_memory: '🧠',
   list_skills: '🧩',
@@ -301,6 +303,15 @@ export function codingSystemPrefix(
     '- Keep replies scannable in chat: short summary first, then details / code blocks.',
     '- If a task is done, say what changed and how to verify. Avoid fluff.',
     '- Skills: use list_skills / view_skill for domain workflows (tests, debug, React, etc.) when relevant. Follow loaded skill steps with tools.',
+    '',
+    '## Media to the user (Telegram / messaging)',
+    '- To send images, videos, or files to this chat, put a MEDIA tag on its own line in your **final** reply:',
+    '  MEDIA:/absolute/or/workdir/path/to/file.png',
+    '- Images (.png/.jpg/.webp/…) → photo; videos (.mp4/.webm/…) → video; other → document. Optional: [[as_document]] to force raw file upload (no photo recompress).',
+    '- After you build or run a site (localhost), capture a screenshot with take_screenshot (url + path), then include the returned MEDIA: line so the user sees the page.',
+    '- Example final reply:',
+    '  Homepage is live at http://localhost:3000',
+    '  MEDIA:/tmp/xibecode-shots/home.png',
   ];
   if (rigor !== 'yolo') {
     lines.push(

@@ -81,6 +81,40 @@ function compactCommandOutput(value: string, maxChars: number): { output: string
 export const NO_EMBEDDED_BROWSER_MESSAGE =
   'XibeCode does not bundle Playwright, Chromium, or agent-browser. Install agent-browser globally on supported OS/arch if you want it, or use your environment browser MCP / fetch_url. For Playwright E2E in a repo, add @playwright/test there and run it via run_command.';
 
+function shellQuote(s: string): string {
+  if (/^[A-Za-z0-9_./:=@%+-]+$/.test(s)) return s;
+  return `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
+async function whichBinary(name: string): Promise<string | null> {
+  try {
+    const { stdout } = await execAsync(`command -v ${shellQuote(name)}`, {
+      timeout: 3000,
+    });
+    const p = stdout.trim().split('\n')[0];
+    return p || null;
+  } catch {
+    return null;
+  }
+}
+
+function screenshotSuccess(
+  url: string,
+  absOut: string,
+  via: string,
+): Record<string, unknown> {
+  const media = `MEDIA:${absOut}`;
+  return {
+    success: true,
+    error: false,
+    url,
+    path: absOut,
+    via,
+    media_tag: media,
+    message: `Screenshot saved. Include this line in your final chat reply so the user receives the image:\n${media}`,
+  };
+}
+
 /**
  * Interface for tool executors
  *
@@ -1040,7 +1074,15 @@ export class CodingToolExecutor implements ToolExecutor {
         };
       }
 
-      case 'take_screenshot':
+      case 'take_screenshot': {
+        if (!p.url || typeof p.url !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: url (string)' };
+        }
+        if (!p.path || typeof p.path !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: path (string)' };
+        }
+        return this.takeScreenshot(p.url, p.path, p.fullPage !== false);
+      }
       case 'get_console_logs':
       case 'run_visual_test':
       case 'check_accessibility':
@@ -2168,12 +2210,12 @@ export class CodingToolExecutor implements ToolExecutor {
       {
         name: 'take_screenshot',
         description:
-          'Disabled: no bundled browser. Returns guidance; use run_command with agent-browser screenshot or a browser MCP for captures.',
+          'Capture a PNG screenshot of a URL (including localhost). Uses agent-browser if installed, else headless Chrome/Chromium. On success returns path + a MEDIA: tag — include that line in your final chat reply so Telegram/Discord can send the image to the user.',
         input_schema: {
           type: 'object',
           properties: {
             url: { type: 'string', description: 'URL to visit (e.g., http://localhost:3000)' },
-            path: { type: 'string', description: 'Output path for the screenshot (e.g., screenshot.png)' },
+            path: { type: 'string', description: 'Output path for the screenshot (e.g., screenshots/home.png)' },
             fullPage: { type: 'boolean', description: 'Capture full page? Default: true' }
           },
           required: ['url', 'path']
@@ -2421,6 +2463,106 @@ export class CodingToolExecutor implements ToolExecutor {
     const result = sanitizePath(this.workingDir, filePath);
     if (!result.ok) throw new Error(result.message);
     return result.path;
+  }
+
+  /**
+   * Screenshot a page without bundling Playwright.
+   * Prefers agent-browser, then headless Chrome/Chromium.
+   * Returns MEDIA: tag for gateway chat delivery to the user.
+   */
+  private async takeScreenshot(
+    url: string,
+    outPath: string,
+    fullPage = true,
+  ): Promise<Record<string, unknown>> {
+    const urlResult = sanitizeUrl(url.trim(), true);
+    if (!urlResult.ok) {
+      return { error: true, success: false, message: urlResult.message };
+    }
+    const safeUrl = urlResult.url;
+    let absOut: string;
+    try {
+      absOut = this.resolvePath(outPath);
+    } catch (e: any) {
+      return { error: true, success: false, message: e?.message || String(e) };
+    }
+    if (!/\.(png|jpe?g|webp)$/i.test(absOut)) {
+      absOut = absOut + '.png';
+    }
+    await fs.mkdir(path.dirname(absOut), { recursive: true });
+
+    const attempts: string[] = [];
+    const tryCmd = async (
+      label: string,
+      command: string,
+      opts?: { timeout?: number },
+    ): Promise<boolean> => {
+      try {
+        await execAsync(command, {
+          maxBuffer: 4 * 1024 * 1024,
+          timeout: opts?.timeout ?? 60000,
+          cwd: this.workingDir,
+          env: { ...process.env },
+        });
+        try {
+          const st = await fs.stat(absOut);
+          if (st.isFile() && st.size > 0) return true;
+        } catch {
+          /* file missing */
+        }
+        attempts.push(`${label}: ran but output missing/empty`);
+        return false;
+      } catch (err: any) {
+        attempts.push(`${label}: ${(err?.stderr || err?.message || err).toString().slice(0, 200)}`);
+        return false;
+      }
+    };
+
+    // 1) agent-browser (preferred for AI agents)
+    const ab = await whichBinary('agent-browser');
+    if (ab) {
+      const fullFlag = fullPage ? ' --full' : '';
+      const ok = await tryCmd(
+        'agent-browser',
+        `${shellQuote(ab)} open ${shellQuote(safeUrl)} && ${shellQuote(ab)} screenshot${fullFlag} ${shellQuote(absOut)}`,
+        { timeout: 90000 },
+      );
+      if (ok) {
+        return screenshotSuccess(safeUrl, absOut, 'agent-browser');
+      }
+    } else {
+      attempts.push('agent-browser: not on PATH');
+    }
+
+    // 2) Headless Chrome / Chromium
+    const chrome =
+      (await whichBinary('google-chrome-stable')) ||
+      (await whichBinary('google-chrome')) ||
+      (await whichBinary('chromium')) ||
+      (await whichBinary('chromium-browser')) ||
+      (await whichBinary('chrome'));
+    if (chrome) {
+      // Chrome --screenshot writes viewport PNG next to cwd; use absolute --screenshot=path
+      const ok = await tryCmd(
+        'chrome-headless',
+        `${shellQuote(chrome)} --headless=new --disable-gpu --no-sandbox --window-size=1280,800 --screenshot=${shellQuote(absOut)} ${shellQuote(safeUrl)}`,
+        { timeout: 60000 },
+      );
+      if (ok) {
+        return screenshotSuccess(safeUrl, absOut, 'chrome-headless');
+      }
+    } else {
+      attempts.push('chrome/chromium: not on PATH');
+    }
+
+    return {
+      error: true,
+      success: false,
+      message:
+        'Screenshot failed. Install agent-browser (`npm i -g agent-browser`) or Chrome/Chromium, or use run_command with your browser MCP.',
+      attempts,
+      hint: NO_EMBEDDED_BROWSER_MESSAGE,
+    };
   }
 
   private async trackFileEditBeforeMutation(fullPath: string): Promise<void> {

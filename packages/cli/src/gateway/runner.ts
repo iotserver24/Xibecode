@@ -177,7 +177,7 @@ export class GatewayRunner {
           if (chatId) {
             const adapter = this.getAdapter(platform);
             if (adapter) {
-              await adapter.sendMessage(chatId, wrapCron(text));
+              await this.sendWithMedia(adapter, chatId, wrapCron(text));
             } else {
               this.log(`cannot deliver to ${platform} (adapter off)`);
             }
@@ -195,7 +195,28 @@ export class GatewayRunner {
     const chatId = rest.join(':');
     const adapter = this.getAdapter(platform as PlatformName);
     if (adapter && chatId) {
-      await adapter.sendMessage(chatId, wrapCron(text));
+      await this.sendWithMedia(adapter, chatId, wrapCron(text));
+    }
+  }
+
+  /** Text + Hermes MEDIA: file uploads (Telegram sendPhoto/Video/Document). */
+  private async sendWithMedia(
+    adapter: import('./types.js').MessagingAdapter,
+    chatId: string,
+    text: string,
+  ): Promise<void> {
+    const { extractMedia } = await import('./media-delivery.js');
+    const { media, cleanedText } = extractMedia(text);
+    if (cleanedText.trim()) {
+      await adapter.sendMessage(chatId, cleanedText);
+    }
+    if (!media.length || typeof adapter.sendLocalFile !== 'function') return;
+    for (const m of media) {
+      try {
+        await adapter.sendLocalFile(chatId, m.path, { kind: m.kind });
+      } catch (err: any) {
+        this.log(`media send failed: ${err?.message || err}`);
+      }
     }
   }
 

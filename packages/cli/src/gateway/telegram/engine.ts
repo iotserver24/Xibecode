@@ -417,45 +417,148 @@ export class TelegramEngine implements MessagingAdapter {
     }
   }
 
-  /** Send a local file as document (Hermes send_document subset). */
+  /**
+   * Upload a local file via Telegram Bot API multipart/form-data.
+   * Routes by kind: sendPhoto / sendVideo / sendVoice / sendDocument.
+   * @see https://core.telegram.org/bots/api#sending-files
+   */
+  async sendLocalFile(
+    chatId: string,
+    filePath: string,
+    opts?: { caption?: string; kind?: 'photo' | 'video' | 'audio' | 'voice' | 'document' },
+  ): Promise<void> {
+    const { validateMediaPath, TG_LIMITS } = await import(
+      '../media-delivery.js'
+    );
+    const validated = validateMediaPath(filePath);
+    if (!validated.ok) {
+      throw new Error(`Cannot send file: ${validated.reason}`);
+    }
+    let kind = opts?.kind || validated.kind;
+    // Audio without voice → document (Telegram sendAudio needs metadata)
+    if (kind === 'audio') kind = 'document';
+
+    const abs = validated.path;
+    const caption = opts?.caption?.slice(0, 1024);
+    const filename = path.basename(abs);
+
+    if (kind === 'photo') {
+      try {
+        await this.uploadMedia(chatId, 'sendPhoto', 'photo', abs, caption, filename);
+        return;
+      } catch (err: any) {
+        const msg = String(err?.message || err);
+        // Invalid dimensions / format → fall back to document (Hermes behavior)
+        this.log(`sendPhoto failed (${msg.slice(0, 120)}); falling back to sendDocument`);
+        kind = 'document';
+      }
+    }
+
+    if (kind === 'video') {
+      try {
+        await this.uploadMedia(chatId, 'sendVideo', 'video', abs, caption, filename);
+        return;
+      } catch (err: any) {
+        this.log(`sendVideo failed; falling back to sendDocument: ${err?.message || err}`);
+        kind = 'document';
+      }
+    }
+
+    if (kind === 'voice') {
+      try {
+        await this.uploadMedia(chatId, 'sendVoice', 'voice', abs, caption, filename);
+        return;
+      } catch (err: any) {
+        this.log(`sendVoice failed; falling back to sendDocument: ${err?.message || err}`);
+        kind = 'document';
+      }
+    }
+
+    // document (or fallback)
+    if (validated.size > TG_LIMITS.document) {
+      throw new Error(`File exceeds Telegram 50MB document limit`);
+    }
+    await this.uploadMedia(chatId, 'sendDocument', 'document', abs, caption, filename);
+  }
+
+  /** Send a local file as document (Hermes send_document). */
   async sendDocument(
     chatId: string,
     filePath: string,
     caption?: string,
   ): Promise<void> {
-    const form = new FormData();
-    form.append('chat_id', chatId);
-    const buf = await fs.promises.readFile(filePath);
-    const blob = new Blob([buf]);
-    form.append('document', blob, path.basename(filePath));
-    if (caption) form.append('caption', caption.slice(0, 1024));
-    const res = await fetch(this.apiUrl('sendDocument'), {
-      method: 'POST',
-      body: form as any,
-    });
-    const data = (await res.json().catch(() => ({}))) as any;
-    if (!res.ok || data.ok === false) {
-      throw new Error(`sendDocument: ${data.description || res.status}`);
-    }
+    await this.sendLocalFile(chatId, filePath, { caption, kind: 'document' });
   }
 
+  /** Send a local image as photo (falls back to document on dimension errors). */
   async sendPhoto(
     chatId: string,
     filePath: string,
     caption?: string,
   ): Promise<void> {
+    await this.sendLocalFile(chatId, filePath, { caption, kind: 'photo' });
+  }
+
+  async sendVideo(
+    chatId: string,
+    filePath: string,
+    caption?: string,
+  ): Promise<void> {
+    await this.sendLocalFile(chatId, filePath, { caption, kind: 'video' });
+  }
+
+  async sendVoice(
+    chatId: string,
+    filePath: string,
+    caption?: string,
+  ): Promise<void> {
+    await this.sendLocalFile(chatId, filePath, { caption, kind: 'voice' });
+  }
+
+  /**
+   * multipart/form-data upload for Telegram Bot API methods that take files.
+   * Uses application/json only for non-file methods; files require multipart.
+   */
+  private async uploadMedia(
+    chatId: string,
+    method: 'sendPhoto' | 'sendVideo' | 'sendDocument' | 'sendVoice' | 'sendAudio',
+    field: string,
+    filePath: string,
+    caption?: string,
+    filename?: string,
+  ): Promise<void> {
+    const { mimeForPath } = await import('../media-delivery.js');
+    const buf = await fs.promises.readFile(filePath);
+    const name = filename || path.basename(filePath);
+    const mime = mimeForPath(filePath);
     const form = new FormData();
     form.append('chat_id', chatId);
-    const buf = await fs.promises.readFile(filePath);
-    form.append('photo', new Blob([buf]), path.basename(filePath));
+    // Blob + filename is the Node 18+/undici FormData file shape Telegram expects
+    form.append(field, new Blob([buf], { type: mime }), name);
     if (caption) form.append('caption', caption.slice(0, 1024));
-    const res = await fetch(this.apiUrl('sendPhoto'), {
+    // Show "uploading photo" indicator when useful
+    try {
+      const action =
+        method === 'sendPhoto'
+          ? 'upload_photo'
+          : method === 'sendVideo'
+            ? 'upload_video'
+            : method === 'sendVoice'
+              ? 'upload_voice'
+              : 'upload_document';
+      await this.api('sendChatAction', { chat_id: chatId, action });
+    } catch {
+      /* ignore */
+    }
+    const res = await fetch(this.apiUrl(method), {
       method: 'POST',
       body: form as any,
     });
     const data = (await res.json().catch(() => ({}))) as any;
     if (!res.ok || data.ok === false) {
-      throw new Error(`sendPhoto: ${data.description || res.status}`);
+      throw new Error(
+        `${method}: ${data.description || res.status || 'upload failed'}`,
+      );
     }
   }
 

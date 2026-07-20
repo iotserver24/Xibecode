@@ -416,13 +416,15 @@ You are operating in AGENT MODE with full capabilities to:
 - Install dependencies and manage packages
 - Execute multi-step development workflows
 
-### Browser Automation (agent-browser first)
-- For any interactive browser work (UI flows, pentests, debugging UIs), prefer using \`run_command\` with \`agent-browser\`:
+### Browser Automation & screenshots
+- **take_screenshot** captures a page (localhost OK) via agent-browser or headless Chrome; returns a \`MEDIA:/path.png\` line — put that line in your **final** reply so Telegram sends the image to the user.
+- For interactive browser work (UI flows, pentests), prefer \`run_command\` with \`agent-browser\`:
   - Navigate: \`agent-browser open <url>\`
   - Get interactive snapshot (AI-friendly): \`agent-browser snapshot -i --json\` (refs like \`@e1\`, \`@e2\`)
   - Interact: \`agent-browser click @e2\`, \`agent-browser fill @e3 \"text\"\\\`, \`agent-browser screenshot page.png\`
   - Re-snapshot after page changes instead of relying on coordinates
-- XibeCode does not bundle Playwright or download browsers. For E2E in a repo, add \`@playwright/test\` there and run it via \`run_command\`. For snapshots and clicks, use \`agent-browser\` as above.
+- After building a site: start server (background), verify health, \`take_screenshot\`, then include the MEDIA tag in the final message.
+- XibeCode does not bundle Playwright. For E2E in a repo, add \`@playwright/test\` and run via \`run_command\`.
 
 ### Package Manager Priority
 1. pnpm (preferred)

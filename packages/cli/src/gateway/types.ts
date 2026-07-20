@@ -25,6 +25,15 @@ export interface SendMessageOptions {
   replyMarkup?: Record<string, unknown>;
 }
 
+export type LocalMediaKind = 'photo' | 'video' | 'audio' | 'voice' | 'document';
+
+export interface SendLocalFileOptions {
+  caption?: string;
+  /** Force kind; otherwise inferred from extension. */
+  kind?: LocalMediaKind;
+  threadId?: string;
+}
+
 export interface MessagingAdapter {
   readonly name: PlatformName;
   /** Optional home channel for cron delivery. */
@@ -34,6 +43,15 @@ export interface MessagingAdapter {
     chatId: string,
     text: string,
     opts?: SendMessageOptions,
+  ): Promise<void>;
+  /**
+   * Upload a local file to the user (Telegram: sendPhoto/Video/Document/Voice).
+   * Optional — platforms without file upload skip MEDIA: delivery.
+   */
+  sendLocalFile?(
+    chatId: string,
+    filePath: string,
+    opts?: SendLocalFileOptions,
   ): Promise<void>;
   /** Optional typing indicator. */
   sendTyping?(chatId: string, opts?: { threadId?: string }): Promise<void>;

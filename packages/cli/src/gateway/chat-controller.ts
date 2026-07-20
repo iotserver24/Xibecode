@@ -44,6 +44,7 @@ import {
   ledgerMarkDelivered,
   ledgerMarkFailed,
 } from './delivery-ledger.js';
+import { extractMedia } from './media-delivery.js';
 import { ConfigManager } from '../utils/config.js';
 import { builtInSkillsDir } from '../utils/built-in-skills-dir.js';
 
@@ -170,9 +171,12 @@ export class ChatController {
       this.options.log(`${platform} circuit open — drop send`);
       return;
     }
+
+    // Hermes-style MEDIA:/path — strip tags from text, upload files natively
+    const { media, cleanedText } = extractMedia(text);
     const body = opts?.recovered
-      ? `♻️ Recovered reply — may be a duplicate\n\n${text}`
-      : text;
+      ? `♻️ Recovered reply — may be a duplicate\n\n${cleanedText}`
+      : cleanedText;
 
     let id: string | undefined;
     try {
@@ -180,14 +184,20 @@ export class ChatController {
     } catch (err: any) {
       // Ledger must never block slash replies (/model, /status, …)
       this.options.log(`ledger record failed: ${err?.message || err}`);
-      await adapter.sendMessage(chatId, body, { threadId: opts?.threadId });
+      if (body.trim()) {
+        await adapter.sendMessage(chatId, body, { threadId: opts?.threadId });
+      }
+      await this.deliverMedia(adapter, chatId, media, opts?.threadId);
       this.options.onPlatformSuccess?.(platform);
       return;
     }
 
     try {
       await ledgerMarkSending(id);
-      await adapter.sendMessage(chatId, body, { threadId: opts?.threadId });
+      if (body.trim()) {
+        await adapter.sendMessage(chatId, body, { threadId: opts?.threadId });
+      }
+      await this.deliverMedia(adapter, chatId, media, opts?.threadId);
       await ledgerMarkDelivered(id);
       this.options.onPlatformSuccess?.(platform);
     } catch (err: any) {
@@ -199,6 +209,46 @@ export class ChatController {
       }
       this.options.onPlatformFailure?.(platform, msg);
       throw err;
+    }
+  }
+
+  /** Upload MEDIA: attachments (Telegram sendPhoto/Video/Document; others if supported). */
+  private async deliverMedia(
+    adapter: MessagingAdapter,
+    chatId: string,
+    media: ReturnType<typeof extractMedia>['media'],
+    threadId?: string,
+  ): Promise<void> {
+    if (!media.length) return;
+    if (typeof adapter.sendLocalFile !== 'function') {
+      this.options.log(
+        `${adapter.name}: ${media.length} MEDIA file(s) skipped (platform has no file upload)`,
+      );
+      return;
+    }
+    for (const m of media) {
+      try {
+        await adapter.sendLocalFile(chatId, m.path, {
+          kind: m.kind,
+          threadId,
+        });
+        this.options.log(
+          `${adapter.name}: sent ${m.kind} ${m.path.split(/[/\\]/).pop()}`,
+        );
+      } catch (err: any) {
+        this.options.log(
+          `${adapter.name}: media send failed (${m.path}): ${err?.message || err}`,
+        );
+        // Best-effort notice without leaking full host paths
+        const name = m.path.split(/[/\\]/).pop() || 'file';
+        await adapter
+          .sendMessage(
+            chatId,
+            `⚠️ Couldn't deliver attachment \`${name}\`: ${err?.message || err}`,
+            { threadId },
+          )
+          .catch(() => {});
+      }
     }
   }
 
