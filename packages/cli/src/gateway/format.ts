@@ -84,21 +84,60 @@ const TOOL_EMOJI: Record<string, string> = {
   run_swarm: '🐝',
 };
 
-const STATUS_PHRASES = [
-  'Working…',
-  'Coding…',
-  'Running tools…',
-  'On it…',
-  'Digging in…',
-  'Making progress…',
+/**
+ * Hermes-style short status lines (gateway/assets/status_phrases.yaml generic).
+ * Plain text, no markdown — works the same on Telegram/Discord/Slack.
+ */
+const STATUS_PHRASES_GENERIC = [
+  'on it',
+  'one sec',
+  'checking that now',
+  'give me a sec',
+  'looking into it',
+  'working through it',
+  'checking',
+  'one moment',
+  'taking a look',
+  'got it, checking',
+  'looking now',
+  'sorting it',
+  'one sec, working on it',
+  'taking a proper look',
+  'checking the details',
+];
+
+/** Long-running heartbeat (Hermes "status" surface). */
+const STATUS_PHRASES_LONG = [
+  'still on it',
+  'still working through it',
+  'still checking',
+  'still making progress',
+  'waiting for the result',
+  'still processing this',
+  'one sec, this is still going',
+  'still here, checking',
+  'still going, not frozen',
 ];
 
 export function statusPhrase(seed = Date.now()): string {
-  return STATUS_PHRASES[Math.abs(seed) % STATUS_PHRASES.length];
+  return STATUS_PHRASES_GENERIC[Math.abs(seed) % STATUS_PHRASES_GENERIC.length];
 }
 
-export function formatBusyAck(workdirBasename: string): string {
-  return `✓ Got it — ${statusPhrase()} in \`${workdirBasename}\``;
+export function longRunningStatusPhrase(seed = Date.now()): string {
+  return STATUS_PHRASES_LONG[Math.abs(seed) % STATUS_PHRASES_LONG.length];
+}
+
+/**
+ * Hermes busy ack: short phrase only — no workdir, no checkmarks, no "Got it —".
+ * workdirBasename kept for API compat; intentionally unused in the message.
+ */
+export function formatBusyAck(_workdirBasename?: string): string {
+  return statusPhrase();
+}
+
+/** Progress bubble header (Hermes: phrase only, not "💻 Coding… dir · rigor"). */
+export function formatProgressHeader(_workdirBasename?: string, _rigor?: string): string {
+  return statusPhrase();
 }
 
 /** Compact tool call for progress lines (Hermes-style emoji + short preview). */

@@ -23,12 +23,13 @@ import {
   describeRigor,
   formatApprovalPrompt,
   formatBusyAck,
+  formatProgressHeader,
   formatToolProgress,
   formatToolResult,
   HELP_TEXT,
   isSilent,
+  longRunningStatusPhrase,
   parseApprovalReply,
-  statusPhrase,
   type GatewayRigorLevel,
 } from './format.js';
 import type {
@@ -395,15 +396,15 @@ export class ChatController {
 
     let lastActivityAt = Date.now();
     const toolLines: string[] = [];
-    const startedPhrase = statusPhrase(Date.now());
     const MAX_CRITICAL = 6;
 
     const { GatewayStreamConsumer } = await import('./stream-consumer.js');
+    // Hermes: one short status line as the progress bubble header (not "Coding… dir · rigor")
     const stream = new GatewayStreamConsumer({
       adapter,
       chatId: msg.chatId,
       threadId: msg.threadId,
-      progressHeader: `💻 **${startedPhrase}** \`${basen}\` · ${rigor}`,
+      progressHeader: formatProgressHeader(basen, rigor),
       enabled: progressOn,
     });
 
@@ -430,21 +431,23 @@ export class ChatController {
         return;
       }
       void adapter.sendTyping?.(msg.chatId, { threadId: msg.threadId });
-      // Heartbeat: if quiet >25s, show "still working" so chat doesn't look dead
+      // Hermes long-running phrases (not "_still working… Ns · N tools_")
       if (Date.now() - lastActivityAt > 25_000 && progressOn) {
-        const secs = Math.round((Date.now() - activeRun.startedAt) / 1000);
-        void flushProgress(
-          `_still working… ${secs}s · ${activeRun.toolCount || 0} tools_`,
-        );
+        void flushProgress(longRunningStatusPhrase(Date.now()));
         lastActivityAt = Date.now();
       }
     }, 4000);
     void adapter.sendTyping?.(msg.chatId, { threadId: msg.threadId });
 
-    // Immediate ack so the chat feels alive before the first tool
-    await adapter
-      .sendMessage(msg.chatId, formatBusyAck(basen), { threadId: msg.threadId })
-      .catch(() => {});
+    // Hermes: single progress bubble with short phrase — no separate "✓ Got it — …" message
+    if (progressOn && adapter.sendOrEditProgress) {
+      await flushProgress();
+    } else {
+      // Fallback platforms without edit: one short ack only
+      await adapter
+        .sendMessage(msg.chatId, formatBusyAck(basen), { threadId: msg.threadId })
+        .catch(() => {});
+    }
 
     const requestApproval = async (
       req: DangerousApprovalRequest,
@@ -593,7 +596,7 @@ export class ChatController {
     };
 
     try {
-      await pushProgress('_starting…_');
+      // No "_starting…_" — Hermes only shows the short phrase until first tool
 
       const history = session.messages.map((m) => ({
         role: m.role,
@@ -684,14 +687,12 @@ export class ChatController {
         },
       });
 
-      // Flush progress bubble, then send final answer (Hermes finalize path)
-      await flushProgress(
-        result.cancelled
-          ? '_stopped_'
-          : result.ok
-            ? '_done_'
-            : '_error_',
-      );
+      // Hermes: leave tool lines as-is (or soft footer); don't shout _done_ / _starting_
+      if (result.cancelled) {
+        await flushProgress('stopped');
+      } else {
+        await flushProgress();
+      }
       stream.close();
 
       const reply = result.cancelled
