@@ -6,7 +6,8 @@
  * - Long-poll getUpdates with abort on stop
  * - Inline approvals (ea:), clarify (cl:), model picker (mp/mm/mg/mb/mx/mpv)
  * - Choice pickers (lv:, cp:)
- * - Progress edit-in-place
+ * - Progress: new messages per tool by default (Hermes separate grouping)
+ * - Approval/ask: edit same message + clear buttons after resolve
  * - Documents / photos (basic media)
  * - setMyCommands menu
  *
@@ -129,13 +130,25 @@ export class TelegramEngine implements MessagingAdapter {
     return data.result;
   }
 
-  /** Hermes send: MarkdownV2 first, plain strip fallback. */
+  /**
+   * Hermes send: MarkdownV2 first, plain strip fallback.
+   * Returns the last sent message_id when available (for interactive prompts).
+   */
   async sendMessage(
     chatId: string,
     text: string,
     opts?: SendMessageOptions,
   ): Promise<void> {
+    await this.sendMessageReturningId(chatId, text, opts);
+  }
+
+  private async sendMessageReturningId(
+    chatId: string,
+    text: string,
+    opts?: SendMessageOptions,
+  ): Promise<string | undefined> {
     const chunks = chunkForChat(text, 3500);
+    let lastId: string | undefined;
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
       const markup =
@@ -144,29 +157,70 @@ export class TelegramEngine implements MessagingAdapter {
           : undefined;
       const md = formatMessage(chunk);
       try {
-        await this.api('sendMessage', {
+        const result = await this.api('sendMessage', {
           chat_id: chatId,
           text: md.slice(0, TG_TEXT_LIMIT),
           parse_mode: 'MarkdownV2',
           disable_web_page_preview: true,
           ...(markup ? { reply_markup: markup } : {}),
         });
+        if (result?.message_id != null) lastId = String(result.message_id);
       } catch {
         try {
-          await this.api('sendMessage', {
+          const result = await this.api('sendMessage', {
             chat_id: chatId,
-            text: stripMdv2(md).slice(0, TG_TEXT_LIMIT) || chunk.slice(0, TG_TEXT_LIMIT),
+            text:
+              stripMdv2(md).slice(0, TG_TEXT_LIMIT) ||
+              chunk.slice(0, TG_TEXT_LIMIT),
             disable_web_page_preview: true,
             ...(markup ? { reply_markup: markup } : {}),
           });
+          if (result?.message_id != null) lastId = String(result.message_id);
         } catch {
-          await this.api('sendMessage', {
+          const result = await this.api('sendMessage', {
             chat_id: chatId,
             text: chunk.slice(0, TG_TEXT_LIMIT),
             disable_web_page_preview: true,
             ...(markup ? { reply_markup: markup } : {}),
           });
+          if (result?.message_id != null) lastId = String(result.message_id);
         }
+      }
+    }
+    return lastId;
+  }
+
+  /**
+   * Hermes: after approval / clarify, edit the same message and drop buttons
+   * (`reply_markup` empty) so the keyboard does not stick around.
+   */
+  async editInteractiveMessage(
+    chatId: string,
+    messageId: string,
+    text: string,
+  ): Promise<void> {
+    const md = formatMessage(text);
+    const emptyKb = { inline_keyboard: [] as unknown[] };
+    try {
+      await this.api('editMessageText', {
+        chat_id: chatId,
+        message_id: Number(messageId),
+        text: md.slice(0, TG_TEXT_LIMIT),
+        parse_mode: 'MarkdownV2',
+        disable_web_page_preview: true,
+        reply_markup: emptyKb,
+      });
+    } catch {
+      try {
+        await this.api('editMessageText', {
+          chat_id: chatId,
+          message_id: Number(messageId),
+          text: text.slice(0, TG_TEXT_LIMIT),
+          disable_web_page_preview: true,
+          reply_markup: emptyKb,
+        });
+      } catch {
+        /* non-fatal — buttons may linger if Telegram rejects the edit */
       }
     }
   }
@@ -183,7 +237,7 @@ export class TelegramEngine implements MessagingAdapter {
     chatId: string,
     text: string,
     approvalId: string,
-  ): Promise<void> {
+  ): Promise<string | undefined> {
     const replyMarkup = {
       inline_keyboard: [
         [
@@ -196,7 +250,7 @@ export class TelegramEngine implements MessagingAdapter {
         ],
       ],
     };
-    await this.sendMessage(chatId, text, { replyMarkup });
+    return this.sendMessageReturningId(chatId, text, { replyMarkup });
   }
 
   /** Hermes send_clarify */
@@ -205,7 +259,7 @@ export class TelegramEngine implements MessagingAdapter {
     question: string,
     choices: string[] | undefined,
     askId: string,
-  ): Promise<void> {
+  ): Promise<string | undefined> {
     let body = `❓ **Question**\n\n${question.trim()}`;
     if (choices?.length) {
       body +=
@@ -227,7 +281,7 @@ export class TelegramEngine implements MessagingAdapter {
             ],
           }
         : undefined;
-    await this.sendMessage(chatId, body, { replyMarkup });
+    return this.sendMessageReturningId(chatId, body, { replyMarkup });
   }
 
   /**
@@ -939,16 +993,23 @@ export class TelegramEngine implements MessagingAdapter {
     const ea = /^ea:(once|session|always|deny):(.+)$/.exec(data);
     if (ea) {
       const choice = ea[1];
-      dispatch(
-        `/${choice}`,
-        choice === 'deny'
-          ? 'Denied'
-          : choice === 'once'
-            ? 'Allowed once'
-            : choice === 'session'
-              ? 'Allowed for session'
-              : 'Always allowed',
-      );
+      const labels: Record<string, string> = {
+        once: '✅ Approved once',
+        session: '✅ Approved for session',
+        always: '✅ Approved permanently',
+        deny: '❌ Denied',
+      };
+      const label = labels[choice] || 'Resolved';
+      // Hermes: edit same message + remove buttons before routing the resolve
+      if (messageIdStr) {
+        const who = cq.from?.first_name || cq.from?.username || 'User';
+        await this.editInteractiveMessage(
+          chatId,
+          messageIdStr,
+          `${label} by ${who}`,
+        );
+      }
+      dispatch(`/${choice}`, label);
       return;
     }
 
@@ -968,7 +1029,28 @@ export class TelegramEngine implements MessagingAdapter {
       const which = cl[2];
       if (which === 'other') {
         await answer('Type your answer in chat');
+        // Hermes: drop number buttons while waiting for free text
+        if (messageIdStr) {
+          const prev =
+            typeof cq.message?.text === 'string' ? cq.message.text : '❓ Question';
+          await this.editInteractiveMessage(
+            chatId,
+            messageIdStr,
+            `${prev}\n\n_Awaiting typed response…_`,
+          );
+        }
         return;
+      }
+      // Hermes: clear buttons on the same message when a choice is tapped
+      if (messageIdStr) {
+        const who = cq.from?.first_name || cq.from?.username || 'User';
+        const prev =
+          typeof cq.message?.text === 'string' ? cq.message.text : '❓ Question';
+        await this.editInteractiveMessage(
+          chatId,
+          messageIdStr,
+          `${prev}\n\n**${who}:** choice ${Number(which) + 1}`,
+        );
       }
       dispatch(`__ask:${askId}:${which}`, `Choice ${Number(which) + 1}`);
       return;

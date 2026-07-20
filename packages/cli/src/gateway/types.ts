@@ -62,21 +62,36 @@ export interface MessagingAdapter {
     previousMessageId?: string,
     opts?: { threadId?: string },
   ): Promise<string | undefined>;
-  /** Optional: approval prompt with platform-native buttons when available. */
+  /**
+   * Optional: edit an interactive prompt (approval / ask) to final text and
+   * remove inline buttons (Hermes: edit_message_text + reply_markup=None).
+   */
+  editInteractiveMessage?(
+    chatId: string,
+    messageId: string,
+    text: string,
+  ): Promise<void>;
+  /**
+   * Optional: approval prompt with platform-native buttons when available.
+   * Returns the platform message id so callers can clear buttons after resolve.
+   */
   sendApprovalPrompt?(
     chatId: string,
     text: string,
     approvalId: string,
     opts?: { threadId?: string },
-  ): Promise<void>;
-  /** Hermes-style ask_user / clarify with numbered buttons. */
+  ): Promise<string | undefined | void>;
+  /**
+   * Hermes-style ask_user / clarify with numbered buttons.
+   * Returns message id for post-resolve button cleanup.
+   */
   sendAskPrompt?(
     chatId: string,
     question: string,
     choices: string[] | undefined,
     askId: string,
     opts?: { threadId?: string },
-  ): Promise<void>;
+  ): Promise<string | undefined | void>;
   /** Hermes-style model picker (inline keyboard). */
   sendModelPicker?(
     chatId: string,
@@ -116,6 +131,8 @@ export interface PendingApproval {
   request: DangerousApprovalRequest;
   resolve: (choice: DangerousApprovalChoice) => void;
   createdAt: number;
+  /** Platform message id of the prompt (for clearing inline buttons). */
+  messageId?: string;
 }
 
 export interface PendingAsk {
@@ -125,6 +142,8 @@ export interface PendingAsk {
   resolve: (answer: string) => void;
   reject: (err: Error) => void;
   createdAt: number;
+  /** Platform message id of the prompt (for clearing inline buttons). */
+  messageId?: string;
 }
 
 export interface ActiveRun {

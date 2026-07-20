@@ -282,6 +282,60 @@ export function wrapCron(text: string): string {
 
 export type GatewayRigorLevel = 'yolo' | 'default' | 'strict';
 
+/**
+ * Prepare agent text for messaging platforms (Telegram/Discord/Slack).
+ *
+ * TUI renders `[[TASK_COMPLETE | summary=…]]` as a bordered footer; chat clients
+ * show the raw tag which breaks Markdown and confuses users. Strip the tag and
+ * append a plain Hermes-style done line (no internal control tokens).
+ */
+export function formatGatewayReply(text: string): string {
+  if (!text) return text;
+  // Lazy import-free regex mirror of core parseTaskComplete / stripTaskComplete
+  // so gateway format stays usable without re-export churn.
+  const match = text.match(/\[\[TASK_COMPLETE([^\]]*)\]\]/i);
+  let body = text.replace(/\[\[TASK_COMPLETE[^\]]*\]\]/gi, '').trim();
+  // Also strip mode request tags if the model leaked them
+  body = body.replace(/\[\[REQUEST_MODE:[^\]]+\]\]/gi, '').trim();
+  body = body.replace(/\[\[PLAN_READY\]\]/gi, '').trim();
+
+  if (!match) return body;
+
+  const raw = match[1] ?? '';
+  const kv = new Map<string, string>();
+  for (const field of raw
+    .split('|')
+    .map((p) => p.trim())
+    .filter(Boolean)) {
+    const eq = field.indexOf('=');
+    if (eq === -1) continue;
+    const key = field.slice(0, eq).trim().toLowerCase();
+    const value = field.slice(eq + 1).trim();
+    if (key) kv.set(key, value);
+  }
+  const summary = kv.get('summary');
+  if (!summary) return body;
+
+  const evidence = kv.get('evidence');
+  const showEvidence =
+    evidence !== undefined &&
+    evidence.trim().length > 0 &&
+    evidence.trim().toLowerCase() !== 'none';
+
+  // Hermes does not surface an internal completion token — just a clean final
+  // answer. We add a short scannable footer so "done" is obvious in chat.
+  const footer = showEvidence
+    ? `✅ **Done** — ${summary}\n_Evidence: ${evidence}_`
+    : `✅ **Done** — ${summary}`;
+
+  if (!body) return footer;
+  // Avoid duplicating if the model already wrote a similar done line
+  if (/✅\s*\*?\*?Done/i.test(body) || /^Done\b/im.test(body)) {
+    return body;
+  }
+  return `${body}\n\n${footer}`;
+}
+
 /** Coding-focused system prefix for gateway chats (anti-hallucination discipline). */
 export function codingSystemPrefix(
   workdir: string,

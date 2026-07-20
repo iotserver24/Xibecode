@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.5.2] - 2026-07-21
+
+### Gateway / Telegram UX (Hermes-aligned)
+
+- **Tool progress as new messages** (Hermes `tool_progress_grouping: separate`): each tool line is a new chat message instead of editing one long bubble. Tool results may still edit the last tool line only. Override with `XIBECODE_PROGRESS_GROUPING=accumulate`.
+- **Progressive answer drafts off by default** — final answer is always a new message. Set `XIBECODE_STREAM_EDIT=1` to restore mid-turn draft edits.
+- **Approval / ask buttons clear after resolve** (Hermes `edit_message_text` + empty keyboard): after you tap Once/Session/Always/Deny or a choice, the **same** prompt message is edited to the decision and the inline keyboard is removed (no stuck buttons).
+- **`[[TASK_COMPLETE | summary=…]]` no longer leaks into Telegram**: stripped and rendered as a plain `✅ Done — …` footer (same idea as the TUI footer; Hermes never shows the internal token).
+
 ## [1.5.1] - 2026-07-20
 
 ### Gateway / Telegram media

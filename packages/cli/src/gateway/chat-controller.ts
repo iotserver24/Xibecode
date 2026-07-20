@@ -23,6 +23,7 @@ import {
   describeRigor,
   formatApprovalPrompt,
   formatBusyAck,
+  formatGatewayReply,
   formatProgressHeader,
   formatToolProgress,
   formatToolResult,
@@ -107,20 +108,39 @@ export class ChatController {
     platform: string,
     chatId: string,
     choice: DangerousApprovalChoice,
-  ): boolean {
+  ): { ok: boolean; messageId?: string } {
     const run = this.active.get(this.key(platform, chatId));
-    if (!run?.pendingApproval) return false;
+    if (!run?.pendingApproval) return { ok: false };
+    const messageId = run.pendingApproval.messageId;
     run.pendingApproval.resolve(choice);
     run.pendingApproval = undefined;
-    return true;
+    return { ok: true, messageId };
   }
 
-  tryResolveAsk(platform: string, chatId: string, answer: string): boolean {
+  tryResolveAsk(
+    platform: string,
+    chatId: string,
+    answer: string,
+  ): { ok: boolean; messageId?: string } {
     const run = this.active.get(this.key(platform, chatId));
-    if (!run?.pendingAsk) return false;
+    if (!run?.pendingAsk) return { ok: false };
+    const messageId = run.pendingAsk.messageId;
     run.pendingAsk.resolve(answer);
     run.pendingAsk = undefined;
-    return true;
+    return { ok: true, messageId };
+  }
+
+  /** Hermes: clear inline keyboard on the prompt after resolve (text path). */
+  private async finalizeInteractivePrompt(
+    platform: PlatformName,
+    chatId: string,
+    messageId: string | undefined,
+    text: string,
+  ): Promise<void> {
+    if (!messageId) return;
+    const adapter = this.options.getAdapter(platform);
+    if (!adapter?.editInteractiveMessage) return;
+    await adapter.editInteractiveMessage(chatId, messageId, text).catch(() => {});
   }
 
   getQueue(platform: string, chatId: string): string[] {
@@ -275,19 +295,33 @@ export class ChatController {
     if (run?.pendingApproval) {
       const choice = parseApprovalReply(text);
       if (choice) {
-        this.tryResolveApproval(msg.platform, msg.chatId, choice);
-        const adapter = this.options.getAdapter(msg.platform);
+        const resolved = this.tryResolveApproval(msg.platform, msg.chatId, choice);
         const labels: Record<DangerousApprovalChoice, string> = {
-          once: 'Allowed once',
-          session: 'Allowed for this session',
-          always: 'Always allowed (until daemon restart)',
-          deny: 'Denied',
+          once: '✅ Approved once',
+          session: '✅ Approved for session',
+          always: '✅ Approved permanently',
+          deny: '❌ Denied',
         };
-        await adapter
-          ?.sendMessage(msg.chatId, `🔐 ${labels[choice]}`, {
-            threadId: msg.threadId,
-          })
-          .catch(() => {});
+        const label = labels[choice];
+        // Hermes: edit the prompt message (clear buttons). Callbacks already
+        // edited in the Telegram engine — skip a second confirmation bubble.
+        if (msg.fromCallback) {
+          // Buttons already cleared on the original message
+          return;
+        }
+        await this.finalizeInteractivePrompt(
+          msg.platform,
+          msg.chatId,
+          resolved.messageId,
+          label,
+        );
+        // Text `/once` path: if we couldn't edit the prompt, send a short ack
+        if (!resolved.messageId) {
+          const adapter = this.options.getAdapter(msg.platform);
+          await adapter
+            ?.sendMessage(msg.chatId, label, { threadId: msg.threadId })
+            .catch(() => {});
+        }
         return;
       }
       if (text.startsWith('/')) {
@@ -324,13 +358,23 @@ export class ChatController {
       } else {
         answer = this.normalizeAskAnswer(text, run.pendingAsk.choices);
       }
-      this.tryResolveAsk(msg.platform, msg.chatId, answer);
-      const adapter = this.options.getAdapter(msg.platform);
-      await adapter
-        ?.sendMessage(msg.chatId, `💬 Got it: ${answer}`, {
-          threadId: msg.threadId,
-        })
-        .catch(() => {});
+      const resolved = this.tryResolveAsk(msg.platform, msg.chatId, answer);
+      const label = `💬 Got it: ${answer}`;
+      // Hermes: edit the same prompt (clear buttons + show answer). Callbacks
+      // already cleared the keyboard; re-edit with the resolved choice text.
+      await this.finalizeInteractivePrompt(
+        msg.platform,
+        msg.chatId,
+        resolved.messageId || msg.messageId,
+        label,
+      );
+      // Text path without a stored message id: short ack bubble
+      if (!msg.fromCallback && !resolved.messageId && !msg.messageId) {
+        const adapter = this.options.getAdapter(msg.platform);
+        await adapter
+          ?.sendMessage(msg.chatId, label, { threadId: msg.threadId })
+          .catch(() => {});
+      }
       return;
     }
 
@@ -523,16 +567,21 @@ export class ChatController {
 
       await pushProgress(`⚠️ approval needed: ${req.toolName}`);
 
+      let promptMessageId: string | undefined;
       if (adapter.sendApprovalPrompt) {
-        await adapter
-          .sendApprovalPrompt(msg.chatId, prompt, approvalId, {
+        try {
+          const mid = await adapter.sendApprovalPrompt(
+            msg.chatId,
+            prompt,
+            approvalId,
+            { threadId: msg.threadId },
+          );
+          if (typeof mid === 'string') promptMessageId = mid;
+        } catch {
+          await adapter.sendMessage(msg.chatId, prompt, {
             threadId: msg.threadId,
-          })
-          .catch(async () => {
-            await adapter.sendMessage(msg.chatId, prompt, {
-              threadId: msg.threadId,
-            });
           });
+        }
       } else {
         await adapter.sendMessage(msg.chatId, prompt, {
           threadId: msg.threadId,
@@ -559,6 +608,12 @@ export class ChatController {
           this.options.log(
             `${msg.platform}:${msg.chatId} approval timed out (${req.toolName})`,
           );
+          void this.finalizeInteractivePrompt(
+            msg.platform,
+            msg.chatId,
+            promptMessageId,
+            '⌛ Approval timed out — treating as deny.',
+          );
           void adapter
             .sendMessage(
               msg.chatId,
@@ -574,6 +629,7 @@ export class ChatController {
           request: req,
           resolve: finish,
           createdAt: Date.now(),
+          messageId: promptMessageId,
         };
       });
     };
@@ -598,21 +654,28 @@ export class ChatController {
       const prompt = lines.join('\n');
       await pushProgress('❓ waiting for your reply…');
       // Hermes-style clarify buttons when platform supports it
+      let promptMessageId: string | undefined;
       if (adapter.sendAskPrompt) {
-        await adapter
-          .sendAskPrompt(msg.chatId, req.question, req.choices, askId, {
-            threadId: msg.threadId,
-          })
-          .catch(async () => {
-            await adapter
-              .sendMessage(msg.chatId, prompt, { threadId: msg.threadId })
-              .catch(() => {});
-          });
+        try {
+          const mid = await adapter.sendAskPrompt(
+            msg.chatId,
+            req.question,
+            req.choices,
+            askId,
+            { threadId: msg.threadId },
+          );
+          if (typeof mid === 'string') promptMessageId = mid;
+        } catch {
+          await adapter
+            .sendMessage(msg.chatId, prompt, { threadId: msg.threadId })
+            .catch(() => {});
+        }
       } else {
         await adapter
           .sendMessage(msg.chatId, prompt, { threadId: msg.threadId })
           .catch(() => {});
       }
+      // separate progress: soft status line only (not a full re-list of tools)
       await flushProgress('_reply or tap a button (or `/stop`)_');
 
       return new Promise<string>((resolve, reject) => {
@@ -640,6 +703,12 @@ export class ChatController {
         const onAbort = () => finishErr(new Error('Cancelled by /stop'));
         abort.signal.addEventListener('abort', onAbort);
         const timer = setTimeout(() => {
+          void this.finalizeInteractivePrompt(
+            msg.platform,
+            msg.chatId,
+            promptMessageId,
+            '⌛ Question timed out.',
+          );
           void adapter
             .sendMessage(msg.chatId, '⌛ Question timed out.', {
               threadId: msg.threadId,
@@ -655,6 +724,7 @@ export class ChatController {
           resolve: finishOk,
           reject: finishErr,
           createdAt: Date.now(),
+          messageId: promptMessageId,
         };
       });
     };
@@ -759,11 +829,13 @@ export class ChatController {
       }
       stream.close();
 
-      const reply = result.cancelled
+      // Strip [[TASK_COMPLETE …]] (TUI-only control token) → plain ✅ Done footer
+      const rawReply = result.cancelled
         ? `⏹ Stopped.\n${result.text || ''}`.trim()
         : result.ok
           ? result.text
           : `❌ Error: ${result.error || 'agent failed'}\n${result.text || ''}`.trim();
+      const reply = formatGatewayReply(rawReply);
 
       if (!isSilent(reply)) {
         await this.reliableSend(msg.platform, msg.chatId, reply, {
@@ -838,12 +910,29 @@ export class ChatController {
         cmd === 'approve'
           ? parseApprovalReply(arg ? `/approve ${arg}` : '/once') || 'once'
           : (cmd as DangerousApprovalChoice);
-      const ok = this.tryResolveApproval(msg.platform, msg.chatId, mapped);
-      await reply(
-        ok
-          ? `🔐 ${mapped === 'deny' ? 'Denied' : `Allowed (${mapped})`}`
-          : 'Nothing waiting for approval.',
-      );
+      const resolved = this.tryResolveApproval(msg.platform, msg.chatId, mapped);
+      const label =
+        mapped === 'deny'
+          ? '❌ Denied'
+          : mapped === 'once'
+            ? '✅ Approved once'
+            : mapped === 'session'
+              ? '✅ Approved for session'
+              : '✅ Approved permanently';
+      if (resolved.ok) {
+        await this.finalizeInteractivePrompt(
+          msg.platform,
+          msg.chatId,
+          resolved.messageId,
+          label,
+        );
+        // Only send a new message if we could not edit the prompt in place
+        if (!resolved.messageId) {
+          await reply(label);
+        }
+      } else {
+        await reply('Nothing waiting for approval.');
+      }
       return;
     }
 
