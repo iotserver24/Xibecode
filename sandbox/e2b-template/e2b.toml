@@ -13,3 +13,5 @@
 dockerfile = "Dockerfile"
 template_name = "xibecode-full-sandbox"
 template_id = "9piviazh0jkh5kzb93jd"
+# Hosting tier (set at last `e2b template create`):
+#   --cpu-count 4 --memory-mb 8192

@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>XibeCode Hosting</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --panel: #121820;
+      --border: #243041;
+      --text: #e8eef7;
+      --muted: #8b9bb0;
+      --accent: #5b9dff;
+      --accent2: #3dd68c;
+      --danger: #ff6b7a;
+      --radius: 12px;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(1200px 600px at 10% -10%, #1a2740 0%, transparent 55%),
+                  radial-gradient(900px 500px at 100% 0%, #13261c 0%, transparent 50%),
+                  var(--bg);
+      color: var(--text);
+    }
+    a { color: var(--accent); text-decoration: none; }
+    .wrap { max-width: 960px; margin: 0 auto; padding: 28px 18px 64px; }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin-bottom: 28px;
+    }
+    .brand { font-weight: 700; letter-spacing: -0.02em; font-size: 1.25rem; }
+    .brand span { color: var(--accent); }
+    .card {
+      background: color-mix(in srgb, var(--panel) 92%, black);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.25);
+    }
+    h1,h2,h3 { margin: 0 0 10px; letter-spacing: -0.02em; }
+    p.muted, .muted { color: var(--muted); }
+    label { display: block; font-size: .85rem; color: var(--muted); margin: 12px 0 6px; }
+    input, select, textarea {
+      width: 100%;
+      background: #0d1219;
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font: inherit;
+    }
+    textarea { min-height: 72px; resize: vertical; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
+    button, .btn {
+      appearance: none; border: 0; cursor: pointer;
+      background: var(--accent); color: #041018;
+      font-weight: 600; border-radius: 8px;
+      padding: 10px 14px; font: inherit;
+    }
+    button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    button.danger { background: color-mix(in srgb, var(--danger) 25%, transparent); color: #ffd0d5; border: 1px solid color-mix(in srgb, var(--danger) 50%, transparent); }
+    button.good { background: var(--accent2); color: #042014; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .hidden { display: none !important; }
+    .pill {
+      display: inline-block; font-size: .75rem; font-weight: 600;
+      padding: 3px 8px; border-radius: 999px;
+      background: #1b2838; color: var(--muted); border: 1px solid var(--border);
+    }
+    .pill.ok { color: #9cf0c4; background: #123226; border-color: #1f5a40; }
+    .pill.warn { color: #ffd48a; background: #2a2110; border-color: #5a4318; }
+    .pill.err { color: #ffb4bc; background: #2a1418; border-color: #5a222a; }
+    .inst {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      margin-top: 12px;
+      background: #0e141c;
+    }
+    .inst h3 { font-size: 1rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .meta { font-size: .82rem; color: var(--muted); margin-top: 6px; word-break: break-all; }
+    .flash {
+      padding: 10px 12px; border-radius: 8px; margin-bottom: 12px;
+      background: #172033; border: 1px solid #2c4266; color: #cfe0ff;
+      white-space: pre-wrap; font-size: .9rem;
+    }
+    .flash.err { background: #2a1418; border-color: #5a222a; color: #ffd0d5; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tabs button { background: transparent; color: var(--muted); border: 1px solid transparent; }
+    .tabs button.active { color: var(--text); border-color: var(--border); background: #151c27; }
+    footer { margin-top: 32px; color: var(--muted); font-size: .85rem; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85em; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">Xibe<span>Code</span> Hosting</div>
+      <div id="userBar" class="muted"></div>
+    </header>
+
+    <div id="flash" class="flash hidden"></div>
+
+    <!-- Auth -->
+    <section id="authView" class="card">
+      <h1>Managed coding sandboxes</h1>
+      <p class="muted">Open-source tools. Paid hosting: 4 vCPU · 8 GB RAM E2B instances with AI + Telegram gateway setup from this dashboard.</p>
+      <div class="tabs">
+        <button type="button" id="tabLogin" class="active">Log in</button>
+        <button type="button" id="tabRegister">Create account</button>
+      </div>
+      <form id="authForm">
+        <label>Email</label>
+        <input id="email" type="email" required autocomplete="username" />
+        <label>Password</label>
+        <input id="password" type="password" required minlength="8" autocomplete="current-password" />
+        <div class="actions">
+          <button type="submit" id="authSubmit">Log in</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- App -->
+    <section id="appView" class="hidden">
+      <div class="card">
+        <h2>Your infrastructure</h2>
+        <p class="muted">Each instance is a private E2B sandbox (hosting tier: <strong>4 cores / 8 GB</strong>) with XibeCode CLI preinstalled.</p>
+        <div class="actions">
+          <button type="button" class="good" id="btnCreate">+ Create instance</button>
+          <button type="button" class="secondary" id="btnRefresh">Refresh</button>
+        </div>
+        <div id="instances"></div>
+      </div>
+
+      <div class="card hidden" id="setupCard">
+        <h2>Setup AI + Telegram</h2>
+        <p class="muted">Runs non-interactive commands <em>inside</em> the selected sandbox via the gateway — writes keys, installs gateway, starts Telegram bot.</p>
+        <input type="hidden" id="setupInstanceId" />
+        <div class="row">
+          <div>
+            <label>Provider</label>
+            <select id="provider">
+              <option value="openai">OpenAI-compatible</option>
+              <option value="anthropic">Anthropic</option>
+            </select>
+          </div>
+          <div>
+            <label>Model</label>
+            <input id="model" placeholder="gpt-4o-mini" />
+          </div>
+        </div>
+        <label>API key</label>
+        <input id="apiKey" type="password" autocomplete="off" placeholder="sk-…" />
+        <label>Base URL (optional)</label>
+        <input id="baseUrl" placeholder="https://api.openai.com/v1" />
+        <label>Telegram bot token</label>
+        <input id="tgToken" type="password" autocomplete="off" placeholder="123456:ABC…" />
+        <div class="actions">
+          <button type="button" class="good" id="btnSetup">Run setup in sandbox</button>
+          <button type="button" class="secondary" id="btnCancelSetup">Cancel</button>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      CLI is open source (<code>npm i -g xibecode</code>). Hosting sells the always-on infra.
+      Gateway: <code id="gwUrl">…</code>
+    </footer>
+  </div>
+
+  <script>
+    let mode = 'login';
+    let me = null;
+    let instances = [];
+
+    const $ = (id) => document.getElementById(id);
+    const flash = (msg, err = false) => {
+      const el = $('flash');
+      el.textContent = msg;
+      el.classList.toggle('hidden', !msg);
+      el.classList.toggle('err', !!err);
+    };
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, {
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json', ...(opts.headers || {}) },
+        ...opts,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || res.statusText || 'Request failed');
+      return data;
+    }
+
+    function setAuthMode(next) {
+      mode = next;
+      $('tabLogin').classList.toggle('active', mode === 'login');
+      $('tabRegister').classList.toggle('active', mode === 'register');
+      $('authSubmit').textContent = mode === 'login' ? 'Log in' : 'Create account';
+      $('password').autocomplete = mode === 'login' ? 'current-password' : 'new-password';
+    }
+
+    function renderUser() {
+      if (!me) {
+        $('userBar').innerHTML = '';
+        $('authView').classList.remove('hidden');
+        $('appView').classList.add('hidden');
+        return;
+      }
+      $('userBar').innerHTML = `${me.email} · <a href="#" id="logout">Log out</a>`;
+      $('authView').classList.add('hidden');
+      $('appView').classList.remove('hidden');
+      $('logout')?.addEventListener('click', async (e) => {
+        e.preventDefault();
+        await api('/api/auth/logout', { method: 'POST', body: '{}' });
+        me = null;
+        renderUser();
+      });
+    }
+
+    function statusPill(s) {
+      const cls = s === 'running' ? 'ok' : s === 'error' ? 'err' : 'warn';
+      return `<span class="pill ${cls}">${s}</span>`;
+    }
+
+    function renderInstances() {
+      const root = $('instances');
+      if (!instances.length) {
+        root.innerHTML = '<p class="muted" style="margin-top:16px">No instances yet. Create one to get a 4c/8GB sandbox.</p>';
+        return;
+      }
+      root.innerHTML = instances.map((i) => `
+        <div class="inst" data-id="${i.id}">
+          <h3>${escapeHtml(i.name)} ${statusPill(i.status)}
+            ${i.aiConfigured ? '<span class="pill ok">AI</span>' : ''}
+            ${i.telegramConfigured ? '<span class="pill ok">Telegram</span>' : ''}
+          </h3>
+          <div class="meta">plan <code>${i.plan}</code> · session <code>${i.sessionId}</code>${i.sandboxId ? ` · sandbox <code>${i.sandboxId}</code>` : ''}</div>
+          ${i.lastError ? `<div class="meta" style="color:#ffb4bc">${escapeHtml(i.lastError)}</div>` : ''}
+          <div class="actions">
+            <button type="button" data-act="setup" data-id="${i.id}">Setup AI + Telegram</button>
+            <button type="button" class="danger" data-act="destroy" data-id="${i.id}">Destroy</button>
+          </div>
+        </div>
+      `).join('');
+
+      root.querySelectorAll('[data-act]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-id');
+          const act = btn.getAttribute('data-act');
+          if (act === 'setup') {
+            $('setupInstanceId').value = id;
+            $('setupCard').classList.remove('hidden');
+            $('setupCard').scrollIntoView({ behavior: 'smooth' });
+          } else if (act === 'destroy') {
+            if (!confirm('Destroy this sandbox permanently?')) return;
+            try {
+              await api(`/api/instances/${id}`, { method: 'DELETE' });
+              flash('Instance destroyed');
+              await loadInstances();
+            } catch (e) {
+              flash(e.message, true);
+            }
+          }
+        });
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c]));
+    }
+
+    async function loadInstances() {
+      const data = await api('/api/instances');
+      instances = data.instances || [];
+      renderInstances();
+    }
+
+    async function boot() {
+      try {
+        const health = await api('/api/health');
+        $('gwUrl').textContent = health.gatewayUrl || '—';
+      } catch {
+        $('gwUrl').textContent = '—';
+      }
+      try {
+        const data = await api('/api/me');
+        me = data.user;
+        renderUser();
+        if (me) await loadInstances();
+      } catch {
+        me = null;
+        renderUser();
+      }
+    }
+
+    $('tabLogin').onclick = () => setAuthMode('login');
+    $('tabRegister').onclick = () => setAuthMode('register');
+
+    $('authForm').onsubmit = async (e) => {
+      e.preventDefault();
+      flash('');
+      const body = JSON.stringify({
+        email: $('email').value,
+        password: $('password').value,
+      });
+      try {
+        const path = mode === 'login' ? '/api/auth/login' : '/api/auth/register';
+        const data = await api(path, { method: 'POST', body });
+        me = data.user;
+        renderUser();
+        await loadInstances();
+        flash(mode === 'login' ? 'Welcome back' : 'Account created');
+      } catch (err) {
+        flash(err.message, true);
+      }
+    };
+
+    $('btnCreate').onclick = async () => {
+      flash('');
+      $('btnCreate').disabled = true;
+      try {
+        const name = prompt('Instance name', 'my-agent') || 'my-agent';
+        const data = await api('/api/instances', {
+          method: 'POST',
+          body: JSON.stringify({ name }),
+        });
+        flash(`Created ${data.instance.name} (${data.instance.sessionId})`);
+        await loadInstances();
+      } catch (e) {
+        flash(e.message, true);
+      } finally {
+        $('btnCreate').disabled = false;
+      }
+    };
+
+    $('btnRefresh').onclick = () => loadInstances().catch((e) => flash(e.message, true));
+
+    $('btnCancelSetup').onclick = () => {
+      $('setupCard').classList.add('hidden');
+    };
+
+    $('btnSetup').onclick = async () => {
+      const id = $('setupInstanceId').value;
+      if (!id) return;
+      flash('Running setup inside sandbox…');
+      $('btnSetup').disabled = true;
+      try {
+        const data = await api(`/api/instances/${id}/setup`, {
+          method: 'POST',
+          body: JSON.stringify({
+            provider: $('provider').value,
+            apiKey: $('apiKey').value,
+            baseUrl: $('baseUrl').value,
+            model: $('model').value,
+            telegramBotToken: $('tgToken').value,
+          }),
+        });
+        flash((data.logs || []).join('\n') || 'Setup complete');
+        $('setupCard').classList.add('hidden');
+        await loadInstances();
+      } catch (e) {
+        flash(e.message, true);
+      } finally {
+        $('btnSetup').disabled = false;
+      }
+    };
+
+    boot();
+  </script>
+</body>
+</html>

@@ -26,20 +26,21 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 # Bump this when you cut a new npm release, then rebuild + publish this template.
 RUN npm install -g xibecode@1.4.2
 
-# Ubuntu base often has UID/GID 1000 as ubuntu:ubuntu; E2B expects login+group `user`.
-RUN G="$(getent group 1000 | cut -d: -f1 || true)" && \
-    U="$(getent passwd 1000 | cut -d: -f1 || true)" && \
-    if [ -z "$U" ]; then \
-      useradd -m -u 1000 user; \
-    else \
-      [ -n "$G" ] && [ "$G" != "user" ] && groupmod -n user "$G"; \
-      if [ "$U" != "user" ]; then \
-        usermod -l user -g user -d /home/user -m "$U"; \
-      else \
-        usermod -g user user; \
+# E2B injects a default `user` (uid 1000). Only create/rename if missing.
+# Never fail the build when the account already exists.
+RUN set -e; \
+  if ! id -u user >/dev/null 2>&1; then \
+    if getent passwd 1000 >/dev/null 2>&1; then \
+      EXISTING="$(getent passwd 1000 | cut -d: -f1)"; \
+      if [ "$EXISTING" != "user" ]; then \
+        usermod -l user -d /home/user -m "$EXISTING" || true; \
       fi; \
-    fi && \
-    mkdir -p /home/user/workspace
+    else \
+      useradd -m -u 1000 -s /bin/bash user; \
+    fi; \
+  fi; \
+  mkdir -p /home/user/workspace; \
+  chown -R 1000:1000 /home/user/workspace 2>/dev/null || true
 
 USER user
 WORKDIR /home/user
