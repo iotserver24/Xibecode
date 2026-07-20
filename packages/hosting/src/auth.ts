@@ -1,12 +1,11 @@
 import jwt from 'jsonwebtoken';
-import type { Request, Response, NextFunction } from 'express';
+import type { ServerResponse } from 'node:http';
 
 const COOKIE = 'xibe_hosting_session';
 
 function jwtSecret(): string {
   const s = process.env.XIBECODE_HOSTING_JWT_SECRET?.trim();
   if (s) return s;
-  // Dev fallback — set XIBECODE_HOSTING_JWT_SECRET in production.
   return 'dev-only-change-me-xibecode-hosting';
 }
 
@@ -18,22 +17,37 @@ export function signSession(user: AuthUser): string {
   });
 }
 
-export function setSessionCookie(res: Response, token: string): void {
-  res.cookie(COOKIE, token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 14 * 24 * 60 * 60 * 1000,
-    path: '/',
-  });
+export function parseCookies(header: string | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!header) return out;
+  for (const part of header.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx < 0) continue;
+    const k = part.slice(0, idx).trim();
+    const v = part.slice(idx + 1).trim();
+    if (k) out[k] = decodeURIComponent(v);
+  }
+  return out;
 }
 
-export function clearSessionCookie(res: Response): void {
-  res.clearCookie(COOKIE, { path: '/' });
+export function setSessionCookie(res: ServerResponse, token: string): void {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  const maxAge = 14 * 24 * 60 * 60;
+  res.setHeader(
+    'Set-Cookie',
+    `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAge}${secure}`,
+  );
 }
 
-export function readSession(req: Request): AuthUser | null {
-  const token = (req as Request & { cookies?: Record<string, string> }).cookies?.[COOKIE];
+export function clearSessionCookie(res: ServerResponse): void {
+  res.setHeader(
+    'Set-Cookie',
+    `${COOKIE}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0`,
+  );
+}
+
+export function readSession(cookies: Record<string, string>): AuthUser | null {
+  const token = cookies[COOKIE];
   if (!token) return null;
   try {
     const payload = jwt.verify(token, jwtSecret()) as { sub: string; email: string };
@@ -42,16 +56,6 @@ export function readSession(req: Request): AuthUser | null {
   } catch {
     return null;
   }
-}
-
-export function requireAuth(req: Request, res: Response, next: NextFunction): void {
-  const user = readSession(req);
-  if (!user) {
-    res.status(401).json({ error: 'Login required' });
-    return;
-  }
-  (req as Request & { user: AuthUser }).user = user;
-  next();
 }
 
 export { COOKIE };

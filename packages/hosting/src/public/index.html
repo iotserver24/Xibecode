@@ -54,7 +54,6 @@
       padding: 10px 12px;
       font: inherit;
     }
-    textarea { min-height: 72px; resize: vertical; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     @media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
     button, .btn {
@@ -86,10 +85,30 @@
     }
     .inst h3 { font-size: 1rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .meta { font-size: .82rem; color: var(--muted); margin-top: 6px; word-break: break-all; }
+    .opt-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    @media (max-width: 640px) { .opt-grid { grid-template-columns: 1fr; } }
+    .opt {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      background: #0b1118;
+      text-align: left;
+      width: 100%;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .opt:hover { border-color: var(--accent); }
+    .opt strong { display: block; margin-bottom: 4px; color: var(--accent); }
+    .opt span { font-size: .82rem; color: var(--muted); font-weight: 400; }
     .flash {
       padding: 10px 12px; border-radius: 8px; margin-bottom: 12px;
       background: #172033; border: 1px solid #2c4266; color: #cfe0ff;
-      white-space: pre-wrap; font-size: .9rem;
+      white-space: pre-wrap; font-size: .9rem; max-height: 280px; overflow: auto;
     }
     .flash.err { background: #2a1418; border-color: #5a222a; color: #ffd0d5; }
     .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
@@ -97,6 +116,9 @@
     .tabs button.active { color: var(--text); border-color: var(--border); background: #151c27; }
     footer { margin-top: 32px; color: var(--muted); font-size: .85rem; }
     code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85em; }
+    .hint { font-size: .8rem; color: var(--muted); margin-top: 4px; }
+    .check { display: flex; align-items: center; gap: 8px; margin-top: 14px; color: var(--muted); font-size: .9rem; }
+    .check input { width: auto; }
   </style>
 </head>
 <body>
@@ -108,10 +130,9 @@
 
     <div id="flash" class="flash hidden"></div>
 
-    <!-- Auth -->
     <section id="authView" class="card">
       <h1>Managed coding sandboxes</h1>
-      <p class="muted">Open-source tools. Paid hosting: 4 vCPU · 8 GB RAM E2B instances with AI + Telegram gateway setup from this dashboard.</p>
+      <p class="muted">Open-source tools. Paid hosting: 4 vCPU · 8 GB RAM with AI + Telegram from this dashboard.</p>
       <div class="tabs">
         <button type="button" id="tabLogin" class="active">Log in</button>
         <button type="button" id="tabRegister">Create account</button>
@@ -127,11 +148,10 @@
       </form>
     </section>
 
-    <!-- App -->
     <section id="appView" class="hidden">
       <div class="card">
         <h2>Your infrastructure</h2>
-        <p class="muted">Each instance is a private E2B sandbox (hosting tier: <strong>4 cores / 8 GB</strong>) with XibeCode CLI preinstalled.</p>
+        <p class="muted">Each instance is a private E2B sandbox (4 cores / 8 GB) with XibeCode preinstalled.</p>
         <div class="actions">
           <button type="button" class="good" id="btnCreate">+ Create instance</button>
           <button type="button" class="secondary" id="btnRefresh">Refresh</button>
@@ -139,32 +159,91 @@
         <div id="instances"></div>
       </div>
 
-      <div class="card hidden" id="setupCard">
-        <h2>Setup AI + Telegram</h2>
-        <p class="muted">Runs non-interactive commands <em>inside</em> the selected sandbox via the gateway — writes keys, installs gateway, starts Telegram bot.</p>
-        <input type="hidden" id="setupInstanceId" />
-        <div class="row">
-          <div>
-            <label>Provider</label>
-            <select id="provider">
-              <option value="openai">OpenAI-compatible</option>
-              <option value="anthropic">Anthropic</option>
-            </select>
+      <!-- Option 1: Edit config -->
+      <div class="card hidden" id="configCard">
+        <h2>1) Edit config</h2>
+        <p class="muted">Update provider, model, base URL, API key, and Telegram bot token inside this instance. Leave secret fields blank to keep the current value.</p>
+        <form id="configForm" autocomplete="off">
+          <input type="hidden" id="configInstanceId" />
+          <label for="cfgName">Instance name</label>
+          <input id="cfgName" name="name" />
+          <div class="row">
+            <div>
+              <label for="provider">Provider</label>
+              <select id="provider" name="provider">
+                <option value="openai">OpenAI-compatible</option>
+                <option value="anthropic">Anthropic</option>
+              </select>
+            </div>
+            <div>
+              <label for="model">Model</label>
+              <input id="model" name="model" placeholder="deepseek-v4-pro" />
+            </div>
           </div>
-          <div>
-            <label>Model</label>
-            <input id="model" placeholder="gpt-4o-mini" />
+          <label for="apiKey">API key</label>
+          <input id="apiKey" name="apiKey" type="text" autocomplete="off" spellcheck="false" placeholder="leave blank to keep current" style="font-family:ui-monospace,Menlo,monospace" />
+          <div class="hint" id="apiKeyHint"></div>
+          <label for="baseUrl">Base URL</label>
+          <input id="baseUrl" name="baseUrl" placeholder="https://api.routing.run" />
+          <label for="tgToken">Telegram bot token</label>
+          <input id="tgToken" name="tgToken" type="text" autocomplete="off" spellcheck="false" placeholder="leave blank to keep current" style="font-family:ui-monospace,Menlo,monospace" />
+          <div class="hint" id="tgHint"></div>
+          <label class="check">
+            <input type="checkbox" id="cfgRestart" checked />
+            Also restart daemon after save (recommended)
+          </label>
+          <label class="check">
+            <input type="checkbox" id="cfgOpenAccess" />
+            Open access — skip pairing (anyone who finds the bot can use it)
+          </label>
+          <p class="hint">Default is <strong>pairing on</strong>: when someone DMs the bot they get a code; approve it under option 3.</p>
+          <div class="actions">
+            <button type="submit" class="good" id="btnSaveConfig">Save config</button>
+            <button type="button" class="secondary" id="btnCancelConfig">Cancel</button>
           </div>
-        </div>
-        <label>API key</label>
-        <input id="apiKey" type="password" autocomplete="off" placeholder="sk-…" />
-        <label>Base URL (optional)</label>
-        <input id="baseUrl" placeholder="https://api.openai.com/v1" />
-        <label>Telegram bot token</label>
-        <input id="tgToken" type="password" autocomplete="off" placeholder="123456:ABC…" />
+        </form>
+      </div>
+
+      <!-- Option 2: Restart daemon -->
+      <div class="card hidden" id="restartCard">
+        <h2>2) Restart daemon</h2>
+        <p class="muted">Starts (or restarts) <code>xibecode daemon</code> in the sandbox using the config already saved there — no need to re-enter keys.</p>
+        <input type="hidden" id="restartInstanceId" />
         <div class="actions">
-          <button type="button" class="good" id="btnSetup">Run setup in sandbox</button>
-          <button type="button" class="secondary" id="btnCancelSetup">Cancel</button>
+          <button type="button" class="good" id="btnDoRestart">Restart daemon now</button>
+          <button type="button" class="secondary" id="btnCancelRestart">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Option 3: Pairing — paste code is primary -->
+      <div class="card hidden" id="pairingCard">
+        <h2>3) Pair Telegram</h2>
+        <ol class="muted" style="margin:0 0 14px 18px;line-height:1.5">
+          <li>Open Telegram and <strong>DM your bot</strong> any message.</li>
+          <li>Bot replies with a pairing code like <code>ABCD1234</code>.</li>
+          <li><strong>Paste the code below</strong> and approve.</li>
+        </ol>
+        <input type="hidden" id="pairingInstanceId" />
+        <form id="pairForm" autocomplete="off">
+          <label for="manualPairCode">Paste pairing code</label>
+          <div class="row">
+            <div>
+              <input id="manualPairCode" name="code" placeholder="ABCD1234" autofocus style="font-size:1.15rem;letter-spacing:0.08em;text-transform:uppercase" />
+            </div>
+            <div style="align-self:end">
+              <button type="submit" class="good" id="btnManualPair" style="width:100%">Approve</button>
+            </div>
+          </div>
+        </form>
+        <details style="margin-top:16px" class="muted">
+          <summary style="cursor:pointer;color:var(--accent)">Advanced: list pending from sandbox</summary>
+          <div id="pairingList" style="margin-top:10px">—</div>
+          <div class="actions">
+            <button type="button" class="secondary" id="btnRefreshPairing">Refresh pending</button>
+          </div>
+        </details>
+        <div class="actions">
+          <button type="button" class="secondary" id="btnCancelPairing">Close</button>
         </div>
       </div>
     </section>
@@ -230,40 +309,70 @@
       return `<span class="pill ${cls}">${s}</span>`;
     }
 
+    function hidePanels() {
+      $('configCard').classList.add('hidden');
+      $('restartCard').classList.add('hidden');
+      $('pairingCard').classList.add('hidden');
+    }
+
     function renderInstances() {
       const root = $('instances');
       if (!instances.length) {
         root.innerHTML = '<p class="muted" style="margin-top:16px">No instances yet. Create one to get a 4c/8GB sandbox.</p>';
         return;
       }
-      root.innerHTML = instances.map((i) => `
+      root.innerHTML = instances.map((i) => {
+        const cfg = i.config || {};
+        const modelLine = [cfg.provider, cfg.model].filter(Boolean).join(' · ') || 'config not set';
+        return `
         <div class="inst" data-id="${i.id}">
           <h3>${escapeHtml(i.name)} ${statusPill(i.status)}
-            ${i.aiConfigured ? '<span class="pill ok">AI</span>' : ''}
-            ${i.telegramConfigured ? '<span class="pill ok">Telegram</span>' : ''}
+            ${i.aiConfigured ? '<span class="pill ok">AI</span>' : '<span class="pill warn">AI?</span>'}
+            ${i.telegramConfigured ? '<span class="pill ok">Telegram</span>' : '<span class="pill warn">TG?</span>'}
           </h3>
+          <div class="meta">${escapeHtml(modelLine)}${cfg.baseUrl ? ` · <code>${escapeHtml(cfg.baseUrl)}</code>` : ''}</div>
           <div class="meta">plan <code>${i.plan}</code> · session <code>${i.sessionId}</code>${i.sandboxId ? ` · sandbox <code>${i.sandboxId}</code>` : ''}</div>
           ${i.lastError ? `<div class="meta" style="color:#ffb4bc">${escapeHtml(i.lastError)}</div>` : ''}
+          <div class="opt-grid">
+            <button type="button" class="opt" data-act="edit" data-id="${i.id}">
+              <strong>1) Edit config</strong>
+              <span>API key, model, base URL, Telegram token</span>
+            </button>
+            <button type="button" class="opt" data-act="restart" data-id="${i.id}">
+              <strong>2) Restart daemon</strong>
+              <span>Start / restart Telegram bot with saved config</span>
+            </button>
+            <button type="button" class="opt" data-act="pairing" data-id="${i.id}">
+              <strong>3) Paste pair code</strong>
+              <span>DM bot → copy code → paste &amp; approve here</span>
+            </button>
+          </div>
           <div class="actions">
-            <button type="button" data-act="setup" data-id="${i.id}">Setup AI + Telegram</button>
             <button type="button" class="danger" data-act="destroy" data-id="${i.id}">Destroy</button>
           </div>
         </div>
-      `).join('');
+      `;
+      }).join('');
 
       root.querySelectorAll('[data-act]').forEach((btn) => {
         btn.addEventListener('click', async () => {
           const id = btn.getAttribute('data-id');
           const act = btn.getAttribute('data-act');
-          if (act === 'setup') {
-            $('setupInstanceId').value = id;
-            $('setupCard').classList.remove('hidden');
-            $('setupCard').scrollIntoView({ behavior: 'smooth' });
+          if (act === 'edit') {
+            await openEditConfig(id);
+          } else if (act === 'restart') {
+            hidePanels();
+            $('restartInstanceId').value = id;
+            $('restartCard').classList.remove('hidden');
+            $('restartCard').scrollIntoView({ behavior: 'smooth' });
+          } else if (act === 'pairing') {
+            await openPairing(id);
           } else if (act === 'destroy') {
             if (!confirm('Destroy this sandbox permanently?')) return;
             try {
               await api(`/api/instances/${id}`, { method: 'DELETE' });
               flash('Instance destroyed');
+              hidePanels();
               await loadInstances();
             } catch (e) {
               flash(e.message, true);
@@ -271,6 +380,110 @@
           }
         });
       });
+    }
+
+    async function openEditConfig(id) {
+      hidePanels();
+      flash('Loading config…');
+      try {
+        const data = await api(`/api/instances/${id}/config`);
+        const sb = data.sandbox || {};
+        const st = data.stored || {};
+        $('configInstanceId').value = id;
+        $('cfgName').value = data.name || '';
+        $('provider').value = sb.provider || st.provider || 'openai';
+        $('model').value = sb.model || st.model || '';
+        $('baseUrl').value = sb.baseUrl || st.baseUrl || '';
+        $('apiKey').value = '';
+        $('tgToken').value = '';
+        $('apiKeyHint').textContent = sb.hasApiKey
+          ? `Current key: ${sb.apiKeyHint || '••••'} (leave blank to keep)`
+          : 'No API key saved yet — enter one.';
+        $('tgHint').textContent = sb.hasTelegramToken
+          ? `Current bot token: ${sb.telegramHint || '••••'} (leave blank to keep)`
+          : 'No Telegram token saved yet — enter one.';
+        $('cfgRestart').checked = true;
+        // open access off by default (pairing on)
+        $('cfgOpenAccess').checked = false;
+        $('configCard').classList.remove('hidden');
+        $('configCard').scrollIntoView({ behavior: 'smooth' });
+        flash('');
+      } catch (e) {
+        flash(e.message, true);
+      }
+    }
+
+    async function openPairing(id) {
+      hidePanels();
+      $('pairingInstanceId').value = id;
+      $('manualPairCode').value = '';
+      $('pairingCard').classList.remove('hidden');
+      $('pairingCard').scrollIntoView({ behavior: 'smooth' });
+      setTimeout(() => $('manualPairCode').focus(), 100);
+    }
+
+    async function refreshPairing() {
+      const id = $('pairingInstanceId').value;
+      if (!id) return;
+      $('pairingList').textContent = 'Loading…';
+      try {
+        const data = await api(`/api/instances/${id}/pairing`);
+        const p = data.pairing || { pending: [], approved: [] };
+        const pending = p.pending || [];
+        const approved = p.approved || [];
+        let html = '';
+        if (!pending.length) {
+          html += '<p>No pending codes in sandbox yet. DM the bot first.</p>';
+        } else {
+          html += '<p><strong>Pending</strong></p>';
+          html += pending.map((x) => `
+            <div class="inst" style="margin-top:8px">
+              <div><code>${escapeHtml(x.code)}</code> · user <code>${escapeHtml(x.userId)}</code></div>
+              <div class="actions">
+                <button type="button" class="good" data-approve="${escapeHtml(x.code)}">Approve</button>
+              </div>
+            </div>
+          `).join('');
+        }
+        if (approved.length) {
+          html += `<p style="margin-top:12px"><strong>Approved</strong>: ${approved.map((a) => escapeHtml(a.userId)).join(', ')}</p>`;
+        }
+        $('pairingList').innerHTML = html;
+        $('pairingList').querySelectorAll('[data-approve]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            await approveCode(btn.getAttribute('data-approve'));
+          });
+        });
+      } catch (e) {
+        $('pairingList').textContent = e.message;
+      }
+    }
+
+    async function approveCode(code) {
+      const id = $('pairingInstanceId').value;
+      const clean = String(code || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+      if (!id || !clean) {
+        flash('Paste a pairing code first', true);
+        return;
+      }
+      flash(`Approving ${clean}…`);
+      $('btnManualPair').disabled = true;
+      try {
+        const data = await api(`/api/instances/${id}/pairing`, {
+          method: 'POST',
+          body: JSON.stringify({ code: clean, platform: 'telegram' }),
+        });
+        const ok = data.ok !== false;
+        flash((data.logs || []).join('\n') || (ok ? `Approved ${clean} — message the bot again.` : 'Failed'), !ok);
+        if (ok) {
+          $('manualPairCode').value = '';
+          await loadInstances();
+        }
+      } catch (e) {
+        flash(e.message, true);
+      } finally {
+        $('btnManualPair').disabled = false;
+      }
     }
 
     function escapeHtml(s) {
@@ -293,10 +506,16 @@
         $('gwUrl').textContent = '—';
       }
       try {
-        const data = await api('/api/me');
-        me = data.user;
-        renderUser();
-        if (me) await loadInstances();
+        const res = await fetch('/api/me', { credentials: 'same-origin' });
+        if (res.ok) {
+          const data = await res.json();
+          me = data.user;
+          renderUser();
+          await loadInstances();
+        } else {
+          me = null;
+          renderUser();
+        }
       } catch {
         me = null;
         renderUser();
@@ -334,8 +553,9 @@
           method: 'POST',
           body: JSON.stringify({ name }),
         });
-        flash(`Created ${data.instance.name} (${data.instance.sessionId})`);
+        flash(`Created ${data.instance.name}. Use “1) Edit config” to set API key + Telegram.`);
         await loadInstances();
+        await openEditConfig(data.instance.id);
       } catch (e) {
         flash(e.message, true);
       } finally {
@@ -345,33 +565,71 @@
 
     $('btnRefresh').onclick = () => loadInstances().catch((e) => flash(e.message, true));
 
-    $('btnCancelSetup').onclick = () => {
-      $('setupCard').classList.add('hidden');
+    $('btnCancelConfig').onclick = () => {
+      $('configCard').classList.add('hidden');
     };
 
-    $('btnSetup').onclick = async () => {
-      const id = $('setupInstanceId').value;
+    $('configForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const id = $('configInstanceId').value;
       if (!id) return;
-      flash('Running setup inside sandbox…');
-      $('btnSetup').disabled = true;
+      flash('Saving config to sandbox…');
+      $('btnSaveConfig').disabled = true;
       try {
-        const data = await api(`/api/instances/${id}/setup`, {
-          method: 'POST',
+        const data = await api(`/api/instances/${id}/config`, {
+          method: 'PUT',
           body: JSON.stringify({
+            name: $('cfgName').value,
             provider: $('provider').value,
-            apiKey: $('apiKey').value,
-            baseUrl: $('baseUrl').value,
             model: $('model').value,
+            baseUrl: $('baseUrl').value,
+            apiKey: $('apiKey').value,
             telegramBotToken: $('tgToken').value,
+            restart: $('cfgRestart').checked,
+            allowAllUsers: $('cfgOpenAccess').checked,
           }),
         });
-        flash((data.logs || []).join('\n') || 'Setup complete');
-        $('setupCard').classList.add('hidden');
+        flash((data.logs || []).join('\n') || 'Config saved');
+        $('apiKey').value = '';
+        $('tgToken').value = '';
         await loadInstances();
-      } catch (e) {
-        flash(e.message, true);
+      } catch (err) {
+        flash(err.message, true);
       } finally {
-        $('btnSetup').disabled = false;
+        $('btnSaveConfig').disabled = false;
+      }
+    };
+
+    $('btnCancelRestart').onclick = () => {
+      $('restartCard').classList.add('hidden');
+    };
+
+    $('btnCancelPairing').onclick = () => $('pairingCard').classList.add('hidden');
+    $('btnRefreshPairing').onclick = () => refreshPairing();
+    $('pairForm').onsubmit = async (e) => {
+      e.preventDefault();
+      await approveCode($('manualPairCode').value);
+    };
+    $('manualPairCode').addEventListener('input', (e) => {
+      e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    });
+
+    $('btnDoRestart').onclick = async () => {
+      const id = $('restartInstanceId').value;
+      if (!id) return;
+      flash('Restarting daemon in sandbox…');
+      $('btnDoRestart').disabled = true;
+      try {
+        const data = await api(`/api/instances/${id}/restart`, {
+          method: 'POST',
+          body: '{}',
+        });
+        flash((data.logs || []).join('\n') || 'Daemon restarted');
+        await loadInstances();
+      } catch (err) {
+        flash(err.message, true);
+      } finally {
+        $('btnDoRestart').disabled = false;
       }
     };
 

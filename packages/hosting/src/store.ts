@@ -13,18 +13,28 @@ export type User = {
 
 export type InstanceStatus = 'creating' | 'running' | 'paused' | 'error' | 'destroyed';
 
+/** Non-secret config shown in the dashboard (keys never stored here). */
+export type InstanceConfigMeta = {
+  provider?: string;
+  model?: string;
+  baseUrl?: string;
+  /** Whether an API key was saved into the sandbox at least once. */
+  hasApiKey?: boolean;
+  /** Whether a Telegram bot token was saved into the sandbox at least once. */
+  hasTelegramToken?: boolean;
+};
+
 export type Instance = {
   id: string;
   userId: string;
   name: string;
-  /** Gateway session id (maps 1:1 to an E2B sandbox). */
   sessionId: string;
   sandboxId?: string;
   status: InstanceStatus;
-  /** AI + Telegram setup state. */
   aiConfigured: boolean;
   telegramConfigured: boolean;
   plan: 'hosting-4c8g';
+  config?: InstanceConfigMeta;
   createdAt: string;
   updatedAt: string;
   lastError?: string;
@@ -134,6 +144,7 @@ export function createInstanceRecord(input: {
     aiConfigured: false,
     telegramConfigured: false,
     plan: 'hosting-4c8g',
+    config: {},
     createdAt: now,
     updatedAt: now,
   };
@@ -145,14 +156,27 @@ export function createInstanceRecord(input: {
 export function updateInstance(
   userId: string,
   id: string,
-  patch: Partial<Pick<Instance, 'status' | 'sandboxId' | 'aiConfigured' | 'telegramConfigured' | 'lastError' | 'name'>>,
+  patch: Partial<
+    Pick<
+      Instance,
+      | 'status'
+      | 'sandboxId'
+      | 'aiConfigured'
+      | 'telegramConfigured'
+      | 'lastError'
+      | 'name'
+      | 'config'
+    >
+  >,
 ): Instance | undefined {
   const db = load();
   const idx = db.instances.findIndex((i) => i.id === id && i.userId === userId);
   if (idx < 0) return undefined;
-  const next = {
-    ...db.instances[idx],
+  const prev = db.instances[idx];
+  const next: Instance = {
+    ...prev,
     ...patch,
+    config: patch.config !== undefined ? { ...prev.config, ...patch.config } : prev.config,
     updatedAt: new Date().toISOString(),
   };
   db.instances[idx] = next;
@@ -169,7 +193,6 @@ export function deleteInstance(userId: string, id: string): boolean {
   return true;
 }
 
-/** Stable id for cookie/session hashing (not crypto-secret). */
 export function fingerprint(value: string): string {
   return createHash('sha256').update(value).digest('hex').slice(0, 16);
 }

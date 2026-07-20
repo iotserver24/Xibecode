@@ -64,7 +64,12 @@ type MoveRequest = {
 
 const port = Number(process.env.PORT || 8787);
 const authToken = process.env.XIBECODE_GATEWAY_TOKEN?.trim() || '';
-const sandboxTemplate = process.env.XIBECODE_E2B_TEMPLATE?.trim() || '';
+/**
+ * Hosting tier template: 4 vCPU / 8192 MB (see sandbox/e2b-template).
+ * Without this, E2B uses the default base image (~2 vCPU) — not what we sell.
+ */
+const sandboxTemplate =
+  process.env.XIBECODE_E2B_TEMPLATE?.trim() || 'xibecode-full-sandbox';
 /**
  * Inactivity window (ms) before lifecycle action; default 15m (E2B default is 5m).
  * With onTimeout=pause + autoResume, idle sandboxes freeze and wake on next SDK/HTTP activity.
@@ -84,13 +89,19 @@ const maxContinuousMs = (() => {
   const n = Number(raw || 23 * 60 * 60 * 1000);
   return Number.isFinite(n) && n > 0 ? Math.max(60_000, n) : 23 * 60 * 60 * 1000;
 })();
+/** Docs default is kill; we force pause unless explicitly set to kill. */
 const lifecycleOnTimeout =
   process.env.XIBECODE_E2B_ON_TIMEOUT?.trim().toLowerCase() === 'kill'
     ? ('kill' as const)
     : ('pause' as const);
+/**
+ * Official auto-resume (https://e2b.dev/docs/sandbox/auto-resume):
+ * any SDK op / sandbox HTTP traffic wakes a paused sandbox when true.
+ * Only valid with onTimeout: 'pause' + full memory snapshot.
+ */
 const lifecycleAutoResume =
-  process.env.XIBECODE_E2B_AUTO_RESUME?.trim().toLowerCase() !== 'false' &&
-  lifecycleOnTimeout === 'pause';
+  lifecycleOnTimeout === 'pause' &&
+  process.env.XIBECODE_E2B_AUTO_RESUME?.trim().toLowerCase() !== 'false';
 const previewDomain = process.env.XIBECODE_E2B_PREVIEW_DOMAIN?.trim() || 'e2b.dev';
 const maxExportBytes = Math.max(
   1,
@@ -108,6 +119,26 @@ function shQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+/**
+ * Paths allowed for file tools in sandbox_full.
+ * Workspace root is always allowed; also allow the XibeCode home + /tmp so
+ * hosting can write daemon.env / profile without shell hacks.
+ */
+function isAllowedSandboxAbsPath(session: SessionRecord, normalized: string): boolean {
+  const root = session.workspaceRoot;
+  if (normalized === root || normalized.startsWith(`${root}/`)) return true;
+  if (normalized === '/tmp' || normalized.startsWith('/tmp/')) return true;
+  // Tenant config / daemon state
+  if (normalized === '/home/user/.xibecode' || normalized.startsWith('/home/user/.xibecode/')) {
+    return true;
+  }
+  if (normalized === '/home/user' || normalized.startsWith('/home/user/')) {
+    // Allow other files under login home (not /home/other)
+    return true;
+  }
+  return false;
+}
+
 function resolveSandboxPath(session: SessionRecord, inputPath: string): string {
   const trimmed = inputPath.trim();
   if (!trimmed) throw new Error('Path cannot be empty');
@@ -117,7 +148,7 @@ function resolveSandboxPath(session: SessionRecord, inputPath: string): string {
   }
 
   if (pathPosix.isAbsolute(normalized)) {
-    if (session.strategy === 'sandbox_full' && !normalized.startsWith(`${session.workspaceRoot}/`) && normalized !== session.workspaceRoot) {
+    if (session.strategy === 'sandbox_full' && !isAllowedSandboxAbsPath(session, normalized)) {
       throw new Error(`Absolute path outside sandbox workspace is not allowed: ${inputPath}`);
     }
     return normalized;
@@ -229,32 +260,106 @@ async function resetContinuousRunCycle(session: SessionRecord, reason: string): 
   await job;
 }
 
-/** Extend idle TTL + enforce 23h continuous-run reset if needed. */
-async function touchSession(session: SessionRecord): Promise<void> {
-  session.updatedAt = Date.now();
+/**
+ * Ensure sandbox is running before any op.
+ *
+ * Per https://e2b.dev/docs/sandbox/auto-resume:
+ * - onTimeout: 'pause' + autoResume: true at create
+ * - Any SDK op (commands.run, files.read/write) auto-resumes a paused sandbox
+ * - connect() is also fine after gateway restart (no live client object)
+ *
+ * Telegram long-poll *inside* a paused VM cannot wake it — host must call this
+ * (or any gateway exec) when a Telegram message arrives.
+ */
+async function ensureSandboxRunning(session: SessionRecord): Promise<{
+  state: string;
+  resumed: boolean;
+}> {
+  let state = 'unknown';
+  let resumed = false;
 
-  // Keep inactivity auto-pause clock fresh while the agent is working
   try {
-    if (typeof session.sandbox.setTimeout === 'function') {
-      await session.sandbox.setTimeout(sandboxTimeoutMs);
-    } else {
-      await Sandbox.setTimeout(session.sandboxId, sandboxTimeoutMs);
-    }
-  } catch {
-    // Paused (idle auto-pause) — connect resumes and resets E2B continuous-run window
-    try {
-      const resumed = await Sandbox.connect(session.sandboxId, {
-        timeoutMs: sandboxTimeoutMs,
-      });
-      session.sandbox = resumed as unknown as SandboxLike;
-      session.continuousRunStartedAt = Date.now();
-      console.log(
-        `[xibecode-e2b-gateway] reconnected paused sandbox=${session.sandboxId} (idle auto-pause resume)`,
+    const info = await Sandbox.getInfo(session.sandboxId);
+    state = String((info as { state?: string }).state || 'unknown');
+    const life = (info as { lifecycle?: { onTimeout?: string; autoResume?: boolean } }).lifecycle;
+    if (life?.onTimeout && life.onTimeout !== 'pause' && lifecycleOnTimeout === 'pause') {
+      console.warn(
+        `[xibecode-e2b-gateway] sandbox=${session.sandboxId} lifecycle.onTimeout=${life.onTimeout} (wanted pause)`,
       );
-    } catch {
-      /* best-effort; next op may auto-resume via lifecycle.autoResume */
+    }
+    if (lifecycleAutoResume && life && life.autoResume === false) {
+      console.warn(
+        `[xibecode-e2b-gateway] sandbox=${session.sandboxId} autoResume=false on E2B side — wake will use connect()`,
+      );
+    }
+  } catch (err) {
+    console.warn(
+      `[xibecode-e2b-gateway] getInfo failed sandbox=${session.sandboxId}: ${(err as Error).message}`,
+    );
+    state = 'unknown';
+  }
+
+  // Prefer official auto-resume: SDK activity on the live client object
+  if (state === 'paused' && session.sandbox?.commands?.run) {
+    try {
+      await session.sandbox.commands.run('true', { timeoutMs: 60_000 });
+      session.continuousRunStartedAt = Date.now();
+      resumed = true;
+      state = 'running';
+      console.log(
+        `[xibecode-e2b-gateway] auto-resumed sandbox=${session.sandboxId} via commands.run (lifecycle.autoResume)`,
+      );
+    } catch (err) {
+      console.warn(
+        `[xibecode-e2b-gateway] auto-resume via commands.run failed, falling back to connect: ${(err as Error).message}`,
+      );
     }
   }
+
+  if (state === 'paused' || state === 'unknown') {
+    try {
+      const connected = await Sandbox.connect(session.sandboxId, {
+        timeoutMs: sandboxTimeoutMs,
+      });
+      session.sandbox = connected as unknown as SandboxLike;
+      session.continuousRunStartedAt = Date.now();
+      resumed = true;
+      state = 'running';
+      console.log(
+        `[xibecode-e2b-gateway] resumed sandbox=${session.sandboxId} via Sandbox.connect`,
+      );
+    } catch (err) {
+      throw new Error(
+        `Sandbox ${session.sandboxId} unavailable (killed or missing?). ${(err as Error).message}`,
+      );
+    }
+  } else if (state === 'running') {
+    try {
+      if (typeof session.sandbox.setTimeout === 'function') {
+        await session.sandbox.setTimeout(sandboxTimeoutMs);
+      } else {
+        await Sandbox.setTimeout(session.sandboxId, sandboxTimeoutMs);
+      }
+    } catch (err) {
+      console.warn(
+        `[xibecode-e2b-gateway] setTimeout failed, reconnecting sandbox=${session.sandboxId}: ${(err as Error).message}`,
+      );
+      const connected = await Sandbox.connect(session.sandboxId, {
+        timeoutMs: sandboxTimeoutMs,
+      });
+      session.sandbox = connected as unknown as SandboxLike;
+      session.continuousRunStartedAt = Date.now();
+      resumed = true;
+    }
+  }
+
+  session.updatedAt = Date.now();
+  return { state, resumed };
+}
+
+/** Extend idle TTL + enforce 23h continuous-run reset if needed. */
+async function touchSession(session: SessionRecord): Promise<void> {
+  await ensureSandboxRunning(session);
 
   if (maxContinuousMs > 0) {
     const elapsed = Date.now() - session.continuousRunStartedAt;
@@ -264,7 +369,14 @@ async function touchSession(session: SessionRecord): Promise<void> {
   }
 }
 
-async function createSession(input: { sessionId?: string; cwd?: string; strategy?: string; workspaceRoot?: string }): Promise<SessionRecord> {
+async function createSession(input: {
+  sessionId?: string;
+  cwd?: string;
+  strategy?: string;
+  workspaceRoot?: string;
+  /** Re-attach an existing E2B sandbox after gateway restart (hosting recovery). */
+  sandboxId?: string;
+}): Promise<SessionRecord> {
   const sessionId = input.sessionId?.trim() || randomUUID();
   const existing = sessions.get(sessionId);
   if (existing) {
@@ -272,17 +384,74 @@ async function createSession(input: { sessionId?: string; cwd?: string; strategy
     return existing;
   }
 
-  const createOptions = {
-    ...(sandboxTemplate ? { template: sandboxTemplate } : {}),
-    timeoutMs: sandboxTimeoutMs,
-    lifecycle: {
-      onTimeout: lifecycleOnTimeout,
-      autoResume: lifecycleAutoResume,
-    },
+  // Reconnect by sandbox id if another session row already holds it
+  const wantSandbox = input.sandboxId?.trim();
+  if (wantSandbox) {
+    const bySb = Array.from(sessions.values()).find((s) => s.sandboxId === wantSandbox);
+    if (bySb) {
+      await touchSession(bySb);
+      return bySb;
+    }
+  }
+
+  const lifecycle = {
+    onTimeout: lifecycleOnTimeout,
+    autoResume: lifecycleAutoResume,
   };
 
-  const sandbox = (await Sandbox.create(createOptions)) as unknown as SandboxLike;
-  const sandboxId = sandbox.sandboxId || randomUUID();
+  let sandbox: SandboxLike;
+  let sandboxId: string;
+
+  if (wantSandbox) {
+    // Re-attach existing VM (filesystem + optional paused memory).
+    // connect() resumes if paused; sets a fresh timeout window.
+    sandbox = (await Sandbox.connect(wantSandbox, {
+      timeoutMs: sandboxTimeoutMs,
+    })) as unknown as SandboxLike;
+    sandboxId = sandbox.sandboxId || wantSandbox;
+    console.log(`[xibecode-e2b-gateway] reattached sandbox=${sandboxId} as session=${sessionId}`);
+  } else {
+    // Exact docs shape: https://e2b.dev/docs/sandbox/auto-resume
+    // Default onTimeout is 'kill' — we must pass lifecycle or sandboxes die.
+    sandbox = (await Sandbox.create({
+      template: sandboxTemplate,
+      timeoutMs: sandboxTimeoutMs,
+      lifecycle: {
+        onTimeout: lifecycleOnTimeout,
+        autoResume: lifecycleAutoResume,
+      },
+    })) as unknown as SandboxLike;
+    sandboxId = sandbox.sandboxId || randomUUID();
+    try {
+      const info = (await Sandbox.getInfo(sandboxId)) as {
+        cpuCount?: number;
+        memoryMB?: number;
+        state?: string;
+        lifecycle?: { onTimeout?: string; autoResume?: boolean };
+      };
+      console.log(
+        `[xibecode-e2b-gateway] created sandbox=${sandboxId} template=${sandboxTemplate}` +
+          ` state=${info.state ?? '?'} cpu=${info.cpuCount ?? '?'} memMB=${info.memoryMB ?? '?'}` +
+          ` lifecycle.onTimeout=${info.lifecycle?.onTimeout ?? lifecycleOnTimeout}` +
+          ` autoResume=${info.lifecycle?.autoResume ?? lifecycleAutoResume}`,
+      );
+      if (lifecycleOnTimeout === 'pause' && info.lifecycle?.onTimeout === 'kill') {
+        console.error(
+          `[xibecode-e2b-gateway] WARNING: requested onTimeout=pause but sandbox reports kill — check E2B plan supports auto-pause`,
+        );
+      }
+      if (lifecycleAutoResume && info.lifecycle && info.lifecycle.autoResume !== true) {
+        console.error(
+          `[xibecode-e2b-gateway] WARNING: requested autoResume=true but sandbox reports ${info.lifecycle.autoResume}`,
+        );
+      }
+    } catch {
+      console.log(
+        `[xibecode-e2b-gateway] created sandbox=${sandboxId} template=${sandboxTemplate} lifecycle=${JSON.stringify(lifecycle)}`,
+      );
+    }
+  }
+
   const strategy = input.strategy?.trim() === 'sandbox_full' ? 'sandbox_full' : 'host_only';
   const requestedWorkspaceRoot = input.workspaceRoot?.trim() || input.cwd?.trim() || defaultWorkspaceRoot;
   const now = Date.now();
@@ -330,10 +499,7 @@ async function runInSession(session: SessionRecord, input: ExecRequest): Promise
   if (
     session.strategy === 'sandbox_full' &&
     pathPosix.isAbsolute(cwd) &&
-    cwd !== session.workspaceRoot &&
-    !cwd.startsWith(`${session.workspaceRoot}/`) &&
-    !cwd.startsWith('/tmp') &&
-    !cwd.startsWith('/home/user')
+    !isAllowedSandboxAbsPath(session, pathPosix.normalize(cwd))
   ) {
     return {
       success: false,
@@ -349,29 +515,51 @@ async function runInSession(session: SessionRecord, input: ExecRequest): Promise
       workspaceRoot: session.workspaceRoot,
     };
   }
-  const result = await session.sandbox.commands?.run(input.command, {
-    cwd,
-    timeoutMs,
-    stdin: input.input,
-  });
+  try {
+    const result = await session.sandbox.commands?.run(input.command, {
+      cwd,
+      timeoutMs,
+      stdin: input.input,
+    });
 
-  const stdout = String((result as any)?.stdout ?? '');
-  const stderr = String((result as any)?.stderr ?? '');
-  const exitCodeRaw = (result as any)?.exitCode;
-  const exitCode = typeof exitCodeRaw === 'number' ? exitCodeRaw : 0;
+    const stdout = String((result as any)?.stdout ?? '');
+    const stderr = String((result as any)?.stderr ?? '');
+    const exitCodeRaw = (result as any)?.exitCode;
+    const exitCode = typeof exitCodeRaw === 'number' ? exitCodeRaw : 0;
 
-  session.updatedAt = Date.now();
-  return {
-    success: exitCode === 0,
-    stdout,
-    stderr,
-    exitCode,
-    timedOut: false,
-    platform: 'e2b',
-    sandboxId: session.sandboxId,
-    strategy: session.strategy,
-    workspaceRoot: session.workspaceRoot,
-  };
+    session.updatedAt = Date.now();
+    return {
+      success: exitCode === 0,
+      stdout,
+      stderr,
+      exitCode,
+      timedOut: false,
+      platform: 'e2b',
+      sandboxId: session.sandboxId,
+      strategy: session.strategy,
+      workspaceRoot: session.workspaceRoot,
+    };
+  } catch (err: any) {
+    // E2B SDK may throw on non-zero exit ("exit status 2") instead of returning exitCode.
+    // Surface as a normal exec result so callers (hosting setup) can show logs.
+    const msg = String(err?.message || err || 'command failed');
+    const exitMatch = msg.match(/exit status (\d+)/i);
+    const exitCode = exitMatch ? Number(exitMatch[1]) : 1;
+    session.updatedAt = Date.now();
+    return {
+      success: false,
+      error: true,
+      message: msg,
+      stdout: String(err?.stdout ?? ''),
+      stderr: String(err?.stderr ?? msg),
+      exitCode,
+      timedOut: /timeout/i.test(msg),
+      platform: 'e2b',
+      sandboxId: session.sandboxId,
+      strategy: session.strategy,
+      workspaceRoot: session.workspaceRoot,
+    };
+  }
 }
 
 async function syncWorkspaceChunk(session: SessionRecord, request: SyncRequest): Promise<Record<string, unknown>> {
@@ -663,6 +851,49 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    // Live E2B state by sandbox id (works even if gateway session map is empty / sandbox paused)
+    const sandboxStateMatch = url.pathname.match(/^\/sandboxes\/([^/]+)(?:\/state)?$/);
+    if (method === 'GET' && sandboxStateMatch) {
+      const sandboxId = decodeURIComponent(sandboxStateMatch[1] || '').trim();
+      if (!sandboxId) {
+        sendJson(res, 400, { success: false, error: true, message: 'Missing sandboxId' });
+        return;
+      }
+      try {
+        const info = (await Sandbox.getInfo(sandboxId)) as {
+          state?: string;
+          sandboxId?: string;
+          templateId?: string;
+          cpuCount?: number;
+          memoryMB?: number;
+          lifecycle?: { onTimeout?: string; autoResume?: boolean };
+        };
+        const state = String(info.state || 'unknown');
+        sendJson(res, 200, {
+          success: true,
+          sandboxId: info.sandboxId || sandboxId,
+          state,
+          // paused sandboxes remain owned/resumable — not deleted
+          resumable: state === 'paused' || state === 'running',
+          templateId: info.templateId,
+          cpuCount: info.cpuCount,
+          memoryMB: info.memoryMB,
+          lifecycle: info.lifecycle,
+        });
+      } catch (e) {
+        const msg = (e as Error).message || String(e);
+        // Not found / killed — still return structured body so dashboard can show "gone"
+        sendJson(res, 200, {
+          success: true,
+          sandboxId,
+          state: 'missing',
+          resumable: false,
+          message: msg.slice(0, 300),
+        });
+      }
+      return;
+    }
+
     if (method === 'GET' && url.pathname === '/sessions') {
       const data = Array.from(sessions.values()).map((session) => ({
         sessionId: session.sessionId,
@@ -709,7 +940,13 @@ const server = createServer(async (req, res) => {
     }
 
     if (method === 'POST' && url.pathname === '/sessions') {
-      const body = await readJson<{ sessionId?: string; cwd?: string; strategy?: string; workspaceRoot?: string }>(req);
+      const body = await readJson<{
+        sessionId?: string;
+        cwd?: string;
+        strategy?: string;
+        workspaceRoot?: string;
+        sandboxId?: string;
+      }>(req);
       const session = await createSession(body);
       sendJson(res, 200, {
         success: true,
@@ -727,6 +964,69 @@ const server = createServer(async (req, res) => {
           maxContinuousMs,
         },
       });
+      return;
+    }
+
+    // Explicit wake/resume (dashboard button, ops, after idle pause)
+    const wakeMatch = url.pathname.match(/^\/sessions\/([^/]+)\/wake$/);
+    if (method === 'POST' && wakeMatch) {
+      const sessionId = decodeURIComponent(wakeMatch[1] || '');
+      let session = sessions.get(sessionId);
+      const body = await readJson<{ sandboxId?: string; restartDaemon?: boolean }>(req).catch(
+        () => ({}) as { sandboxId?: string; restartDaemon?: boolean },
+      );
+      if (!session && body.sandboxId) {
+        session = await createSession({
+          sessionId,
+          sandboxId: body.sandboxId,
+          strategy: 'sandbox_full',
+        });
+      }
+      if (!session) {
+        sendJson(res, 404, {
+          success: false,
+          error: true,
+          message: `Session not found: ${sessionId} (pass sandboxId to reattach)`,
+        });
+        return;
+      }
+      try {
+        const status = await ensureSandboxRunning(session);
+        let daemon: { ok?: boolean; logs?: string[] } | undefined;
+        if (body.restartDaemon) {
+          // After long pause, frozen TCP (Telegram long-poll) is stale — restart daemon.
+          const r = await runInSession(session, {
+            command: [
+              'set +e',
+              'set -a',
+              '[ -f /home/user/.xibecode/daemon.env ] && . /home/user/.xibecode/daemon.env',
+              'set +a',
+              'if [ -f /tmp/xibecode-daemon.pid ]; then kill "$(cat /tmp/xibecode-daemon.pid)" 2>/dev/null; sleep 1; fi',
+              'nohup xibecode daemon --workdir /home/user/workspace >/tmp/xibecode-daemon.log 2>&1 &',
+              'echo $! > /tmp/xibecode-daemon.pid',
+              'sleep 2',
+              'pgrep -f "xibecode daemon" >/dev/null && echo DAEMON_OK || echo DAEMON_FAIL',
+            ].join('\n'),
+            timeout: 60,
+          });
+          const out = `${r.stdout || ''}\n${r.stderr || ''}`;
+          daemon = { ok: out.includes('DAEMON_OK'), logs: [out.slice(0, 1500)] };
+        }
+        sendJson(res, 200, {
+          success: true,
+          sessionId: session.sessionId,
+          sandboxId: session.sandboxId,
+          state: status.state,
+          resumed: status.resumed,
+          daemon,
+        });
+      } catch (e) {
+        sendJson(res, 502, {
+          success: false,
+          error: true,
+          message: (e as Error).message,
+        });
+      }
       return;
     }
 

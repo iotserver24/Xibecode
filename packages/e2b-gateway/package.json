@@ -6,8 +6,8 @@
   "description": "Team-hosted gateway for running XibeCode commands on E2B sandboxes",
   "scripts": {
     "build": "rm -rf dist && tsc",
-    "dev": "tsx watch src/index.ts",
-    "start": "node dist/index.js",
+    "dev": "bun --env-file=.env --hot src/index.ts",
+    "start": "bun --env-file=.env src/index.ts",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
   },
