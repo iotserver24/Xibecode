@@ -339,6 +339,7 @@ export const GATEWAY_BOT_COMMANDS: ReadonlyArray<{
   { command: 'help', description: 'Show available commands' },
   { command: 'new', description: 'Clear conversation (keep workdir)' },
   { command: 'reset', description: 'Clear conversation (same as /new)' },
+  { command: 'clear', description: 'Clear conversation (same as /new)' },
   { command: 'stop', description: 'Interrupt run + kill active commands' },
   { command: 'status', description: 'Workdir, busy state, progress' },
   { command: 'queue', description: 'List or clear queued messages' },

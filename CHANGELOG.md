@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.5.0] - 2026-07-20
+
+### Release
+
+- **`xibecode-core` 1.5.0** and **`xibecode` 1.5.0**.
+
+### Gateway / Telegram (Hermes-aligned)
+
+- Short busy phrases (`on it`, `one sec`, …) — no "Got it — … in workspace" / no `_starting…_`.
+- Progress bubble heartbeats **every 30s** while the agent is busy (`still on it · 30s`).
+- `/clear` aliases `/new`.
+
+### Harness / ACP (from 1.4.30+)
+
+- Stop-hooks, post-edit verify defaults, tool-result budget, StreamConsumer, ACP permissions, VS Code ACP client.
+
 ## [1.4.30] - 2026-07-20
 
 ### Release

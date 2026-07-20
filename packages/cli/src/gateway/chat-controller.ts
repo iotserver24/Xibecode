@@ -424,19 +424,33 @@ export class ChatController {
       await stream.pushToolLine(line, opts);
     };
 
+    // Hermes-style: heartbeat at least every 30s while busy so the chat never
+    // looks frozen for 2+ minutes with no API/tool events.
+    const HEARTBEAT_MS = 30_000;
+    let lastHeartbeatAt = Date.now();
     const typingTimer = setInterval(() => {
-      // Waiting on human — don't spam "still working"
+      // Waiting on human — typing only, no fake "still working" spam
       if (activeRun.pendingAsk || activeRun.pendingApproval) {
         void adapter.sendTyping?.(msg.chatId, { threadId: msg.threadId });
         return;
       }
       void adapter.sendTyping?.(msg.chatId, { threadId: msg.threadId });
-      // Hermes long-running phrases (not "_still working… Ns · N tools_")
-      if (Date.now() - lastActivityAt > 25_000 && progressOn) {
-        void flushProgress(longRunningStatusPhrase(Date.now()));
-        lastActivityAt = Date.now();
+      const now = Date.now();
+      if (!progressOn) return;
+      // Fire every 30s wall-clock from last heartbeat (even if tools are quiet)
+      if (now - lastHeartbeatAt >= HEARTBEAT_MS) {
+        lastHeartbeatAt = now;
+        const secs = Math.round((now - activeRun.startedAt) / 1000);
+        const tools = activeRun.toolCount || 0;
+        // Hermes long-running phrase + elapsed so users see it's alive
+        const phrase = longRunningStatusPhrase(now);
+        void flushProgress(
+          tools > 0
+            ? `${phrase} · ${secs}s · ${tools} tool${tools === 1 ? '' : 's'}`
+            : `${phrase} · ${secs}s`,
+        );
       }
-    }, 4000);
+    }, 5_000);
     void adapter.sendTyping?.(msg.chatId, { threadId: msg.threadId });
 
     // Hermes: single progress bubble with short phrase — no separate "✓ Got it — …" message
@@ -821,7 +835,7 @@ export class ChatController {
       return;
     }
 
-    if (cmd === 'new' || cmd === 'reset') {
+    if (cmd === 'new' || cmd === 'reset' || cmd === 'clear') {
       await resetSession(msg.platform, msg.chatId);
       await reply('Conversation cleared (workdir kept).');
       return;
