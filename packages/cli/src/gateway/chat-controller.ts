@@ -491,6 +491,9 @@ export class ChatController {
     let lastActivityAt = Date.now();
     const toolLines: string[] = [];
     const MAX_CRITICAL = 6;
+    /** Last tool failure text for heartbeats (avoid infinite "still checking" with no error). */
+    let lastToolFail: string | undefined;
+    let consecutiveToolFails = 0;
 
     const { GatewayStreamConsumer } = await import('./stream-consumer.js');
     // Hermes: one short status line as the progress bubble header (not "Coding… dir · rigor")
@@ -536,8 +539,11 @@ export class ChatController {
         lastHeartbeatAt = now;
         const secs = Math.round((now - activeRun.startedAt) / 1000);
         const tools = activeRun.toolCount || 0;
-        // Hermes long-running phrase + elapsed so users see it's alive
-        const phrase = longRunningStatusPhrase(now);
+        // Hermes long-running phrase + elapsed so users see it's alive.
+        // If the last tool failed, surface that instead of vague "still checking".
+        const phrase = lastToolFail
+          ? `last tool failed — agent should retry or report · ${lastToolFail.slice(0, 80)}`
+          : longRunningStatusPhrase(now);
         void flushProgress(
           tools > 0
             ? `${phrase} · ${secs}s · ${tools} tool${tools === 1 ? '' : 's'}`
@@ -778,8 +784,20 @@ export class ChatController {
             else if (r && typeof r === 'object') {
               preview =
                 (typeof r.message === 'string' && r.message) ||
+                (typeof r.stderr === 'string' && r.stderr) ||
                 (typeof r.stdout === 'string' && r.stdout) ||
                 undefined;
+            }
+            if (success) {
+              lastToolFail = undefined;
+              consecutiveToolFails = 0;
+            } else {
+              consecutiveToolFails += 1;
+              lastToolFail = `${name}: ${(preview || 'failed').replace(/\s+/g, ' ').slice(0, 160)}`;
+              // Always log failures (not only verbose) so ops can debug stuck runs
+              this.options.log(
+                `agent tool_result FAIL ${name}: ${(preview || '').replace(/\s+/g, ' ').slice(0, 400)}`,
+              );
             }
             if (daemonVerbose) {
               const pv = (preview || '').replace(/\s+/g, ' ').slice(0, 200);
@@ -787,10 +805,16 @@ export class ChatController {
                 `agent tool_result ${name} success=${success}${pv ? ` :: ${pv}` : ''}`,
               );
             }
-            // Replace the "running …" line with ✓/✗ when possible
+            // Replace the "running …" line with ✓/✗ when possible; on fail show more error text
             void pushProgress(formatToolResult(name, success, preview), {
               replaceLast: true,
             });
+            // If many tools fail in a row, nudge the user so the chat doesn't look frozen
+            if (!success && consecutiveToolFails >= 3 && consecutiveToolFails % 3 === 0) {
+              void pushProgress(
+                `⚠️ ${consecutiveToolFails} tool failures — agent should change approach or finish with the error`,
+              );
+            }
           } else if (type === 'stream_text' || type === 'stream_delta') {
             const t = typeof data?.text === 'string' ? data.text : '';
             if (t) {

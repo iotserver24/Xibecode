@@ -155,10 +155,17 @@ export function formatToolProgress(name: string, input?: any): string {
 
 export function formatToolResult(name: string, success: boolean, preview?: string): string {
   const mark = success ? '✓' : '✗';
-  const short = preview
-    ? preview.replace(/\s+/g, ' ').slice(0, 80)
-    : friendlyToolName(name);
-  return success ? `${mark} ${short}` : `${mark} ${friendlyToolName(name)} failed${preview ? `: ${short}` : ''}`;
+  if (success) {
+    const short = preview
+      ? preview.replace(/\s+/g, ' ').slice(0, 80)
+      : friendlyToolName(name);
+    return `${mark} ${short}`;
+  }
+  // Failures: show a longer error so users/agents aren't stuck with opaque "still checking"
+  const err = preview
+    ? preview.replace(/\s+/g, ' ').slice(0, 200)
+    : 'unknown error';
+  return `${mark} ${friendlyToolName(name)} failed: ${err}`;
 }
 
 function friendlyToolName(name: string): string {
@@ -364,7 +371,9 @@ export function codingSystemPrefix(
     '  (path must be under the project working directory — never /tmp outside the workspace)',
     '- Images (.png/.jpg/.webp/…) → photo; videos (.mp4/.webm/…) → video; other → document. Optional: [[as_document]] to force raw file upload (no photo recompress).',
     '- After you build or run a site (localhost), capture a screenshot with take_screenshot(url, path under workspace), then include the returned MEDIA: line so the user sees the page.',
-    '- take_screenshot path examples: screenshots/home.png or ./shot.png — NOT /tmp/… (outside workspace is remapped or rejected).',
+    '- Browser default: **agent-browser** (open / snapshot / click / screenshot). take_screenshot uses it first.',
+    '- take_screenshot path examples: screenshots/home.png — NOT /tmp/… (outside workspace is remapped).',
+    '- If a tool fails: read the error, retry with different params OR report failure to the user and emit [[TASK_COMPLETE | summary=failed: …]]. Never go silent.',
     '- Example final reply:',
     '  Homepage is live at http://localhost:3000',
     '  MEDIA:screenshots/home.png',

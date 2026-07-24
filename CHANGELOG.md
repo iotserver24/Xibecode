@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.5.5] - 2026-07-24
+
+### Browser (agent-browser default)
+
+- **Prefer `agent-browser`** for `take_screenshot` (then Chromium). Override with `XIBECODE_PREFERRED_BROWSER=chrome`.
+- **E2B template** installs `agent-browser` + Chrome for Testing (`agent-browser install --with-deps`) and pins CLI **1.5.5**.
+- Failed screenshots return **explicit RETRY OPTIONS** (alt command, remapped path, report failure + `TASK_COMPLETE`).
+
+### Anti-stuck on tool failure
+
+- After any failed tool batch, inject a **SYSTEM recovery** message: show the error and require retry-with-new-params, alternative tool, or finish with failure summary — no silent loops.
+- Daemon chat: tool failures always logged; progress shows longer error text; heartbeats surface **last tool failed** instead of only “still checking”.
+
 ## [1.5.4] - 2026-07-24
 
 ### Screenshots / workspace paths

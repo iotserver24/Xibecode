@@ -7,6 +7,7 @@ This template is intended for XibeCode `sandbox_full` mode so command execution 
 - Node.js 20
 - `pnpm` (via Corepack)
 - **XibeCode CLI** (`xibecode` / `xc`) pinned to match the current npm release (see `Dockerfile`; bump when you publish a new CLI)
+- **agent-browser** (Vercel) + Chrome for Testing — default AI browser for screenshots / UI automation
 - `git`, `curl`, `jq`, `tar`
 - Build tooling: `python3`, `make`, `g++`
 - Default workspace path: `/home/user/workspace`

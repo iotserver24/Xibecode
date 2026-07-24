@@ -2567,51 +2567,83 @@ export class CodingToolExecutor implements ToolExecutor {
       }
     };
 
-    // 1) agent-browser (preferred for AI agents)
-    const ab = await whichBinary('agent-browser');
-    if (ab) {
+    // Default browser stack: agent-browser (AI-first CLI) → Chromium headless.
+    // Prefer agent-browser unless XIBECODE_PREFERRED_BROWSER=chrome|chromium.
+    const preferChrome = /^(chrome|chromium|headless)$/i.test(
+      (process.env.XIBECODE_PREFERRED_BROWSER || 'agent-browser').trim(),
+    );
+
+    const tryAgentBrowser = async (): Promise<Record<string, unknown> | null> => {
+      const ab = await whichBinary('agent-browser');
+      if (!ab) {
+        attempts.push('agent-browser: not on PATH (install: npm i -g agent-browser && agent-browser install)');
+        return null;
+      }
       const fullFlag = fullPage ? ' --full' : '';
+      // open then screenshot; path must be absolute for reliable write
       const ok = await tryCmd(
         'agent-browser',
         `${shellQuote(ab)} open ${shellQuote(safeUrl)} && ${shellQuote(ab)} screenshot${fullFlag} ${shellQuote(absOut)}`,
-        { timeout: 90000 },
+        { timeout: 90_000 },
       );
       if (ok) {
         return screenshotSuccess(safeUrl, absOut, 'agent-browser', remappedFrom);
       }
-    } else {
-      attempts.push('agent-browser: not on PATH');
-    }
+      attempts.push(
+        'agent-browser: open/screenshot failed — try: agent-browser install --with-deps',
+      );
+      return null;
+    };
 
-    // 2) Headless Chrome / Chromium
-    const chrome =
-      (await whichBinary('google-chrome-stable')) ||
-      (await whichBinary('google-chrome')) ||
-      (await whichBinary('chromium')) ||
-      (await whichBinary('chromium-browser')) ||
-      (await whichBinary('chrome'));
-    if (chrome) {
-      // Chrome --screenshot writes viewport PNG next to cwd; use absolute --screenshot=path
+    const tryChrome = async (): Promise<Record<string, unknown> | null> => {
+      const chrome =
+        (await whichBinary('google-chrome-stable')) ||
+        (await whichBinary('google-chrome')) ||
+        (await whichBinary('chromium')) ||
+        (await whichBinary('chromium-browser')) ||
+        (await whichBinary('chrome'));
+      if (!chrome) {
+        attempts.push('chrome/chromium: not on PATH');
+        return null;
+      }
       const ok = await tryCmd(
         'chrome-headless',
         `${shellQuote(chrome)} --headless=new --disable-gpu --no-sandbox --window-size=1280,800 --screenshot=${shellQuote(absOut)} ${shellQuote(safeUrl)}`,
-        { timeout: 60000 },
+        { timeout: 60_000 },
       );
       if (ok) {
         return screenshotSuccess(safeUrl, absOut, 'chrome-headless', remappedFrom);
       }
+      return null;
+    };
+
+    if (!preferChrome) {
+      const abHit = await tryAgentBrowser();
+      if (abHit) return abHit;
+      const chromeHit = await tryChrome();
+      if (chromeHit) return chromeHit;
     } else {
-      attempts.push('chrome/chromium: not on PATH');
+      const chromeHit = await tryChrome();
+      if (chromeHit) return chromeHit;
+      const abHit = await tryAgentBrowser();
+      if (abHit) return abHit;
     }
 
+    const attemptText = attempts.length ? `\nAttempts:\n- ${attempts.join('\n- ')}` : '';
     return {
       error: true,
       success: false,
       message:
-        'Screenshot failed (path was OK; browser missing or crashed). Install agent-browser (`npm i -g agent-browser`) or Chrome/Chromium, or use run_command with puppeteer. Prefer path under workspace: screenshots/home.png',
+        `Screenshot FAILED for ${safeUrl} → ${absOut}.${attemptText}\n` +
+        `RETRY OPTIONS (pick one, do not hang):\n` +
+        `1) run_command: agent-browser open ${safeUrl} && agent-browser screenshot screenshots/retry.png\n` +
+        `2) take_screenshot again with path "screenshots/home.png" (workspace only)\n` +
+        `3) If browser missing: run_command "agent-browser install --with-deps" then retry once\n` +
+        `4) Tell the user the screenshot failed with this error and emit [[TASK_COMPLETE | summary=screenshot failed]]`,
       path: absOut,
       remapped_from: remappedFrom,
       attempts,
+      retryable: true,
       hint: NO_EMBEDDED_BROWSER_MESSAGE,
     };
   }

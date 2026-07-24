@@ -1434,6 +1434,37 @@ export class EnhancedAgent extends EventEmitter {
           /* budget optional */
         }
 
+        // After tool failures: force a clear error + retry menu so the model
+        // does not silent-loop or leave the user on "still checking" forever.
+        const failed = updates.filter((u) => !u.success);
+        if (failed.length > 0) {
+          const lines = failed.map((u) => {
+            const r = u.result as any;
+            const msg =
+              typeof r === 'string'
+                ? r
+                : r && typeof r === 'object'
+                  ? String(r.message || r.error || JSON.stringify(r)).slice(0, 600)
+                  : String(r ?? 'unknown error');
+            return `- ${u.toolUse.name}: ${msg.replace(/\s+/g, ' ').trim()}`;
+          });
+          const recovery =
+            `[SYSTEM] TOOL FAILURE (${failed.length}). Do not freeze or repeat the exact same call.\n` +
+            lines.join('\n') +
+            `\n\nYou MUST do one of:\n` +
+            `A) RETRY with a *different* approach/params (fix path, alt command, install deps once).\n` +
+            `B) Use an alternative tool (e.g. run_command with agent-browser if take_screenshot failed).\n` +
+            `C) Stop and tell the user the real error, then emit [[TASK_COMPLETE | summary=failed: <reason> | evidence=<error>]].\n` +
+            `Never continue as if the failed tool succeeded.`;
+          this.emit('warning', {
+            message: `Tool failure recovery: ${failed.map((f) => f.toolUse.name).join(', ')} failed — agent must retry differently or report failure.`,
+          });
+          (toolResults as any).push({
+            type: 'text' as const,
+            text: recovery,
+          });
+        }
+
         // Add injected messages if any exist
         if (this.injectedMessages.length > 0) {
           const combinedMsg = this.injectedMessages.join('\n');
