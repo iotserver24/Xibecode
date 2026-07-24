@@ -270,9 +270,27 @@ export function e2bAgentContextBlock(
       `- When the user asks for the sandbox id, report this value exactly.`,
     );
     if (f.publicPreviewLinks) {
+      const exampleHost = `3000-${id.sandboxId}.e2b.dev`;
       lines.push(
         `- Public preview for a listening port N: \`https://N-${id.sandboxId}.e2b.dev\` (e.g. port 3000 → \`${id.previewUrl(3000)}\`).`,
         `- Prefer reporting that URL after you start a server (and confirm HTTP 200 on localhost first).`,
+        '',
+        '### Vite / dev-server host allowlist (required for preview URLs)',
+        '- E2B opens the app as `https://{port}-{sandboxId}.e2b.dev`. Vite blocks unknown Host headers by default → "This host is not allowed".',
+        '- **Whenever you create or run a Vite app**, set in `vite.config.ts` / `vite.config.js` before sharing the link:',
+        '```js',
+        'export default defineConfig({',
+        '  server: {',
+        "    host: '0.0.0.0',",
+        "    // allow E2B preview hosts (or true / 'all' in Vite 5.1+)",
+        "    allowedHosts: true,",
+        '  },',
+        '})',
+        '```',
+        `- Equivalent: \`allowedHosts: ['.e2b.dev', '${exampleHost}']\` if you prefer an explicit list.`,
+        '- Bind with `--host 0.0.0.0` (or server.host above) so the proxy can reach the process.',
+        '- If the user already sees "host is not allowed", **edit vite.config immediately**, restart the dev server, then re-send the preview URL.',
+        '- Next.js: usually fine with `next dev -H 0.0.0.0`; webpack-dev-server may need `allowedHosts: "all"`.',
       );
     }
   } else {

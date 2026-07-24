@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.6.7] - 2026-07-24
+
+### e2b: Vite preview host allowlist
+
+- Agent e2b context now requires Vite `server.host: '0.0.0.0'` and `server.allowedHosts: true` (or `.e2b.dev`) so `https://{port}-{sandboxId}.e2b.dev` is not blocked as "host is not allowed".
+
 ## [1.6.6] - 2026-07-24
 
 ### e2b `/update`: sudo first (fix EACCES)

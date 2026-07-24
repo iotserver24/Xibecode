@@ -49,7 +49,7 @@ describe('runtime-mode', () => {
     expect(id.previewUrl(3000)).toBe('https://3000-iabc123.e2b.dev');
   });
 
-  it('e2b agent context mentions sandbox id and sudo -n', () => {
+  it('e2b agent context mentions sandbox id, sudo -n, and Vite allowedHosts', () => {
     const block = e2bAgentContextBlock(
       {
         sandboxId: 'iabc123',
@@ -62,5 +62,7 @@ describe('runtime-mode', () => {
     expect(block).toContain('iabc123');
     expect(block).toContain('sudo -n');
     expect(block).toContain('3000-iabc123.e2b.dev');
+    expect(block).toContain('allowedHosts');
+    expect(block).toMatch(/0\.0\.0\.0/);
   });
 });
