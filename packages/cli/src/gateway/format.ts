@@ -83,6 +83,7 @@ const TOOL_EMOJI: Record<string, string> = {
   preview_app: '📸',
   remember_lesson: '🧠',
   update_memory: '🧠',
+  curated_memory: '🧠',
   list_skills: '🧩',
   view_skill: '🧩',
   save_skill: '🧩',
@@ -151,6 +152,25 @@ export function formatProgressHeader(_workdirBasename?: string, _rigor?: string)
 /** Compact tool call for progress lines (emoji + short preview). */
 export function formatToolProgress(name: string, input?: any): string {
   const emoji = TOOL_EMOJI[name] || '⚙️';
+  // Memory tools: clear "saving…" so Telegram shows when persistence starts
+  if (name === 'curated_memory') {
+    const target = input?.target === 'user' ? 'USER' : 'MEMORY';
+    const action = input?.operations?.length
+      ? `batch×${input.operations.length}`
+      : String(input?.action || 'save');
+    const snippet = String(input?.content || input?.old_text || '')
+      .replace(/\s+/g, ' ')
+      .slice(0, 48);
+    return `${emoji} saving ${target} (${action})${snippet ? ` · ${snippet}${snippet.length >= 48 ? '…' : ''}` : '…'}`;
+  }
+  if (name === 'update_memory' || name === 'remember_lesson') {
+    const snippet = String(
+      input?.content || input?.trigger || input?.action || '',
+    )
+      .replace(/\s+/g, ' ')
+      .slice(0, 48);
+    return `${emoji} saving memory${snippet ? ` · ${snippet}${snippet.length >= 48 ? '…' : ''}` : '…'}`;
+  }
   const detail = summarizeToolInput(name, input);
   if (name === 'run_command' && detail) {
     return `${emoji} running ${detail}`;
@@ -159,8 +179,42 @@ export function formatToolProgress(name: string, input?: any): string {
   return `${emoji} ${friendlyToolName(name)}…`;
 }
 
-export function formatToolResult(name: string, success: boolean, preview?: string): string {
+export function formatToolResult(
+  name: string,
+  success: boolean,
+  preview?: string,
+  result?: any,
+): string {
   const mark = success ? '✓' : '✗';
+  // Explicit "saved" line for memory tools (user-visible on Telegram)
+  if (
+    success &&
+    (name === 'curated_memory' ||
+      name === 'update_memory' ||
+      name === 'remember_lesson')
+  ) {
+    const r = result && typeof result === 'object' ? result : null;
+    if (r?.staged) {
+      return `⏳ Memory staged for approval (id=${r.id || '?'})`;
+    }
+    const target =
+      r?.target === 'user' ? 'USER' : r?.target === 'memory' ? 'MEMORY' : null;
+    const usage = typeof r?.usage === 'string' ? r.usage : '';
+    const count =
+      typeof r?.entry_count === 'number' ? `${r.entry_count} entries` : '';
+    const bits = [
+      '💾 Saved',
+      target,
+      usage,
+      count,
+      typeof r?.message === 'string' ? r.message : null,
+    ].filter(Boolean);
+    if (bits.length > 1) return bits.join(' · ');
+    const short = preview
+      ? preview.replace(/\s+/g, ' ').slice(0, 100)
+      : 'memory written';
+    return `💾 Saved · ${short}`;
+  }
   if (success) {
     const short = preview
       ? preview.replace(/\s+/g, ' ').slice(0, 80)
@@ -476,6 +530,7 @@ export const GATEWAY_BOT_COMMANDS: ReadonlyArray<{
   { command: 'skill', description: 'Show a skill: /skill <name>' },
   { command: 'update', description: 'CLI update (E2B: install+restart, chats kept)' },
   { command: 'mode', description: 'Show runtime mode (default | e2b)' },
+  { command: 'cmd', description: 'Run shell: /cmd <command> (workdir, no agent)' },
   { command: 'sethome', description: 'Set this chat as cron home' },
   { command: 'once', description: 'Allow a pending dangerous command once' },
   { command: 'session', description: 'Allow pending command for this session' },
@@ -504,6 +559,10 @@ export const HELP_TEXT = [
   '• `default` — local host',
   '• `e2b` — sandbox: `/update yes` = npm latest + daemon restart (**chat memory kept**)',
   '• `/mode` — show current · set via `XIBECODE_RUNTIME_MODE=default|e2b`',
+  '',
+  '**Shell** (`/cmd`) — no agent, runs in chat workdir:',
+  '• `/cmd ls -la` · `/cmd pwd` · `/cmd tail -n 40 ~/.xibecode/daemon/logs/daemon.log`',
+  '• Timeout 60s (override: `XIBECODE_CMD_TIMEOUT_MS`) · long output is truncated',
   '',
   '**Model** (`/model`):',
   '• `/model` / `/models` — current + list from API',

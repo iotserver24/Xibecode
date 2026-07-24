@@ -1,7 +1,9 @@
 export {
   CuratedMemoryStore,
+  ENTRY_DELIMITER,
   type CuratedTarget,
   type CuratedMemoryConfig,
+  type CuratedMemoryResult,
 } from './curated-memory.js';
 
 export { searchSessions, type SessionHit } from './session-search.js';

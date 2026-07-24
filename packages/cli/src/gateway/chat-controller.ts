@@ -3,6 +3,7 @@
  * Live tool progress, /stop, dangerous-command approval, session continuity.
  */
 
+import { spawn } from 'node:child_process';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import {
@@ -54,6 +55,109 @@ import { ConfigManager } from '../utils/config.js';
 import { builtInSkillsDir } from '../utils/built-in-skills-dir.js';
 
 const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
+
+/** /cmd shell timeout (ms). Override with XIBECODE_CMD_TIMEOUT_MS. */
+function cmdTimeoutMs(): number {
+  const raw = Number(process.env.XIBECODE_CMD_TIMEOUT_MS);
+  if (Number.isFinite(raw) && raw >= 1_000 && raw <= 600_000) return Math.floor(raw);
+  return 60_000;
+}
+
+/** Cap captured /cmd stdout+stderr (chars); keep the tail if exceeded. */
+const CMD_OUTPUT_CAP = 24_000;
+
+type ShellCmdResult = {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+  ms: number;
+  error?: string;
+};
+
+/**
+ * Run a shell command for /cmd (gateway operator path — not the agent tool).
+ * Uses the platform shell; cwd is the chat workdir.
+ */
+function runGatewayShellCommand(
+  command: string,
+  cwd: string,
+  timeoutMs: number,
+): Promise<ShellCmdResult> {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    let timedOut = false;
+    let stdout = '';
+    let stderr = '';
+    const cap = (s: string) =>
+      s.length > CMD_OUTPUT_CAP ? s.slice(-CMD_OUTPUT_CAP) : s;
+
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(command, {
+        shell: true,
+        cwd,
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (err: any) {
+      resolve({
+        code: null,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        timedOut: false,
+        ms: Date.now() - start,
+        error: err?.message || String(err),
+      });
+      return;
+    }
+
+    child.stdout?.on('data', (chunk: Buffer | string) => {
+      stdout = cap(stdout + String(chunk));
+    });
+    child.stderr?.on('data', (chunk: Buffer | string) => {
+      stderr = cap(stderr + String(chunk));
+    });
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        /* ignore */
+      }
+      setTimeout(() => {
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          /* ignore */
+        }
+      }, 2_000).unref?.();
+    }, timeoutMs);
+
+    const finish = (partial: Partial<ShellCmdResult>) => {
+      clearTimeout(timer);
+      resolve({
+        code: partial.code ?? null,
+        signal: partial.signal ?? null,
+        stdout,
+        stderr,
+        timedOut,
+        ms: Date.now() - start,
+        error: partial.error,
+      });
+    };
+
+    child.on('error', (err) => {
+      finish({ error: err?.message || String(err) });
+    });
+    child.on('close', (code, signal) => {
+      finish({ code, signal });
+    });
+  });
+}
 
 /**
  * busy handling when the user messages mid-run.
@@ -987,10 +1091,19 @@ export class ChatController {
                 `agent tool_result ${name} success=${success}${pv ? ` :: ${pv}` : ''}`,
               );
             }
-            // Replace the "running …" line with ✓/✗ when possible; on fail show more error text
-            void pushProgress(formatToolResult(name, success, preview), {
-              replaceLast: true,
-            });
+            // Replace the "running …" line with ✓/✗ when possible; on fail show more error text.
+            // Memory tools pass full result so users see "💾 Saved · MEMORY · usage…"
+            void pushProgress(
+              formatToolResult(
+                name,
+                success,
+                preview,
+                r && typeof r === 'object' ? r : undefined,
+              ),
+              {
+                replaceLast: true,
+              },
+            );
             // If many tools fail in a row, nudge the user so the chat doesn't look frozen
             if (!success && consecutiveToolFails >= 3 && consecutiveToolFails % 3 === 0) {
               void pushProgress(
@@ -1020,6 +1133,14 @@ export class ChatController {
           } else if (type === 'warning') {
             const w = String(data?.message || '');
             this.options.log(`${msg.platform} warning: ${w}`);
+            // Memory + auto-compact status — always show to the user mid-run
+            if (
+              /^💾|^🧠|^🗜️|Compacting context|Context compacted|Microcompact/i.test(
+                w.trim(),
+              )
+            ) {
+              void pushProgress(w.trim().slice(0, 220));
+            }
             const isCritical = /CRITICAL|Loop detected|near-identical|blocked finalize|Stop-hook/i.test(
               w,
             );
@@ -1412,6 +1533,11 @@ export class ChatController {
       return;
     }
 
+    if (cmd === 'cmd' || cmd === 'sh' || cmd === 'shell') {
+      await this.handleCmdSlash(msg, arg, reply);
+      return;
+    }
+
     if (cmd === 'mode' || cmd === 'runtime') {
       const { describeRuntimeMode, resolveRuntimeMode } = await import(
         '../utils/runtime-mode.js'
@@ -1431,6 +1557,82 @@ export class ChatController {
     }
 
     await reply(`Unknown \`/${cmd}\`. Try \`/help\`.`);
+  }
+
+  /**
+   * /cmd <shell> — run a command in the chat workdir without the agent.
+   * Output is returned as a Telegram/Discord/Slack message (truncated if huge).
+   * Useful for: `ls`, `pwd`, `tail` daemon logs, quick checks while coding.
+   */
+  private async handleCmdSlash(
+    msg: InboundMessage,
+    arg: string,
+    reply: (text: string) => Promise<void>,
+  ): Promise<void> {
+    const command = arg.trim();
+    const timeoutMs = cmdTimeoutMs();
+    if (!command) {
+      await reply(
+        [
+          '**`/cmd`** — run a shell command in this chat’s workdir (no agent).',
+          '',
+          'Usage: `/cmd <command>`',
+          'Examples:',
+          '• `/cmd ls -la`',
+          '• `/cmd pwd`',
+          '• `/cmd tail -n 40 ~/.xibecode/daemon/logs/daemon.log`',
+          '',
+          `Timeout: ${Math.round(timeoutMs / 1000)}s · env \`XIBECODE_CMD_TIMEOUT_MS\``,
+          'Long output is truncated (tail kept).',
+        ].join('\n'),
+      );
+      return;
+    }
+
+    const session = await getOrCreateSession(msg.platform, msg.chatId);
+    const workdir = session.workdir || this.options.defaultWorkdir();
+    this.options.log(
+      `${msg.platform}:${msg.chatId} /cmd cwd=${workdir}: ${command.slice(0, 200)}`,
+    );
+
+    const result = await runGatewayShellCommand(command, workdir, timeoutMs);
+    const headerBits = [
+      result.timedOut ? '⏱ **timed out**' : null,
+      result.error ? `error: ${result.error}` : null,
+      result.code != null ? `exit **${result.code}**` : result.signal ? `signal **${result.signal}**` : null,
+      `${result.ms}ms`,
+      `cwd \`${workdir}\``,
+    ].filter(Boolean);
+
+    // Fence the command so markdown doesn't mangle pipes / stars
+    const cmdPreview =
+      command.length > 200 ? `${command.slice(0, 197)}…` : command;
+    const outParts: string[] = [];
+    if (result.stdout.trim()) outParts.push(result.stdout.trimEnd());
+    if (result.stderr.trim()) {
+      outParts.push(
+        (result.stdout.trim() ? '\n--- stderr ---\n' : '') + result.stderr.trimEnd(),
+      );
+    }
+    let body = outParts.join('') || '(no output)';
+    // Keep reply under ~ platform-friendly size; adapters also chunk
+    const maxBody = 10_000;
+    if (body.length > maxBody) {
+      body = '…(truncated)\n' + body.slice(-maxBody);
+    }
+    // Avoid breaking outer fences if command output contains ```
+    body = body.replace(/```/g, '``\u200b`');
+
+    await reply(
+      [
+        `$ \`${cmdPreview.replace(/`/g, "'")}\``,
+        headerBits.join(' · '),
+        '',
+        '```',
+        body,
+        '```',
+      ].join('\n'),
+    );
   }
 
   /**

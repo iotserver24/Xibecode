@@ -16,7 +16,12 @@ import { registerCleanup, setupGracefulShutdown } from './graceful-shutdown.js';
 import { PROVIDER_CONFIGS, ProviderType } from './types/index.js';
 import { PermissionManager } from './permissions.js';
 import { ToolOrchestrator, type ToolExecutionUpdate } from './tool-orchestrator.js';
-import { compactConversation } from './context-compactor.js';
+import {
+  compactConversation,
+  COMPACTION_STATUS,
+  resolveCompactTriggerTokens,
+  shouldTriggerAutoCompact,
+} from './context-compactor.js';
 import {
   autoLoadProjectMemories,
   formatMemoriesForContext,
@@ -28,7 +33,7 @@ import { SettingsManager } from './settings/settings.js';
 import { PermissionRuleManager } from './permission-rules/permission-rules.js';
 import { HooksManager } from './hooks/hooks.js';
 import { AutoMemoryManager } from './auto-memory/auto-memory.js';
-import { microcompact, shouldAutoCompact, resetMicrocompactCircuitBreaker, estimateTokenCount } from './microcompact.js';
+import { microcompact, resetMicrocompactCircuitBreaker } from './microcompact.js';
 import {
   ProviderPool,
   shouldFailoverProvider,
@@ -555,8 +560,118 @@ export class EnhancedAgent extends EventEmitter {
     if (model.includes('o1') || model.includes('o3')) return 128_000;
     if (model.includes('deepseek')) return 128_000;
     if (model.includes('qwen')) return 128_000;
+    if (model.includes('gemini') || model.includes('mimo')) return 128_000;
     // Default safe fallback
     return 120_000;
+  }
+
+  /**
+   * Auto-compact when context is near the budget (preflight each turn + after replies).
+   * Microcompact first (strip old tool results), then full handoff summary + token-budget tail.
+   * Emits a clear status line so messaging gateways show "Compacting context…".
+   */
+  private async maybeAutoCompact(
+    trigger: 'preflight' | 'post_turn',
+  ): Promise<boolean> {
+    let enabled = true;
+    let edgeTokens = 13_000;
+    try {
+      if (this.settingsManager) {
+        const s = await this.settingsManager.getSettings();
+        if (s.autoCompactEnabled === false) enabled = false;
+        if (typeof s.autoCompactThreshold === 'number' && s.autoCompactThreshold > 0) {
+          edgeTokens = s.autoCompactThreshold;
+        }
+      }
+    } catch {
+      /* defaults */
+    }
+    // Env override: XIBECODE_AUTO_COMPACT=0|false|off
+    const envOff = /^(0|false|off|no)$/i.test(
+      (process.env.XIBECODE_AUTO_COMPACT || '').trim(),
+    );
+    if (!enabled || envOff) return false;
+
+    const contextWindow = this.getContextWindowForModel();
+    let estimatedTokens = this.estimateConversationTokens();
+    if (!shouldTriggerAutoCompact(estimatedTokens, contextWindow, edgeTokens)) {
+      return false;
+    }
+
+    const triggerTokens = resolveCompactTriggerTokens(contextWindow, edgeTokens);
+    this.emit('warning', {
+      message: `${COMPACTION_STATUS} (~${estimatedTokens.toLocaleString()} / trigger ${triggerTokens.toLocaleString()} · ${trigger})`,
+    });
+
+    if (this.hooksManager) {
+      try {
+        await this.hooksManager.execute('PreCompact', {
+          event: 'PreCompact',
+          compactTrigger: trigger === 'preflight' ? 'auto' : 'auto',
+        });
+      } catch {
+        /* non-fatal */
+      }
+    }
+
+    // Phase 1: microcompact (strip old tool results)
+    const mcResult = microcompact({
+      messages: this.messages,
+      tokenCount: estimatedTokens,
+      contextWindow,
+      compactThreshold: edgeTokens,
+    });
+    if (mcResult.strippedCount > 0 || mcResult.ephemeralCount > 0) {
+      this.messages = mcResult.messages;
+      estimatedTokens = this.estimateConversationTokens();
+      this.emit('warning', {
+        message: `Microcompact: stripped ${mcResult.strippedCount} tool result(s)${
+          mcResult.ephemeralCount ? `, ephemeral ${mcResult.ephemeralCount}` : ''
+        } · ~${estimatedTokens.toLocaleString()} tokens`,
+      });
+    }
+
+    // Phase 2: full compact if still over budget (or micro asked for it)
+    const stillOver = shouldTriggerAutoCompact(
+      estimatedTokens,
+      contextWindow,
+      edgeTokens,
+    );
+    if (stillOver || mcResult.triggeredFullCompact) {
+      const before = this.messages.length;
+      const compacted = compactConversation(this.messages, {
+        contextWindow,
+        tailTokenBudget: Math.max(4_000, Math.floor(contextWindow * 0.3)),
+        keepRecentCount: 20,
+        minTailMessages: 6,
+        maxTailMessages: 28,
+      });
+      if (compacted.droppedCount > 0 || compacted.messages.length < before) {
+        this.messages = compacted.messages;
+        estimatedTokens =
+          compacted.estimatedTokensAfter ?? this.estimateConversationTokens();
+        this.emit('warning', {
+          message:
+            `✅ Context compacted · dropped ~${compacted.droppedCount} older msg(s) · ` +
+            `now ~${estimatedTokens.toLocaleString()} tokens` +
+            (compacted.groundedFacts.length
+              ? ` · ${compacted.groundedFacts.length} grounded fact(s)`
+              : ''),
+        });
+      }
+    }
+
+    if (this.hooksManager) {
+      try {
+        await this.hooksManager.execute('PostCompact', {
+          event: 'PostCompact',
+          compactTrigger: 'auto',
+        });
+      } catch {
+        /* non-fatal */
+      }
+    }
+    return true;
   }
 
   private hasRecentGroundedEvidence(windowMs = 5 * 60 * 1000): boolean {
@@ -978,6 +1093,16 @@ export class EnhancedAgent extends EventEmitter {
         });
       }
 
+      // Preflight auto-compact: shrink history before the next model call when
+      // we're near the context budget (percent + edge threshold).
+      try {
+        await this.maybeAutoCompact('preflight');
+      } catch (err: any) {
+        this.emit('warning', {
+          message: `Auto-compact skipped: ${err?.message || err}`,
+        });
+      }
+
       this.emit('thinking', { message: 'AI is thinking...' });
 
       const maxApiRetries = 5;
@@ -1105,52 +1230,11 @@ export class EnhancedAgent extends EventEmitter {
           }
         }
 
-        // Auto-compact: first try microcompact, then full compaction if needed
-        const contextWindow = this.getContextWindowForModel();
-        const compactThreshold = this.settingsManager
-          ? (await this.settingsManager.getSettings()).autoCompactThreshold ?? 13000
-          : 13000;
-        let estimatedTokens = this.estimateConversationTokens();
-
-        // Try microcompact first (lighter weight)
-        if (estimatedTokens > contextWindow - compactThreshold) {
-          const mcResult = microcompact({
-            messages: this.messages,
-            tokenCount: estimatedTokens,
-            contextWindow,
-            compactThreshold,
-          });
-
-          if (mcResult.strippedCount > 0 || mcResult.ephemeralCount > 0) {
-            this.messages = mcResult.messages;
-            estimatedTokens = this.estimateConversationTokens();
-            this.emit('warning', {
-              message: `Microcompact: stripped ${mcResult.strippedCount}, marked ${mcResult.ephemeralCount} ephemeral. Tokens: ${estimatedTokens}`,
-            });
-          }
-
-          // If microcompact says we need full compaction, do it
-          if (mcResult.triggeredFullCompact) {
-            const beforeCount = this.messages.length;
-            const compacted = compactConversation(this.messages, 24);
-            this.messages = compacted.messages;
-            estimatedTokens = this.estimateConversationTokens();
-            this.emit('warning', {
-              message:
-                `${compacted.summaryNotice || 'Auto-compacted conversation to save context'} ` +
-                `(estimated tokens: ${estimatedTokens})`,
-            });
-
-            // Fire PreCompact/PostCompact hooks
-            if (this.hooksManager) {
-              try {
-                await this.hooksManager.execute('PostCompact', {
-                  event: 'PostCompact',
-                  compactTrigger: 'auto',
-                });
-              } catch { /* non-fatal */ }
-            }
-          }
+        // Post-turn auto-compact (same path as preflight)
+        try {
+          await this.maybeAutoCompact('post_turn');
+        } catch {
+          /* non-fatal */
         }
 
         // Process response
@@ -1634,14 +1718,16 @@ export class EnhancedAgent extends EventEmitter {
         if (typeof input?.path === 'string') this.filesChanged.add(input.path);
       }
 
-      // Bust the per-session memory cache whenever the agent writes to memory
-      // so the next run() turn reloads from disk.
+      // Project memory.md cache: bust so later tools see new content.
+      // Curated MEMORY.md / USER.md: do NOT re-freeze mid-session — the
+      // system-prompt snapshot stays stable for the whole session (writes
+      // still land on disk immediately; next session loads them).
       if (
         ['update_memory', 'remember_lesson', 'curated_memory'].includes(toolUse.name) &&
-        result?.success !== false
+        result?.success !== false &&
+        !result?.staged
       ) {
         this.invalidateMemoryCache();
-        void this.curatedMemory?.freezeSnapshot?.();
       }
 
       const verification = await this.postEditVerify(toolExecutor, toolUse, result);
@@ -2343,11 +2429,15 @@ ${this.defaultSkillsPrompt ? `${this.defaultSkillsPrompt}\n\n` : ''}
 6. **Error Recovery & Loop Avoidance**: If a tool fails, DO NOT call it again with the same parameters. Analyze the error, verify your assumptions (using read/search tools), and try a COMPLETELY different approach.
 7. **Web Research**: Use \`web_search\` and \`fetch_url\` when you need documentation, error solutions, or up-to-date info.
 8. **Remember Important Things** (learning loop):
-   - \`curated_memory\` — durable facts in MEMORY.md / USER.md (bounded; always in context next session)
-   - \`remember_lesson\` / \`update_memory\` — project lessons and .xibecode/memory.md
+   - \`curated_memory\` — durable facts in MEMORY.md / USER.md (bounded char budget; frozen into the system prompt at **session start**, so mid-session writes apply **next** session)
+   - On success you get \`done: true\` and \`note: "Write saved…"\` — **do not repeat** the same write
+   - Prefer one batch via \`operations\` when consolidating or making several changes
+   - Targets: \`user\` = preferences/profile; \`memory\` = env/conventions/lessons
+   - Skip trivial progress / TODOs / dumpable logs — use \`session_search\` or \`save_skill\` instead
+   - \`remember_lesson\` / \`update_memory\` — project lessons and \`.xibecode/memory.md\`
    - \`session_search\` — find past conversations when you need details not in memory
    - \`save_skill\` — save a reusable coding procedure after a non-trivial successful workflow
-   Save proactively: user preferences, project conventions, fixes that took real work.
+   Save proactively: user preferences, corrections, project conventions, fixes that took real work.
 ${(() => {
   const curated = this.curatedMemory?.formatForSystemPrompt?.() || '';
   return curated ? `\n${curated}\n` : '';

@@ -141,6 +141,7 @@ export {
   resolveReviewLlmConfig,
   type CuratedTarget,
   type CuratedMemoryConfig,
+  type CuratedMemoryResult,
   type SessionHit,
   type LearnedSkillDraft,
   type SkillLearnResult,
@@ -229,7 +230,17 @@ export { type PersistedPlanArtifact, persistPlanArtifact, loadLatestPlanArtifact
 // ─── Context ───────────────────────────────────────────────────
 export { ContextManager } from './context.js';
 export { pruneContext } from './context-pruner.js';
-export { type CompactionResult, compactConversation } from './context-compactor.js';
+export {
+  type CompactionResult,
+  type CompactOptions,
+  compactConversation,
+  shouldTriggerAutoCompact,
+  resolveCompactTriggerTokens,
+  estimateMessagesTokensRough,
+  selectProtectedTail,
+  COMPACTION_STATUS,
+  COMPACTION_STATUS_MARKER,
+} from './context-compactor.js';
 
 // ─── Swarm ─────────────────────────────────────────────────────
 export { SwarmOrchestrator, type SubtaskResult, DEFAULT_SWARM_MAX_PARALLEL } from './swarm.js';

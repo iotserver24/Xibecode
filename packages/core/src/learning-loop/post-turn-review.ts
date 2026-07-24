@@ -92,7 +92,7 @@ async function maybeAddMemory(
     return;
   }
   const r = await curated.add(target, content);
-  if (r.success && !r.message.includes('duplicate')) {
+  if (r.success && !String(r.message || '').includes('duplicate')) {
     if (target === 'user') result.userAdds.push(content);
     else result.memoryAdds.push(content);
   }

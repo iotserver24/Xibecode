@@ -31,16 +31,46 @@ describe('CuratedMemoryStore', () => {
     const store = new CuratedMemoryStore({ baseDir: base });
     const r = await store.add('memory', 'Project uses pnpm');
     expect(r.success).toBe(true);
+    expect(r.done).toBe(true);
+    expect(r.note).toMatch(/Write saved/i);
+    expect(r.entries).toBeUndefined(); // terminal success — no full dump
     await store.freezeSnapshot();
     const prompt = store.formatForSystemPrompt();
     expect(prompt).toContain('Project uses pnpm');
   });
 
-  it('enforces char limit', async () => {
+  it('does not mutate frozen snapshot mid-session after write', async () => {
+    const store = new CuratedMemoryStore({ baseDir: base });
+    await store.add('memory', 'first');
+    await store.freezeSnapshot();
+    const before = store.formatForSystemPrompt();
+    await store.add('memory', 'second mid-session');
+    // Frozen prompt still only has first (disk has both)
+    expect(store.formatForSystemPrompt()).toBe(before);
+    expect(store.formatForSystemPrompt()).not.toContain('second mid-session');
+    const live = await store.loadEntries('memory');
+    expect(live).toContain('second mid-session');
+  });
+
+  it('enforces char limit and returns entries for consolidation', async () => {
     const store = new CuratedMemoryStore({ baseDir: base, memoryCharLimit: 50 });
     await store.add('memory', 'short');
     const r = await store.add('memory', 'x'.repeat(100));
     expect(r.success).toBe(false);
+    expect(r.entries?.length).toBeGreaterThan(0);
+  });
+
+  it('applies atomic batch under final char budget', async () => {
+    const store = new CuratedMemoryStore({ baseDir: base, memoryCharLimit: 80 });
+    await store.add('memory', 'old stale fact that is long enough');
+    const r = await store.applyBatch('memory', [
+      { action: 'remove', old_text: 'old stale' },
+      { action: 'add', content: 'new compact fact' },
+    ]);
+    expect(r.success).toBe(true);
+    expect(r.note).toMatch(/Write saved/i);
+    const live = await store.loadEntries('memory');
+    expect(live).toEqual(['new compact fact']);
   });
 });
 

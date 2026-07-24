@@ -1010,7 +1010,12 @@ export class CodingToolExecutor implements ToolExecutor {
         if (!p.outcome || typeof p.outcome !== 'string') return { error: true, success: false, message: 'Missing outcome' };
 
         await this.memory.addMemory(p.trigger, p.action, p.outcome, p.tags || []);
-        return { success: true, message: 'Lesson learned and saved to neural memory.' };
+        return {
+          success: true,
+          done: true,
+          message: 'Lesson learned and saved to neural memory.',
+          note: 'Write saved. This update is complete — do not repeat it.',
+        };
       }
 
       case 'curated_memory': {
@@ -2112,30 +2117,68 @@ export class CodingToolExecutor implements ToolExecutor {
       {
         name: 'curated_memory',
         description:
-          'Manage durable MEMORY.md (agent notes) and USER.md (user profile) with char limits. Always injected next session. Actions: add, replace, remove. target: memory|user.',
+          'Save durable facts to persistent memory that survive across sessions. Memory is ' +
+          'injected into every future session (frozen snapshot at session start), so keep entries ' +
+          'compact and high-signal.\n\n' +
+          'HOW: prefer ONE call via an "operations" array for multiple changes ' +
+          '(each item: {action, content?, old_text?}). The batch applies atomically and the char ' +
+          'limit is checked only on the FINAL result — so one call can remove/replace stale ' +
+          'entries AND add new ones. Use bare action/content/old_text only for a single change.\n\n' +
+          'WHEN: save proactively when the user states a preference, correction, or personal ' +
+          'detail, or you learn a stable fact about their environment, conventions, or workflow. ' +
+          'Priority: user preferences & corrections > environment facts > procedures. The best ' +
+          'memory stops the user repeating themselves.\n\n' +
+          'IF FULL: an add is rejected with current entries shown. Reissue as ONE batch that ' +
+          'removes or shortens enough stale entries and adds the new one together.\n\n' +
+          'TARGETS: "user" = who the user is (name, role, preferences, style). "memory" = your ' +
+          'notes (environment, conventions, tool quirks, lessons).\n\n' +
+          'SKIP: trivial/obvious info, easily re-discovered facts, raw data dumps, task progress, ' +
+          'completed-work logs, temporary TODO state (use session_search for those). Reusable ' +
+          'procedures belong in a skill (save_skill), not memory.\n\n' +
+          'On success the tool returns done=true and note="Write saved…". Do not repeat the same write.',
         input_schema: {
           type: 'object',
           properties: {
             action: {
               type: 'string',
               enum: ['add', 'replace', 'remove'],
-              description: 'Memory action',
+              description:
+                'Single-op action. Omit when using "operations" batch.',
             },
             target: {
               type: 'string',
               enum: ['memory', 'user'],
-              description: 'memory = environment/lessons; user = preferences/profile',
+              description:
+                'memory = agent notes (env/lessons); user = profile/preferences',
             },
             content: {
               type: 'string',
-              description: 'New entry text (add/replace)',
+              description: 'Entry content for add/replace (single-op).',
             },
             old_text: {
               type: 'string',
-              description: 'Unique substring of entry to replace/remove',
+              description:
+                'Unique substring identifying an existing entry (required for replace/remove single-op).',
+            },
+            operations: {
+              type: 'array',
+              description:
+                'Batch: atomic list of {action, content?, old_text?} against the final char budget. Preferred for multi-change or consolidating when full.',
+              items: {
+                type: 'object',
+                properties: {
+                  action: {
+                    type: 'string',
+                    enum: ['add', 'replace', 'remove'],
+                  },
+                  content: { type: 'string' },
+                  old_text: { type: 'string' },
+                },
+                required: ['action'],
+              },
             },
           },
-          required: ['action', 'target'],
+          required: ['target'],
         },
       },
       {
@@ -4526,26 +4569,42 @@ export class CodingToolExecutor implements ToolExecutor {
     const store = new CuratedMemoryStore();
     const action = String(p.action || '');
     const target = (p.target === 'user' ? 'user' : 'memory') as 'memory' | 'user';
+    const operations = Array.isArray(p.operations) ? p.operations : null;
     const needsApproval = await isWriteApprovalEnabledAsync('memory');
 
-    if (needsApproval && (action === 'add' || action === 'replace' || action === 'remove')) {
+    const isMutating =
+      (operations && operations.length > 0) ||
+      action === 'add' ||
+      action === 'replace' ||
+      action === 'remove';
+
+    if (needsApproval && isMutating) {
+      const summary = operations?.length
+        ? `batch ${target} (${operations.length} ops)`
+        : `${action} ${target}: ${String(p.content || p.old_text || '').slice(0, 80)}`;
       const staged = await stageWrite(
         'memory',
-        `${action} ${target}: ${String(p.content || p.old_text || '').slice(0, 80)}`,
+        summary,
         {
-          action,
+          action: operations?.length ? 'batch' : action,
           target,
           content: p.content,
           old_text: p.old_text,
+          operations: operations || undefined,
         },
         'tool',
       );
       return {
         success: true,
         staged: true,
+        done: false,
         id: staged.id,
         message: `Staged for approval (id=${staged.id}). Operator: xibecode memory approve ${staged.id}`,
       };
+    }
+
+    if (operations?.length) {
+      return store.applyBatch(target, operations);
     }
 
     if (action === 'add') {
@@ -4562,7 +4621,11 @@ export class CodingToolExecutor implements ToolExecutor {
       if (!p.old_text) return { error: true, success: false, message: 'old_text required for remove' };
       return store.remove(target, String(p.old_text));
     }
-    return { error: true, success: false, message: 'action must be add|replace|remove' };
+    return {
+      error: true,
+      success: false,
+      message: 'Provide action (add|replace|remove) or an operations batch',
+    };
   }
 
   private async sessionSearchAction(query: string, limit?: number): Promise<any> {
@@ -4641,9 +4704,11 @@ export class CodingToolExecutor implements ToolExecutor {
       const final = await fs.readFile(memoryPath, 'utf-8');
       return {
         success: true,
+        done: true,
         path: '.xibecode/memory.md',
         lines: final.split('\n').length,
         message: append ? 'Memory updated (appended)' : 'Memory replaced',
+        note: 'Write saved. This update is complete — do not repeat it.',
       };
     } catch (error: any) {
       return { error: true, success: false, message: `Failed to update memory: ${error.message}` };

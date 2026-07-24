@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.17.0] - 2026-07-24
+
+### Messaging: `/cmd` shell from Telegram (and other gateways)
+
+- **`/cmd <command>`** runs a shell command in the chat **workdir** and returns stdout/stderr — no agent loop.
+- Aliases: `/sh`, `/shell`. Empty `/cmd` shows usage.
+- Default timeout **60s** (`XIBECODE_CMD_TIMEOUT_MS`). Output truncated if huge.
+- Examples: `/cmd ls -la`, `/cmd pwd`, `/cmd tail -n 40 ~/.xibecode/daemon/logs/daemon.log`
+
+### Memory: durable saves, clear “Saved” feedback
+
+- **`curated_memory`** improved: richer WHEN/HOW/SKIP guidance, atomic **`operations` batch**, terminal success with `done` + **`note: "Write saved. This update is complete — do not repeat it."`**
+- Success responses no longer dump the full entry list (reduces re-save thrash); overflow errors still return entries for consolidation.
+- **Frozen snapshot** at session start stays fixed mid-session (disk writes still immediate; next session loads them) — stable system-prompt prefix.
+- Telegram/gateway progress: **`🧠 saving MEMORY/USER…`** then **`💾 Saved · MEMORY · usage% · N entries`**; post-turn auto notes also surface as progress.
+- Files: `~/.xibecode/memories/MEMORY.md` + `USER.md` (bounded char budgets).
+
+### Auto-compact (context compression)
+
+- **Preflight + post-turn** auto-compact each agent iteration when context nears budget.
+- Trigger: **~75%** of context for typical windows (≤512k), **~50%** for huge windows — and never later than `window − autoCompactThreshold` (default 13k free for the next reply).
+- Flow: **microcompact** (strip old tool results) → **full handoff** (structured summary + grounded facts + **token-budget tail**, not a fixed message count).
+- User-visible status: **`🗜️ Compacting context — summarizing earlier conversation so I can continue…`** then **`✅ Context compacted · … tokens`** (Telegram progress included).
+- Handoff tells the model not to re-answer resolved work; folds prior compaction summaries.
+- Disable: settings `autoCompactEnabled: false` or env `XIBECODE_AUTO_COMPACT=0`.
+
 ## [1.6.7] - 2026-07-24
 
 ### e2b: Vite preview host allowlist

@@ -18,8 +18,17 @@ export async function approvePending(
       | 'user'
       | 'memory';
     const action = String(item.payload.action || 'add');
-    let r: { success: boolean; message: string };
-    if (action === 'replace') {
+    let r: { success: boolean; message?: string; note?: string };
+    if (action === 'batch' && Array.isArray(item.payload.operations)) {
+      r = await store.applyBatch(
+        target,
+        item.payload.operations as Array<{
+          action: string;
+          content?: string;
+          old_text?: string;
+        }>,
+      );
+    } else if (action === 'replace') {
       r = await store.replace(
         target,
         String(item.payload.old_text || ''),
@@ -31,7 +40,10 @@ export async function approvePending(
       r = await store.add(target, String(item.payload.content || ''));
     }
     if (r.success) await rejectPending(id, 'memory');
-    return r;
+    return {
+      success: r.success,
+      message: r.message || r.note || (r.success ? 'Write saved' : 'failed'),
+    };
   }
 
   if (item.kind === 'skill') {

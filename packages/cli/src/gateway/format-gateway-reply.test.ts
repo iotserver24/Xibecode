@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { formatGatewayReply } from './format.js';
+import {
+  formatGatewayReply,
+  formatToolProgress,
+  formatToolResult,
+} from './format.js';
 
 describe('formatGatewayReply', () => {
   it('strips TASK_COMPLETE and appends Done footer', () => {
@@ -34,5 +38,41 @@ describe('formatGatewayReply', () => {
   it('strips REQUEST_MODE tags', () => {
     const out = formatGatewayReply('hi\n[[REQUEST_MODE:plan]]');
     expect(out).toBe('hi');
+  });
+});
+
+describe('memory progress / saved lines', () => {
+  it('shows saving… for curated_memory', () => {
+    const line = formatToolProgress('curated_memory', {
+      action: 'add',
+      target: 'user',
+      content: 'Prefers pnpm over npm',
+    });
+    expect(line).toMatch(/saving USER/i);
+    expect(line).toMatch(/pnpm/);
+  });
+
+  it('shows 💾 Saved with usage on success', () => {
+    const line = formatToolResult('curated_memory', true, 'Added to memory', {
+      success: true,
+      done: true,
+      target: 'memory',
+      usage: '12% — 200/2,200 chars',
+      entry_count: 3,
+      message: 'Added to memory',
+      note: 'Write saved. This update is complete — do not repeat it.',
+    });
+    expect(line).toMatch(/💾 Saved/);
+    expect(line).toMatch(/MEMORY/);
+    expect(line).toMatch(/12%/);
+  });
+
+  it('shows staged approval clearly', () => {
+    const line = formatToolResult('curated_memory', true, 'staged', {
+      success: true,
+      staged: true,
+      id: 'abc',
+    });
+    expect(line).toMatch(/staged/i);
   });
 });

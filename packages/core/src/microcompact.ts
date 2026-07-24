@@ -264,11 +264,22 @@ export function estimateTokenCount(messages: MessageParam[]): number {
 
 /**
  * Check if auto-compact should be triggered based on token usage.
+ * Prefer `shouldTriggerAutoCompact` from context-compactor (percent + edge).
+ * This keeps the legacy edge-only check for callers that haven't migrated.
  */
 export function shouldAutoCompact(
   tokenCount: number,
   contextWindow: number,
   threshold: number = 13000,
 ): boolean {
-  return tokenCount >= contextWindow - threshold;
+  // Align with percent-based trigger when possible
+  try {
+    // Lazy require avoided — duplicate formula for microcompact isolation
+    const pct = contextWindow >= 512_000 ? 0.5 : 0.75;
+    const byPct = Math.floor(contextWindow * pct);
+    const byEdge = Math.max(8_000, contextWindow - Math.max(threshold, 4_000));
+    return tokenCount >= Math.min(byPct, byEdge);
+  } catch {
+    return tokenCount >= contextWindow - threshold;
+  }
 }
