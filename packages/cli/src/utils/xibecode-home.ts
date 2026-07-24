@@ -25,7 +25,7 @@
  *     sessions/          legacy session dumps
  *     projects/          JSONL chat transcripts per cwd
  *     file-history/      edit checkpoints
- *     pairing/           reserved (Hermes-style pairing dir; JSON still under daemon/)
+ * pairing/ reserved (pairing dir; JSON still under daemon/)
  *     cache/
  *     pending/           write-approval queue
  *

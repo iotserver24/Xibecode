@@ -617,7 +617,7 @@ program
   .argument("[args...]", "approve <platform> <code> | revoke <platform> <userId>")
   .action((action, args) => pairCommand(action, args || []));
 
-// `xibecode acp` → same as --acp (Hermes-style entry for IDE hosts)
+// `xibecode acp` → same as --acp (entry for IDE hosts)
 if (process.argv[2] === "acp") {
   process.argv.splice(2, 1, "--acp");
 }

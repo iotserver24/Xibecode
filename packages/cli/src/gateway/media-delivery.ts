@@ -1,5 +1,5 @@
 /**
- * Hermes-style MEDIA:<path> extraction + safe local-file delivery helpers.
+ * MEDIA:<path> extraction + safe local-file delivery helpers.
  *
  * Agent replies can include tags like:
  *   MEDIA:/path/to/shot.png
@@ -28,9 +28,9 @@ export type MediaKind = 'photo' | 'video' | 'audio' | 'voice' | 'document';
 export interface ExtractedMedia {
   path: string;
   kind: MediaKind;
-  /** Prefer sendDocument even for images (Hermes [[as_document]]). */
+ /** Prefer sendDocument even for images (messaging gateway [[as_document]]). */
   asDocument: boolean;
-  /** Prefer voice note for audio (Hermes [[audio_as_voice]]). */
+ /** Prefer voice note for audio (messaging gateway [[audio_as_voice]]). */
   asVoice: boolean;
   /** Original tag path (for logs). */
   raw?: string;
@@ -470,7 +470,7 @@ export function extractMedia(
 }
 
 /**
- * Build a Hermes-style MEDIA tag for tool results so the gateway can upload the file.
+ * Build a MEDIA tag for tool results so the gateway can upload the file.
  */
 export function mediaTag(filePath: string): string {
   return `MEDIA:${path.resolve(filePath)}`;

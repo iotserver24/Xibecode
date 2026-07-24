@@ -323,7 +323,7 @@ export const PROVIDER_CONFIGS = {
     description: 'Multi-model direct API',
   },
 
-  // ── More OpenAI-compat hosts (Hermes-aligned) ──────────────────────────
+ // ── More OpenAI-compat hosts () ──────────────────────────
   mistral: {
     baseUrl: 'https://api.mistral.ai/v1',
     defaultModel: 'mistral-large-latest',
@@ -402,7 +402,7 @@ export const PROVIDER_CONFIGS = {
     defaultModel: 'Hermes-3-Llama-3.1-70B',
     format: 'openai',
     envKey: 'NOUS_API_KEY',
-    envKeys: ['HERMES_API_KEY'],
+ envKeys: ['HERMES_API_KEY'],
     name: 'Nous Research',
     apiKeyUrl: 'https://portal.nousresearch.com',
     description: 'Nous Portal inference API',
@@ -417,7 +417,7 @@ export const PROVIDER_CONFIGS = {
     apiKeyUrl: 'https://console.aws.amazon.com/bedrock',
     description: 'Set AWS region + credentials; base URL optional',
   },
-  // Aliases (Hermes / models.dev id compatibility)
+ // Aliases (messaging gateway / models.dev id compatibility)
   kilo: {
     baseUrl: 'https://api.kilo.ai/api/gateway',
     defaultModel: 'anthropic/claude-sonnet-4.6',

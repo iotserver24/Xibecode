@@ -3266,7 +3266,7 @@ export class CodingToolExecutor implements ToolExecutor {
     const outputLimit = Math.max(1000, maxOutputChars ?? DEFAULT_COMMAND_OUTPUT_CHARS);
 
     // Auto-background long-lived servers (pnpm dev, vite, etc.) so the agent
-    // does not hang forever — Hermes-style process sessions.
+ // does not hang forever — process sessions.
     let background = opts?.background === true;
     let autoBackground = false;
     if (!background && looksLikeLongLivedCommand(command)) {

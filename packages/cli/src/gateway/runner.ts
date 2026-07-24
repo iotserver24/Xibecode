@@ -214,7 +214,7 @@ export class GatewayRunner {
     }
   }
 
-  /** Text + Hermes MEDIA: file uploads (Telegram sendPhoto/Video/Audio/Document). */
+ /** Text + messaging gateway MEDIA: file uploads (Telegram sendPhoto/Video/Audio/Document). */
   private async sendWithMedia(
     adapter: import('./types.js').MessagingAdapter,
     chatId: string,

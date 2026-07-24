@@ -1,6 +1,6 @@
 /**
- * Hermes-style Telegram gateway engine entry.
- * @see NOTICE for Hermes Agent MIT attribution.
+ * Telegram gateway engine entry.
+ * @see NOTICE for messaging gateway Agent MIT attribution.
  */
 export {
   TelegramEngine,

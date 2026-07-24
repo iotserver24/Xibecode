@@ -56,20 +56,18 @@ import { builtInSkillsDir } from '../utils/built-in-skills-dir.js';
 const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
 
 /**
- * Hermes-style busy handling when the user messages mid-run.
+ * busy handling when the user messages mid-run.
  * - steer (default): inject into the current agent turn after tools / next step
  * - queue: FIFO after the current run finishes (old XibeCode behavior)
  * - interrupt: abort current run and start the new message immediately
  *
  * Env: XIBECODE_BUSY_INPUT_MODE=steer|queue|interrupt
- * (also accepts HERMES_GATEWAY_BUSY_INPUT_MODE)
  */
 export type BusyInputMode = 'steer' | 'queue' | 'interrupt';
 
 export function resolveBusyInputMode(): BusyInputMode {
   const raw = (
     process.env.XIBECODE_BUSY_INPUT_MODE ||
-    process.env.HERMES_GATEWAY_BUSY_INPUT_MODE ||
     'steer'
   )
     .trim()
@@ -190,7 +188,7 @@ export class ChatController {
     return { ok: true, messageId };
   }
 
-  /** Hermes: clear inline keyboard on the prompt after resolve (text path). */
+ /** messaging gateway: clear inline keyboard on the prompt after resolve (text path). */
   private async finalizeInteractivePrompt(
     platform: PlatformName,
     chatId: string,
@@ -263,7 +261,7 @@ export class ChatController {
       }
     }
 
-    // Hermes-style MEDIA:/path — strip tags from text, upload files natively
+ // MEDIA:/path — strip tags from text, upload files natively
     // (photos, videos, audio, voice, and any other file via sendDocument)
     const { media, cleanedText, skipped } = extractMedia(text, { workdir });
     const body = opts?.recovered
@@ -407,7 +405,7 @@ export class ChatController {
           deny: '❌ Denied',
         };
         const label = labels[choice];
-        // Hermes: edit the prompt message (clear buttons). Callbacks already
+ // messaging gateway: edit the prompt message (clear buttons). Callbacks already
         // edited in the Telegram engine — skip a second confirmation bubble.
         if (msg.fromCallback) {
           // Buttons already cleared on the original message
@@ -449,7 +447,7 @@ export class ChatController {
         await this.handleSlash(msg, text);
         return;
       }
-      // Hermes clarify button: __ask:<askId>:<idx>
+ // messaging gateway clarify button: __ask:<askId>:<idx>
       let answer: string;
       const cl = /^__ask:([^:]+):(\d+)$/.exec(text);
       if (cl && cl[1] === run.pendingAsk.id) {
@@ -464,7 +462,7 @@ export class ChatController {
       }
       const resolved = this.tryResolveAsk(msg.platform, msg.chatId, answer);
       const label = `💬 Got it: ${answer}`;
-      // Hermes: edit the same prompt (clear buttons + show answer). Callbacks
+ // messaging gateway: edit the same prompt (clear buttons + show answer). Callbacks
       // already cleared the keyboard; re-edit with the resolved choice text.
       await this.finalizeInteractivePrompt(
         msg.platform,
@@ -527,7 +525,7 @@ export class ChatController {
       const mode = resolveBusyInputMode();
 
       // Explicit /queue handled in slash path; plain text uses busy mode.
-      // Hermes: display.busy_input_mode = steer | queue | interrupt
+ // messaging gateway: display.busy_input_mode = steer | queue | interrupt
       if (mode === 'steer' && typeof busyRun.steer === 'function') {
         const ok = busyRun.steer(text);
         if (ok) {
@@ -649,7 +647,7 @@ export class ChatController {
     let consecutiveToolFails = 0;
 
     const { GatewayStreamConsumer } = await import('./stream-consumer.js');
-    // Hermes: one short status line as the progress bubble header (not "Coding… dir · rigor")
+ // messaging gateway: one short status line as the progress bubble header (not "Coding… dir · rigor")
     const stream = new GatewayStreamConsumer({
       adapter,
       chatId: msg.chatId,
@@ -662,7 +660,7 @@ export class ChatController {
       await stream.flushProgress(footer);
     };
 
-    /** Append a real tool/warning line (Hermes-style: tools only, no step N/0). */
+ /** Append a real tool/warning line (: tools only, no step N/0). */
     const pushProgress = async (line: string, opts?: { replaceLast?: boolean }) => {
       lastActivityAt = Date.now();
       activeRun.lastToolLine = line;
@@ -674,7 +672,7 @@ export class ChatController {
       await stream.pushToolLine(line, opts);
     };
 
-    // Hermes-style: heartbeat at least every 30s while busy so the chat never
+ // : heartbeat at least every 30s while busy so the chat never
     // looks frozen for 2+ minutes with no API/tool events.
     const HEARTBEAT_MS = 30_000;
     let lastHeartbeatAt = Date.now();
@@ -692,7 +690,7 @@ export class ChatController {
         lastHeartbeatAt = now;
         const secs = Math.round((now - activeRun.startedAt) / 1000);
         const tools = activeRun.toolCount || 0;
-        // Hermes long-running phrase + elapsed so users see it's alive.
+ // messaging gateway long-running phrase + elapsed so users see it's alive.
         // If the last tool failed, surface that instead of vague "still checking".
         const phrase = lastToolFail
           ? `last tool failed — agent should retry or report · ${lastToolFail.slice(0, 80)}`
@@ -706,7 +704,7 @@ export class ChatController {
     }, 5_000);
     void adapter.sendTyping?.(msg.chatId, { threadId: msg.threadId });
 
-    // Hermes: single progress bubble with short phrase — no separate "✓ Got it — …" message
+ // messaging gateway: single progress bubble with short phrase — no separate "✓ Got it — …" message
     if (progressOn && adapter.sendOrEditProgress) {
       await flushProgress();
     } else {
@@ -812,7 +810,7 @@ export class ChatController {
       }
       const prompt = lines.join('\n');
       await pushProgress('❓ waiting for your reply…');
-      // Hermes-style clarify buttons when platform supports it
+ // clarify buttons when platform supports it
       let promptMessageId: string | undefined;
       if (adapter.sendAskPrompt) {
         try {
@@ -889,7 +887,7 @@ export class ChatController {
     };
 
     try {
-      // No "_starting…_" — Hermes only shows the short phrase until first tool
+ // No "_starting…_" — messaging gateway only shows the short phrase until first tool
 
       const history = session.messages.map((m) => ({
         role: m.role,
@@ -918,7 +916,7 @@ export class ChatController {
         onDangerousApproval: requestApproval,
         onAskUser: requestAsk,
         onAgentReady: (api) => {
-          // Hermes mid-run steer while this slot is active
+ // mid-run steer while this slot is active
           if (this.active.get(k) === activeRun) {
             activeRun.steer = api.steer;
           }
@@ -1059,7 +1057,7 @@ export class ChatController {
         },
       });
 
-      // Hermes: leave tool lines as-is (or soft footer); don't shout _done_ / _starting_
+ // messaging gateway: leave tool lines as-is (or soft footer); don't shout _done_ / _starting_
       if (result.cancelled) {
         await flushProgress('stopped');
       } else {
@@ -1219,7 +1217,7 @@ export class ChatController {
         await reply(n ? `🗑 Cleared ${n} queued message(s).` : 'Queue already empty.');
         return;
       }
-      // /queue <prompt> — Hermes FIFO without interrupting or steering
+ // /queue <prompt> — messaging gateway FIFO without interrupting or steering
       if (sub && !['list', 'show', 'ls'].includes(subLow)) {
         if (!this.isBusy(msg.platform, msg.chatId)) {
           // Idle: run immediately as a normal task
@@ -1539,7 +1537,7 @@ export class ChatController {
     );
   }
 
-  /** Hermes-style /skills list and /skill <name> view. */
+ /** /skills list and /skill <name> view. */
   private async handleSkillsSlash(
     msg: InboundMessage,
     cmd: string,
@@ -1650,7 +1648,7 @@ export class ChatController {
   }
 
   /**
-   * Hermes-style /model — list or switch.
+ * /model — list or switch.
    *   /model | /models     current + short list
    *   /model <name>        set for this chat
    *   /model <name> --global  also write profile default
@@ -1706,7 +1704,7 @@ export class ChatController {
         listErr = err?.message || String(err);
       }
 
-      // Hermes-style model picker (provider → paginated models → switch)
+ // model picker (provider → paginated models → switch)
       if (adapter?.sendModelPicker) {
         try {
           const provider =

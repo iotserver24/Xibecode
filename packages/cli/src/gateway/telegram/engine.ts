@@ -1,17 +1,17 @@
 /**
- * Hermes-style Telegram gateway engine for XibeCode.
+ * Telegram gateway engine for XibeCode.
  *
- * Ports the messaging surface of Hermes plugins/platforms/telegram/adapter.py:
+ * Ports the messaging surface of messaging gateway plugins/platforms/telegram/adapter.py:
  * - MarkdownV2 format_message + plain fallback
  * - Long-poll getUpdates with abort on stop
  * - Inline approvals (ea:), clarify (cl:), model picker (mp/mm/mg/mb/mx/mpv)
  * - Choice pickers (lv:, cp:)
- * - Progress: new messages per tool by default (Hermes separate grouping)
+ * - Progress: new messages per tool by default (messaging gateway separate grouping)
  * - Approval/ask: edit same message + clear buttons after resolve
  * - Documents / photos (basic media)
  * - setMyCommands menu
  *
- * Adapted from Hermes Agent (MIT, Nous Research) — see NOTICE.
+ * Adapted from messaging gateway Agent (MIT, Nous Research) — see NOTICE.
  */
 
 import fetch from 'node-fetch';
@@ -44,7 +44,7 @@ export interface ModelPickerOptions {
   current: string;
   profileDefault: string;
   chatOverride?: string;
-  /** Multi-provider list (Hermes). Defaults to one "default" provider. */
+ /** Multi-provider list (messaging gateway). Defaults to one "default" provider. */
   providers?: PickerProvider[];
   providerSlug?: string;
   onModelSelected?: (
@@ -179,7 +179,7 @@ export class TelegramEngine implements MessagingAdapter {
   }
 
   /**
-   * Hermes send: MarkdownV2 first, plain strip fallback.
+ * messaging gateway send: MarkdownV2 first, plain strip fallback.
    * Returns the last sent message_id when available (for interactive prompts).
    */
   async sendMessage(
@@ -239,7 +239,7 @@ export class TelegramEngine implements MessagingAdapter {
   }
 
   /**
-   * Hermes: after approval / clarify, edit the same message and drop buttons
+ * messaging gateway: after approval / clarify, edit the same message and drop buttons
    * (`reply_markup` empty) so the keyboard does not stick around.
    */
   async editInteractiveMessage(
@@ -301,7 +301,7 @@ export class TelegramEngine implements MessagingAdapter {
     return this.sendMessageReturningId(chatId, text, { replyMarkup });
   }
 
-  /** Hermes send_clarify */
+ /** messaging gateway send_clarify */
   async sendAskPrompt(
     chatId: string,
     question: string,
@@ -333,7 +333,7 @@ export class TelegramEngine implements MessagingAdapter {
   }
 
   /**
-   * Hermes send_model_picker — provider list → model pages → select.
+ * messaging gateway send_model_picker — provider list → model pages → select.
    * With a single provider, jumps straight to model list.
    */
   async sendModelPicker(
@@ -554,7 +554,7 @@ export class TelegramEngine implements MessagingAdapter {
         return;
       } catch (err: any) {
         const msg = String(err?.message || err);
-        // Invalid dimensions / format → fall back to document (Hermes behavior)
+ // Invalid dimensions / format → fall back to document (messaging gateway behavior)
         this.log(`sendPhoto failed (${msg.slice(0, 120)}); falling back to sendDocument`);
         kind = 'document';
       }
@@ -597,7 +597,7 @@ export class TelegramEngine implements MessagingAdapter {
     await this.uploadMedia(chatId, 'sendDocument', 'document', abs, caption, filename);
   }
 
-  /** Send a local file as document (Hermes send_document). */
+ /** Send a local file as document (messaging gateway send_document). */
   async sendDocument(
     chatId: string,
     filePath: string,
@@ -739,7 +739,7 @@ export class TelegramEngine implements MessagingAdapter {
   async runLoop(
     onMessage: (msg: InboundMessage) => Promise<void>,
   ): Promise<void> {
-    // Drop webhook so long-poll works (Hermes-style)
+ // Drop webhook so long-poll works ()
     try {
       await this.api('deleteWebhook', { drop_pending_updates: false });
     } catch {
@@ -1083,7 +1083,7 @@ export class TelegramEngine implements MessagingAdapter {
       return;
     }
 
-    // Hermes model picker first (handles in-adapter, no chat dispatch)
+ // messaging gateway model picker first (handles in-adapter, no chat dispatch)
     if (await this.handleModelPickerCallback(data, chatId, messageId, answer)) {
       return;
     }
@@ -1115,7 +1115,7 @@ export class TelegramEngine implements MessagingAdapter {
         deny: '❌ Denied',
       };
       const label = labels[choice] || 'Resolved';
-      // Hermes: edit same message + remove buttons before routing the resolve
+ // messaging gateway: edit same message + remove buttons before routing the resolve
       if (messageIdStr) {
         const who = cq.from?.first_name || cq.from?.username || 'User';
         await this.editInteractiveMessage(
@@ -1144,7 +1144,7 @@ export class TelegramEngine implements MessagingAdapter {
       const which = cl[2];
       if (which === 'other') {
         await answer('Type your answer in chat');
-        // Hermes: drop number buttons while waiting for free text
+ // messaging gateway: drop number buttons while waiting for free text
         if (messageIdStr) {
           const prev =
             typeof cq.message?.text === 'string' ? cq.message.text : '❓ Question';
@@ -1156,7 +1156,7 @@ export class TelegramEngine implements MessagingAdapter {
         }
         return;
       }
-      // Hermes: clear buttons on the same message when a choice is tapped
+ // messaging gateway: clear buttons on the same message when a choice is tapped
       if (messageIdStr) {
         const who = cq.from?.first_name || cq.from?.username || 'User';
         const prev =

@@ -139,7 +139,7 @@ export async function configCommand(options: ConfigOptions) {
       return;
     }
 
-    // models.dev / Hermes-style community providers
+ // models.dev / community providers
     try {
       const mdev = await resolveModelsDevEndpoint(provider);
       if (mdev) {

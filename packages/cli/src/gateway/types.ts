@@ -66,7 +66,7 @@ export interface MessagingAdapter {
   ): Promise<string | undefined>;
   /**
    * Optional: edit an interactive prompt (approval / ask) to final text and
-   * remove inline buttons (Hermes: edit_message_text + reply_markup=None).
+ * remove inline buttons (messaging gateway: edit_message_text + reply_markup=None).
    */
   editInteractiveMessage?(
     chatId: string,
@@ -84,7 +84,7 @@ export interface MessagingAdapter {
     opts?: { threadId?: string },
   ): Promise<string | undefined | void>;
   /**
-   * Hermes-style ask_user / clarify with numbered buttons.
+ * ask_user / clarify with numbered buttons.
    * Returns message id for post-resolve button cleanup.
    */
   sendAskPrompt?(
@@ -94,7 +94,7 @@ export interface MessagingAdapter {
     askId: string,
     opts?: { threadId?: string },
   ): Promise<string | undefined | void>;
-  /** Hermes-style model picker (inline keyboard). */
+ /** model picker (inline keyboard). */
   sendModelPicker?(
     chatId: string,
     opts: {
@@ -165,7 +165,7 @@ export interface ActiveRun {
    */
   pendingMediaPaths?: string[];
   /**
-   * Hermes-style mid-run steer: inject user text into the active agent
+ * mid-run steer: inject user text into the active agent
    * between tool iterations (does not abort). Set by the headless runner.
    */
   steer?: (text: string) => boolean;

@@ -1,8 +1,8 @@
 /**
- * Hermes Telegram MarkdownV2 message engine (ported from
+ * messaging gateway Telegram MarkdownV2 message engine (ported from
  * plugins/platforms/telegram/adapter.py format_message / _escape_mdv2).
  *
- * MIT — adapted from Hermes Agent (Nous Research).
+ * MIT — adapted from messaging gateway Agent (Nous Research).
  */
 
 /** Characters MarkdownV2 requires escaped outside code spans. */
@@ -12,7 +12,7 @@ export function escapeMdv2(text: string): string {
   return text.replace(MDV2_ESCAPE_RE, '\\$1');
 }
 
-/** Strip MarkdownV2 escapes + light markers → plain text (Hermes _strip_mdv2). */
+/** Strip MarkdownV2 escapes + light markers → plain text (messaging gateway _strip_mdv2). */
 export function stripMdv2(text: string): string {
   let cleaned = text.replace(/\\([_*[\]()~`>#+\-=|{}.!\\])/g, '$1');
   cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, '$1');
@@ -50,7 +50,7 @@ function renderTableBlock(block: string[]): string {
   return parts.join('\n\n');
 }
 
-/** GFM pipe tables → bullets (Hermes convert_table_to_bullets). */
+/** GFM pipe tables → bullets (messaging gateway convert_table_to_bullets). */
 export function convertTablesToBullets(text: string): string {
   if (!text.includes('|') || !text.includes('-')) return text;
   const lines = text.split('\n');
@@ -92,7 +92,7 @@ export function convertTablesToBullets(text: string): string {
   return out.join('\n');
 }
 
-/** Move (N/M) off fence lines (Hermes _separate_chunk_indicator_from_fence). */
+/** Move (N/M) off fence lines (messaging gateway _separate_chunk_indicator_from_fence). */
 export function separateChunkIndicatorFromFence(text: string): string {
   return text.replace(
     /^``` ((\\)?\(\d+\/\d+(\\)?\))$/gm,
@@ -101,7 +101,7 @@ export function separateChunkIndicatorFromFence(text: string): string {
 }
 
 /**
- * Convert standard markdown → Telegram MarkdownV2 (Hermes format_message).
+ * Convert standard markdown → Telegram MarkdownV2 (messaging gateway format_message).
  */
 export function formatMessage(content: string): string {
   if (!content) return content;

@@ -1,6 +1,6 @@
 /**
- * Hermes-style model picker state + keyboards (mp:/mm:/mg:/mb:/mx:/mpv:).
- * Adapted from Hermes plugins/platforms/telegram/adapter.py
+ * model picker state + keyboards (mp:/mm:/mg:/mb:/mx:/mpv:).
+ * Adapted from messaging gateway plugins/platforms/telegram/adapter.py
  */
 
 import { formatMessage, truncateLabel } from './mdv2.js';

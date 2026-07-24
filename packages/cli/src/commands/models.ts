@@ -1,5 +1,5 @@
 /**
- * Models command — list providers and live /models catalogs (Hermes-style).
+ * Models command — list providers and live /models catalogs ().
  *
  *   xibecode models
  *   xibecode models --providers
@@ -331,7 +331,7 @@ async function listModelsCommand(options: {
 const modelsCmd = new Command('models');
 modelsCmd
   .description(
-    'List models from provider /models API + models.dev catalog (Hermes-style)',
+ 'List models from provider /models API + models.dev catalog ()',
   )
   .option('-k, --api-key <key>', 'API key (overrides config)')
   .option('-b, --base-url <url>', 'Custom base URL')

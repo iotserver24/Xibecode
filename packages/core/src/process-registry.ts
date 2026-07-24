@@ -1,5 +1,5 @@
 /**
- * Tracked background shell processes (Hermes-style process sessions).
+ * Tracked background shell processes (process sessions).
  * Used so `pnpm run dev` / servers return immediately instead of hanging the agent.
  */
 

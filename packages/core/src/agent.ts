@@ -467,7 +467,7 @@ export class EnhancedAgent extends EventEmitter {
   }
 
   /**
-   * Hermes-style mid-turn steer: queue a user note that is injected after the
+ * mid-turn steer: queue a user note that is injected after the
    * next tool batch (or before the next model call) without aborting the run.
    * Safe to call from another async context while run() is in progress.
    * @returns true if accepted
@@ -490,7 +490,7 @@ export class EnhancedAgent extends EventEmitter {
     this.injectedMessages = [];
   }
 
-  /** Drain pending steers into one payload (Hermes out-of-band marker). */
+ /** Drain pending steers into one payload (messaging gateway out-of-band marker). */
   private drainPendingSteer(): string | null {
     if (!this.injectedMessages.length) return null;
     const combined = this.injectedMessages.join('\n').trim();
@@ -965,7 +965,7 @@ export class EnhancedAgent extends EventEmitter {
           : 0, // 0 = unlimited in UI
       });
 
-      // Hermes steer: if user messaged mid-run while we were between tools /
+ // messaging gateway steer: if user messaged mid-run while we were between tools /
       // waiting, inject before the next model call so course can change now.
       const preApiSteer = this.drainPendingSteer();
       if (preApiSteer) {
@@ -1509,7 +1509,7 @@ export class EnhancedAgent extends EventEmitter {
           });
         }
 
-        // Hermes steer: append out-of-band user message to tool batch so the
+ // messaging gateway steer: append out-of-band user message to tool batch so the
         // model sees it on the next iteration (no role-alternation break).
         const postToolSteer = this.drainPendingSteer();
         if (postToolSteer) {

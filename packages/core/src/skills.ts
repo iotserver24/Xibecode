@@ -32,7 +32,7 @@ export class SkillManager {
     private builtInSkills: Skill[] = [];
     private builtInSkillsDir: string;
     private userSkillsDir: string;
-    /** Global user skills: ~/.xibecode/skills (Hermes-style home). */
+ /** Global user skills: ~/.xibecode/skills (home). */
     private homeSkillsDir: string;
     private marketplace: MarketplaceClient;
     private skillsSh: SkillsShClient;
@@ -63,7 +63,7 @@ export class SkillManager {
         // Load built-in skills (flat .md)
         await this.loadSkillsFromDirectory(this.builtInSkillsDir, 'built-in');
 
-        // Project skills: flat .md + nested SKILL.md (agentskills / Hermes layout)
+ // Project skills: flat .md + nested SKILL.md (agentskills / messaging gateway layout)
         await this.loadSkillsTree(this.userSkillsDir, 'user');
 
         // Global home skills (~/.xibecode/skills)
@@ -81,7 +81,7 @@ export class SkillManager {
 
     /**
      * Load skills from a tree: top-level `*.md` plus recursive `SKILL.md` dirs
-     * (Hermes / agentskills.io layout).
+ * (messaging gateway / agentskills.io layout).
      */
     private async loadSkillsTree(dir: string, source: 'built-in' | 'user'): Promise<void> {
         try {
@@ -279,7 +279,7 @@ export class SkillManager {
     }
 
     /**
-     * Metadata-only catalog (Hermes skills_list tier-1).
+ * Metadata-only catalog (messaging gateway skills_list tier-1).
      * Used by the list_skills tool and /skills slash command.
      */
     listSkillsCatalog(opts?: { query?: string; limit?: number }): Array<{
@@ -309,7 +309,7 @@ export class SkillManager {
     }
 
     /**
-     * Full skill body (Hermes skill_view tier-2).
+ * Full skill body (messaging gateway skill_view tier-2).
      */
     viewSkill(name: string): { ok: true; skill: Skill } | { ok: false; message: string } {
         const key = name.trim();

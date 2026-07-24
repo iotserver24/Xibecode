@@ -6,18 +6,18 @@
 
 - **`default`** — local host daemon (no auto self-update restart).
 - **`e2b`** — hosted sandbox (auto-detected or `XIBECODE_RUNTIME_MODE=e2b`):
-  - `/update` · `/update yes` → `npm i -g xibecode@latest`, then **`sudo -n npm …`** if needed, then **restart daemon**
-  - **Chat memory kept** in `~/.xibecode/daemon/sessions/` across restart
-  - `/mode` shows current mode + E2B built-ins
-  - Startup update offer only in e2b mode
+ - `/update` · `/update yes` → `npm i -g xibecode@latest`, then **`sudo -n npm …`** if needed, then **restart daemon**
+ - **Chat memory kept** in `~/.xibecode/daemon/sessions/` across restart
+ - `/mode` shows current mode + E2B built-ins
+ - Startup update offer only in e2b mode
 - Public preview / direct links for running servers — reserved for next ship
 
 ## [1.6.4] - 2026-07-24
 
-### Hermes-style mid-run messages (steer, not only queue)
+### Mid-run messages (steer, not only queue)
 
 - Default **busy mode is `steer`**: while the agent is working, a new Telegram message is injected into the **same run** (after tools / before the next model step) — not parked until the whole task ends.
-- Modes (Hermes `display.busy_input_mode`): `steer` | `queue` | `interrupt` via `XIBECODE_BUSY_INPUT_MODE`.
+- Modes: `steer` | `queue` | `interrupt` via `XIBECODE_BUSY_INPUT_MODE`.
 - `/queue <prompt>` still forces FIFO without interrupting; plain text steers by default.
 - Ack: `⏩ Steered into current run…` (or interrupt / queue acks).
 
@@ -91,18 +91,18 @@
 
 ## [1.5.2] - 2026-07-21
 
-### Gateway / Telegram UX (Hermes-aligned)
+### Gateway / Telegram UX ()
 
-- **Tool progress as new messages** (Hermes `tool_progress_grouping: separate`): each tool line is a new chat message instead of editing one long bubble. Tool results may still edit the last tool line only. Override with `XIBECODE_PROGRESS_GROUPING=accumulate`.
+- **Tool progress as new messages** : each tool line is a new chat message instead of editing one long bubble. Tool results may still edit the last tool line only. Override with `XIBECODE_PROGRESS_GROUPING=accumulate`.
 - **Progressive answer drafts off by default** — final answer is always a new message. Set `XIBECODE_STREAM_EDIT=1` to restore mid-turn draft edits.
-- **Approval / ask buttons clear after resolve** (Hermes `edit_message_text` + empty keyboard): after you tap Once/Session/Always/Deny or a choice, the **same** prompt message is edited to the decision and the inline keyboard is removed (no stuck buttons).
-- **`[[TASK_COMPLETE | summary=…]]` no longer leaks into Telegram**: stripped and rendered as a plain `✅ Done — …` footer (same idea as the TUI footer; Hermes never shows the internal token).
+- **Approval / ask buttons clear after resolve** : after you tap Once/Session/Always/Deny or a choice, the **same** prompt message is edited to the decision and the inline keyboard is removed (no stuck buttons).
+- **`[[TASK_COMPLETE | summary=…]]` no longer leaks into Telegram**: stripped and rendered as a plain `✅ Done — …` footer (same idea as the TUI footer).
 
 ## [1.5.1] - 2026-07-20
 
 ### Gateway / Telegram media
 
-- **MEDIA:/path** tags in agent replies are uploaded natively (Hermes-style): Telegram `sendPhoto` / `sendVideo` / `sendVoice` / `sendDocument` via multipart/form-data ([Bot API](https://core.telegram.org/bots/api#sending-files)).
+- **MEDIA:/path** tags in agent replies are uploaded natively : Telegram `sendPhoto` / `sendVideo` / `sendVoice` / `sendDocument` via multipart/form-data ([Bot API](https://core.telegram.org/bots/api#sending-files)).
 - Photo dimension/format failures fall back to `sendDocument` (no host path leaked on failure).
 - `[[as_document]]` / `[[audio_as_voice]]` directives supported.
 - Cron/home delivery also strips tags and sends attachments.
@@ -123,7 +123,7 @@
 
 - **`xibecode-core` 1.5.0** and **`xibecode` 1.5.0**.
 
-### Gateway / Telegram (Hermes-aligned)
+### Gateway / Telegram ()
 
 - Short busy phrases (`on it`, `one sec`, …) — no "Got it — … in workspace" / no `_starting…_`.
 - Progress bubble heartbeats **every 30s** while the agent is busy (`still on it · 30s`).
@@ -149,7 +149,7 @@
 - Disable: `XIBECODE_DISABLE_UPDATE_CHECK=1` or `XIBECODE_DISABLE_AUTO_UPDATE=1`.
 - Template pin example: `xibecode@1.4.30` (new sandboxes still need template rebuild).
 
-### Providers & models (Hermes-aligned)
+### Providers & models ()
 
 - Built-in provider catalog expanded; **models.dev** registry (100+ providers) for catalogs.
 - Shared `fetchProviderModels` (live `/models` + models.dev + curated fallback).
@@ -171,7 +171,7 @@ All notable changes to XibeCode will be documented in this file.
 
 ### Gateway (24/7 Telegram / Discord / Slack)
 
-- Hermes-style Telegram UX: slash command menu, live tool progress, mid-run slash handling, `/stop`, message queue, `ask_user` with numbered options + arrow-key-friendly pickers.
+- Telegram UX: slash command menu, live tool progress, mid-run slash handling, `/stop`, message queue, `ask_user` with numbered options + arrow-key-friendly pickers.
 - Model picker (`/model` / `/models`) with interactive inline keyboards (not text-only).
 - Rigor levels (`yolo` / `default` / `strict`) stored per session and applied to tool safety.
 - Dangerous-command approval prompts; process registry for background long-running commands.
@@ -229,11 +229,11 @@ All notable changes to XibeCode will be documented in this file.
 ### CLI
 
 - **`xibecode setup`** — interactive setup wizard for easier onboarding:
-  - `xibecode setup` — full wizard (model → 24/7 gateway → agent defaults)
-  - `xibecode setup model` / `setup gateway` / `setup agent` — section-only
-  - `xibecode setup --quick` — model + Telegram gateway
-  - `xibecode setup --non-interactive` — print flag/env guidance for CI/headless
-  - Writes `~/.xibecode/gateway.env`, optional systemd install/start
+ - `xibecode setup` — full wizard (model → 24/7 gateway → agent defaults)
+ - `xibecode setup model` / `setup gateway` / `setup agent` — section-only
+ - `xibecode setup --quick` — model + Telegram gateway
+ - `xibecode setup --non-interactive` — print flag/env guidance for CI/headless
+ - Writes `~/.xibecode/gateway.env`, optional systemd install/start
 
 ## [1.3.22] - 2026-07-19
 
@@ -261,7 +261,7 @@ Includes the 24/7 coding gateway (Telegram / Discord / Slack, cron, delivery led
 
 ## [1.3.19] - 2026-07-19
 
-### Learning loop (Hermes-style, coding-focused)
+### Learning loop
 
 #### Core (`xibecode-core` **1.3.17**)
 - **Curated memory** — `MEMORY.md` + `USER.md` under `~/.xibecode/memories/` with char limits (frozen snapshot in system prompt).
@@ -292,12 +292,12 @@ Includes the 24/7 coding gateway (Telegram / Discord / Slack, cron, delivery led
 
 - Bump to **1.3.17**.
 - Depend on **`xibecode-core` ^1.3.16**.
-- **`xibecode gateway`** — Hermes-style 24/7 daemon:
-  - Cron scheduler (60s tick)
-  - Telegram long-polling messaging adapter
-  - Per-chat session continuity under `~/.xibecode/gateway/sessions/`
-  - **`--install`** writes a systemd user unit for always-on operation
-  - **`--start` / `--stop` / `--status`** control the user service
+- **`xibecode gateway`** — 24/7 daemon:
+ - Cron scheduler (60s tick)
+ - Telegram long-polling messaging adapter
+ - Per-chat session continuity under `~/.xibecode/gateway/sessions/`
+ - **`--install`** writes a systemd user unit for always-on operation
+ - **`--start` / `--stop` / `--status`** control the user service
 - **`xibecode cron`** — manage scheduled agent jobs (`list`, `create`, `remove`, `pause`, `resume`, `show`, `edit`)
 - Config keys: `fallbackProviders`, `telegramBotToken`, `telegramHomeChatId`, `gatewayWorkdir`
 - Env: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USERS`, `TELEGRAM_HOME_CHANNEL`, `XIBECODE_FALLBACK_PROVIDERS`, `GATEWAY_ALLOW_ALL_USERS`
@@ -534,11 +534,11 @@ Completely redesigned the WebUI with a **v0.dev-inspired professional layout**:
 
 The `/learn` command now uses Claude AI to generate high-quality, structured skill files from documentation instead of raw text dumps.
 
-**Before**: Raw HTML-stripped text with navigation elements and broken formatting  
+**Before**: Raw HTML-stripped text with navigation elements and broken formatting
 **After**: Clean, comprehensive skills with:
 
 - Overview & key concepts
-- Properly formatted code examples  
+- Properly formatted code examples
 - Best practices & gotchas
 - Quick reference cheat-sheet
 
@@ -552,10 +552,10 @@ The `/learn` command now uses Claude AI to generate high-quality, structured ski
 ### 🔧 Improvements
 
 - **Skills Marketplace Integration** (from v0.1.9):
-  - `/marketplace` - Browse and install community skills
-  - Auto-upload skills after `/learn`
-  - Search by keywords and categories
-  
+ - `/marketplace` - Browse and install community skills
+ - Auto-upload skills after `/learn`
+ - Search by keywords and categories
+
 ### 🐛 Bug Fixes
 
 - Fixed marketplace upload failures for large content (increased limit to 500KB)

@@ -1,9 +1,9 @@
 /**
- * Hermes-style progressive message consumer for messaging gateways.
+ * progressive message consumer for messaging gateways.
  *
- * Progress grouping (Hermes `tool_progress_grouping`):
+ * Progress grouping (messaging gateway `tool_progress_grouping`):
  * - **separate** (default): each tool line is a **new** message; tool-result
- *   may edit only the last tool line. Matches Hermes "separate" / pre-v0.9.
+ * may edit only the last tool line. Matches messaging gateway "separate" / pre-v0.9.
  * - **accumulate**: one bubble edited in place with all tool lines.
  *
  * Stream draft (optional): edits a preview bubble as stream_text arrives.
@@ -11,7 +11,7 @@
  *
  * Env:
  * - XIBECODE_STREAM_EDIT=1 enables progressive answer drafts (off by default —
- *   final answer is a new message; matches Hermes-style chat without mid-turn
+ * final answer is a new message; matches chat without mid-turn
  *   draft thrash on Telegram)
  * - XIBECODE_PROGRESS_GROUPING=accumulate|separate overrides default (separate)
  */
@@ -31,8 +31,8 @@ export type StreamConsumerOptions = {
   progressHeader: string;
   enabled?: boolean;
   /**
-   * Hermes tool_progress_grouping.
-   * Default: separate (new message per tool) — matches user-facing Hermes UX.
+ * messaging gateway tool_progress_grouping.
+ * Default: separate (new message per tool) — matches user-facing messaging gateway UX.
    */
   grouping?: ProgressGrouping;
 };
@@ -84,7 +84,7 @@ export class GatewayStreamConsumer {
   }
 
   private canDraft(): boolean {
-    // Off by default: final answer is a new message (user preference / Hermes chat UX).
+ // Off by default: final answer is a new message (user preference / messaging gateway chat UX).
     // Set XIBECODE_STREAM_EDIT=1 to re-enable mid-turn draft edits.
     const v = (process.env.XIBECODE_STREAM_EDIT || '').toLowerCase();
     return this.canProgress() && (v === '1' || v === 'true' || v === 'on');
@@ -141,7 +141,7 @@ export class GatewayStreamConsumer {
     if (!this.canProgress()) return;
 
     if (this.grouping === 'separate') {
-      // Hermes separate: one message per tool line; result may edit last only
+ // messaging gateway separate: one message per tool line; result may edit last only
       if (opts?.replaceLast && this.lastToolMsgId) {
         this.lastToolMsgId = await this.adapter.sendOrEditProgress!(
           this.chatId,
@@ -214,7 +214,7 @@ export class GatewayStreamConsumer {
 }
 
 /**
- * Keep chunk markers off fenced code lines (Hermes fence hygiene).
+ * Keep chunk markers off fenced code lines (messaging gateway fence hygiene).
  */
 export function separateChunkIndicatorFromFence(text: string): string {
   // Avoid: ``` (1/2)  which breaks Markdown fences on Telegram

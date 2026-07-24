@@ -39,11 +39,11 @@ export interface HeadlessRunOptions {
   signal?: AbortSignal;
   /** Pause high-risk tools until the user approves (Telegram / Discord / Slack). */
   onDangerousApproval?: DangerousApprovalHandler;
-  /** Pause for clarify / ask_user (Hermes-style). */
+ /** Pause for clarify / ask_user (). */
   onAskUser?: AskUserHandler;
   /**
    * Called once the agent is constructed so the gateway can mid-run steer
-   * (Hermes busy_input_mode=steer) without aborting the turn.
+ * (messaging gateway busy_input_mode=steer) without aborting the turn.
    */
   onAgentReady?: (api: { steer: (text: string) => boolean }) => void;
   /**
@@ -216,7 +216,7 @@ export async function runHeadlessAgent(
     provider as any,
   );
 
-  // Hermes mid-run steer hook for messaging gateway
+ // mid-run steer hook for messaging gateway
   try {
     options.onAgentReady?.({
       steer: (text: string) => {

@@ -1,5 +1,5 @@
 /**
- * models.dev registry integration (Hermes-style).
+ * models.dev registry integration ().
  *
  * Community catalog of 100+ providers / 4000+ models:
  *   https://models.dev/api.json
@@ -217,7 +217,7 @@ export async function modelsDevModelIds(
 }
 
 /**
- * Hermes-style id aliases: our config id ↔ models.dev id.
+ * id aliases: our config id ↔ models.dev id.
  */
 const TO_MODELS_DEV: Record<string, string> = {
   openrouter: 'openrouter',

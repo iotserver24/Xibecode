@@ -23,7 +23,7 @@ export function chunkForChat(text: string, max = 3900): string[] {
       if (close > 0 && close < max + 200) cut = Math.min(close + 3, rest.length);
     }
     let piece = rest.slice(0, cut);
-    // Hermes: never leave chunk marker on a fence line
+    // messaging: never leave chunk marker on a fence line
     if (/```\s*$/.test(piece)) {
       piece = piece.replace(/\s*$/, '') + '\n';
     }
@@ -87,7 +87,7 @@ const TOOL_EMOJI: Record<string, string> = {
 };
 
 /**
- * Hermes-style short status lines (gateway/assets/status_phrases.yaml generic).
+ * short status lines (gateway/assets/status_phrases.yaml generic).
  * Plain text, no markdown — works the same on Telegram/Discord/Slack.
  */
 const STATUS_PHRASES_GENERIC = [
@@ -108,7 +108,7 @@ const STATUS_PHRASES_GENERIC = [
   'checking the details',
 ];
 
-/** Long-running heartbeat (Hermes "status" surface). */
+/** Long-running heartbeat ("status" surface). */
 const STATUS_PHRASES_LONG = [
   'still on it',
   'still working through it',
@@ -130,19 +130,19 @@ export function longRunningStatusPhrase(seed = Date.now()): string {
 }
 
 /**
- * Hermes busy ack: short phrase only — no workdir, no checkmarks, no "Got it —".
+ * busy ack: short phrase only — no workdir, no checkmarks, no "Got it —".
  * workdirBasename kept for API compat; intentionally unused in the message.
  */
 export function formatBusyAck(_workdirBasename?: string): string {
   return statusPhrase();
 }
 
-/** Progress bubble header (Hermes: phrase only, not "💻 Coding… dir · rigor"). */
+/** Progress bubble header (messaging: phrase only, not "💻 Coding… dir · rigor"). */
 export function formatProgressHeader(_workdirBasename?: string, _rigor?: string): string {
   return statusPhrase();
 }
 
-/** Compact tool call for progress lines (Hermes-style emoji + short preview). */
+/** Compact tool call for progress lines (emoji + short preview). */
 export function formatToolProgress(name: string, input?: any): string {
   const emoji = TOOL_EMOJI[name] || '⚙️';
   const detail = summarizeToolInput(name, input);
@@ -294,7 +294,7 @@ export type GatewayRigorLevel = 'yolo' | 'default' | 'strict';
  *
  * TUI renders `[[TASK_COMPLETE | summary=…]]` as a bordered footer; chat clients
  * show the raw tag which breaks Markdown and confuses users. Strip the tag and
- * append a plain Hermes-style done line (no internal control tokens).
+ * append a plain done line (no internal control tokens).
  */
 export function formatGatewayReply(text: string): string {
   if (!text) return text;
@@ -329,7 +329,7 @@ export function formatGatewayReply(text: string): string {
     evidence.trim().length > 0 &&
     evidence.trim().toLowerCase() !== 'none';
 
-  // Hermes does not surface an internal completion token — just a clean final
+  // does not surface an internal completion token — just a clean final
   // answer. We add a short scannable footer so "done" is obvious in chat.
   const footer = showEvidence
     ? `✅ **Done** — ${summary}\n_Evidence: ${evidence}_`
@@ -466,7 +466,7 @@ export const HELP_TEXT = [
   'Agent can **ask** you questions mid-run — reply with a number or free text (not `/status`).',
   '',
   '**While busy:**',
-  '• Default: plain messages **steer** mid-run (Hermes-style — land after tools / next step)',
+  '• Default: plain messages **steer** mid-run (land after tools / next step)',
   '• `/queue <prompt>` — FIFO after current run (no interrupt)',
   '• `/stop` — hard interrupt; next free chat',
   '• `?` — quick status without queueing',
@@ -487,7 +487,7 @@ export const HELP_TEXT = [
   '• `default` — ask on dangerous cmds (recommended)',
   '• `strict` — stronger anti-hallucination + verify after edits',
   '',
-  '**Skills** (progressive load, Hermes-style):',
+  '**Skills** (progressive load):',
   '• `/skills` — list installed skills',
   '• `/skills search <query>` — filter',
   '• `/skill <name>` — show full skill body',

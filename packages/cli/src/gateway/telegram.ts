@@ -1,5 +1,5 @@
 /**
- * Telegram adapter — re-exports Hermes-style engine.
+ * Telegram adapter — re-exports engine.
  * Implementation lives in ./telegram/ (MarkdownV2, model picker, callbacks).
  */
 export {

@@ -60,7 +60,7 @@ const VERSION = pkg.version ?? "0.0.0";
 const NAME = "xibecode";
 const MODEL_CACHE_TTL_MS = 5 * 60 * 1000;
 
-/** Pending dangerous-tool approvals (Hermes/Claude ACP-style). */
+/** Pending dangerous-tool approvals (messaging gateway/Claude ACP-style). */
 const pendingPermissions = new Map<
   string,
   { resolve: (c: ACPPermissionChoice) => void; createdAt: number }

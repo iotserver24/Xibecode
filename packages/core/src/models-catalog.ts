@@ -1,5 +1,5 @@
 /**
- * Live model catalog from provider `/models` endpoints (Hermes-style).
+ * Live model catalog from provider `/models` endpoints ().
  *
  * - OpenAI-compatible: GET {base}/models with Bearer
  * - Anthropic-compatible: GET {base}/models with x-api-key + anthropic-version
@@ -37,7 +37,7 @@ export interface FetchModelsResult {
   error?: string;
 }
 
-/** Curated agent-friendly models when /models lags or fails (Hermes _PROVIDER_MODELS idea). */
+/** Curated agent-friendly models when /models lags or fails (messaging gateway _PROVIDER_MODELS idea). */
 export const CURATED_PROVIDER_MODELS: Record<string, readonly string[]> = {
   anthropic: [
     'claude-opus-4-6',
@@ -291,7 +291,7 @@ export async function fetchProviderModels(
     return { models: live, source: 'live', url, error };
   }
 
-  // models.dev catalog (Hermes primary offline/online database)
+ // models.dev catalog (messaging gateway primary offline/online database)
   if (provider) {
     try {
       const { modelsDevModelIds } = await import('./models-dev.js');
@@ -387,7 +387,7 @@ export function listProviderCatalog(): Array<{
 }
 
 /**
- * Built-in providers + full models.dev universe (Hermes-style mega-catalog).
+ * Built-in providers + full models.dev universe (mega-catalog).
  */
 export async function listAllProvidersCatalog(opts?: {
   includeModelsDev?: boolean;
