@@ -24,7 +24,7 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Match published CLI so manual `xibecode`/`xc` in the VM matches your release track.
 # Bump this when you cut a new npm release, then rebuild + publish this template.
-RUN npm install -g xibecode@1.5.0
+RUN npm install -g xibecode@1.5.3
 
 # E2B injects a default `user` (uid 1000). Only create/rename if missing.
 # Never fail the build when the account already exists.
