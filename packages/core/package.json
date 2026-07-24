@@ -1,6 +1,6 @@
 {
   "name": "xibecode-core",
-  "version": "1.5.3",
+  "version": "1.6.0",
   "description": "XibeCode Core - AI agent engine with tool execution, MCP, memory, and multi-mode support",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -24,12 +24,12 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/iotserver24/xibecode"
+    "url": "git+https://github.com/iotserver24/Xibecode.git"
   },
   "bugs": {
-    "url": "https://github.com/iotserver24/xibecode/issues"
+    "url": "https://github.com/iotserver24/Xibecode/issues"
   },
-  "homepage": "https://github.com/iotserver24/xibecode#readme",
+  "homepage": "https://github.com/iotserver24/Xibecode#readme",
   "publishConfig": {
     "access": "public"
   },

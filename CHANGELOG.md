@@ -1,11 +1,20 @@
 # Changelog
 
-## [1.5.5] - 2026-07-24
+## [1.6.0] - 2026-07-24
+
+### Agent browser + anti-stuck (shipped)
+
+- **agent-browser** is the default for `take_screenshot` (then Chromium).
+- E2B template ships **xibecode 1.6.0** tarball + **agent-browser** + Chrome for Testing.
+- Tool failures inject SYSTEM recovery (retry differently / report fail) and heartbeats show last error.
+- Screenshot paths outside the workspace remapped to `screenshots/`.
+
+## [1.5.6] - 2026-07-24
 
 ### Browser (agent-browser default)
 
 - **Prefer `agent-browser`** for `take_screenshot` (then Chromium). Override with `XIBECODE_PREFERRED_BROWSER=chrome`.
-- **E2B template** installs `agent-browser` + Chrome for Testing (`agent-browser install --with-deps`) and pins CLI **1.5.5**.
+- **E2B template** installs `agent-browser` + Chrome for Testing (`agent-browser install --with-deps`) and pins CLI **1.5.6**.
 - Failed screenshots return **explicit RETRY OPTIONS** (alt command, remapped path, report failure + `TASK_COMPLETE`).
 
 ### Anti-stuck on tool failure
