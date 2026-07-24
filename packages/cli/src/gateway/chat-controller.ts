@@ -45,7 +45,11 @@ import {
   ledgerMarkDelivered,
   ledgerMarkFailed,
 } from './delivery-ledger.js';
-import { extractMedia } from './media-delivery.js';
+import {
+  appendMissingMediaTags,
+  collectMediaPathsFromToolResult,
+  extractMedia,
+} from './media-delivery.js';
 import { ConfigManager } from '../utils/config.js';
 import { builtInSkillsDir } from '../utils/built-in-skills-dir.js';
 
@@ -215,7 +219,7 @@ export class ChatController {
     platform: PlatformName,
     chatId: string,
     text: string,
-    opts?: { threadId?: string; recovered?: boolean },
+    opts?: { threadId?: string; recovered?: boolean; workdir?: string },
   ): Promise<void> {
     const adapter = this.options.getAdapter(platform);
     if (!adapter) return;
@@ -224,11 +228,31 @@ export class ChatController {
       return;
     }
 
+    // Resolve workdir so relative MEDIA: paths (e.g. MEDIA:dist/app.zip) work
+    let workdir = opts?.workdir;
+    if (!workdir) {
+      try {
+        const session = await getOrCreateSession(platform, chatId);
+        workdir = session.workdir || this.options.defaultWorkdir();
+      } catch {
+        workdir = this.options.defaultWorkdir();
+      }
+    }
+
     // Hermes-style MEDIA:/path — strip tags from text, upload files natively
-    const { media, cleanedText } = extractMedia(text);
+    // (photos, videos, audio, voice, and any other file via sendDocument)
+    const { media, cleanedText, skipped } = extractMedia(text, { workdir });
     const body = opts?.recovered
       ? `♻️ Recovered reply — may be a duplicate\n\n${cleanedText}`
       : cleanedText;
+
+    if (skipped.length) {
+      for (const s of skipped) {
+        this.options.log(
+          `${platform}: MEDIA skipped (${s.raw}): ${s.reason}`,
+        );
+      }
+    }
 
     let id: string | undefined;
     try {
@@ -239,7 +263,7 @@ export class ChatController {
       if (body.trim()) {
         await adapter.sendMessage(chatId, body, { threadId: opts?.threadId });
       }
-      await this.deliverMedia(adapter, chatId, media, opts?.threadId);
+      await this.deliverMedia(adapter, chatId, media, opts?.threadId, workdir, skipped);
       this.options.onPlatformSuccess?.(platform);
       return;
     }
@@ -249,7 +273,7 @@ export class ChatController {
       if (body.trim()) {
         await adapter.sendMessage(chatId, body, { threadId: opts?.threadId });
       }
-      await this.deliverMedia(adapter, chatId, media, opts?.threadId);
+      await this.deliverMedia(adapter, chatId, media, opts?.threadId, workdir, skipped);
       await ledgerMarkDelivered(id);
       this.options.onPlatformSuccess?.(platform);
     } catch (err: any) {
@@ -264,18 +288,41 @@ export class ChatController {
     }
   }
 
-  /** Upload MEDIA: attachments (Telegram sendPhoto/Video/Document; others if supported). */
+  /** Upload MEDIA: attachments (Telegram sendPhoto/Video/Audio/Voice/Document). */
   private async deliverMedia(
     adapter: MessagingAdapter,
     chatId: string,
     media: ReturnType<typeof extractMedia>['media'],
     threadId?: string,
+    workdir?: string,
+    skipped?: Array<{ raw: string; reason: string }>,
   ): Promise<void> {
+    if (skipped?.length) {
+      // Surface undeliverable tags so the user knows (was silent before)
+      const lines = skipped
+        .slice(0, 5)
+        .map((s) => `• \`${s.raw}\` — ${s.reason}`)
+        .join('\n');
+      await adapter
+        .sendMessage(
+          chatId,
+          `⚠️ Couldn't attach ${skipped.length} file(s):\n${lines}`,
+          { threadId },
+        )
+        .catch(() => {});
+    }
     if (!media.length) return;
     if (typeof adapter.sendLocalFile !== 'function') {
       this.options.log(
         `${adapter.name}: ${media.length} MEDIA file(s) skipped (platform has no file upload)`,
       );
+      await adapter
+        .sendMessage(
+          chatId,
+          `⚠️ ${media.length} file(s) not uploaded (this platform has no file upload).`,
+          { threadId },
+        )
+        .catch(() => {});
       return;
     }
     for (const m of media) {
@@ -283,6 +330,7 @@ export class ChatController {
         await adapter.sendLocalFile(chatId, m.path, {
           kind: m.kind,
           threadId,
+          workdir,
         });
         this.options.log(
           `${adapter.name}: sent ${m.kind} ${m.path.split(/[/\\]/).pop()}`,
@@ -497,6 +545,7 @@ export class ChatController {
       prompt: text,
       toolCount: 0,
       criticalWarnings: 0,
+      pendingMediaPaths: [],
     };
     this.active.set(k, activeRun);
 
@@ -823,6 +872,31 @@ export class ChatController {
             if (success) {
               lastToolFail = undefined;
               consecutiveToolFails = 0;
+              // Auto-queue screenshots / MEDIA paths for Telegram delivery
+              // (model often forgets to restate MEDIA: in the final reply)
+              const isMediaTool =
+                /screenshot|take_screenshot|capture/i.test(String(name)) ||
+                (r &&
+                  typeof r === 'object' &&
+                  (typeof (r as any).media_tag === 'string' ||
+                    typeof (r as any).mediaTag === 'string'));
+              if (isMediaTool || (preview && /MEDIA:/i.test(preview))) {
+                const found = collectMediaPathsFromToolResult(r ?? preview, {
+                  workdir,
+                });
+                if (found.length) {
+                  const bag = activeRun.pendingMediaPaths || [];
+                  for (const p of found) {
+                    if (!bag.includes(p)) bag.push(p);
+                  }
+                  activeRun.pendingMediaPaths = bag;
+                  if (daemonVerbose) {
+                    this.options.log(
+                      `queued ${found.length} media path(s) for delivery: ${found.map((p) => p.split(/[/\\]/).pop()).join(', ')}`,
+                    );
+                  }
+                }
+              }
             } else {
               consecutiveToolFails += 1;
               lastToolFail = `${name}: ${(preview || 'failed').replace(/\s+/g, ' ').slice(0, 160)}`;
@@ -922,11 +996,26 @@ export class ChatController {
           : result.ok
             ? result.text
             : `❌ Error: ${result.error || 'agent failed'}\n${result.text || ''}`.trim();
-        const reply = formatGatewayReply(rawReply);
+        // Guarantee Telegram photo/file upload for screenshots taken this turn
+        const withMedia = appendMissingMediaTags(
+          rawReply,
+          activeRun.pendingMediaPaths || [],
+          { workdir },
+        );
+        if (
+          withMedia !== rawReply &&
+          (activeRun.pendingMediaPaths?.length || 0) > 0
+        ) {
+          this.options.log(
+            `${msg.platform}: auto-attached ${activeRun.pendingMediaPaths!.length} media path(s) for delivery`,
+          );
+        }
+        const reply = formatGatewayReply(withMedia);
 
         if (!isSilent(reply)) {
           await this.reliableSend(msg.platform, msg.chatId, reply, {
             threadId: msg.threadId,
+            workdir,
           });
         }
         await appendTurn(msg.platform, msg.chatId, text, reply);

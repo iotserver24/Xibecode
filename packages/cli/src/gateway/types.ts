@@ -32,6 +32,8 @@ export interface SendLocalFileOptions {
   /** Force kind; otherwise inferred from extension. */
   kind?: LocalMediaKind;
   threadId?: string;
+  /** Session workdir for resolving relative paths. */
+  workdir?: string;
 }
 
 export interface MessagingAdapter {
@@ -156,6 +158,12 @@ export interface ActiveRun {
   lastToolLine?: string;
   toolCount?: number;
   criticalWarnings?: number;
+  /**
+   * Absolute paths from successful take_screenshot / MEDIA tags in tool
+   * results — auto-appended to the final reply so Telegram always gets photos
+   * even if the model forgets to restate MEDIA: lines.
+   */
+  pendingMediaPaths?: string[];
   /** Optional: kill foreground shells when /stop (set by runner). */
   interruptCommands?: () => number;
   /**

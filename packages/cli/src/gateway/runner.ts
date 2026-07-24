@@ -213,23 +213,53 @@ export class GatewayRunner {
     }
   }
 
-  /** Text + Hermes MEDIA: file uploads (Telegram sendPhoto/Video/Document). */
+  /** Text + Hermes MEDIA: file uploads (Telegram sendPhoto/Video/Audio/Document). */
   private async sendWithMedia(
     adapter: import('./types.js').MessagingAdapter,
     chatId: string,
     text: string,
+    workdir?: string,
   ): Promise<void> {
     const { extractMedia } = await import('./media-delivery.js');
-    const { media, cleanedText } = extractMedia(text);
+    const cfg = this.config.getAll();
+    const wd =
+      workdir ||
+      this.options.workdir ||
+      cfg.gatewayWorkdir ||
+      process.cwd();
+    const { media, cleanedText, skipped } = extractMedia(text, { workdir: wd });
     if (cleanedText.trim()) {
       await adapter.sendMessage(chatId, cleanedText);
+    }
+    if (skipped.length) {
+      for (const s of skipped) {
+        this.log(`MEDIA skipped (${s.raw}): ${s.reason}`);
+      }
+      await adapter
+        .sendMessage(
+          chatId,
+          `⚠️ Couldn't attach ${skipped.length} file(s):\n` +
+            skipped
+              .slice(0, 5)
+              .map((s) => `• \`${s.raw}\` — ${s.reason}`)
+              .join('\n'),
+        )
+        .catch(() => {});
     }
     if (!media.length || typeof adapter.sendLocalFile !== 'function') return;
     for (const m of media) {
       try {
-        await adapter.sendLocalFile(chatId, m.path, { kind: m.kind });
+        await adapter.sendLocalFile(chatId, m.path, { kind: m.kind, workdir: wd });
+        this.log(`sent ${m.kind} ${m.path.split(/[/\\]/).pop()}`);
       } catch (err: any) {
         this.log(`media send failed: ${err?.message || err}`);
+        const name = m.path.split(/[/\\]/).pop() || 'file';
+        await adapter
+          .sendMessage(
+            chatId,
+            `⚠️ Couldn't deliver attachment \`${name}\`: ${err?.message || err}`,
+          )
+          .catch(() => {});
       }
     }
   }

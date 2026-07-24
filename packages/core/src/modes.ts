@@ -427,6 +427,14 @@ You are operating in AGENT MODE with full capabilities to:
 - If a browser tool **fails**: the error is real — fix params or install, or report failure with \`[[TASK_COMPLETE | summary=failed: …]]\`. Do **not** hang or pretend success.
 - XibeCode does not bundle Playwright for E2E tests; add \`@playwright/test\` in the project if needed.
 
+### Sending files to the user (Telegram / messaging gateways)
+- To deliver **any** file (not just screenshots) put a line in your **final** reply:
+  - \`MEDIA:path/to/file.ext\` (workspace-relative or absolute)
+- Examples: \`MEDIA:reports/out.pdf\`, \`MEDIA:dist/app.zip\`, \`MEDIA:src/main.ts\`, \`MEDIA:screenshots/home.png\`
+- Telegram routing: images → photo; video → video; audio → audio; other → **document** (downloadable, original filename). Cap **50MB**.
+- Optional: \`[[as_document]]\` to force raw upload (no photo recompress). Multiple files = multiple \`MEDIA:\` lines.
+- Prefer writing the file with tools then \`MEDIA:\` it — do not dump huge contents into chat text.
+
 ### Package Manager Priority
 1. pnpm (preferred)
 2. bun (fallback)

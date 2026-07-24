@@ -521,24 +521,28 @@ export class TelegramEngine implements MessagingAdapter {
 
   /**
    * Upload a local file via Telegram Bot API multipart/form-data.
-   * Routes by kind: sendPhoto / sendVideo / sendVoice / sendDocument.
+   * Routes by kind: sendPhoto / sendVideo / sendAudio / sendVoice / sendDocument.
+   * Any non-media type (code, zip, pdf, …) goes through sendDocument (≤50MB).
    * @see https://core.telegram.org/bots/api#sending-files
+   * @see https://core.telegram.org/bots/api#senddocument
    */
   async sendLocalFile(
     chatId: string,
     filePath: string,
-    opts?: { caption?: string; kind?: 'photo' | 'video' | 'audio' | 'voice' | 'document' },
+    opts?: {
+      caption?: string;
+      kind?: 'photo' | 'video' | 'audio' | 'voice' | 'document';
+      workdir?: string;
+    },
   ): Promise<void> {
     const { validateMediaPath, TG_LIMITS } = await import(
       '../media-delivery.js'
     );
-    const validated = validateMediaPath(filePath);
+    const validated = validateMediaPath(filePath, { workdir: opts?.workdir });
     if (!validated.ok) {
       throw new Error(`Cannot send file: ${validated.reason}`);
     }
     let kind = opts?.kind || validated.kind;
-    // Audio without voice → document (Telegram sendAudio needs metadata)
-    if (kind === 'audio') kind = 'document';
 
     const abs = validated.path;
     const caption = opts?.caption?.slice(0, 1024);
@@ -566,6 +570,16 @@ export class TelegramEngine implements MessagingAdapter {
       }
     }
 
+    if (kind === 'audio') {
+      try {
+        await this.uploadMedia(chatId, 'sendAudio', 'audio', abs, caption, filename);
+        return;
+      } catch (err: any) {
+        this.log(`sendAudio failed; falling back to sendDocument: ${err?.message || err}`);
+        kind = 'document';
+      }
+    }
+
     if (kind === 'voice') {
       try {
         await this.uploadMedia(chatId, 'sendVoice', 'voice', abs, caption, filename);
@@ -576,7 +590,7 @@ export class TelegramEngine implements MessagingAdapter {
       }
     }
 
-    // document (or fallback)
+    // document (or fallback for any other file type)
     if (validated.size > TG_LIMITS.document) {
       throw new Error(`File exceeds Telegram 50MB document limit`);
     }
@@ -617,9 +631,19 @@ export class TelegramEngine implements MessagingAdapter {
     await this.sendLocalFile(chatId, filePath, { caption, kind: 'voice' });
   }
 
+  async sendAudio(
+    chatId: string,
+    filePath: string,
+    caption?: string,
+  ): Promise<void> {
+    await this.sendLocalFile(chatId, filePath, { caption, kind: 'audio' });
+  }
+
   /**
    * multipart/form-data upload for Telegram Bot API methods that take files.
-   * Uses application/json only for non-file methods; files require multipart.
+   * Uses node-fetch File/FormData so filename + content-type are preserved
+   * (required for sendDocument so users get the real .pdf/.zip/.ts name).
+   * @see https://core.telegram.org/bots/api#sending-files
    */
   private async uploadMedia(
     chatId: string,
@@ -630,15 +654,35 @@ export class TelegramEngine implements MessagingAdapter {
     filename?: string,
   ): Promise<void> {
     const { mimeForPath } = await import('../media-delivery.js');
-    const buf = await fs.promises.readFile(filePath);
     const name = filename || path.basename(filePath);
     const mime = mimeForPath(filePath);
-    const form = new FormData();
-    form.append('chat_id', chatId);
-    // Blob + filename is the Node 18+/undici FormData file shape Telegram expects
-    form.append(field, new Blob([buf], { type: mime }), name);
+
+    // Prefer node-fetch File/FormData so multipart includes a real filename.
+    // Fall back to Blob if unavailable.
+    let form: FormData;
+    try {
+      const nf = await import('node-fetch');
+      const FormDataCtor = (nf as any).FormData || FormData;
+      const FileCtor = (nf as any).File || (globalThis as any).File;
+      form = new FormDataCtor();
+      form.append('chat_id', chatId);
+      const buf = await fs.promises.readFile(filePath);
+      if (typeof FileCtor === 'function') {
+        const file = new FileCtor([buf], name, { type: mime });
+        form.append(field, file);
+      } else {
+        const BlobCtor = (nf as any).Blob || Blob;
+        form.append(field, new BlobCtor([buf], { type: mime }), name);
+      }
+    } catch {
+      form = new FormData();
+      form.append('chat_id', chatId);
+      const buf = await fs.promises.readFile(filePath);
+      form.append(field, new Blob([buf], { type: mime }), name);
+    }
+
     if (caption) form.append('caption', caption.slice(0, 1024));
-    // Show "uploading photo" indicator when useful
+
     try {
       const action =
         method === 'sendPhoto'
@@ -647,7 +691,9 @@ export class TelegramEngine implements MessagingAdapter {
             ? 'upload_video'
             : method === 'sendVoice'
               ? 'upload_voice'
-              : 'upload_document';
+              : method === 'sendAudio'
+                ? 'upload_document'
+                : 'upload_document';
       await this.api('sendChatAction', { chat_id: chatId, action });
     } catch {
       /* ignore */

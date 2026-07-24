@@ -2215,7 +2215,7 @@ export class CodingToolExecutor implements ToolExecutor {
       {
         name: 'take_screenshot',
         description:
-          'Capture a PNG screenshot of a URL (including localhost). Uses agent-browser if installed, else headless Chrome/Chromium. path MUST be under the project working directory (e.g. screenshots/home.png) — never /tmp. On success returns path + a MEDIA: tag — include that line in your final chat reply so Telegram/Discord can send the image to the user.',
+          'Capture a PNG screenshot of a URL (including localhost). Uses agent-browser if installed, else headless Chrome/Chromium. path MUST be under the project working directory (e.g. screenshots/home.png) — never /tmp. On success returns path + a MEDIA: tag — include that line in your final chat reply so Telegram sends the image. For non-image files (pdf, zip, code, …) write the file then put MEDIA:path in the final reply the same way.',
         input_schema: {
           type: 'object',
           properties: {

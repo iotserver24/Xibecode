@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.6.3] - 2026-07-24
+
+### Telegram: real file & screenshot delivery
+
+- Deliver **any** workspace file via `MEDIA:path` (PDF, zip, code, CSV, video, audio — not only PNG).
+- **Relative paths** resolve against the session workdir (`MEDIA:screenshots/home.png` works).
+- Routing: images → `sendPhoto`, video → `sendVideo`, audio → `sendAudio`, voice → `sendVoice`, else → **`sendDocument`** (≤50MB).
+- **Auto-attach screenshots**: successful `take_screenshot` is queued and appended if the model omits `MEDIA:` — Telegram gets real photo uploads.
+- Failed attachments notify the user; optional `[[as_document]]` / `[[audio_as_voice]]`.
+
+## [1.6.2] - 2026-07-24
+
+### Telegram: send any file (not just PNG) — unreleased intermediate
+
+- Same media pipeline as 1.6.3 (shipped as **1.6.3**).
+
 ## [1.6.1] - 2026-07-24
 
 ### Telegram /stop + attachments
