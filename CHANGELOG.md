@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1] - 2026-07-24
+
+### Telegram /stop + attachments
+
+- **`/stop` frees the chat immediately** so the next message is not stuck until daemon restart (hung LLM no longer keeps the busy slot forever).
+- **Text file attachments are downloaded** and inlined into the prompt (`.txt`, `.md`, code, etc. up to 512KB) so a prompt-in-file works.
+
 ## [1.6.0] - 2026-07-24
 
 ### Agent browser + anti-stuck (shipped)

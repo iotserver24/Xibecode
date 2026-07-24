@@ -158,4 +158,10 @@ export interface ActiveRun {
   criticalWarnings?: number;
   /** Optional: kill foreground shells when /stop (set by runner). */
   interruptCommands?: () => number;
+  /**
+   * Set by /stop when the busy slot was force-cleared so a hung LLM call
+   * cannot keep the chat busy forever. The orphaned run should not re-claim
+   * the slot or drain the queue in finally.
+   */
+  forceStopped?: boolean;
 }

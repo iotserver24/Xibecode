@@ -131,6 +131,54 @@ export class TelegramEngine implements MessagingAdapter {
   }
 
   /**
+   * Download a Telegram document and return UTF-8 text if it looks like text.
+   * Returns null for binary/too-large files (caller still mentions the filename).
+   */
+  private async downloadTextAttachment(
+    fileId: string,
+    fileName: string,
+    mimeType: string,
+  ): Promise<string | null> {
+    const MAX_BYTES = 512 * 1024; // 512KB inline cap
+    const textExt =
+      /\.(txt|md|markdown|json|jsonl|csv|tsv|log|ya?ml|toml|xml|html?|css|js|jsx|ts|tsx|mjs|cjs|py|rb|go|rs|java|kt|swift|c|cc|cpp|h|hpp|sh|bash|zsh|env|ini|cfg|conf|sql|graphql|vue|svelte|r|php|pl|lua|zig|nim|ex|exs|erl|hs|clj|scala|dart|proto|gradle|properties|gitignore|dockerignore|editorconfig)$/i;
+    const textMime = /^(text\/|application\/(json|xml|javascript|x-sh|x-yaml|toml))/i;
+    const looksText =
+      textExt.test(fileName) || textMime.test(mimeType || '') || !mimeType;
+
+    const info = (await this.api('getFile', { file_id: fileId })) as {
+      file_path?: string;
+      file_size?: number;
+    };
+    if (!info?.file_path) throw new Error('getFile missing file_path');
+    if (typeof info.file_size === 'number' && info.file_size > MAX_BYTES) {
+      return null;
+    }
+
+    const url = `https://api.telegram.org/file/bot${this.token}/${info.file_path}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`file download HTTP ${res.status}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > MAX_BYTES) return null;
+
+    // Heuristic: if not clearly text and has many NUL bytes, treat as binary
+    if (!looksText) {
+      const sample = buf.subarray(0, Math.min(buf.length, 8000));
+      let nuls = 0;
+      for (let i = 0; i < sample.length; i++) if (sample[i] === 0) nuls++;
+      if (nuls > 2) return null;
+    }
+
+    let text = buf.toString('utf8');
+    // Strip UTF-8 BOM
+    if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+    // Reject if mostly replacement chars (not utf8)
+    const bad = (text.match(/\uFFFD/g) || []).length;
+    if (bad > 20 && bad / Math.max(text.length, 1) > 0.05) return null;
+    return text;
+  }
+
+  /**
    * Hermes send: MarkdownV2 first, plain strip fallback.
    * Returns the last sent message_id when available (for interactive prompts).
    */
@@ -701,14 +749,35 @@ export class TelegramEngine implements MessagingAdapter {
 
           let text = typeof msg.text === 'string' ? msg.text : '';
           if (!text && typeof msg.caption === 'string') text = msg.caption;
-          if (msg.document?.file_name) {
-            const name = msg.document.file_name;
-            text = text
-              ? `${text}\n\n[attached file: ${name}]`
-              : `Review attached file: ${name}`;
-          }
-          if (msg.photo?.length && !text.trim()) {
-            text = '[photo attached]';
+
+          // Download text-like documents so the agent can read the body
+          // (previously only the filename was mentioned — prompts-in-.txt failed).
+          if (msg.document?.file_id) {
+            const name = String(msg.document.file_name || 'attachment');
+            const mime = String(msg.document.mime_type || '');
+            try {
+              const body = await this.downloadTextAttachment(
+                msg.document.file_id,
+                name,
+                mime,
+              );
+              if (body != null) {
+                text = text
+                  ? `${text}\n\n--- attached file: ${name} ---\n${body}\n--- end ${name} ---`
+                  : `User sent file \`${name}\`. Contents:\n\n${body}`;
+              } else {
+                text = text
+                  ? `${text}\n\n[attached file: ${name} — binary or too large to inline; ask user to paste text or save path if available]`
+                  : `User attached file \`${name}\` (could not inline contents — binary/too large). Ask them to paste text or describe the task.`;
+              }
+            } catch (e: any) {
+              this.log(`document download failed: ${e?.message || e}`);
+              text = text
+                ? `${text}\n\n[attached file: ${name} — download failed: ${e?.message || e}]`
+                : `User attached file \`${name}\` but download failed: ${e?.message || e}`;
+            }
+          } else if (msg.photo?.length && !text.trim()) {
+            text = '[photo attached — no download path; describe what you need or paste text]';
           }
           if (!text.trim()) continue;
           text = text.replace(/^\/([a-zA-Z0-9_]+)@[^\s]+/, '/$1');

@@ -83,7 +83,8 @@ export class ChatController {
   }
 
   stopRun(platform: string, chatId: string): { stopped: boolean; killedCmds: number } {
-    const run = this.active.get(this.key(platform, chatId));
+    const k = this.key(platform, chatId);
+    const run = this.active.get(k);
     if (!run) return { stopped: false, killedCmds: 0 };
     if (run.pendingApproval) {
       run.pendingApproval.resolve('deny');
@@ -99,8 +100,39 @@ export class ChatController {
     } catch {
       /* ignore */
     }
+    run.forceStopped = true;
     run.abort.abort();
+    // Free the busy slot immediately. Hung LLM/network after abort used to leave
+    // `active` set forever so the next user message never ran until daemon restart.
+    if (this.active.get(k) === run) {
+      this.active.delete(k);
+    }
+    // Drain one queued follow-up shortly (after /stop reply is sent).
+    setTimeout(() => {
+      void this.drainOneQueued(platform, chatId);
+    }, 250);
     return { stopped: true, killedCmds };
+  }
+
+  /** Start next queued message for a chat if idle. */
+  private async drainOneQueued(platform: string, chatId: string): Promise<void> {
+    const k = this.key(platform, chatId);
+    if (this.active.has(k)) return;
+    const q = this.queues.get(k) || [];
+    if (!q.length) return;
+    const next = q.shift()!;
+    this.queues.set(k, q);
+    const msg: InboundMessage = {
+      platform: platform as PlatformName,
+      chatId,
+      userId: chatId,
+      text: next,
+    };
+    void this.runTask(msg, next).catch((err: any) => {
+      this.options.log(
+        `drainQueue ${platform}:${chatId} error: ${err?.message || err}`,
+      );
+    });
   }
 
   /** Resolve a pending approval if the chat is waiting on one. */
@@ -883,20 +915,22 @@ export class ChatController {
       }
       stream.close();
 
-      // Strip [[TASK_COMPLETE …]] (TUI-only control token) → plain ✅ Done footer
-      const rawReply = result.cancelled
-        ? `⏹ Stopped.\n${result.text || ''}`.trim()
-        : result.ok
-          ? result.text
-          : `❌ Error: ${result.error || 'agent failed'}\n${result.text || ''}`.trim();
-      const reply = formatGatewayReply(rawReply);
+      // If /stop already force-cleared us, skip a second "Stopped" reply (user got one).
+      if (!(activeRun.forceStopped && result.cancelled)) {
+        const rawReply = result.cancelled
+          ? `⏹ Stopped.\n${result.text || ''}`.trim()
+          : result.ok
+            ? result.text
+            : `❌ Error: ${result.error || 'agent failed'}\n${result.text || ''}`.trim();
+        const reply = formatGatewayReply(rawReply);
 
-      if (!isSilent(reply)) {
-        await this.reliableSend(msg.platform, msg.chatId, reply, {
-          threadId: msg.threadId,
-        });
+        if (!isSilent(reply)) {
+          await this.reliableSend(msg.platform, msg.chatId, reply, {
+            threadId: msg.threadId,
+          });
+        }
+        await appendTurn(msg.platform, msg.chatId, text, reply);
       }
-      await appendTurn(msg.platform, msg.chatId, text, reply);
     } finally {
       try {
         stream.close();
@@ -912,14 +946,15 @@ export class ChatController {
         activeRun.pendingAsk.reject(new Error('Run ended'));
         activeRun.pendingAsk = undefined;
       }
-      this.active.delete(k);
-
-      // Drain one queued follow-up
-      const q = this.queues.get(k) || [];
-      if (q.length) {
-        const next = q.shift()!;
-        this.queues.set(k, q);
-        void this.runTask(msg, next);
+      // Only clear/drain if we still own the slot (not force-cleared by /stop)
+      if (this.active.get(k) === activeRun) {
+        this.active.delete(k);
+        const q = this.queues.get(k) || [];
+        if (q.length) {
+          const next = q.shift()!;
+          this.queues.set(k, q);
+          void this.runTask(msg, next);
+        }
       }
     }
   }
@@ -998,13 +1033,13 @@ export class ChatController {
     if (cmd === 'stop') {
       const { stopped, killedCmds } = this.stopRun(msg.platform, msg.chatId);
       if (!stopped) {
-        await reply('Nothing running.');
+        await reply('Nothing running — ready for your next message.');
         return;
       }
       await reply(
         killedCmds > 0
-          ? `⏹ Interrupted — stopped run and killed ${killedCmds} active command(s).`
-          : '⏹ Interrupted — stopping current coding run…',
+          ? `⏹ Stopped. Killed ${killedCmds} command(s). You can send a new task now.`
+          : '⏹ Stopped. You can send a new task now.',
       );
       return;
     }
