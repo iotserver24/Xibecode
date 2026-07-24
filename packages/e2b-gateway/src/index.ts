@@ -71,12 +71,13 @@ const authToken = process.env.XIBECODE_GATEWAY_TOKEN?.trim() || '';
 const sandboxTemplate =
   process.env.XIBECODE_E2B_TEMPLATE?.trim() || 'xibecode-full-sandbox';
 /**
- * Inactivity window (ms) before lifecycle action; default 15m (E2B default is 5m).
- * With onTimeout=pause + autoResume, idle sandboxes freeze and wake on next SDK/HTTP activity.
+ * Inactivity window (ms) before lifecycle action.
+ * Default 30m (E2B platform default is 5m). After auto-resume, E2B restarts the
+ * countdown with max(this value, 5m) — see e2b.dev/docs/sandbox/auto-resume.
  */
 const sandboxTimeoutMs = Math.max(
   60_000,
-  Number(process.env.XIBECODE_E2B_SANDBOX_TIMEOUT_MS || 15 * 60 * 1000),
+  Number(process.env.XIBECODE_E2B_SANDBOX_TIMEOUT_MS || 30 * 60 * 1000),
 );
 /**
  * E2B Pro continuous *running* cap is 24h. Pause+resume resets that window.
@@ -89,19 +90,29 @@ const maxContinuousMs = (() => {
   const n = Number(raw || 23 * 60 * 60 * 1000);
   return Number.isFinite(n) && n > 0 ? Math.max(60_000, n) : 23 * 60 * 60 * 1000;
 })();
-/** Docs default is kill; we force pause unless explicitly set to kill. */
+/**
+ * https://e2b.dev/docs/sandbox/auto-resume
+ * Default onTimeout is "kill". We force "pause" (full memory + fs snapshot).
+ * String form "pause" keeps keepMemory=true (required for autoResume).
+ */
 const lifecycleOnTimeout =
   process.env.XIBECODE_E2B_ON_TIMEOUT?.trim().toLowerCase() === 'kill'
     ? ('kill' as const)
     : ('pause' as const);
 /**
- * Official auto-resume (https://e2b.dev/docs/sandbox/auto-resume):
- * any SDK op / sandbox HTTP traffic wakes a paused sandbox when true.
+ * https://e2b.dev/docs/sandbox/auto-resume
+ * autoResume: true → wake on commands.run / files.* / HTTP into sandbox.
  * Only valid with onTimeout: 'pause' + full memory snapshot.
  */
 const lifecycleAutoResume =
   lifecycleOnTimeout === 'pause' &&
   process.env.XIBECODE_E2B_AUTO_RESUME?.trim().toLowerCase() !== 'false';
+
+/** Exact lifecycle object passed to Sandbox.create (docs shape). */
+const sandboxLifecycle =
+  lifecycleOnTimeout === 'pause'
+    ? ({ onTimeout: 'pause' as const, autoResume: lifecycleAutoResume })
+    : ({ onTimeout: 'kill' as const, autoResume: false as const });
 const previewDomain = process.env.XIBECODE_E2B_PREVIEW_DOMAIN?.trim() || 'e2b.dev';
 const maxExportBytes = Math.max(
   1,
@@ -235,12 +246,14 @@ async function resetContinuousRunCycle(session: SessionRecord, reason: string): 
       // 2) Resume — resets E2B continuous runtime window (Pro ~24h)
       const resumed = await Sandbox.connect(session.sandboxId, {
         timeoutMs: sandboxTimeoutMs,
+        requestTimeoutMs: 120_000,
       });
       session.sandbox = resumed as unknown as SandboxLike;
       session.continuousRunStartedAt = Date.now();
       session.cycleCount += 1;
       session.lastCycleResetAt = Date.now();
       session.updatedAt = Date.now();
+      await refreshSandboxTimeout(session);
       console.log(
         `[xibecode-e2b-gateway] continuous-run cycle #${session.cycleCount} done sandbox=${session.sandboxId}`,
       );
@@ -263,25 +276,89 @@ async function resetContinuousRunCycle(session: SessionRecord, reason: string): 
 /**
  * Ensure sandbox is running before any op.
  *
- * Per https://e2b.dev/docs/sandbox/auto-resume:
- * - onTimeout: 'pause' + autoResume: true at create
- * - Any SDK op (commands.run, files.read/write) auto-resumes a paused sandbox
- * - connect() is also fine after gateway restart (no live client object)
+ * https://e2b.dev/docs/sandbox/auto-resume
+ * - Create with lifecycle { onTimeout: 'pause', autoResume: true }
+ * - Activity (commands.run, files.*, HTTP into sandbox) wakes paused VMs
+ * - No connect() needed first when autoResume is true AND client is still live
+ * - After gateway restart (no client) → Sandbox.connect()
+ * - setTimeout() only while running; re-apply after resume
  *
- * Telegram long-poll *inside* a paused VM cannot wake it — host must call this
- * (or any gateway exec) when a Telegram message arrives.
+ * Telegram long-poll *inside* a paused VM cannot generate that activity.
+ * Host must issue an SDK op (wake/exec), then restart the channel runtime
+ * (OpenClaw-style) because thawed TCP to Telegram is stale.
  */
+async function reconnectSandbox(session: SessionRecord, reason: string): Promise<void> {
+  const connected = await Sandbox.connect(session.sandboxId, {
+    timeoutMs: Math.max(sandboxTimeoutMs, 120_000),
+    requestTimeoutMs: 120_000,
+  });
+  session.sandbox = connected as unknown as SandboxLike;
+  session.continuousRunStartedAt = Date.now();
+  session.updatedAt = Date.now();
+  await refreshSandboxTimeout(session);
+  console.log(
+    `[xibecode-e2b-gateway] reconnected sandbox=${session.sandboxId} via Sandbox.connect (${reason})`,
+  );
+}
+
+/** setTimeout only works while running; paused → "Sandbox not found". */
+async function refreshSandboxTimeout(session: SessionRecord): Promise<void> {
+  try {
+    if (typeof session.sandbox.setTimeout === 'function') {
+      await session.sandbox.setTimeout(sandboxTimeoutMs);
+    } else {
+      await Sandbox.setTimeout(session.sandboxId, sandboxTimeoutMs);
+    }
+  } catch (err) {
+    console.warn(
+      `[xibecode-e2b-gateway] setTimeout failed sandbox=${session.sandboxId}: ${(err as Error).message}`,
+    );
+  }
+}
+
+function isResumeRelatedError(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return (
+    m.includes('paused') ||
+    m.includes('not running') ||
+    m.includes('sandbox is not') ||
+    m.includes('unavailable') ||
+    m.includes('connection') ||
+    m.includes('econnreset') ||
+    m.includes('socket') ||
+    m.includes('timeout') ||
+    m.includes('404') ||
+    m.includes('not found') ||
+    m.includes('dead') ||
+    m.includes('killed')
+  );
+}
+
+async function probeWithSdkActivity(
+  session: SessionRecord,
+  timeoutMs: number,
+): Promise<void> {
+  if (!session.sandbox?.commands?.run) {
+    throw new Error('no live sandbox client (commands.run missing)');
+  }
+  await session.sandbox.commands.run('true', { timeoutMs });
+}
+
 async function ensureSandboxRunning(session: SessionRecord): Promise<{
   state: string;
   resumed: boolean;
 }> {
   let state = 'unknown';
   let resumed = false;
+  let sandboxAutoResume = lifecycleAutoResume;
 
   try {
     const info = await Sandbox.getInfo(session.sandboxId);
     state = String((info as { state?: string }).state || 'unknown');
     const life = (info as { lifecycle?: { onTimeout?: string; autoResume?: boolean } }).lifecycle;
+    if (typeof life?.autoResume === 'boolean') {
+      sandboxAutoResume = life.autoResume;
+    }
     if (life?.onTimeout && life.onTimeout !== 'pause' && lifecycleOnTimeout === 'pause') {
       console.warn(
         `[xibecode-e2b-gateway] sandbox=${session.sandboxId} lifecycle.onTimeout=${life.onTimeout} (wanted pause)`,
@@ -299,58 +376,48 @@ async function ensureSandboxRunning(session: SessionRecord): Promise<{
     state = 'unknown';
   }
 
-  // Prefer official auto-resume: SDK activity on the live client object
-  if (state === 'paused' && session.sandbox?.commands?.run) {
+  if (state === 'running') {
     try {
-      await session.sandbox.commands.run('true', { timeoutMs: 60_000 });
+      await probeWithSdkActivity(session, 30_000);
+      await refreshSandboxTimeout(session);
+      session.updatedAt = Date.now();
+      return { state: 'running', resumed: false };
+    } catch (err) {
+      console.warn(
+        `[xibecode-e2b-gateway] running-handle stale sandbox=${session.sandboxId}: ${(err as Error).message} — reconnecting`,
+      );
+      await reconnectSandbox(session, 'stale running handle');
+      return { state: 'running', resumed: true };
+    }
+  }
+
+  // 1) Official auto-resume via SDK activity (docs: no connect() first)
+  if (state === 'paused' && sandboxAutoResume && session.sandbox?.commands?.run) {
+    try {
+      await probeWithSdkActivity(session, 90_000);
+      await refreshSandboxTimeout(session);
       session.continuousRunStartedAt = Date.now();
-      resumed = true;
-      state = 'running';
+      session.updatedAt = Date.now();
       console.log(
         `[xibecode-e2b-gateway] auto-resumed sandbox=${session.sandboxId} via commands.run (lifecycle.autoResume)`,
       );
+      return { state: 'running', resumed: true };
     } catch (err) {
       console.warn(
-        `[xibecode-e2b-gateway] auto-resume via commands.run failed, falling back to connect: ${(err as Error).message}`,
+        `[xibecode-e2b-gateway] auto-resume via commands.run failed sandbox=${session.sandboxId}: ${(err as Error).message} — connect()`,
       );
     }
   }
 
-  if (state === 'paused' || state === 'unknown') {
-    try {
-      const connected = await Sandbox.connect(session.sandboxId, {
-        timeoutMs: sandboxTimeoutMs,
-      });
-      session.sandbox = connected as unknown as SandboxLike;
-      session.continuousRunStartedAt = Date.now();
-      resumed = true;
-      state = 'running';
-      console.log(
-        `[xibecode-e2b-gateway] resumed sandbox=${session.sandboxId} via Sandbox.connect`,
-      );
-    } catch (err) {
-      throw new Error(
-        `Sandbox ${session.sandboxId} unavailable (killed or missing?). ${(err as Error).message}`,
-      );
-    }
-  } else if (state === 'running') {
-    try {
-      if (typeof session.sandbox.setTimeout === 'function') {
-        await session.sandbox.setTimeout(sandboxTimeoutMs);
-      } else {
-        await Sandbox.setTimeout(session.sandboxId, sandboxTimeoutMs);
-      }
-    } catch (err) {
-      console.warn(
-        `[xibecode-e2b-gateway] setTimeout failed, reconnecting sandbox=${session.sandboxId}: ${(err as Error).message}`,
-      );
-      const connected = await Sandbox.connect(session.sandboxId, {
-        timeoutMs: sandboxTimeoutMs,
-      });
-      session.sandbox = connected as unknown as SandboxLike;
-      session.continuousRunStartedAt = Date.now();
-      resumed = true;
-    }
+  // 2) Explicit resume (autoResume off, or no live client after gateway restart)
+  try {
+    await reconnectSandbox(session, `state=${state}`);
+    resumed = true;
+    state = 'running';
+  } catch (err) {
+    throw new Error(
+      `Sandbox ${session.sandboxId} unavailable (killed or missing?). ${(err as Error).message}`,
+    );
   }
 
   session.updatedAt = Date.now();
@@ -394,32 +461,25 @@ async function createSession(input: {
     }
   }
 
-  const lifecycle = {
-    onTimeout: lifecycleOnTimeout,
-    autoResume: lifecycleAutoResume,
-  };
-
   let sandbox: SandboxLike;
   let sandboxId: string;
 
   if (wantSandbox) {
     // Re-attach existing VM (filesystem + optional paused memory).
-    // connect() resumes if paused; sets a fresh timeout window.
+    // connect() resumes if paused; timeoutMs is the post-resume idle window.
     sandbox = (await Sandbox.connect(wantSandbox, {
       timeoutMs: sandboxTimeoutMs,
+      requestTimeoutMs: 120_000,
     })) as unknown as SandboxLike;
     sandboxId = sandbox.sandboxId || wantSandbox;
     console.log(`[xibecode-e2b-gateway] reattached sandbox=${sandboxId} as session=${sessionId}`);
   } else {
     // Exact docs shape: https://e2b.dev/docs/sandbox/auto-resume
-    // Default onTimeout is 'kill' — we must pass lifecycle or sandboxes die.
+    //   lifecycle: { onTimeout: 'pause', autoResume: true }
     sandbox = (await Sandbox.create({
       template: sandboxTemplate,
       timeoutMs: sandboxTimeoutMs,
-      lifecycle: {
-        onTimeout: lifecycleOnTimeout,
-        autoResume: lifecycleAutoResume,
-      },
+      lifecycle: sandboxLifecycle,
     })) as unknown as SandboxLike;
     sandboxId = sandbox.sandboxId || randomUUID();
     try {
@@ -432,8 +492,8 @@ async function createSession(input: {
       console.log(
         `[xibecode-e2b-gateway] created sandbox=${sandboxId} template=${sandboxTemplate}` +
           ` state=${info.state ?? '?'} cpu=${info.cpuCount ?? '?'} memMB=${info.memoryMB ?? '?'}` +
-          ` lifecycle.onTimeout=${info.lifecycle?.onTimeout ?? lifecycleOnTimeout}` +
-          ` autoResume=${info.lifecycle?.autoResume ?? lifecycleAutoResume}`,
+          ` lifecycle.onTimeout=${info.lifecycle?.onTimeout ?? sandboxLifecycle.onTimeout}` +
+          ` autoResume=${info.lifecycle?.autoResume ?? sandboxLifecycle.autoResume}`,
       );
       if (lifecycleOnTimeout === 'pause' && info.lifecycle?.onTimeout === 'kill') {
         console.error(
@@ -447,7 +507,7 @@ async function createSession(input: {
       }
     } catch {
       console.log(
-        `[xibecode-e2b-gateway] created sandbox=${sandboxId} template=${sandboxTemplate} lifecycle=${JSON.stringify(lifecycle)}`,
+        `[xibecode-e2b-gateway] created sandbox=${sandboxId} template=${sandboxTemplate} lifecycle=${JSON.stringify(sandboxLifecycle)}`,
       );
     }
   }
@@ -469,6 +529,9 @@ async function createSession(input: {
     syncStageFile: `/tmp/xibecode-sync-${sessionId}.b64`,
   };
   sessions.set(sessionId, session);
+
+  // Pin idle TTL after create/connect (docs: setTimeout after resume)
+  await refreshSandboxTimeout(session);
 
   if (strategy === 'sandbox_full') {
     try {
@@ -515,18 +578,17 @@ async function runInSession(session: SessionRecord, input: ExecRequest): Promise
       workspaceRoot: session.workspaceRoot,
     };
   }
-  try {
+
+  const runOnce = async () => {
     const result = await session.sandbox.commands?.run(input.command, {
       cwd,
       timeoutMs,
       stdin: input.input,
     });
-
     const stdout = String((result as any)?.stdout ?? '');
     const stderr = String((result as any)?.stderr ?? '');
     const exitCodeRaw = (result as any)?.exitCode;
     const exitCode = typeof exitCodeRaw === 'number' ? exitCodeRaw : 0;
-
     session.updatedAt = Date.now();
     return {
       success: exitCode === 0,
@@ -538,13 +600,62 @@ async function runInSession(session: SessionRecord, input: ExecRequest): Promise
       sandboxId: session.sandboxId,
       strategy: session.strategy,
       workspaceRoot: session.workspaceRoot,
+      resumed: false as boolean | undefined,
     };
+  };
+
+  try {
+    return await runOnce();
   } catch (err: any) {
-    // E2B SDK may throw on non-zero exit ("exit status 2") instead of returning exitCode.
-    // Surface as a normal exec result so callers (hosting setup) can show logs.
     const msg = String(err?.message || err || 'command failed');
+    // E2B SDK may throw on non-zero exit ("exit status 2") instead of returning exitCode.
     const exitMatch = msg.match(/exit status (\d+)/i);
-    const exitCode = exitMatch ? Number(exitMatch[1]) : 1;
+    if (exitMatch) {
+      session.updatedAt = Date.now();
+      return {
+        success: false,
+        error: true,
+        message: msg,
+        stdout: String(err?.stdout ?? ''),
+        stderr: String(err?.stderr ?? msg),
+        exitCode: Number(exitMatch[1]),
+        timedOut: false,
+        platform: 'e2b',
+        sandboxId: session.sandboxId,
+        strategy: session.strategy,
+        workspaceRoot: session.workspaceRoot,
+      };
+    }
+
+    if (isResumeRelatedError(msg)) {
+      console.warn(
+        `[xibecode-e2b-gateway] exec failed (likely paused/stale) sandbox=${session.sandboxId}: ${msg} — reconnect+retry`,
+      );
+      try {
+        await reconnectSandbox(session, 'exec retry after failure');
+        const retried = await runOnce();
+        retried.resumed = true;
+        return retried;
+      } catch (retryErr: any) {
+        const rmsg = String(retryErr?.message || retryErr || 'retry failed');
+        const rExit = rmsg.match(/exit status (\d+)/i);
+        session.updatedAt = Date.now();
+        return {
+          success: false,
+          error: true,
+          message: rmsg,
+          stdout: String(retryErr?.stdout ?? ''),
+          stderr: String(retryErr?.stderr ?? rmsg),
+          exitCode: rExit ? Number(rExit[1]) : 1,
+          timedOut: /timeout/i.test(rmsg),
+          platform: 'e2b',
+          sandboxId: session.sandboxId,
+          strategy: session.strategy,
+          workspaceRoot: session.workspaceRoot,
+        };
+      }
+    }
+
     session.updatedAt = Date.now();
     return {
       success: false,
@@ -552,7 +663,7 @@ async function runInSession(session: SessionRecord, input: ExecRequest): Promise
       message: msg,
       stdout: String(err?.stdout ?? ''),
       stderr: String(err?.stderr ?? msg),
-      exitCode,
+      exitCode: 1,
       timedOut: /timeout/i.test(msg),
       platform: 'e2b',
       sandboxId: session.sandboxId,
