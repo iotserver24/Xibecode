@@ -6,11 +6,12 @@
 
 - **`default`** — local host daemon (no auto self-update restart).
 - **`e2b`** — hosted sandbox (auto-detected or `XIBECODE_RUNTIME_MODE=e2b`):
- - `/update` · `/update yes` → `npm i -g xibecode@latest`, then **`sudo -n npm …`** if needed, then **restart daemon**
- - **Chat memory kept** in `~/.xibecode/daemon/sessions/` across restart
- - `/mode` shows current mode + E2B built-ins
- - Startup update offer only in e2b mode
-- Public preview / direct links for running servers — reserved for next ship
+  - `/update` · `/update yes` → `npm i -g xibecode@latest`, then **`sudo -n npm …`** if needed, then **restart daemon**
+  - **Chat memory kept** in `~/.xibecode/daemon/sessions/` across restart
+  - **Agent knows its sandbox id** (`E2B_SANDBOX_ID` or `/run/e2b/.E2B_SANDBOX_ID`) — injected into the system prompt; `/status` and `/mode` show it
+  - **Passwordless `sudo -n`** allowed for package installs (not treated as high-risk approval); catastrophic cmds still blocked
+  - Preview URL pattern: `https://{port}-{sandboxId}.e2b.dev`
+  - Startup update offer only in e2b mode
 
 ## [1.6.4] - 2026-07-24
 

@@ -39,7 +39,11 @@ import type { MessagingAdapter, PlatformName } from './types.js';
 import { runHeadlessAgent } from './agent-runner.js';
 import { CircuitBreaker } from './circuit-breaker.js';
 import { ledgerPendingRedeliveries, ledgerMarkDelivered, ledgerMarkSending, ledgerMarkFailed } from './delivery-ledger.js';
-import { resolveRuntimeMode } from '../utils/runtime-mode.js';
+import {
+  hydrateE2bRuntimeEnv,
+  resolveRuntimeMode,
+  resolveSandboxIdentity,
+} from '../utils/runtime-mode.js';
 
 // re-export for callers that imported gatewayHome from runner historically
 export { gatewayHome };
@@ -348,12 +352,22 @@ export class GatewayRunner {
     // Profile-specific daemon-<profile>.env overwrites global gateway.env keys.
     const profile = this.options.profile?.trim() || this.config.getProfileName();
     const envLoaded = loadSecretEnvFiles(getXibecodeHome(), { profile });
+    // e2b: populate sandbox id + allow passwordless sudo policy for the agent
+    const { mode: runtimeMode, identity: sandboxId } = hydrateE2bRuntimeEnv();
     await fs.mkdir(gatewayHome(), { recursive: true });
     await this.writePidFile();
     this.log(`${DAEMON_PRODUCT_NAME} starting (pid ${process.pid})`);
     this.log(`home ${getXibecodeHome()}`);
     this.log(`daemon ${gatewayHome()}`);
     this.log(`workdir ${this.defaultWorkdir()}`);
+    this.log(
+      `runtime ${runtimeMode.mode} (${runtimeMode.source})` +
+        (sandboxId.sandboxId
+          ? ` sandbox=${sandboxId.sandboxId}`
+          : runtimeMode.isE2b
+            ? ' sandbox=unknown'
+            : ''),
+    );
     if (profile) this.log(`config profile ${profile}`);
     if (envLoaded.length) {
       this.log(`loaded secrets from ${envLoaded.map((f) => path.basename(f)).join(', ')}`);
@@ -420,15 +434,17 @@ export class GatewayRunner {
       },
       statusExtra: () => {
         const r = resolveRuntimeMode();
+        const id = resolveSandboxIdentity();
         return [
           `runtime: ${r.mode} (${r.source})`,
+          id.sandboxId ? `sandbox: ${id.sandboxId}` : null,
           `profile: ${this.config.getProfileName()}`,
           `cron: ${this.stopCron ? 'on' : 'off'}`,
           `telegram: ${this.adapters.has('telegram') ? 'on' : 'off'}`,
           `discord: ${this.adapters.has('discord') ? 'on' : 'off'}`,
           `slack: ${this.adapters.has('slack') ? 'on' : 'off'}`,
           ...[...this.breakers.values()].map((b) => b.statusLine()),
-        ];
+        ].filter(Boolean) as string[];
       },
     });
 

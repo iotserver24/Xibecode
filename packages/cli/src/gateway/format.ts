@@ -4,6 +4,12 @@
  */
 
 import type { DangerousApprovalRequest } from 'xibecode-core';
+import {
+  e2bAgentContextBlock,
+  featuresForMode,
+  resolveRuntimeMode,
+  resolveSandboxIdentity,
+} from '../utils/runtime-mode.js';
 
 /** Split long text for platform limits, preferring breaks at newlines / code fences. */
 export function chunkForChat(text: string, max = 3900): string[] {
@@ -365,6 +371,23 @@ export function codingSystemPrefix(
     '- If a task is done, say what changed and how to verify. Avoid fluff.',
     '- Skills: use list_skills / view_skill for domain workflows (tests, debug, React, etc.) when relevant. Follow loaded skill steps with tools.',
     '',
+  ];
+
+  // Hosted sandbox: identity + sudo + preview (e2b mode only)
+  try {
+    const mode = resolveRuntimeMode();
+    const features = featuresForMode(mode.mode);
+    if (mode.isE2b) {
+      const block = e2bAgentContextBlock(resolveSandboxIdentity(), features);
+      if (block) {
+        lines.push(block, '');
+      }
+    }
+  } catch {
+    /* optional in non-cli test contexts */
+  }
+
+  lines.push(
     '## Sending files to the user (Telegram / messaging)',
     'When the user asks for a file, report, zip, code, PDF, image, video, or any other artifact, you MUST deliver it natively — not only describe the path.',
     '',
@@ -397,10 +420,15 @@ export function codingSystemPrefix(
     '  MEDIA:src/index.ts',
     '',
     '- If a tool fails: read the error, retry with different params OR report failure to the user and emit [[TASK_COMPLETE | summary=failed: …]]. Never go silent.',
-  ];
+  );
   if (rigor !== 'yolo') {
+    const e2bSudo =
+      process.env.XIBECODE_E2B_ALLOW_SUDO === '1' ||
+      process.env.XIBECODE_RUNTIME_MODE === 'e2b';
     lines.push(
-      '- High-risk shell commands (rm -rf, force push, sudo, publish, etc.) pause for user approval — wait; do not assume they ran.',
+      e2bSudo
+        ? '- High-risk shell commands (rm -rf /, force push, publish, etc.) pause for user approval. Passwordless `sudo -n` for package installs is allowed in e2b mode.'
+        : '- High-risk shell commands (rm -rf, force push, sudo, publish, etc.) pause for user approval — wait; do not assume they ran.',
     );
   }
   if (rigor === 'strict') {

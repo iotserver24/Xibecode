@@ -173,7 +173,18 @@ export class SafetyChecker {
    * Assess the risk level of a shell command
    */
   assessCommandRisk(command: string): RiskLevel {
-    const cmd = command.toLowerCase().trim();
+    let cmd = command.toLowerCase().trim();
+
+    // Hosted sandbox (e2b): passwordless sudo is normal for package installs.
+    // Strip leading `sudo` / `sudo -n` so only the real command is risk-scored.
+    // Catastrophic patterns (rm -rf /, fork bombs) still hit after stripping.
+    const e2bAllowSudo =
+      process.env.XIBECODE_E2B_ALLOW_SUDO === '1' ||
+      process.env.XIBECODE_E2B_ALLOW_SUDO === 'true' ||
+      process.env.XIBECODE_RUNTIME_MODE === 'e2b';
+    if (e2bAllowSudo) {
+      cmd = cmd.replace(/^(sudo\s+(-n\s+)?)+/, '');
+    }
 
     // High-risk commands (gateway will pause for approval when handler is set)
     const highRiskPatterns = [
@@ -189,7 +200,8 @@ export class SafetyChecker {
       /chmod\s+777/,
       /chown\s+-R/,
       /sudo\s+rm/,
-      /sudo\s+/,
+      // Full sudo stays high-risk on local/default; e2b already stripped above
+      ...(e2bAllowSudo ? [] : [/sudo\s+/]),
       /> \/dev\//,
       /curl.*\|\s*(bash|sh)/,
       /wget.*\|\s*(bash|sh)/,
