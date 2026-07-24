@@ -42,6 +42,11 @@ export interface HeadlessRunOptions {
   /** Pause for clarify / ask_user (Hermes-style). */
   onAskUser?: AskUserHandler;
   /**
+   * Called once the agent is constructed so the gateway can mid-run steer
+   * (Hermes busy_input_mode=steer) without aborting the turn.
+   */
+  onAgentReady?: (api: { steer: (text: string) => boolean }) => void;
+  /**
    * Gateway rigor: yolo | default | strict
    * Controls completion evidence + post-edit verification.
    * (Approval prompts are still controlled by onDangerousApproval presence.)
@@ -210,6 +215,21 @@ export async function runHeadlessAgent(
     },
     provider as any,
   );
+
+  // Hermes mid-run steer hook for messaging gateway
+  try {
+    options.onAgentReady?.({
+      steer: (text: string) => {
+        try {
+          return agent.steer(text);
+        } catch {
+          return false;
+        }
+      },
+    });
+  } catch {
+    /* ignore */
+  }
 
   if (options.history?.length) {
     agent.setMessages(

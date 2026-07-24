@@ -164,6 +164,11 @@ export interface ActiveRun {
    * even if the model forgets to restate MEDIA: lines.
    */
   pendingMediaPaths?: string[];
+  /**
+   * Hermes-style mid-run steer: inject user text into the active agent
+   * between tool iterations (does not abort). Set by the headless runner.
+   */
+  steer?: (text: string) => boolean;
   /** Optional: kill foreground shells when /stop (set by runner). */
   interruptCommands?: () => number;
   /**

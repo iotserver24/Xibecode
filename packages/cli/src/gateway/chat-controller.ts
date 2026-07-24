@@ -55,6 +55,30 @@ import { builtInSkillsDir } from '../utils/built-in-skills-dir.js';
 
 const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
 
+/**
+ * Hermes-style busy handling when the user messages mid-run.
+ * - steer (default): inject into the current agent turn after tools / next step
+ * - queue: FIFO after the current run finishes (old XibeCode behavior)
+ * - interrupt: abort current run and start the new message immediately
+ *
+ * Env: XIBECODE_BUSY_INPUT_MODE=steer|queue|interrupt
+ * (also accepts HERMES_GATEWAY_BUSY_INPUT_MODE)
+ */
+export type BusyInputMode = 'steer' | 'queue' | 'interrupt';
+
+export function resolveBusyInputMode(): BusyInputMode {
+  const raw = (
+    process.env.XIBECODE_BUSY_INPUT_MODE ||
+    process.env.HERMES_GATEWAY_BUSY_INPUT_MODE ||
+    'steer'
+  )
+    .trim()
+    .toLowerCase();
+  if (raw === 'queue' || raw === 'q') return 'queue';
+  if (raw === 'interrupt' || raw === 'int' || raw === 'stop') return 'interrupt';
+  return 'steer';
+}
+
 export interface ChatControllerOptions {
   profile?: string;
   defaultWorkdir: () => string;
@@ -470,6 +494,7 @@ export class ChatController {
         const secs = Math.round((Date.now() - busyRun.startedAt) / 1000);
         const qlen = (this.queues.get(k) || []).length;
         const adapter = this.options.getAdapter(msg.platform);
+        const mode = resolveBusyInputMode();
         await adapter
           ?.sendMessage(
             msg.chatId,
@@ -478,11 +503,16 @@ export class ChatController {
               busyRun.lastToolLine ? `last: ${busyRun.lastToolLine}` : null,
               `tools: ${busyRun.toolCount || 0}`,
               qlen ? `queue: ${qlen}` : null,
+              `busy mode: ${mode}`,
               busyRun.pendingApproval
                 ? 'waiting for approval — use buttons or `/once` `/deny`'
                 : busyRun.pendingAsk
                   ? 'waiting for your answer to a question'
-                  : 'Send `/stop` to interrupt, or a follow-up (queued). `/queue` to list.',
+                  : mode === 'steer'
+                    ? 'Send a message to **steer** mid-run, `/stop` to interrupt, `/queue` to list.'
+                    : mode === 'interrupt'
+                      ? 'Next message **interrupts** the run. `/queue` forces FIFO without interrupt.'
+                      : 'Follow-ups are **queued**. `/stop` interrupt · `/queue` list.',
             ]
               .filter(Boolean)
               .join('\n'),
@@ -491,16 +521,58 @@ export class ChatController {
           .catch(() => {});
         return;
       }
-      // Queue follow-up coding messages (don't interrupt mid-edit)
+
+      const busyRun = this.active.get(k)!;
+      const adapter = this.options.getAdapter(msg.platform);
+      const mode = resolveBusyInputMode();
+
+      // Explicit /queue handled in slash path; plain text uses busy mode.
+      // Hermes: display.busy_input_mode = steer | queue | interrupt
+      if (mode === 'steer' && typeof busyRun.steer === 'function') {
+        const ok = busyRun.steer(text);
+        if (ok) {
+          const preview = text.replace(/\s+/g, ' ').slice(0, 80);
+          await adapter
+            ?.sendMessage(
+              msg.chatId,
+              `⏩ Steered into current run (lands after tools / next step):\n_${preview}${text.length > 80 ? '…' : ''}_`,
+              { threadId: msg.threadId },
+            )
+            .catch(() => {});
+          this.options.log(
+            `${msg.platform}:${msg.chatId} steered mid-run: ${preview.slice(0, 120)}`,
+          );
+          return;
+        }
+        // fall through to queue if steer rejected
+      }
+
+      if (mode === 'interrupt') {
+        // Enqueue first so stopRun's drain picks up this message as next turn
+        const q = this.queues.get(k) || [];
+        q.unshift(text);
+        this.queues.set(k, q);
+        const { killedCmds } = this.stopRun(msg.platform, msg.chatId);
+        await adapter
+          ?.sendMessage(
+            msg.chatId,
+            `⚡ Interrupting current task${killedCmds ? ` (killed ${killedCmds} cmd)` : ''} — starting your new message…`,
+            { threadId: msg.threadId },
+          )
+          .catch(() => {});
+        return;
+      }
+
+      // queue mode (or steer fallback)
       const q = this.queues.get(k) || [];
       q.push(text);
       this.queues.set(k, q);
-      const adapter = this.options.getAdapter(msg.platform);
       await adapter
         ?.sendMessage(
           msg.chatId,
           `📥 Queued #${q.length}. Current run continues.\n` +
-            `\`/queue\` list · \`/queue clear\` · \`/stop\` interrupt`,
+            `\`/queue\` list · \`/queue clear\` · \`/stop\` interrupt\n` +
+            `_Tip: busy mode is \`${mode}\` — set \`XIBECODE_BUSY_INPUT_MODE=steer|queue|interrupt\``,
           { threadId: msg.threadId },
         )
         .catch(() => {});
@@ -845,6 +917,12 @@ export class ChatController {
         verbose: daemonVerbose,
         onDangerousApproval: requestApproval,
         onAskUser: requestAsk,
+        onAgentReady: (api) => {
+          // Hermes mid-run steer while this slot is active
+          if (this.active.get(k) === activeRun) {
+            activeRun.steer = api.steer;
+          }
+        },
         onEvent: (type, data) => {
           if (type === 'tool_call') {
             activeRun.toolCount = (activeRun.toolCount || 0) + 1;
@@ -1133,22 +1211,49 @@ export class ChatController {
       return;
     }
 
-    if (cmd === 'queue') {
-      const sub = arg.toLowerCase().trim();
-      if (sub === 'clear' || sub === 'flush' || sub === 'empty') {
+    if (cmd === 'queue' || cmd === 'q') {
+      const sub = arg.trim();
+      const subLow = sub.toLowerCase();
+      if (subLow === 'clear' || subLow === 'flush' || subLow === 'empty') {
         const n = this.clearQueue(msg.platform, msg.chatId);
         await reply(n ? `🗑 Cleared ${n} queued message(s).` : 'Queue already empty.');
         return;
       }
+      // /queue <prompt> — Hermes FIFO without interrupting or steering
+      if (sub && !['list', 'show', 'ls'].includes(subLow)) {
+        if (!this.isBusy(msg.platform, msg.chatId)) {
+          // Idle: run immediately as a normal task
+          void this.runTask(msg, sub).catch((err: any) => {
+            this.options.log(`queued task error: ${err?.message || err}`);
+          });
+          await reply(`▶️ Idle — starting now.`);
+          return;
+        }
+        const qk = this.key(msg.platform, msg.chatId);
+        const q = this.queues.get(qk) || [];
+        q.push(sub);
+        this.queues.set(qk, q);
+        await reply(
+          `📥 Queued for next turn (#${q.length}). Current run continues (no interrupt/steer).`,
+        );
+        return;
+      }
       const q = this.getQueue(msg.platform, msg.chatId);
+      const mode = resolveBusyInputMode();
       if (!q.length) {
-        await reply('Queue empty. Follow-ups while busy are queued automatically.');
+        await reply(
+          `Queue empty.\nBusy mode: \`${mode}\` (plain messages ${mode === 'steer' ? 'steer mid-run' : mode === 'interrupt' ? 'interrupt' : 'queue'}).\n` +
+            `Use \`/queue <prompt>\` to force FIFO without interrupt.\n` +
+            `Env: \`XIBECODE_BUSY_INPUT_MODE=steer|queue|interrupt\``,
+        );
         return;
       }
       const preview = q
         .map((t, i) => `${i + 1}. ${t.length > 80 ? t.slice(0, 77) + '…' : t}`)
         .join('\n');
-      await reply(`**Queue (${q.length})**\n${preview}\n\n\`/queue clear\` to drop all.`);
+      await reply(
+        `**Queue (${q.length})** · busy mode \`${mode}\`\n${preview}\n\n\`/queue clear\` · \`/queue <prompt>\` to append`,
+      );
       return;
     }
 

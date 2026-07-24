@@ -461,15 +461,46 @@ export class EnhancedAgent extends EventEmitter {
   }
 
   public injectMessage(message: string): void {
-    this.injectedMessages.push(message);
+    const t = String(message || '').trim();
+    if (!t) return;
+    this.injectedMessages.push(t);
+  }
+
+  /**
+   * Hermes-style mid-turn steer: queue a user note that is injected after the
+   * next tool batch (or before the next model call) without aborting the run.
+   * Safe to call from another async context while run() is in progress.
+   * @returns true if accepted
+   */
+  public steer(message: string): boolean {
+    const t = String(message || '').trim();
+    if (!t) return false;
+    this.injectedMessages.push(t);
+    this.emit('warning', {
+      message: `Steer queued (${t.slice(0, 80)}${t.length > 80 ? '…' : ''}) — lands after current tools / next model step`,
+    });
+    return true;
   }
 
   public getInjectedMessages(): string[] {
-    return this.injectedMessages;
+    return [...this.injectedMessages];
   }
 
   public clearInjectedMessages(): void {
     this.injectedMessages = [];
+  }
+
+  /** Drain pending steers into one payload (Hermes out-of-band marker). */
+  private drainPendingSteer(): string | null {
+    if (!this.injectedMessages.length) return null;
+    const combined = this.injectedMessages.join('\n').trim();
+    this.injectedMessages = [];
+    if (!combined) return null;
+    return (
+      `[OUT-OF-BAND USER MESSAGE — a direct message from the user, delivered mid-turn; not tool output]\n` +
+      `${combined}\n` +
+      `[/OUT-OF-BAND USER MESSAGE]`
+    );
   }
 
   /** Bust the memory-section cache so the next run() reloads from disk. Call this after memory-write tool calls. */
@@ -933,6 +964,19 @@ export class EnhancedAgent extends EventEmitter {
           ? this.config.maxIterations
           : 0, // 0 = unlimited in UI
       });
+
+      // Hermes steer: if user messaged mid-run while we were between tools /
+      // waiting, inject before the next model call so course can change now.
+      const preApiSteer = this.drainPendingSteer();
+      if (preApiSteer) {
+        this.messages.push({
+          role: 'user',
+          content: preApiSteer,
+        });
+        this.emit('warning', {
+          message: 'Steered into run (user message before model call)',
+        });
+      }
 
       this.emit('thinking', { message: 'AI is thinking...' });
 
@@ -1465,15 +1509,17 @@ export class EnhancedAgent extends EventEmitter {
           });
         }
 
-        // Add injected messages if any exist
-        if (this.injectedMessages.length > 0) {
-          const combinedMsg = this.injectedMessages.join('\n');
-          toolResults.push({
+        // Hermes steer: append out-of-band user message to tool batch so the
+        // model sees it on the next iteration (no role-alternation break).
+        const postToolSteer = this.drainPendingSteer();
+        if (postToolSteer) {
+          (toolResults as any).push({
             type: 'text' as const,
-            text: `[USER INTERRUPT/UPDATE]:\n${combinedMsg}`
-          } as any);
-          this.emit('warning', { message: `Injected ${this.injectedMessages.length} user message(s) into context.` });
-          this.injectedMessages = [];
+            text: postToolSteer,
+          });
+          this.emit('warning', {
+            message: 'Steered into run (user message after tools)',
+          });
         }
 
         // Add results to conversation

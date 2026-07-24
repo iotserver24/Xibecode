@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.6.4] - 2026-07-24
+
+### Hermes-style mid-run messages (steer, not only queue)
+
+- Default **busy mode is `steer`**: while the agent is working, a new Telegram message is injected into the **same run** (after tools / before the next model step) — not parked until the whole task ends.
+- Modes (Hermes `display.busy_input_mode`): `steer` | `queue` | `interrupt` via `XIBECODE_BUSY_INPUT_MODE`.
+- `/queue <prompt>` still forces FIFO without interrupting; plain text steers by default.
+- Ack: `⏩ Steered into current run…` (or interrupt / queue acks).
+
 ## [1.6.3] - 2026-07-24
 
 ### Telegram: real file & screenshot delivery
