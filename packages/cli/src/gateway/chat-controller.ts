@@ -741,6 +741,10 @@ export class ChatController {
       activeRun.interruptCommands = () =>
         globalProcessRegistry.killAllForeground('SIGTERM');
 
+      const daemonVerbose = /^(1|true|yes|on)$/i.test(
+        (process.env.XIBECODE_DAEMON_VERBOSE || process.env.XIBECODE_VERBOSE || '').trim(),
+      );
+
       const result = await runHeadlessAgent({
         prompt: text,
         workdir,
@@ -751,6 +755,7 @@ export class ChatController {
         systemPrefix: codingSystemPrefix(workdir, rigor),
         signal: abort.signal,
         rigorLevel: rigor,
+        verbose: daemonVerbose,
         onDangerousApproval: requestApproval,
         onAskUser: requestAsk,
         onEvent: (type, data) => {
@@ -758,6 +763,11 @@ export class ChatController {
             activeRun.toolCount = (activeRun.toolCount || 0) + 1;
             const name = data?.name || data?.tool || 'tool';
             const line = formatToolProgress(name, data?.input || data?.args);
+            if (daemonVerbose) {
+              this.options.log(
+                `agent tool_call #${activeRun.toolCount} ${name}: ${line.slice(0, 240)}`,
+              );
+            }
             void pushProgress(line);
           } else if (type === 'tool_result') {
             const name = data?.name || data?.tool || 'tool';
@@ -771,6 +781,12 @@ export class ChatController {
                 (typeof r.stdout === 'string' && r.stdout) ||
                 undefined;
             }
+            if (daemonVerbose) {
+              const pv = (preview || '').replace(/\s+/g, ' ').slice(0, 200);
+              this.options.log(
+                `agent tool_result ${name} success=${success}${pv ? ` :: ${pv}` : ''}`,
+              );
+            }
             // Replace the "running …" line with ✓/✗ when possible
             void pushProgress(formatToolResult(name, success, preview), {
               replaceLast: true,
@@ -780,6 +796,20 @@ export class ChatController {
             if (t) {
               lastActivityAt = Date.now();
               void stream.onDelta(t);
+            }
+          } else if (type === 'error') {
+            const err =
+              data?.error ||
+              data?.message ||
+              (typeof data === 'string' ? data : JSON.stringify(data || {}));
+            this.options.log(
+              `agent error ${msg.platform}:${msg.chatId}: ${String(err).slice(0, 400)}`,
+            );
+          } else if (type === 'complete' || type === 'done') {
+            if (daemonVerbose) {
+              this.options.log(
+                `agent ${type} ${msg.platform}:${msg.chatId} tools=${activeRun.toolCount || 0}`,
+              );
             }
           } else if (type === 'warning') {
             const w = String(data?.message || '');

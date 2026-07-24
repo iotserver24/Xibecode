@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.5.3] - 2026-07-24
+
+### Daemon / multi-profile Telegram
+
+- **Per-profile secrets**: `~/.xibecode/daemon-<profile>.env` is loaded when running `xibecode daemon --profile <name>` and **overwrites** global `gateway.env` / `daemon.env` keys (so a test bot no longer steals the App bot token or router `OPENAI_*` settings).
+- **Legacy systemd unit no longer double-polls**: `xibecode-gateway.service` is a oneshot alias of `xibecode-daemon` (not a second `getUpdates` process). Fixes Telegram **409 Conflict** when both units were enabled.
+- **Clearer daemon logs**: lines include `pid=` and `profile=`; non-default profiles also write `~/.xibecode/daemon/logs/daemon-<profile>.log`.
+
+### Daemon verbose agent tracing
+
+- **`XIBECODE_DAEMON_VERBOSE=1`** (or `XIBECODE_VERBOSE=1`) enables headless tool logging: `agent tool_call`, `tool_result`, `agent complete`, and always-on `agent error` lines in the daemon log / verbose stream.
+
+### CLI
+
+- **`xibecode update --to <semver>`** (and `--target`) replaces `--version`, which Commander reserved for printing the package version.
+
 ## [1.5.2] - 2026-07-21
 
 ### Gateway / Telegram UX (Hermes-aligned)

@@ -11,6 +11,7 @@
  *     .env               secrets (preferred)
  *     daemon.env         secrets for Xibe Daemon (preferred over legacy gateway.env)
  *     gateway.env        legacy secrets file (still read)
+ *     daemon-<profile>.env  per-profile secrets (overwrites global when --profile is set)
  *     daemon/            Xibe Daemon runtime state
  *       sessions/        messaging chat sessions
  *       logs/            daemon.log
@@ -176,39 +177,74 @@ export function secretEnvFiles(home = getXibecodeHome()): string[] {
   return [p.envFile, p.daemonEnv, p.gatewayEnv];
 }
 
+/** Per-profile daemon secrets: `~/.xibecode/daemon-<profile>.env` */
+export function profileDaemonEnvPath(
+  profile: string,
+  home = getXibecodeHome(),
+): string {
+  const safe = profile.trim().replace(/[^a-zA-Z0-9._-]/g, '_');
+  return path.join(home, `daemon-${safe}.env`);
+}
+
+/**
+ * Parse KEY=VALUE lines from an env file. Returns applied key count (or -1 on read error).
+ */
+function applyEnvFile(
+  file: string,
+  mode: 'fill' | 'overwrite',
+): number {
+  if (!existsSync(file)) return 0;
+  try {
+    const raw = readFileSync(file, 'utf-8');
+    let n = 0;
+    for (const line of raw.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq <= 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+      let val = trimmed.slice(eq + 1).trim();
+      if (
+        (val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'"))
+      ) {
+        val = val.slice(1, -1);
+      }
+      if (mode === 'overwrite' || process.env[key] === undefined) {
+        process.env[key] = val;
+        n++;
+      }
+    }
+    return n;
+  } catch {
+    return -1;
+  }
+}
+
 /**
  * Load `~/.xibecode/.env`, `daemon.env`, and legacy `gateway.env` into process.env.
  * Does not overwrite keys already set in the environment (systemd / shell win).
  * Returns paths that were successfully loaded.
+ *
+ * When `profile` is set, also loads `daemon-<profile>.env` **with overwrite** so a
+ * test/profile bot does not inherit gateway TELEGRAM_BOT_TOKEN / OPENAI_* from the
+ * default App daemon secrets.
  */
-export function loadSecretEnvFiles(home = getXibecodeHome()): string[] {
+export function loadSecretEnvFiles(
+  home = getXibecodeHome(),
+  opts?: { profile?: string },
+): string[] {
   const loaded: string[] = [];
   for (const file of secretEnvFiles(home)) {
-    if (!existsSync(file)) continue;
-    try {
-      const raw = readFileSync(file, 'utf-8');
-      for (const line of raw.split(/\r?\n/)) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) continue;
-        const eq = trimmed.indexOf('=');
-        if (eq <= 0) continue;
-        const key = trimmed.slice(0, eq).trim();
-        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
-        let val = trimmed.slice(eq + 1).trim();
-        if (
-          (val.startsWith('"') && val.endsWith('"')) ||
-          (val.startsWith("'") && val.endsWith("'"))
-        ) {
-          val = val.slice(1, -1);
-        }
-        if (process.env[key] === undefined) {
-          process.env[key] = val;
-        }
-      }
-      loaded.push(file);
-    } catch {
-      /* ignore unreadable env files */
-    }
+    const n = applyEnvFile(file, 'fill');
+    if (n >= 0 && existsSync(file)) loaded.push(file);
+  }
+  const profile = opts?.profile?.trim();
+  if (profile) {
+    const profileFile = profileDaemonEnvPath(profile, home);
+    const n = applyEnvFile(profileFile, 'overwrite');
+    if (n >= 0 && existsSync(profileFile)) loaded.push(profileFile);
   }
   return loaded;
 }

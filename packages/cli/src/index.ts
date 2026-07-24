@@ -477,7 +477,9 @@ program
   )
   .option("--check", "Only check npm for a newer version (default)", false)
   .option("--apply", "Install update (requires --yes for non-interactive)", false)
-  .option("--version <semver>", "Exact version to install (with --apply)")
+  // Never use --version here — Commander/global reserves it for "print package version & exit".
+  .option("--to <semver>", "Exact version to install (with --apply)")
+  .option("--target <semver>", "Alias for --to")
   .option("--yes", "Confirm non-interactive apply", false)
   .option(
     "--restart",
@@ -486,10 +488,11 @@ program
   )
   .option("--json", "Machine-readable output", false)
   .action(async (opts) => {
+    const to = (opts.to || opts.target || '').trim() || undefined;
     await updateCommand({
-      check: opts.check || (!opts.apply && !opts.version),
-      apply: opts.apply || Boolean(opts.version),
-      version: opts.version,
+      check: opts.check || (!opts.apply && !to),
+      apply: opts.apply || Boolean(to),
+      version: to,
       yes: opts.yes,
       restart: opts.restart,
       json: opts.json,

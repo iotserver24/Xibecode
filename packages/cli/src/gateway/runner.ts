@@ -27,6 +27,7 @@ import {
   loadSecretEnvFiles,
   paths,
   primarySecretEnvPath,
+  profileDaemonEnvPath,
   redactSecrets,
 } from '../utils/xibecode-home.js';
 import { ChatController, loadGatewayConfig, saveGatewayConfig } from './chat-controller.js';
@@ -64,7 +65,10 @@ export class GatewayRunner {
   }
 
   private log(msg: string): void {
-    const line = `[daemon ${new Date().toISOString()}] ${redactSecrets(msg)}`;
+    const profile = this.options.profile?.trim() || this.config.getProfileName();
+    const tag =
+      profile && profile !== 'default' ? ` profile=${profile}` : '';
+    const line = `[daemon ${new Date().toISOString()} pid=${process.pid}${tag}] ${redactSecrets(msg)}`;
     console.log(line);
     void this.appendLog(line);
   }
@@ -95,6 +99,16 @@ export class GatewayRunner {
       await fs.appendFile(path.join(dir, 'daemon.log'), line + '\n', 'utf-8');
       // keep legacy filename for existing log tail scripts
       await fs.appendFile(path.join(dir, 'gateway.log'), line + '\n', 'utf-8');
+      // Per-profile log so App + local-tg-test don't look like one stream
+      const profile = this.options.profile?.trim() || this.config.getProfileName();
+      if (profile && profile !== 'default') {
+        const safe = profile.replace(/[^a-zA-Z0-9._-]/g, '_');
+        await fs.appendFile(
+          path.join(dir, `daemon-${safe}.log`),
+          line + '\n',
+          'utf-8',
+        );
+      }
     } catch {
       /* ignore */
     }
@@ -300,18 +314,22 @@ export class GatewayRunner {
   async start(): Promise<void> {
     await ensureXibecodeHome();
     // Foreground runs need secrets from ~/.xibecode/*.env (systemd uses EnvironmentFile).
-    const envLoaded = loadSecretEnvFiles();
+    // Profile-specific daemon-<profile>.env overwrites global gateway.env keys.
+    const profile = this.options.profile?.trim() || this.config.getProfileName();
+    const envLoaded = loadSecretEnvFiles(getXibecodeHome(), { profile });
     await fs.mkdir(gatewayHome(), { recursive: true });
     await this.writePidFile();
     this.log(`${DAEMON_PRODUCT_NAME} starting (pid ${process.pid})`);
     this.log(`home ${getXibecodeHome()}`);
     this.log(`daemon ${gatewayHome()}`);
     this.log(`workdir ${this.defaultWorkdir()}`);
+    if (profile) this.log(`config profile ${profile}`);
     if (envLoaded.length) {
       this.log(`loaded secrets from ${envLoaded.map((f) => path.basename(f)).join(', ')}`);
     } else {
       this.log(
-        `no secret env files found — put TELEGRAM_BOT_TOKEN etc. in ${primarySecretEnvPath()}`,
+        `no secret env files found — put TELEGRAM_BOT_TOKEN etc. in ${primarySecretEnvPath()}` +
+          (profile ? ` or ${path.basename(profileDaemonEnvPath(profile))}` : ''),
       );
     }
 
@@ -544,27 +562,22 @@ WantedBy=default.target
 `;
 
   await fs.writeFile(unitPath, unit, 'utf-8');
-  // Keep legacy unit name as a thin redirect for users who already enabled xibecode-gateway
+  // Legacy unit name must NOT start a second getUpdates poller (causes Telegram 409).
+  // Oneshoot that pulls in the real unit only.
   const legacyPath = path.join(unitDir, 'xibecode-gateway.service');
   const legacy = `[Unit]
-Description=Xibe Daemon (legacy unit name → ${DAEMON_SERVICE_NAME})
-After=network-online.target
+Description=Xibe Daemon (legacy alias → ${DAEMON_SERVICE_NAME}; does not run a second process)
+Requires=${DAEMON_SERVICE_NAME}.service
+After=${DAEMON_SERVICE_NAME}.service
 
 [Service]
-Type=simple
-WorkingDirectory=${workdir}
-ExecStart=${xibecodeBin} daemon${profileFlag} --workdir ${workdir}
-Restart=always
-RestartSec=5
-TimeoutStopSec=15
-KillMode=mixed
-Environment=NODE_ENV=production
-Environment=XIBECODE_HOME=${xcHome}
-EnvironmentFile=-${secretEnv}
-EnvironmentFile=-${p.envFile}
+Type=oneshot
+ExecStart=/bin/true
+RemainAfterExit=yes
 
 [Install]
 WantedBy=default.target
+Also=${DAEMON_SERVICE_NAME}.service
 `;
   await fs.writeFile(legacyPath, legacy, 'utf-8');
   return unitPath;

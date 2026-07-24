@@ -47,6 +47,20 @@ export interface HeadlessRunOptions {
    * (Approval prompts are still controlled by onDangerousApproval presence.)
    */
   rigorLevel?: 'yolo' | 'default' | 'strict';
+  /**
+   * Verbose agent/tool logging. Defaults from XIBECODE_DAEMON_VERBOSE=1|true
+   * or XIBECODE_VERBOSE=1|true when not set explicitly.
+   */
+  verbose?: boolean;
+}
+
+function resolveDaemonVerbose(explicit?: boolean): boolean {
+  if (typeof explicit === 'boolean') return explicit;
+  const v =
+    process.env.XIBECODE_DAEMON_VERBOSE ||
+    process.env.XIBECODE_VERBOSE ||
+    '';
+  return /^(1|true|yes|on)$/i.test(v.trim());
 }
 
 export interface HeadlessRunResult {
@@ -174,13 +188,15 @@ export async function runHeadlessAgent(
     options.signal.addEventListener('abort', onAbort);
   }
 
+  const verbose = resolveDaemonVerbose(options.verbose);
+
   const agent = new EnhancedAgent(
     {
       apiKey,
       baseUrl,
       model,
       maxIterations,
-      verbose: false,
+      verbose,
       mode: 'agent',
       provider: provider as any,
       customProviderFormat: config.get('customProviderFormat'),
