@@ -54,40 +54,116 @@ function runNpmInstall(
   opts?: { allowSudo?: boolean },
 ): { ok: boolean; logs: string } {
   const spec = `${packageName()}@${targetVersion}`;
-  const baseArgs = ['install', '-g', spec, '--no-fund', '--no-audit'];
+  // Prefer legacy peer deps so upgrades don't fail on peer mismatches in sandboxes
+  const baseArgs = [
+    'install',
+    '-g',
+    spec,
+    '--no-fund',
+    '--no-audit',
+    '--prefer-offline=false',
+  ];
   const chunks: string[] = [];
   const env = { ...process.env, npm_config_update_notifier: 'false' };
 
-  const tryOnce = (cmd: string, args: string[]): boolean => {
-    chunks.push(`$ ${cmd} ${args.join(' ')}`);
+  const tryOnce = (
+    label: string,
+    cmd: string,
+    args: string[],
+  ): { ok: boolean; out: string } => {
+    chunks.push(`$ ${label}`);
     const r = spawnSync(cmd, args, {
       encoding: 'utf-8',
       env,
       timeout: 180_000,
     });
-    chunks.push(`${r.stdout || ''}${r.stderr || ''}`);
-    if (r.status === 0) return true;
-    chunks.push(`exit ${r.status ?? '?'}`);
-    return false;
+    const out = `${r.stdout || ''}${r.stderr || ''}`.trim();
+    if (out) chunks.push(out.slice(0, 4000));
+    if (r.status === 0) return { ok: true, out };
+    chunks.push(`exit ${r.status ?? '?'}${r.error ? ` (${r.error.message})` : ''}`);
+    return { ok: false, out };
   };
 
-  // 1) Plain global npm (works when the process can write the global prefix)
-  if (tryOnce('npm', baseArgs)) {
-    return { ok: true, logs: chunks.join('\n') };
+  const isEacces = (out: string) =>
+    /EACCES|permission denied|EPERM/i.test(out);
+
+  const allowSudo =
+    opts?.allowSudo === true ||
+    (opts?.allowSudo !== false &&
+      (featuresForMode(resolveRuntimeMode().mode).preferSudoNpm ||
+        process.env.XIBECODE_E2B_ALLOW_SUDO === '1' ||
+        process.env.XIBECODE_E2B_ALLOW_SUDO === 'true' ||
+        resolveRuntimeMode().isE2b ||
+        isE2bHostedRuntime()));
+
+  // E2B templates install CLI under /usr/lib/node_modules as root.
+  // Prefer passwordless sudo FIRST so we never fail on EACCES then give up
+  // when the truncated Telegram log hides the retry.
+  if (allowSudo) {
+    chunks.push('--- e2b/hosted: install with sudo -n (passwordless) ---');
+    // Probe that sudo -n works at all
+    const probe = spawnSync('sudo', ['-n', 'true'], {
+      encoding: 'utf-8',
+      env,
+      timeout: 10_000,
+    });
+    if (probe.status === 0) {
+      const sudoHit = tryOnce(
+        `sudo -n npm ${baseArgs.join(' ')}`,
+        'sudo',
+        ['-n', 'npm', ...baseArgs],
+      );
+      if (sudoHit.ok) return { ok: true, logs: chunks.join('\n') };
+    } else {
+      chunks.push(
+        `sudo -n probe failed (exit ${probe.status ?? '?'}): ${(probe.stderr || probe.stdout || '').slice(0, 300)}`,
+      );
+      chunks.push(
+        'Hint: configure NOPASSWD for the sandbox user, or run from dashboard as root.',
+      );
+    }
   }
 
-  // 2) E2B templates often install CLI as root → need sudo
-  const allowSudo =
-    opts?.allowSudo ?? featuresForMode(resolveRuntimeMode().mode).preferSudoNpm;
-  if (allowSudo) {
-    chunks.push('--- retry with sudo ---');
-    if (tryOnce('sudo', ['-n', 'npm', ...baseArgs])) {
+  // Plain global npm (writable prefix / user-owned install)
+  const plain = tryOnce(`npm ${baseArgs.join(' ')}`, 'npm', baseArgs);
+  if (plain.ok) return { ok: true, logs: chunks.join('\n') };
+
+  // Always retry with sudo after EACCES even if mode detection failed
+  if (isEacces(plain.out) || allowSudo) {
+    chunks.push('--- retry after EACCES / permission: sudo -n npm ---');
+    const sudoRetry = tryOnce(
+      `sudo -n npm ${baseArgs.join(' ')}`,
+      'sudo',
+      ['-n', 'npm', ...baseArgs],
+    );
+    if (sudoRetry.ok) return { ok: true, logs: chunks.join('\n') };
+  }
+
+  // Last resort: user-local global prefix (no root needed)
+  try {
+    const home = process.env.HOME || os.homedir();
+    const prefix = path.join(home, '.local');
+    chunks.push(`--- fallback: npm install -g --prefix ${prefix} ---`);
+    const local = tryOnce(
+      `npm install -g --prefix ${prefix} ${spec}`,
+      'npm',
+      ['install', '-g', '--prefix', prefix, spec, '--no-fund', '--no-audit'],
+    );
+    if (local.ok) {
+      chunks.push(
+        `Installed under ${prefix}/bin — ensure PATH includes it for daemon restart.`,
+      );
+      // Prefer this binary on next relaunch if possible
+      process.env.PATH = `${path.join(prefix, 'bin')}:${process.env.PATH || ''}`;
       return { ok: true, logs: chunks.join('\n') };
     }
-    // Interactive sudo may hang in headless — only -n (non-interactive)
-    chunks.push('(sudo -n failed or not permitted; install as root from dashboard if needed)');
+  } catch (e: any) {
+    chunks.push(`local prefix fallback error: ${e?.message || e}`);
   }
 
+  chunks.push(
+    'Install failed. On e2b the global package is usually root-owned; need `sudo -n npm i -g xibecode@latest` (passwordless sudo) or dashboard root install.',
+  );
   return { ok: false, logs: chunks.join('\n') };
 }
 
@@ -161,23 +237,32 @@ export async function applySelfUpdate(opts?: {
     /* ignore */
   }
 
-  const allowSudo = opts?.allowSudo ?? features.preferSudoNpm;
+  // Always allow sudo path on e2b/hosted (global install is root-owned)
+  const allowSudo =
+    opts?.allowSudo !== false &&
+    (opts?.allowSudo === true ||
+      features.preferSudoNpm ||
+      runtime.isE2b ||
+      isE2bHostedRuntime());
   const install = runNpmInstall(to, { allowSudo });
   const verified = verifyInstalledVersion();
-  const ok =
-    install.ok &&
-    (compareSemverCore(verified, to) >= 0 ||
-      verified === to ||
-      verified.startsWith(to));
+  const versionOk =
+    compareSemverCore(verified, to) >= 0 ||
+    verified === to ||
+    verified.startsWith(to);
+  const ok = install.ok && versionOk;
 
   if (!ok) {
+    const why = !install.ok
+      ? 'npm install failed (often EACCES — need sudo -n on e2b)'
+      : `version mismatch (wanted ${to}, got ${verified})`;
     return {
       ok: false,
       from,
       to,
       verified,
       logs: install.logs,
-      error: 'install failed or version mismatch',
+      error: why,
     };
   }
 

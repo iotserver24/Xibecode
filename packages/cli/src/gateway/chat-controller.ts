@@ -1514,12 +1514,24 @@ export class ChatController {
 
     const result = await applySelfUpdate({
       restartDaemon: features.selfUpdateWithRestart,
-      allowSudo: features.preferSudoNpm,
+      // e2b: always try sudo -n (global package under /usr/lib is root-owned)
+      allowSudo: features.preferSudoNpm || runtime.isE2b || true,
     });
 
     if (!result.ok) {
+      const logTail = (result.logs || '')
+        .split('\n')
+        .filter(Boolean)
+        .slice(-12)
+        .join('\n');
       await reply(
-        `Update failed: ${result.error || 'unknown'}\n\`${(result.logs || '').slice(0, 400)}\``,
+        `Update failed: ${result.error || 'unknown'}\n` +
+          (runtime.isE2b
+            ? '_e2b needs passwordless `sudo -n npm i -g …` (or use Dashboard Update which runs sudo first)._\n'
+            : '') +
+          '```\n' +
+          logTail.slice(0, 900) +
+          '\n```',
       );
       return;
     }

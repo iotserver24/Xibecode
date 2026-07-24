@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.6] - 2026-07-24
+
+### e2b `/update`: sudo first (fix EACCES)
+
+- Global install under `/usr/lib/node_modules` is root-owned on e2b templates.
+- **`/update yes`** now runs **`sudo -n npm i -g xibecode@…` first**, then plain npm, then user-local prefix fallback.
+- Clearer failure logs (last install lines + EACCES hint). Use **Dashboard Update** if Telegram is still on an older CLI that only tried plain npm.
+
 ## [1.6.5] - 2026-07-24
 
 ### Runtime modes: `default` vs `e2b`
