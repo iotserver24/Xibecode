@@ -995,22 +995,36 @@ const server = createServer(async (req, res) => {
         let daemon: { ok?: boolean; logs?: string[] } | undefined;
         if (body.restartDaemon) {
           // After long pause, frozen TCP (Telegram long-poll) is stale — restart daemon.
+          // Poll until process is up; clear host webhook leftovers so long-poll can bind.
           const r = await runInSession(session, {
             command: [
               'set +e',
               'set -a',
               '[ -f /home/user/.xibecode/daemon.env ] && . /home/user/.xibecode/daemon.env',
+              '[ -f /home/user/.xibecode/gateway.env ] && . /home/user/.xibecode/gateway.env',
               'set +a',
+              'if [ -n "${TELEGRAM_BOT_TOKEN:-}${XIBECODE_TELEGRAM_BOT_TOKEN:-}" ]; then',
+              '  TOK="${TELEGRAM_BOT_TOKEN:-$XIBECODE_TELEGRAM_BOT_TOKEN}"',
+              '  curl -sS -m 10 -X POST "https://api.telegram.org/bot${TOK}/deleteWebhook" -d "drop_pending_updates=false" >/dev/null 2>&1 || true',
+              'fi',
               'if [ -f /tmp/xibecode-daemon.pid ]; then kill "$(cat /tmp/xibecode-daemon.pid)" 2>/dev/null; sleep 1; fi',
+              'pkill -f "xibecode daemon" 2>/dev/null || true',
+              'sleep 1',
               'nohup xibecode daemon --workdir /home/user/workspace >/tmp/xibecode-daemon.log 2>&1 &',
               'echo $! > /tmp/xibecode-daemon.pid',
-              'sleep 2',
-              'pgrep -f "xibecode daemon" >/dev/null && echo DAEMON_OK || echo DAEMON_FAIL',
+              'OK=0',
+              'for i in 1 2 3 4 5 6 7 8 9 10; do',
+              '  sleep 1',
+              '  if pgrep -f "xibecode daemon" >/dev/null 2>&1; then OK=1; break; fi',
+              'done',
+              'if [ "$OK" = "1" ]; then echo DAEMON_OK; else echo DAEMON_FAIL; fi',
+              'echo "--- daemon log (tail) ---"',
+              'tail -40 /tmp/xibecode-daemon.log 2>/dev/null || true',
             ].join('\n'),
-            timeout: 60,
+            timeout: 90,
           });
           const out = `${r.stdout || ''}\n${r.stderr || ''}`;
-          daemon = { ok: out.includes('DAEMON_OK'), logs: [out.slice(0, 1500)] };
+          daemon = { ok: out.includes('DAEMON_OK'), logs: [out.slice(0, 2000)] };
         }
         sendJson(res, 200, {
           success: true,
