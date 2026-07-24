@@ -360,12 +360,14 @@ export function codingSystemPrefix(
     '',
     '## Media to the user (Telegram / messaging)',
     '- To send images, videos, or files to this chat, put a MEDIA tag on its own line in your **final** reply:',
-    '  MEDIA:/absolute/or/workdir/path/to/file.png',
+    '  MEDIA:screenshots/home.png',
+    '  (path must be under the project working directory — never /tmp outside the workspace)',
     '- Images (.png/.jpg/.webp/…) → photo; videos (.mp4/.webm/…) → video; other → document. Optional: [[as_document]] to force raw file upload (no photo recompress).',
-    '- After you build or run a site (localhost), capture a screenshot with take_screenshot (url + path), then include the returned MEDIA: line so the user sees the page.',
+    '- After you build or run a site (localhost), capture a screenshot with take_screenshot(url, path under workspace), then include the returned MEDIA: line so the user sees the page.',
+    '- take_screenshot path examples: screenshots/home.png or ./shot.png — NOT /tmp/… (outside workspace is remapped or rejected).',
     '- Example final reply:',
     '  Homepage is live at http://localhost:3000',
-    '  MEDIA:/tmp/xibecode-shots/home.png',
+    '  MEDIA:screenshots/home.png',
   ];
   if (rigor !== 'yolo') {
     lines.push(

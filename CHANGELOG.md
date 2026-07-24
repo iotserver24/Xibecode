@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.4] - 2026-07-24
+
+### Screenshots / workspace paths
+
+- **`take_screenshot` no longer fails on `/tmp/…` paths**: absolute paths outside the working directory (e.g. `/tmp/xibecode-shots/home.png` from old agent prompts) are **remapped** to `screenshots/<basename>` under the project root.
+- Agent prompts (daemon chat + mode docs) now tell the model to use **workspace-relative** paths only (`screenshots/home.png`), never `/tmp` outside the sandbox workspace.
+
 ## [1.5.3] - 2026-07-24
 
 ### Daemon / multi-profile Telegram

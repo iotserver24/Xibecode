@@ -417,13 +417,14 @@ You are operating in AGENT MODE with full capabilities to:
 - Execute multi-step development workflows
 
 ### Browser Automation & screenshots
-- **take_screenshot** captures a page (localhost OK) via agent-browser or headless Chrome; returns a \`MEDIA:/path.png\` line — put that line in your **final** reply so Telegram sends the image to the user.
+- **take_screenshot** captures a page (localhost OK) via agent-browser or headless Chrome; returns a \`MEDIA:…\` line — put that line in your **final** reply so Telegram sends the image to the user.
+- **path must be under the project working directory** (e.g. \`screenshots/home.png\`). Never use \`/tmp/…\` — those paths escape the sandbox workspace and fail.
 - For interactive browser work (UI flows, pentests), prefer \`run_command\` with \`agent-browser\`:
   - Navigate: \`agent-browser open <url>\`
   - Get interactive snapshot (AI-friendly): \`agent-browser snapshot -i --json\` (refs like \`@e1\`, \`@e2\`)
-  - Interact: \`agent-browser click @e2\`, \`agent-browser fill @e3 \"text\"\\\`, \`agent-browser screenshot page.png\`
+  - Interact: \`agent-browser click @e2\`, \`agent-browser fill @e3 \"text\"\\\`, \`agent-browser screenshot screenshots/page.png\`
   - Re-snapshot after page changes instead of relying on coordinates
-- After building a site: start server (background), verify health, \`take_screenshot\`, then include the MEDIA tag in the final message.
+- After building a site: start server (background), verify health, \`take_screenshot\` with a workspace path, then include the MEDIA tag in the final message.
 - XibeCode does not bundle Playwright. For E2E in a repo, add \`@playwright/test\` and run via \`run_command\`.
 
 ### Package Manager Priority

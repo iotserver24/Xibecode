@@ -102,8 +102,12 @@ function screenshotSuccess(
   url: string,
   absOut: string,
   via: string,
+  remappedFrom?: string,
 ): Record<string, unknown> {
   const media = `MEDIA:${absOut}`;
+  const remapNote = remappedFrom
+    ? ` (path remapped from ${remappedFrom} → workspace screenshots/)`
+    : '';
   return {
     success: true,
     error: false,
@@ -111,7 +115,8 @@ function screenshotSuccess(
     path: absOut,
     via,
     media_tag: media,
-    message: `Screenshot saved. Include this line in your final chat reply so the user receives the image:\n${media}`,
+    remapped_from: remappedFrom,
+    message: `Screenshot saved${remapNote}. Include this line in your final chat reply so the user receives the image:\n${media}`,
   };
 }
 
@@ -2210,12 +2215,16 @@ export class CodingToolExecutor implements ToolExecutor {
       {
         name: 'take_screenshot',
         description:
-          'Capture a PNG screenshot of a URL (including localhost). Uses agent-browser if installed, else headless Chrome/Chromium. On success returns path + a MEDIA: tag — include that line in your final chat reply so Telegram/Discord can send the image to the user.',
+          'Capture a PNG screenshot of a URL (including localhost). Uses agent-browser if installed, else headless Chrome/Chromium. path MUST be under the project working directory (e.g. screenshots/home.png) — never /tmp. On success returns path + a MEDIA: tag — include that line in your final chat reply so Telegram/Discord can send the image to the user.',
         input_schema: {
           type: 'object',
           properties: {
             url: { type: 'string', description: 'URL to visit (e.g., http://localhost:3000)' },
-            path: { type: 'string', description: 'Output path for the screenshot (e.g., screenshots/home.png)' },
+            path: {
+              type: 'string',
+              description:
+                'Output path under the workspace only (e.g. screenshots/home.png). Absolute /tmp paths are remapped into screenshots/.',
+            },
             fullPage: { type: 'boolean', description: 'Capture full page? Default: true' }
           },
           required: ['url', 'path']
@@ -2466,6 +2475,40 @@ export class CodingToolExecutor implements ToolExecutor {
   }
 
   /**
+   * Screenshot outputs must stay inside the working directory (hosting/E2B
+   * rejects paths outside workspace). Remap /tmp and other escapes into
+   * screenshots/<basename> so take_screenshot never fails on path alone.
+   */
+  private resolveScreenshotOutPath(outPath: string): { abs: string; remappedFrom?: string } {
+    const raw = String(outPath || '').trim() || `screenshots/shot-${Date.now()}.png`;
+    const cleaned = raw
+      .replace(/^["'`]+|["'`]+$/g, '')
+      .replace(/^file:\/\//i, '');
+
+    const direct = sanitizePath(this.workingDir, cleaned);
+    if (direct.ok) {
+      let abs = direct.path;
+      if (!/\.(png|jpe?g|webp)$/i.test(abs)) abs = `${abs}.png`;
+      return { abs };
+    }
+
+    const base =
+      path.basename(cleaned.replace(/\/+$/, '')) || `shot-${Date.now()}.png`;
+    const safeBase =
+      base.replace(/[^\w.\-]+/g, '_').replace(/^\.+/, '') || `shot-${Date.now()}.png`;
+    const remapped = path.join('screenshots', safeBase);
+    const again = sanitizePath(this.workingDir, remapped);
+    if (!again.ok) {
+      throw new Error(
+        `Screenshot path not allowed (${again.message}). Use a path under the project, e.g. screenshots/home.png`,
+      );
+    }
+    let abs = again.path;
+    if (!/\.(png|jpe?g|webp)$/i.test(abs)) abs = `${abs}.png`;
+    return { abs, remappedFrom: cleaned };
+  }
+
+  /**
    * Screenshot a page without bundling Playwright.
    * Prefers agent-browser, then headless Chrome/Chromium.
    * Returns MEDIA: tag for gateway chat delivery to the user.
@@ -2481,13 +2524,19 @@ export class CodingToolExecutor implements ToolExecutor {
     }
     const safeUrl = urlResult.url;
     let absOut: string;
+    let remappedFrom: string | undefined;
     try {
-      absOut = this.resolvePath(outPath);
+      const resolved = this.resolveScreenshotOutPath(outPath);
+      absOut = resolved.abs;
+      remappedFrom = resolved.remappedFrom;
     } catch (e: any) {
-      return { error: true, success: false, message: e?.message || String(e) };
-    }
-    if (!/\.(png|jpe?g|webp)$/i.test(absOut)) {
-      absOut = absOut + '.png';
+      return {
+        error: true,
+        success: false,
+        message:
+          e?.message ||
+          'Screenshot path must stay inside the project (not /tmp). Use screenshots/home.png',
+      };
     }
     await fs.mkdir(path.dirname(absOut), { recursive: true });
 
@@ -2528,7 +2577,7 @@ export class CodingToolExecutor implements ToolExecutor {
         { timeout: 90000 },
       );
       if (ok) {
-        return screenshotSuccess(safeUrl, absOut, 'agent-browser');
+        return screenshotSuccess(safeUrl, absOut, 'agent-browser', remappedFrom);
       }
     } else {
       attempts.push('agent-browser: not on PATH');
@@ -2549,7 +2598,7 @@ export class CodingToolExecutor implements ToolExecutor {
         { timeout: 60000 },
       );
       if (ok) {
-        return screenshotSuccess(safeUrl, absOut, 'chrome-headless');
+        return screenshotSuccess(safeUrl, absOut, 'chrome-headless', remappedFrom);
       }
     } else {
       attempts.push('chrome/chromium: not on PATH');
@@ -2559,7 +2608,9 @@ export class CodingToolExecutor implements ToolExecutor {
       error: true,
       success: false,
       message:
-        'Screenshot failed. Install agent-browser (`npm i -g agent-browser`) or Chrome/Chromium, or use run_command with your browser MCP.',
+        'Screenshot failed (path was OK; browser missing or crashed). Install agent-browser (`npm i -g agent-browser`) or Chrome/Chromium, or use run_command with puppeteer. Prefer path under workspace: screenshots/home.png',
+      path: absOut,
+      remapped_from: remappedFrom,
       attempts,
       hint: NO_EMBEDDED_BROWSER_MESSAGE,
     };
