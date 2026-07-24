@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.5] - 2026-07-24
+
+### Runtime modes: `default` vs `e2b`
+
+- **`default`** — local host daemon (no auto self-update restart).
+- **`e2b`** — hosted sandbox (auto-detected or `XIBECODE_RUNTIME_MODE=e2b`):
+  - `/update` · `/update yes` → `npm i -g xibecode@latest`, then **`sudo -n npm …`** if needed, then **restart daemon**
+  - **Chat memory kept** in `~/.xibecode/daemon/sessions/` across restart
+  - `/mode` shows current mode + E2B built-ins
+  - Startup update offer only in e2b mode
+- Public preview / direct links for running servers — reserved for next ship
+
 ## [1.6.4] - 2026-07-24
 
 ### Hermes-style mid-run messages (steer, not only queue)

@@ -1,10 +1,15 @@
 /**
  * Opt-in self-update helpers for E2B / hosted daemons.
  * Install from npm, optionally relaunch the current daemon process.
+ *
+ * Sessions live under ~/.xibecode/daemon/sessions/ — restart does NOT wipe chat memory.
  */
 
 import { execSync, spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 import {
   checkUpdateAvailable,
   compareSemverCore,
@@ -12,6 +17,10 @@ import {
   updateCheckDisabled,
   type UpdateAvailability,
 } from './npm-update-notice.js';
+import {
+  featuresForMode,
+  resolveRuntimeMode,
+} from './runtime-mode.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../../package.json') as { version?: string; name?: string };
@@ -33,18 +42,52 @@ export async function checkCliUpdate(options?: {
   });
 }
 
-function runNpmInstall(targetVersion: string): { ok: boolean; logs: string } {
+/** Path to gateway session JSON files (chat memory). Survives daemon restart. */
+export function daemonSessionsDir(): string {
+  const home =
+    process.env.XIBECODE_HOME?.trim() || path.join(os.homedir(), '.xibecode');
+  return path.join(home, 'daemon', 'sessions');
+}
+
+function runNpmInstall(
+  targetVersion: string,
+  opts?: { allowSudo?: boolean },
+): { ok: boolean; logs: string } {
   const spec = `${packageName()}@${targetVersion}`;
-  const args = ['install', '-g', spec, '--no-fund', '--no-audit'];
-  const chunks: string[] = [`$ npm ${args.join(' ')}`];
-  const r = spawnSync('npm', args, {
-    encoding: 'utf-8',
-    env: { ...process.env, npm_config_update_notifier: 'false' },
-    timeout: 180_000,
-  });
-  chunks.push(`${r.stdout || ''}${r.stderr || ''}`);
-  if (r.status === 0) return { ok: true, logs: chunks.join('\n') };
-  chunks.push(`exit ${r.status ?? '?'}`);
+  const baseArgs = ['install', '-g', spec, '--no-fund', '--no-audit'];
+  const chunks: string[] = [];
+  const env = { ...process.env, npm_config_update_notifier: 'false' };
+
+  const tryOnce = (cmd: string, args: string[]): boolean => {
+    chunks.push(`$ ${cmd} ${args.join(' ')}`);
+    const r = spawnSync(cmd, args, {
+      encoding: 'utf-8',
+      env,
+      timeout: 180_000,
+    });
+    chunks.push(`${r.stdout || ''}${r.stderr || ''}`);
+    if (r.status === 0) return true;
+    chunks.push(`exit ${r.status ?? '?'}`);
+    return false;
+  };
+
+  // 1) Plain global npm (works when the process can write the global prefix)
+  if (tryOnce('npm', baseArgs)) {
+    return { ok: true, logs: chunks.join('\n') };
+  }
+
+  // 2) E2B templates often install CLI as root → need sudo
+  const allowSudo =
+    opts?.allowSudo ?? featuresForMode(resolveRuntimeMode().mode).preferSudoNpm;
+  if (allowSudo) {
+    chunks.push('--- retry with sudo ---');
+    if (tryOnce('sudo', ['-n', 'npm', ...baseArgs])) {
+      return { ok: true, logs: chunks.join('\n') };
+    }
+    // Interactive sudo may hang in headless — only -n (non-interactive)
+    chunks.push('(sudo -n failed or not permitted; install as root from dashboard if needed)');
+  }
+
   return { ok: false, logs: chunks.join('\n') };
 }
 
@@ -78,6 +121,8 @@ export async function applySelfUpdate(opts?: {
   version?: string;
   /** After success, relaunch this process as a new daemon and exit. */
   restartDaemon?: boolean;
+  /** Prefer sudo npm -g (E2B templates). Default from runtime mode. */
+  allowSudo?: boolean;
 }): Promise<ApplySelfUpdateResult> {
   if (updateCheckDisabled()) {
     return {
@@ -90,6 +135,8 @@ export async function applySelfUpdate(opts?: {
     };
   }
 
+  const runtime = resolveRuntimeMode();
+  const features = featuresForMode(runtime.mode);
   const from = packageVersion();
   let to = (opts?.version || '').trim().replace(/^v/, '');
   if (!to) {
@@ -106,7 +153,16 @@ export async function applySelfUpdate(opts?: {
     to = avail.latest;
   }
 
-  const install = runNpmInstall(to);
+  // Sessions are on disk — touch log so operators know memory is kept
+  try {
+    const sess = daemonSessionsDir();
+    if (!fs.existsSync(sess)) fs.mkdirSync(sess, { recursive: true });
+  } catch {
+    /* ignore */
+  }
+
+  const allowSudo = opts?.allowSudo ?? features.preferSudoNpm;
+  const install = runNpmInstall(to, { allowSudo });
   const verified = verifyInstalledVersion();
   const ok =
     install.ok &&
@@ -126,7 +182,14 @@ export async function applySelfUpdate(opts?: {
   }
 
   let restarted = false;
-  if (opts?.restartDaemon) {
+  // E2B mode always restarts on confirm unless explicitly disabled
+  const shouldRestart =
+    opts?.restartDaemon === true ||
+    (opts?.restartDaemon !== false &&
+      features.selfUpdateWithRestart &&
+      process.env.XIBECODE_UPDATE_RESTART !== '0');
+
+  if (shouldRestart) {
     restarted = scheduleDaemonRelaunch();
   }
 
@@ -135,7 +198,10 @@ export async function applySelfUpdate(opts?: {
     from,
     to,
     verified,
-    logs: install.logs,
+    logs:
+      install.logs +
+      `\n# sessions preserved: ${daemonSessionsDir()}` +
+      (restarted ? '\n# daemon relaunch scheduled' : ''),
     restarted,
   };
 }
@@ -214,16 +280,25 @@ export function formatUpdateOffer(avail: UpdateAvailability): string {
   if (!avail.updateAvailable) {
     return `Up to date · \`${avail.current}\``;
   }
-  const hosted = avail.hosted || isE2bHostedRuntime();
+  const runtime = resolveRuntimeMode();
+  const hosted = avail.hosted || runtime.isE2b || isE2bHostedRuntime();
   const lines = [
     `**Update available:** \`${avail.latest}\` (you have \`${avail.current}\`)`,
+    `Runtime: **${runtime.mode}**`,
     '',
     hosted
-      ? 'Running in E2B/hosted sandbox. Reply **`/update yes`** to install and **auto-restart** the daemon (workspace + secrets kept).'
-      : 'Reply **`/update yes`** to install, or run `npm i -g xibecode@latest` locally.',
+      ? [
+          '**E2B mode:** reply **`/update yes`** to run:',
+          '• `npm i -g xibecode@latest` (then `sudo -n npm …` if needed)',
+          '• restart the daemon automatically',
+          '• **keep chat memory** (`~/.xibecode/daemon/sessions/`) + workspace + secrets',
+        ].join('\n')
+      : '**Default mode:** reply **`/update yes`** to install, or run `npm i -g xibecode@latest` locally (no auto-restart unless `--restart`).',
     'Dismiss: `/update no`',
   ];
   return lines.join('\n');
 }
 
 export { isE2bHostedRuntime, updateCheckDisabled };
+export { resolveRuntimeMode, describeRuntimeMode, featuresForMode } from './runtime-mode.js';
+export type { RuntimeMode, RuntimeModeInfo } from './runtime-mode.js';

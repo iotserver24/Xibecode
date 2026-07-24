@@ -1414,11 +1414,32 @@ export class ChatController {
       return;
     }
 
+    if (cmd === 'mode' || cmd === 'runtime') {
+      const { describeRuntimeMode, resolveRuntimeMode } = await import(
+        '../utils/runtime-mode.js'
+      );
+      const info = resolveRuntimeMode();
+      const sub = arg.trim().toLowerCase();
+      if (sub === 'e2b' || sub === 'default' || sub === 'local' || sub === 'hosted') {
+        await reply(
+          `Runtime mode is process-level (not per-chat).\n` +
+            `Current: **${info.mode}**\n` +
+            `To force: set env \`XIBECODE_RUNTIME_MODE=${sub === 'local' ? 'default' : sub === 'hosted' ? 'e2b' : sub}\` and restart the daemon.`,
+        );
+        return;
+      }
+      await reply(describeRuntimeMode(info));
+      return;
+    }
+
     await reply(`Unknown \`/${cmd}\`. Try \`/help\`.`);
   }
 
   /**
-   * E2B/hosted: ask → `/update yes` installs npm package and auto-restarts daemon.
+   * /update — check or apply CLI self-update.
+   * **E2B mode:** `npm i -g xibecode@latest` (+ sudo if needed) + restart daemon;
+   * chat sessions under ~/.xibecode/daemon/sessions/ are preserved.
+   * **Default mode:** install only unless --restart / env forces it.
    */
   private async handleUpdateSlash(
     msg: InboundMessage,
@@ -1429,9 +1450,13 @@ export class ChatController {
       applySelfUpdate,
       checkCliUpdate,
       formatUpdateOffer,
-      isE2bHostedRuntime,
+      daemonSessionsDir,
+      resolveRuntimeMode,
+      featuresForMode,
     } = await import('../utils/self-update.js');
 
+    const runtime = resolveRuntimeMode();
+    const features = featuresForMode(runtime.mode);
     const sub = arg.trim().toLowerCase();
     const confirm =
       sub === 'yes' ||
@@ -1450,15 +1475,21 @@ export class ChatController {
     if (!confirm) {
       const avail = await checkCliUpdate({ forceRefresh: false });
       await reply(formatUpdateOffer(avail));
-      // Buttons send as plain text "yes"/"no" via choice picker → handle as /update yes
       const adapter = this.options.getAdapter(msg.platform);
       if (avail.updateAvailable && adapter?.sendChoicePicker) {
         try {
           await adapter.sendChoicePicker(
             msg.chatId,
-            'Install update and auto-restart daemon?',
+            features.selfUpdateWithRestart
+              ? 'Install update and auto-restart daemon? (chats kept)'
+              : 'Install CLI update from npm?',
             [
-              { value: '/update yes', label: 'Update & restart' },
+              {
+                value: '/update yes',
+                label: features.selfUpdateWithRestart
+                  ? 'Update & restart'
+                  : 'Update now',
+              },
               { value: '/update no', label: 'Not now' },
             ],
             'up',
@@ -1471,10 +1502,21 @@ export class ChatController {
     }
 
     // Confirm path
-    await reply('Updating CLI… then auto-restarting daemon (this may take a minute).');
-    const hosted = isE2bHostedRuntime();
+    if (features.selfUpdateWithRestart) {
+      await reply(
+        `Updating CLI (**e2b mode**)…\n` +
+          `• \`npm i -g xibecode@latest\` (sudo if needed)\n` +
+          `• restart daemon\n` +
+          `• **keep chats** at \`${daemonSessionsDir()}\`\n` +
+          `This may take a minute.`,
+      );
+    } else {
+      await reply('Updating CLI… (default mode — no auto-restart unless configured).');
+    }
+
     const result = await applySelfUpdate({
-      restartDaemon: hosted, // E2B: install + relaunch self
+      restartDaemon: features.selfUpdateWithRestart,
+      allowSudo: features.preferSudoNpm,
     });
 
     if (!result.ok) {
@@ -1485,15 +1527,15 @@ export class ChatController {
     }
 
     if (result.logs === 'already_latest') {
-      await reply(`Already on latest · \`${result.from}\``);
+      await reply(`Already on latest · \`${result.from}\` · mode **${runtime.mode}**`);
       return;
     }
 
     await reply(
-      `Updated \`${result.from}\` → \`${result.verified}\`` +
+      `Updated \`${result.from}\` → \`${result.verified}\` · mode **${runtime.mode}**` +
         (result.restarted
-          ? '\nRestarting daemon… brb.'
-          : '\nRestart the daemon from the dashboard if channels go quiet.'),
+          ? `\nRestarting daemon… your chat history is kept (\`${daemonSessionsDir()}\`). Brb.`
+          : '\nRestart the daemon manually if channels go quiet.'),
     );
   }
 

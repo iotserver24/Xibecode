@@ -39,6 +39,7 @@ import type { MessagingAdapter, PlatformName } from './types.js';
 import { runHeadlessAgent } from './agent-runner.js';
 import { CircuitBreaker } from './circuit-breaker.js';
 import { ledgerPendingRedeliveries, ledgerMarkDelivered, ledgerMarkSending, ledgerMarkFailed } from './delivery-ledger.js';
+import { resolveRuntimeMode } from '../utils/runtime-mode.js';
 
 // re-export for callers that imported gatewayHome from runner historically
 export { gatewayHome };
@@ -417,14 +418,18 @@ export class GatewayRunner {
         const adapter = this.getAdapter(platform);
         if (adapter) adapter.homeChannel = chatId;
       },
-      statusExtra: () => [
-        `profile: ${this.config.getProfileName()}`,
-        `cron: ${this.stopCron ? 'on' : 'off'}`,
-        `telegram: ${this.adapters.has('telegram') ? 'on' : 'off'}`,
-        `discord: ${this.adapters.has('discord') ? 'on' : 'off'}`,
-        `slack: ${this.adapters.has('slack') ? 'on' : 'off'}`,
-        ...[...this.breakers.values()].map((b) => b.statusLine()),
-      ],
+      statusExtra: () => {
+        const r = resolveRuntimeMode();
+        return [
+          `runtime: ${r.mode} (${r.source})`,
+          `profile: ${this.config.getProfileName()}`,
+          `cron: ${this.stopCron ? 'on' : 'off'}`,
+          `telegram: ${this.adapters.has('telegram') ? 'on' : 'off'}`,
+          `discord: ${this.adapters.has('discord') ? 'on' : 'off'}`,
+          `slack: ${this.adapters.has('slack') ? 'on' : 'off'}`,
+          ...[...this.breakers.values()].map((b) => b.statusLine()),
+        ];
+      },
     });
 
     // E2B/hosted: notify home chats if a newer CLI is on npm (never auto-install)
@@ -512,16 +517,24 @@ export class GatewayRunner {
       const {
         checkCliUpdate,
         formatUpdateOffer,
-        isE2bHostedRuntime,
+        featuresForMode,
+        resolveRuntimeMode,
       } = await import('../utils/self-update.js');
-      if (!isE2bHostedRuntime()) return;
+      const runtime = resolveRuntimeMode();
+      const features = featuresForMode(runtime.mode);
+      if (!features.updateOfferOnStart) {
+        this.log(`runtime mode ${runtime.mode} — skip startup update offer`);
+        return;
+      }
       const avail = await checkCliUpdate({ forceRefresh: false });
       if (!avail.updateAvailable) {
-        this.log(`cli version ${avail.current} (up to date or check skipped)`);
+        this.log(
+          `cli version ${avail.current} · runtime ${runtime.mode} (up to date or check skipped)`,
+        );
         return;
       }
       this.log(
-        `cli update available: ${avail.latest} (running ${avail.current}) — user must /update yes`,
+        `cli update available: ${avail.latest} (running ${avail.current}) · mode ${runtime.mode} — user must /update yes`,
       );
       const text = formatUpdateOffer(avail);
       for (const adapter of this.adapters.values()) {
