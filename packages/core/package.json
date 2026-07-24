@@ -52,7 +52,7 @@
     "@types/diff": "^5.0.8",
     "@types/node": "^20.10.0",
     "@types/picomatch": "^3.0.2",
-    "vitest": "^1.6.1"
+    "vitest": "^3.2.6"
   },
   "engines": {
     "node": ">=18.0.0"
