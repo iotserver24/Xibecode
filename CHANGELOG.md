@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.17.1] - 2026-07-25
+
+### Hosting / E2B template
+
+- Custom template **wake-http** doorbell (`/opt/vectra/wake-http`, port 8788) for E2B auto-resume on public URL traffic — not part of the Telegram bot (bot stays long-poll).
+- Template ships aligned CLI **1.17.1** tarballs.
+
+### Patch
+
+- Patch release for template rebuild + npm alignment.
+
 ## [1.17.0] - 2026-07-24
 
 ### Messaging: `/cmd` shell from Telegram (and other gateways)
