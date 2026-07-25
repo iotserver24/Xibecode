@@ -1028,7 +1028,14 @@ const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   // Memory tools
   'update_memory': 'write_fs',
   'remember_lesson': 'write_fs',
+  'curated_memory': 'write_fs',
   'search_lessons': 'read_only',
+  'session_search': 'context',
+
+  // Skills tools
+  'list_skills': 'read_only',
+  'view_skill': 'read_only',
+  'save_skill': 'write_fs',
 
   // Subagent / parallel delegation
   'delegate_subtask': 'swarm',
@@ -1091,7 +1098,9 @@ function inferToolCategory(toolName: string): ToolCategory | undefined {
     dynamicName.startsWith('insert_') ||
     dynamicName.startsWith('revert_') ||
     dynamicName.startsWith('update_memory') ||
-    dynamicName.startsWith('remember_')
+    dynamicName.startsWith('remember_') ||
+    dynamicName === 'curated_memory' ||
+    dynamicName === 'save_skill'
   ) {
     return 'write_fs';
   }

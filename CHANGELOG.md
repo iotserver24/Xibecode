@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.17.4] - 2026-07-25
+
+### Fix
+
+- **`curated_memory` permission denied / Unknown tool:** tool was implemented and
+  advertised to the model but missing from `TOOL_CATEGORIES` in `modes.ts`, so
+  mode permission checks rejected every call. Also registered `session_search`,
+  `save_skill`, `list_skills`, and `view_skill` categories.
+
 ## [1.17.3] - 2026-07-25
 
 ### Telegram / E2B wake latency
