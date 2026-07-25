@@ -11,6 +11,10 @@ This template is intended for XibeCode `sandbox_full` mode so command execution 
 - `git`, `curl`, `jq`, `tar`
 - Build tooling: `python3`, `make`, `g++`
 - Default workspace path: `/home/user/workspace`
+- **Wake HTTP** (`/opt/vectra/wake-http`, port **8788**) — template doorbell for E2B
+  [auto-resume on request](https://e2b.dev/docs/sandbox/auto-resume). Not part of the bot.
+  Public URL: `https://8788-{sandboxId}.e2b.app/wake` (or `/telegram`).
+  Start: `/opt/vectra/wake-http/start.sh` (hosting also starts it with the daemon).
 
 ## Resources (hosting tier)
 

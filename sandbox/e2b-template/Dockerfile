@@ -81,6 +81,13 @@ RUN set -e; \
   fi; \
   chown -R 1000:1000 /home/user/workspace /home/user/.cache /home/user/.agent-browser 2>/dev/null || true
 
+# Template wake HTTP (NOT the xibecode bot). Public URL auto-resumes paused sandboxes.
+# https://e2b.dev/docs/sandbox/auto-resume
+COPY wake-http /opt/vectra/wake-http
+RUN chmod +x /opt/vectra/wake-http/start.sh /opt/vectra/wake-http/server.py \
+  && chown -R 1000:1000 /opt/vectra
+
 USER user
 WORKDIR /home/user
 ENV PATH="/usr/local/bin:${PATH}"
+ENV VECTRA_WAKE_PORT=8788
