@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { MessageParam, Tool, ToolUseBlock, TextBlock, ContentBlock } from '@anthropic-ai/sdk/resources/messages';
-import fetch from 'node-fetch';
+import { safeFetch as fetch } from './safe-fetch.js';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { homedir } from 'os';
@@ -2128,17 +2128,23 @@ export class EnhancedAgent extends EventEmitter {
         throw new Error('Streaming body not available');
       }
 
-      // When the user cancels (Esc), node-fetch aborts the Readable stream and emits an
-      // 'error' event. If no listener is attached, Node treats it as unhandled and crashes.
-      // Instead of re-throwing (which doesn't propagate from event handlers), we store the
-      // error and check it in the for-await loop, then destroy the stream to break the loop.
-      // We must attach this 'error' listener immediately before any abort signals can fire
-      // and call destroy(), preventing unhandled event crashes.
+      // When the user cancels (Esc / daemon auto-stop), node-fetch aborts the Readable
+      // stream and emits an 'error' event. If no listener is attached, Node treats it as
+      // unhandled and crashes the whole process (fatal for xibecode daemon).
+      // safe-fetch already attaches a defensive listener; we still track non-abort errors
+      // here and destroy the stream to break for-await on cancel.
       let streamBodyError: unknown = null;
       body.on('error', (err: unknown) => {
-        if (isAbortError(err) || signal?.aborted || streamAborted) return;
+        if (isAbortError(err) || signal?.aborted || streamAborted) {
+          streamAborted = true;
+          return;
+        }
         streamBodyError = err;
-        (body as any).destroy();
+        try {
+          (body as any).destroy();
+        } catch {
+          /* ignore */
+        }
       });
 
       // Set up abort handler to track abort state
@@ -2146,9 +2152,20 @@ export class EnhancedAgent extends EventEmitter {
         streamAborted = true;
         // node-fetch returns a Node.js Readable stream which has destroy()
         // TypeScript types don't include destroy(), but it exists at runtime
-        (body as any).destroy();
+        try {
+          if (!(body as any).destroyed) {
+            (body as any).destroy();
+          }
+        } catch {
+          /* ignore */
+        }
       };
-      signal?.addEventListener('abort', abortHandler);
+      // If already aborted (auto-stop race), tear down immediately
+      if (signal?.aborted) {
+        abortHandler();
+      } else {
+        signal?.addEventListener('abort', abortHandler);
+      }
 
       let fullText = '';
       const toolCallsAccum: Array<{ id: string; name: string; arguments: string; index: number }> = [];
@@ -2292,7 +2309,11 @@ export class EnhancedAgent extends EventEmitter {
       // If the request was cancelled, do not fall back to non-streaming — just bubble up
       // the abort so the UI can render "Cancelled." without crashing.
       if (signal?.aborted || isAbortError(_streamError) || streamAborted) {
-        throw _streamError;
+        if (isAbortError(_streamError)) throw _streamError;
+        const abortErr = new Error('The operation was aborted.');
+        (abortErr as any).name = 'AbortError';
+        (abortErr as any).type = 'aborted';
+        throw abortErr;
       }
 
       // For retryable errors (network, timeout, 5xx), throw so the outer retry loop

@@ -217,6 +217,7 @@ export { loadTranscriptFile, findMainConversationTip, buildConversationChain, lo
 export { type Entry, type TranscriptMessage, type MetadataEntry, type UserTranscriptEntry, type AssistantTranscriptEntry, type SystemTranscriptEntry, type AttachmentTranscriptEntry, type SummaryTranscriptEntry, type CustomTitleTranscriptEntry, type TagTranscriptEntry, type LastPromptTranscriptEntry, type CompactBoundaryTranscriptEntry, type FileHistorySnapshotEntry, type SessionMetaTranscriptEntry, type FileHistoryBackupRef, type FileHistorySnapshot, type SessionInfo, type LiteSessionFile, isTranscriptMessage, isChainParticipant, isMetadataEntry, validateUuid, generateUuid, extractJsonStringField, extractLastJsonStringField } from './transcript-types.js';
 export { recoverConversationV2, assertResumeMessageSize, ResumeTranscriptTooLargeError, type TurnInterruptionState, type DeserializeResult } from './conversation-recovery-v2.js';
 export { registerCleanup, runCleanupFunctions, gracefulShutdown, gracefulShutdownSync, setupGracefulShutdown, isShuttingDown } from './graceful-shutdown.js';
+export { safeFetch, isFetchAbortError } from './safe-fetch.js';
 export { FileEditor, type EditResult, type SearchReplaceEdit, type LineRangeEdit, type VerifiedEdit } from './editor.js';
 
 // ─── File History ───────────────────────────────────────────────

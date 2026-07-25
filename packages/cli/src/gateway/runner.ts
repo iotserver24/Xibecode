@@ -63,10 +63,73 @@ export class GatewayRunner {
   private breakers = new Map<PlatformName, CircuitBreaker>();
   private chat: ChatController | null = null;
   private stopping = false;
+  private processGuardsInstalled = false;
 
   constructor(options: GatewayOptions = {}) {
     this.options = options;
     this.config = new ConfigManager(options.profile);
+  }
+
+  /**
+   * Keep the 24/7 daemon alive when a cancelled model stream emits an unhandled
+   * AbortError on a node-fetch Readable (auto-stop / /stop). Other uncaught
+   * exceptions still exit so process supervisors can restart a bad process.
+   */
+  private installProcessGuards(): void {
+    if (this.processGuardsInstalled) return;
+    this.processGuardsInstalled = true;
+
+    const isAbort = (err: unknown): boolean => {
+      if (!err || typeof err !== 'object') {
+        return /abort/i.test(String(err || ''));
+      }
+      const e = err as { name?: string; type?: string; message?: string };
+      return (
+        e.name === 'AbortError' ||
+        e.type === 'aborted' ||
+        /operation was aborted|aborted/i.test(String(e.message || ''))
+      );
+    };
+
+    process.on('uncaughtException', (error) => {
+      if (isAbort(error)) {
+        this.log(
+          `ignored uncaught AbortError (stop/auto-stop): ${error?.message || error}`,
+        );
+        return;
+      }
+      this.log(
+        `uncaughtException: ${error?.stack || error?.message || error}`,
+      );
+      // Non-abort: exit so systemd/docker can restart a corrupted process
+      if (!this.stopping) {
+        this.stopping = true;
+        try {
+          this.stop();
+        } catch {
+          /* ignore */
+        }
+        process.exit(1);
+      }
+    });
+
+    process.on('unhandledRejection', (reason) => {
+      if (isAbort(reason)) {
+        this.log(
+          `ignored unhandled AbortError rejection (stop/auto-stop): ${
+            (reason as any)?.message || reason
+          }`,
+        );
+        return;
+      }
+      this.log(
+        `unhandledRejection: ${
+          reason instanceof Error
+            ? reason.stack || reason.message
+            : String(reason)
+        }`,
+      );
+    });
   }
 
   private log(msg: string): void {
@@ -347,6 +410,10 @@ export class GatewayRunner {
   }
 
   async start(): Promise<void> {
+    // Must be first: auto-stop / /stop can emit AbortError on node-fetch streams
+    // outside the agent promise chain and would otherwise kill the daemon.
+    this.installProcessGuards();
+
     await ensureXibecodeHome();
     // Foreground runs need secrets from ~/.xibecode/*.env (systemd uses EnvironmentFile).
     // Profile-specific daemon-<profile>.env overwrites global gateway.env keys.
