@@ -4,7 +4,6 @@
  * Ports the messaging surface of messaging gateway plugins/platforms/telegram/adapter.py:
  * - MarkdownV2 format_message + plain fallback
  * - Long-poll getUpdates with abort on stop
- * - Optional HTTP webhook mode (for E2B auto-resume on public URL traffic)
  * - Inline approvals (ea:), clarify (cl:), model picker (mp/mm/mg/mb/mx/mpv)
  * - Choice pickers (lv:, cp:)
  * - Progress: new messages per tool by default (messaging gateway separate grouping)
@@ -12,19 +11,11 @@
  * - Documents / photos (basic media)
  * - setMyCommands menu
  *
- * Webhook mode (E2B / Vectra Cloud):
- *   TELEGRAM_WEBHOOK_PORT=8788
- *   TELEGRAM_WEBHOOK_URL=https://8788-{sandboxId}.e2b.app/telegram
- *   TELEGRAM_WEBHOOK_SECRET=optional secret_token
- * Telegram setWebhook → sandbox public URL; E2B auto-resumes paused VMs on that HTTP hit.
- * Docs: https://e2b.dev/docs/sandbox/auto-resume
- *
  * Adapted from messaging gateway Agent (MIT, Nous Research) — see NOTICE.
  */
 
 import fetch from 'node-fetch';
 import * as fs from 'fs';
-import * as http from 'http';
 import * as path from 'path';
 import type {
   InboundMessage,
@@ -46,15 +37,6 @@ export interface TelegramConfig {
   botToken: string;
   allowedUsers?: string[];
   homeChatId?: string;
-  /**
-   * When set, run HTTP webhook instead of getUpdates long-poll.
-   * Required for E2B: traffic to the public URL wakes a paused sandbox.
-   */
-  webhookPort?: number;
-  /** Full public HTTPS URL passed to Telegram setWebhook (e.g. https://8788-xxx.e2b.app/telegram). */
-  webhookUrl?: string;
-  /** Telegram secret_token; also checked on X-Telegram-Bot-Api-Secret-Token. */
-  webhookSecret?: string;
 }
 
 export interface ModelPickerOptions {
@@ -83,10 +65,6 @@ export class TelegramEngine implements MessagingAdapter {
   private stopped = false;
   private log: (m: string) => void;
   private pollAbort: AbortController | null = null;
-  private webhookServer: http.Server | null = null;
-  private webhookPort?: number;
-  private webhookUrl?: string;
-  private webhookSecret?: string;
 
   private modelPicker = new Map<string, ModelPickerState>();
   private choicePicker = new Map<
@@ -101,28 +79,6 @@ export class TelegramEngine implements MessagingAdapter {
     const baseLog = log || ((m) => console.log(`[telegram] ${m}`));
     this.log = (m) =>
       baseLog(String(m).replace(/bot\d+:[A-Za-z0-9_-]+/g, 'bot***'));
-
-    const envPort = Number(
-      process.env.TELEGRAM_WEBHOOK_PORT ||
-        process.env.XIBECODE_TELEGRAM_WEBHOOK_PORT ||
-        '',
-    );
-    this.webhookPort =
-      config.webhookPort ||
-      (Number.isFinite(envPort) && envPort > 0 ? envPort : undefined);
-    this.webhookUrl = (
-      config.webhookUrl ||
-      process.env.TELEGRAM_WEBHOOK_URL ||
-      process.env.XIBECODE_TELEGRAM_WEBHOOK_URL ||
-      ''
-    ).trim() || undefined;
-    this.webhookSecret = (
-      config.webhookSecret ||
-      process.env.TELEGRAM_WEBHOOK_SECRET ||
-      process.env.XIBECODE_TELEGRAM_WEBHOOK_SECRET ||
-      ''
-    ).trim() || undefined;
-
     if (config.allowedUsers?.length) {
       this.allowed = new Set(
         config.allowedUsers.map((s) => s.trim()).filter(Boolean),
@@ -149,14 +105,6 @@ export class TelegramEngine implements MessagingAdapter {
       this.pollAbort?.abort();
     } catch {
       /* ignore */
-    }
-    if (this.webhookServer) {
-      try {
-        this.webhookServer.close();
-      } catch {
-        /* ignore */
-      }
-      this.webhookServer = null;
     }
   }
 
@@ -791,26 +739,13 @@ export class TelegramEngine implements MessagingAdapter {
   async runLoop(
     onMessage: (msg: InboundMessage) => Promise<void>,
   ): Promise<void> {
-    await this.registerBotCommands();
-
-    // E2B/Vectra: webhook on public sandbox URL auto-resumes paused VMs on traffic.
-    const useWebhook = Boolean(
-      this.webhookPort ||
-        this.webhookUrl ||
-        process.env.TELEGRAM_WEBHOOK_MODE === '1' ||
-        process.env.XIBECODE_TELEGRAM_WEBHOOK_MODE === '1',
-    );
-    if (useWebhook) {
-      await this.runWebhookLoop(onMessage);
-      return;
-    }
-
-    // Long-poll: drop any webhook so getUpdates owns the bot
+ // Drop webhook so long-poll works ()
     try {
       await this.api('deleteWebhook', { drop_pending_updates: false });
     } catch {
       /* ignore */
     }
+    await this.registerBotCommands();
     this.log('long-polling started');
     while (!this.stopped) {
       this.pollAbort = new AbortController();
@@ -847,7 +782,68 @@ export class TelegramEngine implements MessagingAdapter {
         for (const update of data.result) {
           if (this.stopped) break;
           this.offset = Math.max(this.offset, (update.update_id || 0) + 1);
-          await this.dispatchUpdate(update, onMessage);
+          if (update.callback_query) {
+            await this.handleCallbackQuery(update.callback_query, onMessage);
+            continue;
+          }
+          const msg = update.message;
+          if (!msg) continue;
+          const chatId = String(msg.chat?.id ?? '');
+          const userId = String(msg.from?.id ?? '');
+          if (!chatId || !userId) continue;
+          if (!(await this.isAuthorized(userId, chatId))) continue;
+
+          let text = typeof msg.text === 'string' ? msg.text : '';
+          if (!text && typeof msg.caption === 'string') text = msg.caption;
+
+          // Download text-like documents so the agent can read the body
+          // (previously only the filename was mentioned — prompts-in-.txt failed).
+          if (msg.document?.file_id) {
+            const name = String(msg.document.file_name || 'attachment');
+            const mime = String(msg.document.mime_type || '');
+            try {
+              const body = await this.downloadTextAttachment(
+                msg.document.file_id,
+                name,
+                mime,
+              );
+              if (body != null) {
+                text = text
+                  ? `${text}\n\n--- attached file: ${name} ---\n${body}\n--- end ${name} ---`
+                  : `User sent file \`${name}\`. Contents:\n\n${body}`;
+              } else {
+                text = text
+                  ? `${text}\n\n[attached file: ${name} — binary or too large to inline; ask user to paste text or save path if available]`
+                  : `User attached file \`${name}\` (could not inline contents — binary/too large). Ask them to paste text or describe the task.`;
+              }
+            } catch (e: any) {
+              this.log(`document download failed: ${e?.message || e}`);
+              text = text
+                ? `${text}\n\n[attached file: ${name} — download failed: ${e?.message || e}]`
+                : `User attached file \`${name}\` but download failed: ${e?.message || e}`;
+            }
+          } else if (msg.photo?.length && !text.trim()) {
+            text = '[photo attached — no download path; describe what you need or paste text]';
+          }
+          if (!text.trim()) continue;
+          text = text.replace(/^\/([a-zA-Z0-9_]+)@[^\s]+/, '/$1');
+
+          const inbound: InboundMessage = {
+            platform: 'telegram',
+            chatId,
+            userId,
+            text: text.trim(),
+            messageId:
+              msg.message_id != null ? String(msg.message_id) : undefined,
+            username: msg.from?.username,
+          };
+          void Promise.resolve(onMessage(inbound)).catch(async (err: any) => {
+            this.log(`handler error: ${err?.message || err}`);
+            await this.sendMessage(
+              chatId,
+              `Error: ${err?.message || err}`,
+            ).catch(() => {});
+          });
         }
       } catch (err: any) {
         if (this.stopped) break;
@@ -857,208 +853,6 @@ export class TelegramEngine implements MessagingAdapter {
       }
     }
     this.log('long-polling stopped');
-  }
-
-  /**
-   * HTTP webhook mode — Telegram POSTs updates here.
-   * On E2B with lifecycle.autoResume, the first request to the public URL
-   * resumes a paused sandbox, then this server handles the update.
-   */
-  private async runWebhookLoop(
-    onMessage: (msg: InboundMessage) => Promise<void>,
-  ): Promise<void> {
-    const port = this.webhookPort || 8788;
-    const secret = this.webhookSecret || '';
-
-    await new Promise<void>((resolve, reject) => {
-      const server = http.createServer((req, res) => {
-        void this.handleWebhookHttp(req, res, onMessage, secret);
-      });
-      this.webhookServer = server;
-      server.on('error', (err) => {
-        this.log(`webhook server error: ${(err as Error).message}`);
-        reject(err);
-      });
-      server.listen(port, '0.0.0.0', () => {
-        this.log(`webhook HTTP listening on 0.0.0.0:${port}`);
-        resolve();
-      });
-    });
-
-    // Register with Telegram if we have a public URL (host may also set this)
-    const url = this.webhookUrl;
-    if (url) {
-      try {
-        const body: Record<string, unknown> = {
-          url,
-          allowed_updates: ['message', 'callback_query'],
-          drop_pending_updates: false,
-        };
-        if (secret) body.secret_token = secret;
-        const r = await this.api('setWebhook', body);
-        this.log(
-          r?.ok
-            ? `setWebhook ok → ${url.replace(/\/\/[^/]+@/, '//')}`
-            : `setWebhook failed: ${r?.description || 'unknown'}`,
-        );
-      } catch (e: any) {
-        this.log(`setWebhook error: ${e?.message || e}`);
-      }
-    } else {
-      this.log(
-        'webhook mode: no TELEGRAM_WEBHOOK_URL — listening only; host must setWebhook to this sandbox public URL',
-      );
-    }
-
-    // Stay alive until stop()
-    while (!this.stopped) {
-      await sleep(1000);
-    }
-    this.log('webhook server stopped');
-  }
-
-  private async handleWebhookHttp(
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-    onMessage: (msg: InboundMessage) => Promise<void>,
-    secret: string,
-  ): Promise<void> {
-    const urlPath = (req.url || '/').split('?')[0] || '/';
-    const method = (req.method || 'GET').toUpperCase();
-
-    const send = (code: number, obj: unknown) => {
-      const body = JSON.stringify(obj);
-      res.writeHead(code, {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(body),
-      });
-      res.end(body);
-    };
-
-    // Health / wake probes (E2B traffic also wakes paused sandbox)
-    if (
-      method === 'GET' &&
-      (urlPath === '/' ||
-        urlPath === '/health' ||
-        urlPath === '/wake' ||
-        urlPath === '/telegram')
-    ) {
-      send(200, {
-        ok: true,
-        service: 'xibecode-telegram-webhook',
-        mode: 'webhook',
-      });
-      return;
-    }
-
-    if (method === 'POST' && (urlPath === '/telegram' || urlPath === '/')) {
-      if (secret) {
-        const hdr = String(req.headers['x-telegram-bot-api-secret-token'] || '');
-        if (hdr !== secret) {
-          send(401, { ok: false, error: 'bad secret' });
-          return;
-        }
-      }
-
-      const chunks: Buffer[] = [];
-      try {
-        for await (const chunk of req) {
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-        }
-      } catch {
-        send(400, { ok: false, error: 'read failed' });
-        return;
-      }
-      const raw = Buffer.concat(chunks).toString('utf8');
-      let update: any = {};
-      try {
-        update = raw ? JSON.parse(raw) : {};
-      } catch {
-        send(400, { ok: false, error: 'invalid json' });
-        return;
-      }
-
-      // Ack Telegram immediately so delivery succeeds even if agent work is slow
-      send(200, { ok: true });
-
-      void this.dispatchUpdate(update, onMessage).catch((err: any) => {
-        this.log(`webhook dispatch error: ${err?.message || err}`);
-      });
-      return;
-    }
-
-    send(404, { ok: false, error: 'not found' });
-  }
-
-  /** Shared path for long-poll and webhook updates. */
-  private async dispatchUpdate(
-    update: any,
-    onMessage: (msg: InboundMessage) => Promise<void>,
-  ): Promise<void> {
-    if (!update || typeof update !== 'object') return;
-    if (update.update_id != null) {
-      this.offset = Math.max(this.offset, Number(update.update_id) + 1);
-    }
-    if (update.callback_query) {
-      await this.handleCallbackQuery(update.callback_query, onMessage);
-      return;
-    }
-    const msg = update.message;
-    if (!msg) return;
-    const chatId = String(msg.chat?.id ?? '');
-    const userId = String(msg.from?.id ?? '');
-    if (!chatId || !userId) return;
-    if (!(await this.isAuthorized(userId, chatId))) return;
-
-    let text = typeof msg.text === 'string' ? msg.text : '';
-    if (!text && typeof msg.caption === 'string') text = msg.caption;
-
-    // Download text-like documents so the agent can read the body
-    if (msg.document?.file_id) {
-      const name = String(msg.document.file_name || 'attachment');
-      const mime = String(msg.document.mime_type || '');
-      try {
-        const body = await this.downloadTextAttachment(
-          msg.document.file_id,
-          name,
-          mime,
-        );
-        if (body != null) {
-          text = text
-            ? `${text}\n\n--- attached file: ${name} ---\n${body}\n--- end ${name} ---`
-            : `User sent file \`${name}\`. Contents:\n\n${body}`;
-        } else {
-          text = text
-            ? `${text}\n\n[attached file: ${name} — binary or too large to inline; ask user to paste text or save path if available]`
-            : `User attached file \`${name}\` (could not inline contents — binary/too large). Ask them to paste text or describe the task.`;
-        }
-      } catch (e: any) {
-        this.log(`document download failed: ${e?.message || e}`);
-        text = text
-          ? `${text}\n\n[attached file: ${name} — download failed: ${e?.message || e}]`
-          : `User attached file \`${name}\` but download failed: ${e?.message || e}`;
-      }
-    } else if (msg.photo?.length && !text.trim()) {
-      text =
-        '[photo attached — no download path; describe what you need or paste text]';
-    }
-    if (!text.trim()) return;
-    text = text.replace(/^\/([a-zA-Z0-9_]+)@[^\s]+/, '/$1');
-
-    const inbound: InboundMessage = {
-      platform: 'telegram',
-      chatId,
-      userId,
-      text: text.trim(),
-      messageId: msg.message_id != null ? String(msg.message_id) : undefined,
-      username: msg.from?.username,
-    };
-    void Promise.resolve(onMessage(inbound)).catch(async (err: any) => {
-      this.log(`handler error: ${err?.message || err}`);
-      await this.sendMessage(chatId, `Error: ${err?.message || err}`).catch(
-        () => {},
-      );
-    });
   }
 
   private async editPickerMessage(
