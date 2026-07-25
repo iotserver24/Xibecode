@@ -185,9 +185,37 @@ def rearm_webhook() -> None:
     log(f"rearm setWebhook: {r}")
 
 
+PENDING_PATHS = (
+    "/home/user/.xibecode/daemon/pending-telegram-updates.jsonl",
+    "/tmp/xibecode-pending-telegram-updates.jsonl",
+)
+
+
+def queue_pending_update(data: dict) -> str | None:
+    """
+    Hand the wake DM to the long-poll daemon so the user does not need to resend.
+    Daemon drains this file on start (xibecode ≥1.17.2).
+    """
+    line = json.dumps(data, ensure_ascii=False) + "\n"
+    for p in PENDING_PATHS:
+        try:
+            d = os.path.dirname(p)
+            if d:
+                os.makedirs(d, exist_ok=True)
+            # Overwrite: one wake cycle → one primary update (avoid stacking)
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(line)
+            log(f"queued pending telegram update → {p}")
+            return p
+        except OSError as e:
+            log(f"queue pending failed {p}: {e}")
+    return None
+
+
 def handle_telegram_update(raw: bytes) -> None:
     load_daemon_env()
     chat_id = None
+    data: dict = {}
     try:
         data = json.loads(raw.decode("utf-8") or "{}")
         msg = data.get("message") or {}
@@ -198,19 +226,27 @@ def handle_telegram_update(raw: bytes) -> None:
     except Exception as e:
         log(f"parse update: {e}")
 
+    # Queue first so the daemon can replay the exact prompt after start
+    queued = None
+    if data:
+        queued = queue_pending_update(data)
+
     # This HTTP hit already woke the VM (E2B auto-resume). Restart the *bot*
     # long-poll (separate process — not this server).
     ok = restart_daemon()
 
     if chat_id is not None and TOKEN:
-        if ok:
+        if ok and queued:
+            # Silent success — daemon should pick up pending and answer the same "hi"
+            log("wake ok + pending queued — no resend prompt")
+        elif ok and not queued:
             tg_api(
                 "sendMessage",
                 {
                     "chat_id": chat_id,
                     "text": (
                         "Sandbox is awake — please send your message again "
-                        "(the first DM woke the machine; the coding bot uses long-poll)."
+                        "(could not queue the first DM for auto-replay)."
                     ),
                 },
             )

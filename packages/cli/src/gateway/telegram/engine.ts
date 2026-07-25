@@ -17,6 +17,7 @@
 import fetch from 'node-fetch';
 import * as fs from 'fs';
 import * as path from 'path';
+import { homedir } from 'os';
 import type {
   InboundMessage,
   MessagingAdapter,
@@ -739,13 +740,18 @@ export class TelegramEngine implements MessagingAdapter {
   async runLoop(
     onMessage: (msg: InboundMessage) => Promise<void>,
   ): Promise<void> {
- // Drop webhook so long-poll works ()
+    // Drop webhook so long-poll works
     try {
       await this.api('deleteWebhook', { drop_pending_updates: false });
     } catch {
       /* ignore */
     }
     await this.registerBotCommands();
+
+    // Vectra / E2B wake-http: first DM may hit the template webhook (auto-resume).
+    // That process queues the update here so we process it without asking to resend.
+    await this.drainPendingTelegramUpdates(onMessage);
+
     this.log('long-polling started');
     while (!this.stopped) {
       this.pollAbort = new AbortController();
@@ -782,68 +788,7 @@ export class TelegramEngine implements MessagingAdapter {
         for (const update of data.result) {
           if (this.stopped) break;
           this.offset = Math.max(this.offset, (update.update_id || 0) + 1);
-          if (update.callback_query) {
-            await this.handleCallbackQuery(update.callback_query, onMessage);
-            continue;
-          }
-          const msg = update.message;
-          if (!msg) continue;
-          const chatId = String(msg.chat?.id ?? '');
-          const userId = String(msg.from?.id ?? '');
-          if (!chatId || !userId) continue;
-          if (!(await this.isAuthorized(userId, chatId))) continue;
-
-          let text = typeof msg.text === 'string' ? msg.text : '';
-          if (!text && typeof msg.caption === 'string') text = msg.caption;
-
-          // Download text-like documents so the agent can read the body
-          // (previously only the filename was mentioned — prompts-in-.txt failed).
-          if (msg.document?.file_id) {
-            const name = String(msg.document.file_name || 'attachment');
-            const mime = String(msg.document.mime_type || '');
-            try {
-              const body = await this.downloadTextAttachment(
-                msg.document.file_id,
-                name,
-                mime,
-              );
-              if (body != null) {
-                text = text
-                  ? `${text}\n\n--- attached file: ${name} ---\n${body}\n--- end ${name} ---`
-                  : `User sent file \`${name}\`. Contents:\n\n${body}`;
-              } else {
-                text = text
-                  ? `${text}\n\n[attached file: ${name} — binary or too large to inline; ask user to paste text or save path if available]`
-                  : `User attached file \`${name}\` (could not inline contents — binary/too large). Ask them to paste text or describe the task.`;
-              }
-            } catch (e: any) {
-              this.log(`document download failed: ${e?.message || e}`);
-              text = text
-                ? `${text}\n\n[attached file: ${name} — download failed: ${e?.message || e}]`
-                : `User attached file \`${name}\` but download failed: ${e?.message || e}`;
-            }
-          } else if (msg.photo?.length && !text.trim()) {
-            text = '[photo attached — no download path; describe what you need or paste text]';
-          }
-          if (!text.trim()) continue;
-          text = text.replace(/^\/([a-zA-Z0-9_]+)@[^\s]+/, '/$1');
-
-          const inbound: InboundMessage = {
-            platform: 'telegram',
-            chatId,
-            userId,
-            text: text.trim(),
-            messageId:
-              msg.message_id != null ? String(msg.message_id) : undefined,
-            username: msg.from?.username,
-          };
-          void Promise.resolve(onMessage(inbound)).catch(async (err: any) => {
-            this.log(`handler error: ${err?.message || err}`);
-            await this.sendMessage(
-              chatId,
-              `Error: ${err?.message || err}`,
-            ).catch(() => {});
-          });
+          await this.processTelegramUpdate(update, onMessage);
         }
       } catch (err: any) {
         if (this.stopped) break;
@@ -853,6 +798,117 @@ export class TelegramEngine implements MessagingAdapter {
       }
     }
     this.log('long-polling stopped');
+  }
+
+  /**
+   * Drain updates queued by the E2B template wake-http service before long-poll.
+   * File: ~/.xibecode/daemon/pending-telegram-updates.jsonl (one Telegram update JSON per line).
+   */
+  private async drainPendingTelegramUpdates(
+    onMessage: (msg: InboundMessage) => Promise<void>,
+  ): Promise<void> {
+    const candidates = [
+      path.join(homedir(), '.xibecode', 'daemon', 'pending-telegram-updates.jsonl'),
+      '/home/user/.xibecode/daemon/pending-telegram-updates.jsonl',
+      '/tmp/xibecode-pending-telegram-updates.jsonl',
+    ];
+    for (const file of candidates) {
+      if (!fs.existsSync(file)) continue;
+      let raw = '';
+      try {
+        raw = fs.readFileSync(file, 'utf8');
+        fs.unlinkSync(file);
+      } catch (e: any) {
+        this.log(`pending telegram read failed ${file}: ${e?.message || e}`);
+        continue;
+      }
+      const lines = raw
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+      if (!lines.length) continue;
+      this.log(`replaying ${lines.length} pending Telegram update(s) from ${file}`);
+      for (const line of lines) {
+        if (this.stopped) break;
+        try {
+          const update = JSON.parse(line) as any;
+          if (update?.update_id != null) {
+            this.offset = Math.max(this.offset, Number(update.update_id) + 1);
+          }
+          await this.processTelegramUpdate(update, onMessage);
+        } catch (e: any) {
+          this.log(`pending update parse/handle failed: ${e?.message || e}`);
+        }
+      }
+    }
+  }
+
+  /** Shared path for getUpdates and wake-http pending replay. */
+  private async processTelegramUpdate(
+    update: any,
+    onMessage: (msg: InboundMessage) => Promise<void>,
+  ): Promise<void> {
+    if (!update || typeof update !== 'object') return;
+    if (update.callback_query) {
+      await this.handleCallbackQuery(update.callback_query, onMessage);
+      return;
+    }
+    const msg = update.message;
+    if (!msg) return;
+    const chatId = String(msg.chat?.id ?? '');
+    const userId = String(msg.from?.id ?? '');
+    if (!chatId || !userId) return;
+    if (!(await this.isAuthorized(userId, chatId))) return;
+
+    let text = typeof msg.text === 'string' ? msg.text : '';
+    if (!text && typeof msg.caption === 'string') text = msg.caption;
+
+    // Download text-like documents so the agent can read the body
+    if (msg.document?.file_id) {
+      const name = String(msg.document.file_name || 'attachment');
+      const mime = String(msg.document.mime_type || '');
+      try {
+        const body = await this.downloadTextAttachment(
+          msg.document.file_id,
+          name,
+          mime,
+        );
+        if (body != null) {
+          text = text
+            ? `${text}\n\n--- attached file: ${name} ---\n${body}\n--- end ${name} ---`
+            : `User sent file \`${name}\`. Contents:\n\n${body}`;
+        } else {
+          text = text
+            ? `${text}\n\n[attached file: ${name} — binary or too large to inline; ask user to paste text or save path if available]`
+            : `User attached file \`${name}\` (could not inline contents — binary/too large). Ask them to paste text or describe the task.`;
+        }
+      } catch (e: any) {
+        this.log(`document download failed: ${e?.message || e}`);
+        text = text
+          ? `${text}\n\n[attached file: ${name} — download failed: ${e?.message || e}]`
+          : `User attached file \`${name}\` but download failed: ${e?.message || e}`;
+      }
+    } else if (msg.photo?.length && !text.trim()) {
+      text =
+        '[photo attached — no download path; describe what you need or paste text]';
+    }
+    if (!text.trim()) return;
+    text = text.replace(/^\/([a-zA-Z0-9_]+)@[^\s]+/, '/$1');
+
+    const inbound: InboundMessage = {
+      platform: 'telegram',
+      chatId,
+      userId,
+      text: text.trim(),
+      messageId: msg.message_id != null ? String(msg.message_id) : undefined,
+      username: msg.from?.username,
+    };
+    void Promise.resolve(onMessage(inbound)).catch(async (err: any) => {
+      this.log(`handler error: ${err?.message || err}`);
+      await this.sendMessage(chatId, `Error: ${err?.message || err}`).catch(
+        () => {},
+      );
+    });
   }
 
   private async editPickerMessage(

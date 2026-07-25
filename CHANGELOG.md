@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.17.2] - 2026-07-25
+
+### Telegram / E2B wake
+
+- Daemon drains `~/.xibecode/daemon/pending-telegram-updates.jsonl` on start so the
+  first DM that woke a paused sandbox is processed automatically (no "send again").
+- Template wake-http queues that update before restarting the long-poll bot.
+
 ## [1.17.1] - 2026-07-25
 
 ### Hosting / E2B template
