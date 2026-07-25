@@ -752,16 +752,33 @@ export class TelegramEngine implements MessagingAdapter {
     // That process queues the update here so we process it without asking to resend.
     await this.drainPendingTelegramUpdates(onMessage);
 
+    // Soft-wake: after memory resume, wake-http queues pending + SIGUSR1 instead of
+    // cold-restarting Node (~saves several seconds). Abort the in-flight getUpdates
+    // so we drain immediately rather than waiting for a 30s poll timeout.
+    const onSoftWake = () => {
+      this.log('SIGUSR1 soft-wake — draining pending Telegram + refreshing poll');
+      try {
+        this.pollAbort?.abort();
+      } catch {
+        /* ignore */
+      }
+      void this.drainPendingTelegramUpdates(onMessage).catch((e: any) => {
+        this.log(`soft-wake drain failed: ${e?.message || e}`);
+      });
+    };
+    process.on('SIGUSR1', onSoftWake);
+
     this.log('long-polling started');
     while (!this.stopped) {
       this.pollAbort = new AbortController();
       try {
         // POST body (not GET query) — avoids embedding the bot token in error URLs
+        // Shorter long-poll so soft-wake / stale sockets recover faster after pause
         const res = await fetch(this.apiUrl('getUpdates'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            timeout: 30,
+            timeout: 10,
             offset: this.offset,
             allowed_updates: ['message', 'callback_query'],
           }),
@@ -773,16 +790,23 @@ export class TelegramEngine implements MessagingAdapter {
             this.log(
               'getUpdates 409 conflict — another bot instance is polling. Stop other gateways.',
             );
-            await sleep(5000);
+            // Clear webhook again (host may have re-armed on pause)
+            try {
+              await this.api('deleteWebhook', { drop_pending_updates: false });
+            } catch {
+              /* ignore */
+            }
+            await sleep(500);
             continue;
           }
           this.log(`getUpdates HTTP ${res.status}`);
-          await sleep(3000);
+          await sleep(1000);
           continue;
         }
         const data = (await res.json()) as { ok: boolean; result?: any[] };
         if (!data.ok || !data.result) {
-          await sleep(1000);
+          // Also pick up any pending wake DMs between polls
+          await this.drainPendingTelegramUpdates(onMessage);
           continue;
         }
         for (const update of data.result) {
@@ -790,12 +814,23 @@ export class TelegramEngine implements MessagingAdapter {
           this.offset = Math.max(this.offset, (update.update_id || 0) + 1);
           await this.processTelegramUpdate(update, onMessage);
         }
+        // Pending file may arrive mid-poll; drain each cycle (cheap if missing)
+        await this.drainPendingTelegramUpdates(onMessage);
       } catch (err: any) {
         if (this.stopped) break;
-        if (err?.name === 'AbortError') break;
+        if (err?.name === 'AbortError') {
+          // Soft-wake aborted the poll — loop immediately to drain / re-poll
+          await this.drainPendingTelegramUpdates(onMessage);
+          continue;
+        }
         this.log(`poll error: ${err?.message || err}`);
-        await sleep(5000);
+        await sleep(1000);
       }
+    }
+    try {
+      process.off('SIGUSR1', onSoftWake);
+    } catch {
+      /* ignore */
     }
     this.log('long-polling stopped');
   }

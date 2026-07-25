@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.17.3] - 2026-07-25
+
+### Telegram / E2B wake latency
+
+- **Soft-wake:** after memory resume, template wake-http queues the DM and sends
+  `SIGUSR1` to the live daemon (no Node cold start) — targets ~1–2s vs 5–6s.
+- Cold path uses a fast restart (0.1s polls, short deleteWebhook timeout).
+- Long-poll timeout 10s; drain pending on each cycle / abort for faster pickup.
+
 ## [1.17.2] - 2026-07-25
 
 ### Telegram / E2B wake

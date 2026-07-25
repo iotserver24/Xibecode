@@ -11,19 +11,12 @@ E2B auto-resumes a *paused* sandbox when traffic hits this URL
 (docs: https://e2b.dev/docs/sandbox/auto-resume
        https://e2b.dev/docs/network/public-url).
 
-Roles:
-  GET  /health|/wake  — doorbell (wake + liveness)
-  POST /telegram      — optional Telegram webhook target:
-                        1) VM already waking from this request
-                        2) restart xibecode daemon (long-poll bot, unchanged)
-                        3) ack Telegram; user may need to resend once if the
-                           update was only consumed by this webhook
+Fast path (target ~1–2s user-perceived wake):
+  Memory resume restores the running Node daemon → queue pending update +
+  SIGUSR1 soft-wake (no cold Node restart).
 
-Env (optional, from ~/.xibecode/daemon.env when started by hosting):
-  VECTRA_WAKE_PORT          default 8788
-  TELEGRAM_BOT_TOKEN        for optional setWebhook re-arm / notify
-  TELEGRAM_WEBHOOK_SECRET   X-Telegram-Bot-Api-Secret-Token
-  VECTRA_TG_WEBHOOK_URL     public URL if this process re-arms setWebhook
+Slow path (cold):
+  Spawn xibecode daemon with minimal sleeps if the process is gone.
 """
 from __future__ import annotations
 
@@ -31,6 +24,7 @@ import json
 import os
 import subprocess
 import threading
+import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -54,7 +48,13 @@ PUBLIC_URL = (
 
 WORKDIR = os.environ.get("XIBECODE_DAEMON_WORKDIR") or "/home/user/workspace"
 DAEMON_ENV = "/home/user/.xibecode/daemon.env"
+PIDFILE = "/tmp/xibecode-daemon.pid"
 LOG = "/tmp/vectra-wake-http.log"
+
+PENDING_PATHS = (
+    "/home/user/.xibecode/daemon/pending-telegram-updates.jsonl",
+    "/tmp/xibecode-pending-telegram-updates.jsonl",
+)
 
 
 def log(msg: str) -> None:
@@ -100,7 +100,7 @@ def load_daemon_env() -> None:
     ).strip()
 
 
-def tg_api(method: str, payload: dict) -> dict:
+def tg_api(method: str, payload: dict, timeout: float = 8.0) -> dict:
     if not TOKEN:
         return {"ok": False, "description": "no token"}
     data = json.dumps(payload).encode("utf-8")
@@ -111,90 +111,117 @@ def tg_api(method: str, payload: dict) -> dict:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=20) as res:
+        with urllib.request.urlopen(req, timeout=timeout) as res:
             return json.loads(res.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
         return {"ok": False, "description": str(e)}
 
 
-def restart_daemon() -> bool:
-    """Restart long-poll xibecode daemon (bot code unchanged)."""
+def delete_webhook_async() -> None:
+    """Fire-and-forget: clear host webhook so long-poll can bind (don't block soft-wake)."""
+
+    def _run() -> None:
+        load_daemon_env()
+        if not TOKEN:
+            return
+        r = tg_api("deleteWebhook", {"drop_pending_updates": False}, timeout=4.0)
+        log(f"deleteWebhook async: {r.get('ok')} {r.get('description', '')}")
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+def daemon_pid() -> int | None:
+    try:
+        with open(PIDFILE, encoding="utf-8") as f:
+            raw = f.read().strip()
+        if not raw:
+            return None
+        pid = int(raw)
+        os.kill(pid, 0)
+        return pid
+    except (OSError, ValueError):
+        return None
+
+
+def soft_wake_daemon() -> bool:
+    """
+    If the daemon process is still alive after E2B memory resume, signal it
+    instead of cold-starting Node (biggest latency win).
+    """
+    pid = daemon_pid()
+    if pid is None:
+        return False
+    delete_webhook_async()
+    try:
+        # SIGUSR1 → telegram engine drains pending + aborts stale getUpdates
+        os.kill(pid, 10)  # SIGUSR1 on Linux
+        log(f"soft-wake SIGUSR1 → pid {pid}")
+        return True
+    except OSError as e:
+        log(f"soft-wake failed pid={pid}: {e}")
+        return False
+
+
+def restart_daemon_fast() -> bool:
+    """Cold start when soft-wake is not possible — minimize sleeps."""
     script = r"""
 set +e
 set -a
 [ -f /home/user/.xibecode/daemon.env ] && . /home/user/.xibecode/daemon.env
 [ -f /home/user/.xibecode/gateway.env ] && . /home/user/.xibecode/gateway.env
 set +a
-# Long-poll bot needs no webhook; clear so getUpdates can bind
+# Clear webhook (short timeout) so long-poll can bind
 if [ -n "${TELEGRAM_BOT_TOKEN:-}${XIBECODE_TELEGRAM_BOT_TOKEN:-}" ]; then
   TOK="${TELEGRAM_BOT_TOKEN:-$XIBECODE_TELEGRAM_BOT_TOKEN}"
-  curl -sS -m 10 -X POST "https://api.telegram.org/bot${TOK}/deleteWebhook" \
+  curl -sS -m 3 -X POST "https://api.telegram.org/bot${TOK}/deleteWebhook" \
     -d "drop_pending_updates=false" >/dev/null 2>&1 || true
 fi
-# Do not pkill -f "xibecode daemon" — matches this bash -c script and self-kills.
 if [ -f /tmp/xibecode-daemon.pid ]; then
   OLD="$(cat /tmp/xibecode-daemon.pid 2>/dev/null)"
-  if [ -n "$OLD" ]; then kill "$OLD" 2>/dev/null || true; sleep 1; kill -9 "$OLD" 2>/dev/null || true; fi
+  if [ -n "$OLD" ]; then kill "$OLD" 2>/dev/null || true; kill -9 "$OLD" 2>/dev/null || true; fi
   rm -f /tmp/xibecode-daemon.pid
 fi
-for pid in $(pgrep -f "node.*xibecode|xibecode/dist" 2>/dev/null || true); do
-  if [ "$pid" != "$$" ] && [ "$pid" != "$PPID" ]; then
-    case "$(tr '\\0' ' ' < /proc/$pid/cmdline 2>/dev/null || true)" in
-      *daemon*) kill "$pid" 2>/dev/null || true ;;
-    esac
-  fi
-done
-sleep 1
 nohup xibecode daemon --workdir /home/user/workspace >/tmp/xibecode-daemon.log 2>&1 &
 echo $! > /tmp/xibecode-daemon.pid
 OK=0
-for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-  sleep 1
-  if [ -f /tmp/xibecode-daemon.pid ] && kill -0 "$(cat /tmp/xibecode-daemon.pid)" 2>/dev/null; then OK=1; break; fi
+# ~2s max (20 × 0.1s) — pid existence is enough; agent warms in background
+for i in $(seq 1 20); do
+  if [ -f /tmp/xibecode-daemon.pid ] && kill -0 "$(cat /tmp/xibecode-daemon.pid)" 2>/dev/null; then
+    OK=1
+    break
+  fi
+  sleep 0.1
 done
 if [ "$OK" = "1" ]; then echo DAEMON_OK; else echo DAEMON_FAIL; fi
 """
     try:
+        t0 = time.monotonic()
         r = subprocess.run(
             ["bash", "-lc", script],
             capture_output=True,
             text=True,
-            timeout=90,
+            timeout=30,
             cwd=WORKDIR,
         )
         out = (r.stdout or "") + (r.stderr or "")
-        log(f"restart_daemon: {out[-500:]}")
+        log(f"restart_daemon_fast {time.monotonic() - t0:.2f}s: {out[-400:]}")
         return "DAEMON_OK" in out
     except Exception as e:
-        log(f"restart_daemon error: {e}")
+        log(f"restart_daemon_fast error: {e}")
         return False
 
 
-def rearm_webhook() -> None:
-    """After pause cycle, host may re-arm; we can also re-point Telegram here."""
-    if not TOKEN or not PUBLIC_URL:
-        return
-    body: dict = {
-        "url": PUBLIC_URL,
-        "allowed_updates": ["message", "callback_query"],
-        "drop_pending_updates": False,
-    }
-    if SECRET:
-        body["secret_token"] = SECRET
-    r = tg_api("setWebhook", body)
-    log(f"rearm setWebhook: {r}")
-
-
-PENDING_PATHS = (
-    "/home/user/.xibecode/daemon/pending-telegram-updates.jsonl",
-    "/tmp/xibecode-pending-telegram-updates.jsonl",
-)
+def ensure_daemon() -> bool:
+    """Prefer soft-wake (resume) over cold restart."""
+    if soft_wake_daemon():
+        return True
+    return restart_daemon_fast()
 
 
 def queue_pending_update(data: dict) -> str | None:
     """
     Hand the wake DM to the long-poll daemon so the user does not need to resend.
-    Daemon drains this file on start (xibecode ≥1.17.2).
+    Daemon drains this file on start / SIGUSR1 (xibecode ≥1.17.2).
     """
     line = json.dumps(data, ensure_ascii=False) + "\n"
     for p in PENDING_PATHS:
@@ -202,7 +229,6 @@ def queue_pending_update(data: dict) -> str | None:
             d = os.path.dirname(p)
             if d:
                 os.makedirs(d, exist_ok=True)
-            # Overwrite: one wake cycle → one primary update (avoid stacking)
             with open(p, "w", encoding="utf-8") as f:
                 f.write(line)
             log(f"queued pending telegram update → {p}")
@@ -213,6 +239,7 @@ def queue_pending_update(data: dict) -> str | None:
 
 
 def handle_telegram_update(raw: bytes) -> None:
+    t0 = time.monotonic()
     load_daemon_env()
     chat_id = None
     data: dict = {}
@@ -226,44 +253,22 @@ def handle_telegram_update(raw: bytes) -> None:
     except Exception as e:
         log(f"parse update: {e}")
 
-    # Queue first so the daemon can replay the exact prompt after start
-    queued = None
-    if data:
-        queued = queue_pending_update(data)
+    queued = queue_pending_update(data) if data else None
+    ok = ensure_daemon()
+    elapsed = time.monotonic() - t0
+    log(f"wake path done ok={ok} queued={bool(queued)} {elapsed:.2f}s")
 
-    # This HTTP hit already woke the VM (E2B auto-resume). Restart the *bot*
-    # long-poll (separate process — not this server).
-    ok = restart_daemon()
-
-    if chat_id is not None and TOKEN:
-        if ok and queued:
-            # Silent success — daemon should pick up pending and answer the same "hi"
-            log("wake ok + pending queued — no resend prompt")
-        elif ok and not queued:
-            tg_api(
-                "sendMessage",
-                {
-                    "chat_id": chat_id,
-                    "text": (
-                        "Sandbox is awake — please send your message again "
-                        "(could not queue the first DM for auto-replay)."
-                    ),
-                },
-            )
-        else:
-            tg_api(
-                "sendMessage",
-                {
-                    "chat_id": chat_id,
-                    "text": (
-                        "Could not start the coding bot after wake. "
-                        "Use Wake / resume on the dashboard."
-                    ),
-                },
-            )
-
-    # Daemon long-poll owns Telegram while running. Host/cron re-arms this
-    # webhook URL when the sandbox pauses again (E2B lifecycle).
+    if chat_id is not None and TOKEN and not ok:
+        tg_api(
+            "sendMessage",
+            {
+                "chat_id": chat_id,
+                "text": (
+                    "Could not start the coding bot after wake. "
+                    "Use Wake / resume on the dashboard."
+                ),
+            },
+        )
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -287,7 +292,8 @@ class Handler(BaseHTTPRequestHandler):
                     "ok": True,
                     "service": "vectra-wake-http",
                     "port": PORT,
-                    "note": "E2B template doorbell — not xibecode bot",
+                    "daemon_alive": daemon_pid() is not None,
+                    "note": "E2B template doorbell — soft-wake when possible",
                 },
             )
             return
@@ -299,7 +305,16 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length) if length > 0 else b"{}"
 
         if path in ("/wake", "/"):
-            self._send(200, {"ok": True, "service": "vectra-wake-http", "woke": True})
+            # Pure doorbell — E2B already resumed on this request
+            self._send(
+                200,
+                {
+                    "ok": True,
+                    "service": "vectra-wake-http",
+                    "woke": True,
+                    "daemon_alive": daemon_pid() is not None,
+                },
+            )
             return
 
         if path == "/telegram":
@@ -308,7 +323,7 @@ class Handler(BaseHTTPRequestHandler):
                 if hdr != SECRET:
                     self._send(401, {"ok": False, "error": "bad secret"})
                     return
-            # Ack Telegram immediately (delivery success); work in background
+            # Ack Telegram immediately; work in background
             self._send(200, {"ok": True, "accepted": True})
             threading.Thread(target=handle_telegram_update, args=(raw,), daemon=True).start()
             return
@@ -319,7 +334,7 @@ class Handler(BaseHTTPRequestHandler):
 def main() -> None:
     load_daemon_env()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-    log(f"vectra-wake-http listening 0.0.0.0:{PORT} (template doorbell)")
+    log(f"vectra-wake-http listening 0.0.0.0:{PORT} (soft-wake + fast restart)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
