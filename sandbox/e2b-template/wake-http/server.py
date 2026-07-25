@@ -131,18 +131,26 @@ if [ -n "${TELEGRAM_BOT_TOKEN:-}${XIBECODE_TELEGRAM_BOT_TOKEN:-}" ]; then
   curl -sS -m 10 -X POST "https://api.telegram.org/bot${TOK}/deleteWebhook" \
     -d "drop_pending_updates=false" >/dev/null 2>&1 || true
 fi
+# Do not pkill -f "xibecode daemon" — matches this bash -c script and self-kills.
 if [ -f /tmp/xibecode-daemon.pid ]; then
-  kill "$(cat /tmp/xibecode-daemon.pid)" 2>/dev/null || true
-  sleep 1
+  OLD="$(cat /tmp/xibecode-daemon.pid 2>/dev/null)"
+  if [ -n "$OLD" ]; then kill "$OLD" 2>/dev/null || true; sleep 1; kill -9 "$OLD" 2>/dev/null || true; fi
+  rm -f /tmp/xibecode-daemon.pid
 fi
-pkill -f "xibecode daemon" 2>/dev/null || true
+for pid in $(pgrep -f "node.*xibecode|xibecode/dist" 2>/dev/null || true); do
+  if [ "$pid" != "$$" ] && [ "$pid" != "$PPID" ]; then
+    case "$(tr '\\0' ' ' < /proc/$pid/cmdline 2>/dev/null || true)" in
+      *daemon*) kill "$pid" 2>/dev/null || true ;;
+    esac
+  fi
+done
 sleep 1
 nohup xibecode daemon --workdir /home/user/workspace >/tmp/xibecode-daemon.log 2>&1 &
 echo $! > /tmp/xibecode-daemon.pid
 OK=0
 for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
   sleep 1
-  if pgrep -f "xibecode daemon" >/dev/null 2>&1; then OK=1; break; fi
+  if [ -f /tmp/xibecode-daemon.pid ] && kill -0 "$(cat /tmp/xibecode-daemon.pid)" 2>/dev/null; then OK=1; break; fi
 done
 if [ "$OK" = "1" ]; then echo DAEMON_OK; else echo DAEMON_FAIL; fi
 """
