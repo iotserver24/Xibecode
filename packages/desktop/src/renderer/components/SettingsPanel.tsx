@@ -599,7 +599,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                     />
                   </div>
 
-                  <div className="bg-xibe-surface-raised/40 border border-xibe-border/40 rounded-xl p-5 space-y-4">
+                  <div className="bg-xibe-surface-hover/50 border border-xibe-border-subtle rounded-xl p-5 space-y-4">
                     <h4 className="text-[10px] font-bold text-xibe-text-secondary uppercase tracking-wider">Host URL Presets</h4>
                     <div className="flex flex-wrap gap-2.5">
                       {[
@@ -611,7 +611,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                         <button
                           key={preset.label}
                           onClick={() => setBaseUrl(preset.url)}
-                          className="text-[10px] bg-xibe-surface-raised border border-xibe-border/60 text-xibe-text-secondary hover:text-xibe-text hover:border-xibe-border-focus px-3 py-2 rounded-lg transition-all cursor-pointer font-semibold shadow-sm"
+                          className="text-[10px] bg-xibe-surface border border-xibe-border-subtle text-xibe-text-secondary hover:text-xibe-text hover:border-xibe-border-focus px-3 py-2 rounded-lg transition-all cursor-pointer font-semibold"
                         >
                           {preset.label}
                         </button>
@@ -725,7 +725,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                     />
                   </div>
 
-                  <div className="bg-xibe-surface-raised/40 border border-xibe-border/40 rounded-xl p-5 space-y-4">
+                  <div className="bg-xibe-surface-hover/50 border border-xibe-border-subtle rounded-xl p-5 space-y-4">
                     <h4 className="text-[10px] font-bold text-xibe-text-secondary uppercase tracking-wider">Quick Preset Tags</h4>
                     <div className="flex flex-wrap gap-2.5">
                       {[
@@ -737,7 +737,7 @@ export default function SettingsPanel({ onClose, onModelChange, onProviderChange
                         <button
                           key={preset}
                           onClick={() => setEconomyModel(preset)}
-                          className="text-[10px] font-mono bg-xibe-surface-raised border border-xibe-border/60 text-xibe-text-secondary hover:text-xibe-text hover:border-xibe-border-focus px-3.5 py-2 rounded-lg transition-all cursor-pointer font-semibold"
+                          className="text-[10px] font-mono bg-xibe-surface border border-xibe-border-subtle text-xibe-text-secondary hover:text-xibe-text hover:border-xibe-border-focus px-3.5 py-2 rounded-lg transition-all cursor-pointer font-semibold"
                         >
                           {preset}
                         </button>

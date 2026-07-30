@@ -2,9 +2,9 @@
 
 @theme {
   --color-xibe-bg: #09090b;
-  --color-xibe-surface: #121214;
+  --color-xibe-surface: #09090b;
   --color-xibe-surface-raised: #18181b;
-  --color-xibe-surface-hover: #27272a;
+  --color-xibe-surface-hover: #18181b;
   --color-xibe-border: #27272a;
   --color-xibe-border-subtle: #18181b;
   --color-xibe-border-focus: #52525b;
@@ -50,8 +50,8 @@ body {
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #27272a; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+::-webkit-scrollbar-thumb { background: var(--color-xibe-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-xibe-border-focus); }
 
 ::selection { background: rgba(250, 250, 250, 0.2); color: #fff; }
 pre, code { font-family: var(--font-mono); }
@@ -60,4 +60,4 @@ pre, code { font-family: var(--font-mono); }
 @keyframes slide-up { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes pulse-dot { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
 
-*:focus-visible { outline: 2px solid var(--color-xibe-border-focus); outline-offset: -2px; border-radius: 4px; }
+*:focus-visible { outline: 1px solid var(--color-xibe-border-focus); outline-offset: -1px; border-radius: 4px; }
