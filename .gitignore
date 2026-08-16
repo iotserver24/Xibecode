@@ -64,6 +64,7 @@ packages/ext/dist/
 # Not part of the monorepo (local only)
 Skill-marketplace/
 site/
+cloud-infra/
 next/
 reports/
 screenshots/
