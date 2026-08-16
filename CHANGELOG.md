@@ -7,6 +7,7 @@
 - Wake HTTP (`:8788`) mints tokenized workspace download links: `https://8788-{sandboxId}.e2b.app/f/{token}/{name}`.
 - Gateway `MEDIA:` delivery does **both**: native upload (Telegram / Discord / Slack / app) **and** the public share link so zips and big files stay downloadable after pause.
 - E2B agent prompt requires `MEDIA:` for archives and exports (no “it’s at /workspace/…”).
+- E2B template `xibecode-full-sandbox` rebuilt with CLI **1.17.7**.
 
 ### App chat / vision
 
