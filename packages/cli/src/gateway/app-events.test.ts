@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  fileKindFromName,
   inboxAuthorized,
   inlineUploadPrompt,
   makeEvent,
   parseBearer,
+  parseProgressText,
 } from './app-events.js';
 
 describe('app chat events', () => {
@@ -54,5 +56,16 @@ describe('app chat events', () => {
     expect(prompt).toContain('--- attached file: notes.md ---');
     expect(prompt).toContain('# hi');
     expect(prompt).toContain('`/ws/inbox/shot.png`');
+    expect(prompt).toContain('Open and look at that image file');
+  });
+
+  it('classifies image uploads and parses progress text', () => {
+    expect(fileKindFromName('shot.PNG')).toBe('photo');
+    expect(fileKindFromName('notes.pdf')).toBe('document');
+    expect(fileKindFromName('clip.mp4')).toBe('video');
+    expect(parseProgressText('still on it · 45s · 3 tools')).toEqual({
+      elapsedMs: 45000,
+      tools: 3,
+    });
   });
 });

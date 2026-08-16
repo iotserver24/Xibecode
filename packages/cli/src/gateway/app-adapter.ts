@@ -17,9 +17,11 @@ import {
   APP_DEFAULT_CHAT_ID,
   APP_DEFAULT_USER_ID,
   APP_INBOX_DEFAULT_PORT,
+  fileKindFromName,
   inboxAuthorized,
   inlineUploadPrompt,
   makeEvent,
+  parseProgressText,
   type AppChatEvent,
   type AppFileKind,
 } from './app-events.js';
@@ -169,6 +171,9 @@ export class AppAdapter implements MessagingAdapter {
   private fileSeq = 0;
   private secrets: string[] = [];
   private stopped = false;
+  private typedThisTurn = false;
+  private progressStarted = false;
+  private progressEventId?: string;
   private pickerHandlers = new Map<
     string,
     (value: string) => Promise<string>
@@ -217,7 +222,15 @@ export class AppAdapter implements MessagingAdapter {
     this.emit(chatId, { type: 'done' });
   }
 
+  private beginInboundTurn(): void {
+    this.typedThisTurn = false;
+    this.progressStarted = false;
+    this.progressEventId = undefined;
+  }
+
   async sendTyping(chatId: string): Promise<void> {
+    if (this.typedThisTurn) return;
+    this.typedThisTurn = true;
     this.emit(chatId, { type: 'typing', text: 'on it' });
   }
 
@@ -226,12 +239,28 @@ export class AppAdapter implements MessagingAdapter {
     text: string,
     previousMessageId?: string,
   ): Promise<string | undefined> {
+    const trimmed = String(text || '').slice(0, 400);
+    const parsed = parseProgressText(trimmed);
+    const editingStatus =
+      Boolean(previousMessageId) && previousMessageId === this.progressEventId;
+    const firstStatus = !previousMessageId && !this.progressStarted;
+    if (editingStatus || firstStatus) {
+      this.progressStarted = true;
+      const ev = this.emit(chatId, {
+        type: 'progress',
+        text: trimmed,
+        elapsedMs: parsed.elapsedMs,
+        tools: parsed.tools,
+      });
+      this.progressEventId = ev.id;
+      return ev.id;
+    }
     const ev = this.emit(chatId, {
       type: 'tool',
-      state: 'start',
-      summary: String(text || '').slice(0, 400),
+      state: previousMessageId ? 'done' : 'start',
+      summary: trimmed,
     });
-    return previousMessageId || ev.id;
+    return ev.id;
   }
 
   async editInteractiveMessage(
@@ -351,6 +380,7 @@ export class AppAdapter implements MessagingAdapter {
   }
 
   private async dispatchInbound(text: string, chatId: string): Promise<void> {
+    this.beginInboundTurn();
     const trimmed = text.trim();
     if (!trimmed || !this.onMessage) return;
     const msg: InboundMessage = {
@@ -448,24 +478,45 @@ export class AppAdapter implements MessagingAdapter {
         name: string;
         savedPath?: string;
         inlineText?: string;
+        mime?: string;
+        kind?: AppFileKind;
       }> = [];
       if (files.length) {
         const destDir = inboxUploadDir(this.workdir());
         await fs.mkdir(destDir, { recursive: true });
+        await fs.mkdir(outboxDir(), { recursive: true });
         for (const f of files.slice(0, 8)) {
           const name = path.basename(String(f.name || 'upload.bin')) || 'upload.bin';
           const raw = Buffer.from(String(f.contentBase64 || ''), 'base64');
           if (!raw.length) continue;
           const dest = path.join(destDir, name);
           await fs.writeFile(dest, raw);
+          const kind = fileKindFromName(name, f.mime);
+          this.fileSeq += 1;
+          const fileId = `f${this.fileSeq}`;
+          const outDest = path.join(outboxDir(), `${fileId}-${name}`);
+          await fs.copyFile(dest, outDest);
+          this.files.set(fileId, { abs: outDest, name, kind });
+          this.emit(chatId, {
+            type: 'file',
+            fileId,
+            name,
+            kind,
+            mime: f.mime,
+            size: raw.length,
+            role: 'user',
+            caption: text || undefined,
+          });
           if (looksTextFile(name, f.mime) && raw.length <= TEXT_INLINE_MAX) {
             uploaded.push({
               name,
               savedPath: dest,
               inlineText: raw.toString('utf8'),
+              mime: f.mime,
+              kind,
             });
           } else {
-            uploaded.push({ name, savedPath: dest });
+            uploaded.push({ name, savedPath: dest, mime: f.mime, kind });
           }
         }
       }

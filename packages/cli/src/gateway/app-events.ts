@@ -15,6 +15,7 @@ export type AppEventType =
   | 'approve'
   | 'picker'
   | 'file'
+  | 'progress'
   | 'done'
   | 'error';
 
@@ -40,6 +41,12 @@ export interface AppChatEvent {
   kind?: AppFileKind | AppPickerKind;
   fileId?: string;
   caption?: string;
+  mime?: string;
+  size?: number;
+  role?: 'user' | 'assistant';
+  elapsedMs?: number;
+  tools?: number;
+  pct?: number;
   options?: Array<{ value: string; label: string; current?: boolean }>;
   /** Approval / ask / picker id the client echoes back. */
   ref?: string;
@@ -85,18 +92,60 @@ export function inboxAuthorized(opts: {
   return offered.some((o) => secrets.includes(o));
 }
 
+const IMAGE_EXTS = new Set([
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.bmp',
+  '.heic',
+  '.heif',
+]);
+
+export function fileKindFromName(name: string, mime?: string): AppFileKind {
+  if (mime && /^image\//i.test(mime)) return 'photo';
+  if (mime && /^video\//i.test(mime)) return 'video';
+  if (mime && /^audio\//i.test(mime)) return 'audio';
+  const ext = name.includes('.') ? name.slice(name.lastIndexOf('.')).toLowerCase() : '';
+  if (IMAGE_EXTS.has(ext)) return 'photo';
+  if (['.mp4', '.mov', '.webm', '.mkv'].includes(ext)) return 'video';
+  if (['.mp3', '.wav', '.ogg', '.m4a', '.opus'].includes(ext)) return 'audio';
+  return 'document';
+}
+
+export function parseProgressText(text: string): { elapsedMs?: number; tools?: number } {
+  const secs = /\b(\d+)s\b/.exec(text);
+  const tools = /\b(\d+)\s+tools?\b/i.exec(text);
+  return {
+    elapsedMs: secs ? Number(secs[1]) * 1000 : undefined,
+    tools: tools ? Number(tools[1]) : undefined,
+  };
+}
+
 export function inlineUploadPrompt(
   caption: string,
-  files: Array<{ name: string; savedPath?: string; inlineText?: string }>,
+  files: Array<{
+    name: string;
+    savedPath?: string;
+    inlineText?: string;
+    mime?: string;
+    kind?: string;
+  }>,
 ): string {
   const cap = caption.trim();
   if (!files.length) return cap;
   const parts: string[] = [];
   if (cap) parts.push(cap);
   for (const f of files) {
+    const kind = f.kind || fileKindFromName(f.name, f.mime);
     if (f.inlineText != null) {
       parts.push(
         `--- attached file: ${f.name} ---\n${f.inlineText}\n--- end ${f.name} ---`,
+      );
+    } else if (kind === 'photo' && f.savedPath) {
+      parts.push(
+        `User attached image \`${f.name}\` saved at \`${f.savedPath}\`. Open and look at that image file — it is already on disk in the workspace.`,
       );
     } else if (f.savedPath) {
       parts.push(
