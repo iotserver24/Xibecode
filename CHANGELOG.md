@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.17.14] - 2026-08-16
+
+### Release
+
+- `xibecode-core` and `xibecode` **1.17.14** (npm). Includes Nous Portal live `/models` pickers and workspace file shares from earlier 1.17.10 work.
+
 ## [1.17.10] - 2026-08-16
 
 ### Providers
