@@ -79,6 +79,7 @@ export {
 
 // ─── Agent ─────────────────────────────────────────────────────
 export { EnhancedAgent } from './agent.js';
+export { ToolLoopGuard, type LoopDecision } from './tool-loop-guard.js';
 export {
   resolveContextWindow,
   heuristicContextWindow,

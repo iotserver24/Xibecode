@@ -40,6 +40,7 @@ import {
   resolveContextWindow,
   usagePercent,
 } from './context-window.js';
+import { ToolLoopGuard } from './tool-loop-guard.js';
 
 function imageHref(img: ImageAttachment): string | null {
   const url = (img.url || '').trim();
@@ -134,91 +135,8 @@ export interface AgentEvent {
   data: any;
 }
 
-export class LoopDetector {
-  private history: Array<{ tool: string; signature: string; coarse: string; timestamp: number }> = [];
-  private readonly maxRepeats = 3;
-  private readonly timeWindow = 10000;
-
-  check(toolName: string, toolInput: any): { allowed: boolean; reason?: string } {
-    const signature = this.makeSignature(toolName, toolInput);
-    const coarse = this.makeCoarseSignature(toolName, toolInput);
-    const now = Date.now();
-
-    this.history.push({ tool: toolName, signature, coarse, timestamp: now });
-    this.history = this.history.filter(h => now - h.timestamp < this.timeWindow);
-
-    const recentDuplicates = this.history.filter(h => h.signature === signature);
-    if (recentDuplicates.length >= this.maxRepeats) {
-      return {
-        allowed: false,
-        reason: `CRITICAL ERROR: Loop detected! You called ${toolName} ${this.maxRepeats}+ times with the exact same parameters. YOU MUST STOP AND RE-EVALUATE YOUR STRATEGY. Do not use this tool again right now. Change your mindset. Use 'search_files' or 'get_context' to gather new facts before proceeding.`,
-      };
-    }
-
-    const sameTool = this.history.filter(h => h.tool === toolName);
-    const sameCoarse = this.history.filter(h => h.coarse === coarse);
-
-    // Aggressive coarse match rejection
-    if (sameCoarse.length >= this.maxRepeats + 1) {
-      return {
-        allowed: false,
-        reason: `CRITICAL ERROR: Repeated ${toolName} attempts with near-identical patterns. YOUR ASSUMPTIONS ARE WRONG. Step back, verify file paths with 'search_files', and try a completely different approach.`,
-      };
-    }
-
-    // Lower threshold for repeated tool failures
-    if (sameTool.length >= this.maxRepeats + 2) {
-      const uniquePatterns = new Set(sameTool.map(h => h.coarse)).size;
-      if (uniquePatterns <= 3) {
-        return {
-          allowed: false,
-          reason: `CRITICAL ERROR: ${toolName} repeated ${sameTool.length} times with little variation. STOP guessing. Use 'read_file' or 'grep_code' to find the actual code structure, or use 'web_search' if you lack documentation.`,
-        };
-      }
-      return {
-        allowed: true,
-        reason: `Warning: ${toolName} called ${sameTool.length} times recently. Ensure you are making progress.`,
-      };
-    }
-
-    return { allowed: true };
-  }
-
-  reset() {
-    this.history = [];
-  }
-
-  private makeSignature(toolName: string, input: unknown): string {
-    return JSON.stringify({
-      tool: toolName,
-      input: this.canonicalize(input),
-    });
-  }
-
-  private makeCoarseSignature(toolName: string, input: unknown): string {
-    const canonical = this.canonicalize(input);
-    if (!canonical || typeof canonical !== 'object' || Array.isArray(canonical)) {
-      return `${toolName}:primitive`;
-    }
-    const keys = Object.keys(canonical as Record<string, unknown>).sort();
-    return `${toolName}:${keys.join(',')}`;
-  }
-
-  private canonicalize(value: unknown): unknown {
-    if (Array.isArray(value)) {
-      return value.map((item) => this.canonicalize(item));
-    }
-    if (value && typeof value === 'object') {
-      const inObj = value as Record<string, unknown>;
-      const out: Record<string, unknown> = {};
-      for (const key of Object.keys(inObj).sort()) {
-        out[key] = this.canonicalize(inObj[key]);
-      }
-      return out;
-    }
-    return value;
-  }
-}
+/** @deprecated Use ToolLoopGuard. Kept as an alias for older imports. */
+export { ToolLoopGuard as LoopDetector } from './tool-loop-guard.js';
 
 const MAX_TOOL_RESULT_CHARS = 30000;
 
@@ -324,7 +242,7 @@ function retryDelayMs(attempt: number, baseMs = 2000, maxMs = 30000): number {
 export class EnhancedAgent extends EventEmitter {
   private client: Anthropic;
   private messages: MessageParam[] = [];
-  private loopDetector = new LoopDetector();
+  private loopDetector = new ToolLoopGuard();
   private thinkFilter = new ThinkTagFilter();
   private config: Required<Omit<AgentConfig, 'sessionMemory' | 'contextHintFiles' | 'planningModel' | 'executionModel' | 'mindsetAdaptive' | 'strictTextOnlyCompletion' | 'defaultSkillsPrompt' | 'requestFormat' | 'completionEvidenceMode' | 'postEditVerification' | 'memoryRecallMinScore' | 'remoteToolWorkspaceRoot' | 'remoteToolSandboxId' | 'fallbackProviders'>> & { customProviderFormat: 'openai' | 'anthropic'; requestFormat: 'auto' | 'openai' | 'anthropic'; sessionMemory?: SessionMemory | null; contextHintFiles: string[]; planningModel?: string; executionModel?: string; mindsetAdaptive?: boolean; strictTextOnlyCompletion: boolean; completionEvidenceMode: 'off' | 'balanced' | 'strict'; postEditVerification: 'off' | 'balanced' | 'strict'; memoryRecallMinScore: number; fallbackProviders: ProviderEndpoint[] };
   /** Multi-endpoint pool for connection reliability / failover. */
@@ -1665,7 +1583,7 @@ export class EnhancedAgent extends EventEmitter {
   ): Promise<ToolExecutionUpdate> {
     this.toolCallCount++;
 
-    const loopCheck = this.loopDetector.check(toolUse.name, toolUse.input);
+    const loopCheck = this.loopDetector.before(toolUse.name, toolUse.input);
     if (!loopCheck.allowed) {
       this.emit('warning', { message: loopCheck.reason });
       return {
@@ -1676,8 +1594,8 @@ export class EnhancedAgent extends EventEmitter {
       };
     }
 
-    if (loopCheck.reason) {
-      this.emit('warning', { message: loopCheck.reason });
+    if (loopCheck.warning) {
+      this.emit('warning', { message: loopCheck.warning });
     }
 
     this.emit('tool_call', {
@@ -1767,6 +1685,8 @@ export class EnhancedAgent extends EventEmitter {
       }
 
       const success = !result?.error && result?.success !== false;
+      const after = this.loopDetector.after(toolUse.name, toolUse.input, result, success);
+      if (after.warning) this.emit('warning', { message: after.warning });
       this.emit('tool_result', {
         name: toolUse.name,
         result,
@@ -1792,10 +1712,13 @@ export class EnhancedAgent extends EventEmitter {
         tool: toolUse.name,
         error: error.message,
       });
+      const failText = `Error: ${error.message}`;
+      const after = this.loopDetector.after(toolUse.name, toolUse.input, failText, false);
+      if (after.warning) this.emit('warning', { message: after.warning });
       return {
         toolUse,
         index,
-        result: `Error: ${error.message}`,
+        result: failText,
         success: false,
       };
     }

@@ -32,7 +32,7 @@ export interface ModelPickerState {
 }
 
 export const PROVIDER_PAGE_SIZE = 10;
-export const MODEL_PAGE_SIZE = 8;
+export const MODEL_PAGE_SIZE = 10;
 
 type Btn = { text: string; callback_data: string };
 type Keyboard = { inline_keyboard: Btn[][] };

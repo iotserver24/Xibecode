@@ -735,6 +735,12 @@ export class ChatController {
       pendingMediaPaths: [],
     };
     this.active.set(k, activeRun);
+    void adapter.sendTurnStatus?.(msg.chatId, {
+      busy: true,
+      startedAt: activeRun.startedAt,
+      elapsedMs: 0,
+      tools: 0,
+    });
 
     let session;
     try {
@@ -817,6 +823,13 @@ export class ChatController {
             ? `${phrase} · ${secs}s · ${tools} tool${tools === 1 ? '' : 's'}`
             : `${phrase} · ${secs}s`,
         );
+        void adapter.sendTurnStatus?.(msg.chatId, {
+          busy: true,
+          startedAt: activeRun.startedAt,
+          elapsedMs: now - activeRun.startedAt,
+          tools,
+          lastTool: activeRun.lastToolLine,
+        });
       }
     }, 5_000);
     void adapter.sendTyping?.(msg.chatId, { threadId: msg.threadId });
@@ -1267,6 +1280,13 @@ export class ChatController {
         /* ignore */
       }
       clearInterval(typingTimer);
+      void adapter.sendTurnStatus?.(msg.chatId, {
+        busy: false,
+        startedAt: activeRun.startedAt,
+        elapsedMs: Date.now() - activeRun.startedAt,
+        tools: activeRun.toolCount || 0,
+        lastTool: activeRun.lastToolLine,
+      });
       if (activeRun.pendingApproval) {
         activeRun.pendingApproval.resolve('deny');
         activeRun.pendingApproval = undefined;

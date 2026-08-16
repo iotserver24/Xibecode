@@ -18,6 +18,7 @@ export type AppEventType =
   | 'file'
   | 'progress'
   | 'usage'
+  | 'status'
   | 'done'
   | 'error';
 
@@ -57,6 +58,9 @@ export interface AppChatEvent {
   max?: number;
   model?: string;
   label?: string;
+  busy?: boolean;
+  startedAt?: number;
+  lastTool?: string;
   options?: Array<{ value: string; label: string; current?: boolean }>;
   /** Approval / ask / picker id the client echoes back. */
   ref?: string;

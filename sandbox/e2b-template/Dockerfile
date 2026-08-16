@@ -75,10 +75,10 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 #          (cd packages/cli  && npm pack --pack-destination ../../sandbox/e2b-template)
 # Then rename to xibecode-core.tgz / xibecode.tgz or keep versioned names below.
 RUN mkdir -p /tmp/packs
-COPY xibecode-core-1.17.9.tgz /tmp/packs/xibecode-core-1.17.9.tgz
-COPY xibecode-1.17.9.tgz /tmp/packs/xibecode-1.17.9.tgz
+COPY xibecode-core-1.17.10.tgz /tmp/packs/xibecode-core-1.17.10.tgz
+COPY xibecode-1.17.10.tgz /tmp/packs/xibecode-1.17.10.tgz
 RUN set -e; \
-  npm install -g /tmp/packs/xibecode-core-1.17.9.tgz /tmp/packs/xibecode-1.17.9.tgz agent-browser; \
+  npm install -g /tmp/packs/xibecode-core-1.17.10.tgz /tmp/packs/xibecode-1.17.10.tgz agent-browser; \
   (agent-browser install --with-deps || agent-browser install); \
   xibecode -v; \
   agent-browser --version || true

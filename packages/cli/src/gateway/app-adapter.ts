@@ -192,6 +192,13 @@ export class AppAdapter implements MessagingAdapter {
     input?: number;
     output?: number;
   } | null = null;
+  private lastTurn: {
+    busy: boolean;
+    startedAt?: number;
+    elapsedMs?: number;
+    tools?: number;
+    lastTool?: string;
+  } | null = null;
 
   constructor(
     opts: { homeChatId?: string; workdir?: () => string } = {},
@@ -312,6 +319,30 @@ export class AppAdapter implements MessagingAdapter {
     });
   }
 
+  async sendTurnStatus(
+    chatId: string,
+    turn: {
+      busy: boolean;
+      startedAt?: number;
+      elapsedMs?: number;
+      tools?: number;
+      lastTool?: string;
+    },
+  ): Promise<void> {
+    const elapsedMs =
+      turn.elapsedMs ??
+      (turn.startedAt ? Date.now() - turn.startedAt : 0);
+    this.lastTurn = { ...turn, elapsedMs };
+    this.emit(chatId, {
+      type: 'status',
+      busy: turn.busy,
+      startedAt: turn.startedAt,
+      elapsedMs,
+      tools: turn.tools,
+      lastTool: turn.lastTool,
+    });
+  }
+
   async sendOrEditProgress(
     chatId: string,
     text: string,
@@ -409,7 +440,7 @@ export class AppAdapter implements MessagingAdapter {
       ref: pickerId,
       title: 'Model',
       detail: `current: ${opts.current} · profile: ${opts.profileDefault}`,
-      options: opts.models.slice(0, 80).map((m) => ({
+      options: opts.models.slice(0, 400).map((m) => ({
         value: m,
         label: m,
         current: m === opts.current,
@@ -523,9 +554,16 @@ export class AppAdapter implements MessagingAdapter {
     }
 
     if (method === 'GET' && url.pathname === '/v1/status') {
+      const elapsedMs =
+        this.lastTurn?.busy && this.lastTurn.startedAt
+          ? Date.now() - this.lastTurn.startedAt
+          : this.lastTurn?.elapsedMs;
       sendJson(res, 200, {
         ok: true,
         usage: this.lastUsage,
+        turn: this.lastTurn
+          ? { ...this.lastTurn, elapsedMs }
+          : { busy: false },
       });
       return;
     }
@@ -551,6 +589,22 @@ export class AppAdapter implements MessagingAdapter {
             chatId,
             ...this.lastUsage,
             text: this.lastUsage.label,
+          })}\n\n`,
+        );
+      }
+      if (this.lastTurn) {
+        const elapsedMs =
+          this.lastTurn.busy && this.lastTurn.startedAt
+            ? Date.now() - this.lastTurn.startedAt
+            : this.lastTurn.elapsedMs;
+        res.write(
+          `data: ${JSON.stringify({
+            type: 'status',
+            id: 'status',
+            ts: Date.now(),
+            chatId,
+            ...this.lastTurn,
+            elapsedMs,
           })}\n\n`,
         );
       }

@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.17.10] - 2026-08-16
+
+### Agent
+
+- Tool-loop guard no longer blocks different commands on the same tool. Only the exact same call (same args / same fetch result) is limited — warn at 3, block at 6.
+
+### App inbox
+
+- Turn clock (`busy`, `elapsedMs`, tools) is computed in the daemon and sent as `status` / `GET /v1/status`.
+- Model picker sends up to 400 options; Telegram and the phone app page **10 at a time, 2 per row**, with prev/next.
+
+### Hosting / E2B template
+
+- `xibecode-full-sandbox` Dockerfile pinned to CLI/core **1.17.10**. Existing sandboxes stay on their bake until Update CLI.
+
 ## [1.17.9] - 2026-08-16
 
 ### App chat

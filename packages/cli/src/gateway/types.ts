@@ -85,6 +85,17 @@ export interface MessagingAdapter {
       output?: number;
     },
   ): Promise<void>;
+  /** Daemon-owned turn clock (busy / elapsed / tools). */
+  sendTurnStatus?(
+    chatId: string,
+    turn: {
+      busy: boolean;
+      startedAt?: number;
+      elapsedMs?: number;
+      tools?: number;
+      lastTool?: string;
+    },
+  ): Promise<void>;
   /** Optional: edit a progress message in place. Returns message id. */
   sendOrEditProgress?(
     chatId: string,
