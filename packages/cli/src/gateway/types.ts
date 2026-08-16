@@ -4,7 +4,7 @@
 
 import type { DangerousApprovalChoice, DangerousApprovalRequest } from 'xibecode-core';
 
-export type PlatformName = 'telegram' | 'discord' | 'slack';
+export type PlatformName = 'telegram' | 'discord' | 'slack' | 'app';
 
 export interface InboundMessage {
   platform: PlatformName;

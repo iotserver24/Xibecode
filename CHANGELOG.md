@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.17.5] - 2026-08-16
+
+### App inbox (first-party chat)
+
+- Daemon always starts an HTTP inbox on port **8790** (`XIBECODE_APP_INBOX_PORT`).
+- Same `ChatController` as Telegram: slash commands, approvals, ask, files.
+- JSON events (`typing`, `text`, `tool`, `ask`, `approve`, `picker`, `file`, `done`, `error`) — not ACP, not MarkdownV2.
+- Auth: `XIBECODE_APP_INBOX_SECRET` or `XIBECODE_GATEWAY_TOKEN` (`XIBECODE_APP_INBOX_OPEN=1` for local).
+
+### Core
+
+- Recover leaked DeepSeek DSML / shell-tag tool calls so the agent loop keeps running.
+
+### Messaging
+
+- Discord channel / guild pairing scopes.
+
 ## [1.17.4] - 2026-07-25
 
 ### Fix

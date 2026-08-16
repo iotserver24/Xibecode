@@ -35,6 +35,7 @@ import { isSilent, wrapCron } from './format.js';
 import { TelegramAdapter } from './telegram.js';
 import { DiscordAdapter } from './discord.js';
 import { SlackAdapter } from './slack.js';
+import { AppAdapter } from './app-adapter.js';
 import type { MessagingAdapter, PlatformName } from './types.js';
 import { runHeadlessAgent } from './agent-runner.js';
 import { CircuitBreaker } from './circuit-breaker.js';
@@ -251,7 +252,7 @@ export class GatewayRunner {
         continue;
       }
 
-      for (const platform of ['telegram', 'discord', 'slack'] as PlatformName[]) {
+      for (const platform of ['telegram', 'discord', 'slack', 'app'] as PlatformName[]) {
         if (t === platform || t.startsWith(`${platform}:`)) {
           const chatId = t.includes(':')
             ? t.split(':').slice(1).join(':')
@@ -407,6 +408,20 @@ export class GatewayRunner {
         'slack incomplete — need both SLACK_BOT_TOKEN (xoxb-) and SLACK_APP_TOKEN (xapp-)',
       );
     }
+
+    // First-party Flutter / website chat — no bot token. Always on.
+    const app = new AppAdapter(
+      {
+        homeChatId:
+          gwCfg.appHomeChatId ||
+          process.env.XIBECODE_APP_HOME_CHAT_ID ||
+          cfgAll.appHomeChatId,
+        workdir: () => this.defaultWorkdir(),
+      },
+      (m) => this.log(m),
+    );
+    this.adapters.set('app', app);
+    this.log('app inbox enabled');
   }
 
   async start(): Promise<void> {
@@ -494,7 +509,9 @@ export class GatewayRunner {
             ? 'telegramHomeChatId'
             : platform === 'discord'
               ? 'discordHomeChatId'
-              : 'slackHomeChatId';
+              : platform === 'app'
+                ? 'appHomeChatId'
+                : 'slackHomeChatId';
         await saveGatewayConfig({ [key]: chatId });
         const adapter = this.getAdapter(platform);
         if (adapter) adapter.homeChannel = chatId;
@@ -510,6 +527,7 @@ export class GatewayRunner {
           `telegram: ${this.adapters.has('telegram') ? 'on' : 'off'}`,
           `discord: ${this.adapters.has('discord') ? 'on' : 'off'}`,
           `slack: ${this.adapters.has('slack') ? 'on' : 'off'}`,
+          `app: ${this.adapters.has('app') ? 'on' : 'off'}`,
           ...[...this.breakers.values()].map((b) => b.statusLine()),
         ].filter(Boolean) as string[];
       },
@@ -520,7 +538,7 @@ export class GatewayRunner {
 
     if (this.adapters.size === 0) {
       this.log(
-        'no messaging adapters — cron-only. Set TELEGRAM_BOT_TOKEN, DISCORD_BOT_TOKEN, and/or SLACK_BOT_TOKEN+SLACK_APP_TOKEN',
+        'no messaging adapters — cron-only. Set TELEGRAM_BOT_TOKEN, DISCORD_BOT_TOKEN, SLACK_BOT_TOKEN+SLACK_APP_TOKEN, or rely on the app inbox',
       );
       await waitForever();
       return;

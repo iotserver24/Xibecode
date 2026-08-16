@@ -16,6 +16,8 @@ This template is intended for XibeCode `sandbox_full` mode so command execution 
   [auto-resume on request](https://e2b.dev/docs/sandbox/auto-resume). Not part of the bot.
   Public URL: `https://8788-{sandboxId}.e2b.app/wake` (or `/telegram`).
   Start: `/opt/vectra/wake-http/start.sh` (hosting also starts it with the daemon).
+- **App inbox** (daemon, port **8790**) — first-party Flutter / website chat.
+  Public URL: `https://8790-{sandboxId}.e2b.app/health`. Started with `xibecode daemon`.
 
 **Not baked** (install at runtime when needed): language stacks (Bun/Go/Rust), deploy CLIs, ffmpeg, global TS tooling, project deps. Keep image well under 10 GB.
 
