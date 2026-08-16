@@ -719,8 +719,6 @@ The project is on track for a successful 2.0.0 release in approximately 12 weeks
 - [API_REFERENCE.md](API_REFERENCE.md) - API documentation
 - [CODING_STANDARDS.md](CODING_STANDARDS.md) - Code style guide
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
-- [pentest-report.md](pentest-report.md) - Security assessment
-- [implementation_plan.md](implementation_plan.md) - Pentest implementation plan
 
 ### B. Tools & Technologies
 - **Language:** TypeScript 5.3+

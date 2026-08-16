@@ -228,7 +228,6 @@ XIBECODE_MODEL=claude-sonnet-4-5-20250929
 | Document | Purpose |
 |----------|---------|
 | [PLANNING.md](PLANNING.md) | Comprehensive 12-week roadmap |
-| [pentest-report.md](pentest-report.md) | Security assessment (25/100) |
 | [README.md](README.md) | Full project documentation |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture |
 | [API_REFERENCE.md](API_REFERENCE.md) | API documentation |

@@ -29,6 +29,14 @@ dist/
 .DS_Store
 Thumbs.db
 
+# Scratch / generated workspace artifacts (not product source)
+hermes_api_integration_guide.md
+implementations.md
+implementation_plan.md
+pentest-report.md
+screenshot.png
+screenshot.py
+
 # XibeCode runtime
 .xibecode/
 .xibecode_backups/
