@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.17.7] - 2026-08-16
+
+### Hosted sandbox files
+
+- Wake HTTP (`:8788`) mints tokenized workspace download links: `https://8788-{sandboxId}.e2b.app/f/{token}/{name}`.
+- Gateway `MEDIA:` delivery does **both**: native upload (Telegram / Discord / Slack / app) **and** the public share link so zips and big files stay downloadable after pause.
+- E2B agent prompt requires `MEDIA:` for archives and exports (no “it’s at /workspace/…”).
+
+### App chat / vision
+
+- Agent talks before the first tool and between tool batches (what it understood, files it opened).
+- New `see_image` tool publishes a public https URL and attaches pixels for vision. User photos from the phone app are attached the same way — not base64.
+- Inbox serves unguessable `/v1/public/:token` files; website proxies them at `/api/public/media/:instanceId/:token`.
+
+### App UI
+
+- Finished tool rows collapse into “N tools used”; tap to expand. Live tools stay open while the agent is working.
+- Opening a chat lands on the latest message.
+
 ## [1.17.5] - 2026-08-16
 
 ### App inbox (first-party chat)

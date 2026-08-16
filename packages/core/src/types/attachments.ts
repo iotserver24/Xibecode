@@ -7,6 +7,9 @@
 export type ImageAttachment = {
   path: string;
   mime: string;
-  dataBase64: string;
-  bytes: number;
+  /** Preferred: public https URL. Vision models fetch this more reliably than data URLs. */
+  url?: string;
+  /** Fallback when no public URL is available (local TUI). */
+  dataBase64?: string;
+  bytes?: number;
 };

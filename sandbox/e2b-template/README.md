@@ -15,6 +15,8 @@ This template is intended for XibeCode `sandbox_full` mode so command execution 
 - **Wake HTTP** (`/opt/vectra/wake-http`, port **8788**) — template doorbell for E2B
   [auto-resume on request](https://e2b.dev/docs/sandbox/auto-resume). Not part of the bot.
   Public URL: `https://8788-{sandboxId}.e2b.app/wake` (or `/telegram`).
+  Workspace file shares (tokenized, no directory listing):
+  `POST /share` (localhost) → `GET https://8788-{sandboxId}.e2b.app/f/{token}/{name}`.
   Start: `/opt/vectra/wake-http/start.sh` (hosting also starts it with the daemon).
 - **App inbox** (daemon, port **8790**) — first-party Flutter / website chat.
   Public URL: `https://8790-{sandboxId}.e2b.app/health`. Started with `xibecode daemon`.

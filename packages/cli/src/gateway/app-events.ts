@@ -41,6 +41,8 @@ export interface AppChatEvent {
   kind?: AppFileKind | AppPickerKind;
   fileId?: string;
   caption?: string;
+  /** Public wake-http share URL (E2B). */
+  url?: string;
   mime?: string;
   size?: number;
   role?: 'user' | 'assistant';
@@ -133,6 +135,7 @@ export function inlineUploadPrompt(
     inlineText?: string;
     mime?: string;
     kind?: string;
+    publicUrl?: string;
   }>,
 ): string {
   const cap = caption.trim();
@@ -146,8 +149,11 @@ export function inlineUploadPrompt(
         `--- attached file: ${f.name} ---\n${f.inlineText}\n--- end ${f.name} ---`,
       );
     } else if (kind === 'photo' && f.savedPath) {
+      const link = f.publicUrl
+        ? ` Public vision URL: ${f.publicUrl}`
+        : '';
       parts.push(
-        `User attached image \`${f.name}\` saved at \`${f.savedPath}\`. Open and look at that image file — it is already on disk in the workspace.`,
+        `User attached image \`${f.name}\` saved at \`${f.savedPath}\`.${link} The picture is attached to this turn for vision — call see_image on that path if you need to look again.`,
       );
     } else if (f.savedPath) {
       parts.push(

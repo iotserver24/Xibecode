@@ -64,5 +64,10 @@ describe('runtime-mode', () => {
     expect(block).toContain('3000-iabc123.e2b.dev');
     expect(block).toContain('allowedHosts');
     expect(block).toMatch(/0\.0\.0\.0/);
+    expect(block).toMatch(/cannot.*sandbox disk/i);
+    expect(block).toContain('MEDIA:');
+    expect(block).toContain('8788-iabc123.e2b.app/f/');
+    expect(block).toMatch(/zip/i);
+    expect(block).toMatch(/Native upload/i);
   });
 });

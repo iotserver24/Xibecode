@@ -233,6 +233,7 @@ export class CodingToolExecutor implements ToolExecutor {
   private processRegistry: ProcessRegistry = globalProcessRegistry;
   /** Abort signal for interrupting foreground commands (/stop). */
   private abortSignal?: AbortSignal;
+  private publishImageUrl?: (absPath: string) => Promise<string | undefined>;
 
   /**
    * Creates a new CodingToolExecutor instance
@@ -283,6 +284,8 @@ export class CodingToolExecutor implements ToolExecutor {
       onAskUser?: (req: { question: string; choices?: string[] }) => Promise<string>;
       processRegistry?: ProcessRegistry;
       abortSignal?: AbortSignal;
+      /** Publish a local image to a public https URL for vision (preferred over base64). */
+      publishImageUrl?: (absPath: string) => Promise<string | undefined>;
     }
   ) {
     this.workingDir = workingDir;
@@ -290,6 +293,7 @@ export class CodingToolExecutor implements ToolExecutor {
     this.onAskUser = options?.onAskUser;
     if (options?.processRegistry) this.processRegistry = options.processRegistry;
     this.abortSignal = options?.abortSignal;
+    this.publishImageUrl = options?.publishImageUrl;
     this.contextManager = new ContextManager(workingDir);
     this.fileEditor = new FileEditor(workingDir, {
       beforeMutate: async (fullPath: string) => {
@@ -1084,6 +1088,13 @@ export class CodingToolExecutor implements ToolExecutor {
         };
       }
 
+      case 'see_image': {
+        if (!p.path || typeof p.path !== 'string') {
+          return { error: true, success: false, message: 'Missing required parameter: path (string)' };
+        }
+        return this.seeImage(p.path);
+      }
+
       case 'take_screenshot': {
         if (!p.url || typeof p.url !== 'string') {
           return { error: true, success: false, message: 'Missing required parameter: url (string)' };
@@ -1306,7 +1317,7 @@ export class CodingToolExecutor implements ToolExecutor {
       }
 
       default:
-        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, update_memory, curated_memory, session_search, synthesize_tool, list_skills, view_skill, save_skill, take_screenshot, get_console_logs, run_visual_test, check_accessibility, measure_performance, test_responsive, capture_network, search_skills_sh, install_skill_from_skills_sh, preview_app, delegate_subtask, run_swarm` };
+        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, update_memory, curated_memory, session_search, synthesize_tool, list_skills, view_skill, save_skill, see_image, take_screenshot, get_console_logs, run_visual_test, check_accessibility, measure_performance, test_responsive, capture_network, search_skills_sh, install_skill_from_skills_sh, preview_app, delegate_subtask, run_swarm` };
     }
     } catch (err: any) {
       return { error: true, success: false, message: err?.message ?? String(err) };
@@ -1362,7 +1373,7 @@ export class CodingToolExecutor implements ToolExecutor {
       {
         name: 'read_file',
         description:
-          'Read text file contents. For large files, can read specific line ranges to avoid token limits. Always use this before editing text files. Do NOT use this to "view" images (.png, .jpg, etc.) — it cannot decode pixels; use a user message that names the image path for vision, or run_command for metadata (file, identify).',
+          'Read text file contents. For large files, can read specific line ranges to avoid token limits. Always use this before editing text files. Do NOT use this to "view" images (.png, .jpg, etc.) — call see_image(path) so pixels are attached via a public URL.',
         input_schema: {
           type: 'object',
           properties: {
@@ -2256,6 +2267,21 @@ export class CodingToolExecutor implements ToolExecutor {
         }
       },
       {
+        name: 'see_image',
+        description:
+          'Attach a workspace image for vision. Publishes a public https URL (preferred over base64) and the pixels are added to your next turn. Use this whenever you need to look at a screenshot, user upload, or any .png/.jpg/.webp/.gif.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            path: {
+              type: 'string',
+              description: 'Workspace-relative or absolute path to the image',
+            },
+          },
+          required: ['path'],
+        },
+      },
+      {
         name: 'take_screenshot',
         description:
           'Capture a PNG screenshot of a URL (including localhost). Uses agent-browser if installed, else headless Chrome/Chromium. path MUST be under the project working directory (e.g. screenshots/home.png) — never /tmp. On success returns path + a MEDIA: tag — include that line in your final chat reply so Telegram sends the image. For non-image files (pdf, zip, code, …) write the file then put MEDIA:path in the final reply the same way.',
@@ -2743,6 +2769,55 @@ export class CodingToolExecutor implements ToolExecutor {
     return String(result?.content ?? '');
   }
 
+  private async seeImage(filePath: string): Promise<Record<string, unknown>> {
+    const fullPath = this.resolvePath(filePath);
+    const ext = path.extname(fullPath).toLowerCase();
+    if (!READ_FILE_SKIP_RASTER_IMAGE_EXTS.has(ext)) {
+      return {
+        error: true,
+        success: false,
+        message: `see_image only accepts image files (png/jpg/webp/gif/…). Got ${ext || 'no extension'}.`,
+      };
+    }
+    try {
+      const st = await fs.stat(fullPath);
+      if (!st.isFile()) {
+        return { error: true, success: false, message: `Not a file: ${filePath}` };
+      }
+    } catch {
+      return { error: true, success: false, message: `Image not found: ${filePath}` };
+    }
+    const mime =
+      ext === '.jpg' || ext === '.jpeg'
+        ? 'image/jpeg'
+        : ext === '.gif'
+          ? 'image/gif'
+          : ext === '.webp'
+            ? 'image/webp'
+            : ext === '.bmp'
+              ? 'image/bmp'
+              : 'image/png';
+    let publicUrl: string | undefined;
+    if (this.publishImageUrl) {
+      try {
+        publicUrl = await this.publishImageUrl(fullPath);
+      } catch {
+        publicUrl = undefined;
+      }
+    }
+    return {
+      success: true,
+      error: false,
+      vision: true,
+      path: fullPath,
+      mime,
+      public_url: publicUrl,
+      message: publicUrl
+        ? `Image published for vision at ${publicUrl}. Pixels are attached to this turn.`
+        : `Image ready at ${fullPath}. Pixels will be attached on the next model turn.`,
+    };
+  }
+
   /**
    * Read file contents
    *
@@ -2799,7 +2874,7 @@ export class CodingToolExecutor implements ToolExecutor {
           path: filePath,
           content:
             `This path is a binary image (${ext.slice(1) || 'image'}). read_file only handles text — it does not expose pixels to you.\n\n` +
-            `To analyze what the image shows, ask the user to send a message that **includes this path** (e.g. ${base} or @${base}) so the CLI attaches it for vision/multimodal. ` +
+            `Call see_image with path "${filePath}" (or ${base}) so the picture is attached for vision via a public URL. ` +
             `For dimensions or format only, use run_command with file(1), identify, etc.`,
           lines: 3,
           binary_image: true,

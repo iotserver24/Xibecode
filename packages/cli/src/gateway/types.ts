@@ -19,6 +19,8 @@ export interface InboundMessage {
   guildId?: string;
   /** True when synthesized from an inline-button tap. */
   fromCallback?: boolean;
+  /** Images already on disk (or published) so the agent can attach vision. */
+  images?: Array<{ path: string; mime: string; url?: string }>;
 }
 
 export interface SendMessageOptions {
@@ -48,6 +50,17 @@ export interface MessagingAdapter {
     text: string,
     opts?: SendMessageOptions,
   ): Promise<void>;
+  /**
+   * Mid-run spoken update (thinking / references). Must NOT end the turn.
+   * Optional — Telegram keeps a single final reply.
+   */
+  sendLiveText?(
+    chatId: string,
+    text: string,
+    opts?: SendMessageOptions,
+  ): Promise<void>;
+  /** Publish a local image so vision models can fetch it over https. */
+  publishImageUrl?(absPath: string): Promise<string | undefined>;
   /**
    * Upload a local file to the user (Telegram: sendPhoto/Video/Document/Voice).
    * Optional — platforms without file upload skip MEDIA: delivery.

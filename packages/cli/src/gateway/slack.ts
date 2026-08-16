@@ -3,8 +3,10 @@
  * Needs SLACK_BOT_TOKEN (xoxb-*) and SLACK_APP_TOKEN (xapp-* with connections:write).
  */
 
+import { readFile, stat } from 'node:fs/promises';
+import path from 'node:path';
 import fetch from 'node-fetch';
-import type { InboundMessage, MessagingAdapter } from './types.js';
+import type { InboundMessage, MessagingAdapter, SendLocalFileOptions } from './types.js';
 import { chunkForChat } from './format.js';
 
 export interface SlackConfig {
@@ -139,6 +141,41 @@ export class SlackAdapter implements MessagingAdapter {
         mrkdwn: true,
       });
     }
+  }
+
+  async sendLocalFile(
+    chatId: string,
+    filePath: string,
+    opts?: SendLocalFileOptions,
+  ): Promise<void> {
+    const abs = path.isAbsolute(filePath)
+      ? filePath
+      : path.resolve(opts?.workdir || process.cwd(), filePath);
+    const st = await stat(abs);
+    if (!st.isFile()) throw new Error(`file not found: ${path.basename(filePath)}`);
+    const name = path.basename(abs);
+    const buf = await readFile(abs);
+    const start = await this.slackApi('files.getUploadURLExternal', {
+      filename: name,
+      length: buf.length,
+    });
+    const uploadUrl = String(start.upload_url || '');
+    const fileId = String(start.file_id || '');
+    if (!uploadUrl || !fileId) throw new Error('Slack upload URL missing');
+    const put = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream' },
+      body: buf,
+    });
+    if (!put.ok) {
+      throw new Error(`Slack upload ${put.status}`);
+    }
+    await this.slackApi('files.completeUploadExternal', {
+      files: [{ id: fileId, title: name }],
+      channel_id: chatId,
+      thread_ts: opts?.threadId || undefined,
+      initial_comment: opts?.caption || undefined,
+    });
   }
 
   async sendTyping(chatId: string): Promise<void> {

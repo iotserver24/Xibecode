@@ -2,6 +2,39 @@ import { describe, expect, it } from 'vitest';
 import { EnhancedAgent } from './agent.js';
 
 describe('EnhancedAgent anthropic message normalization', () => {
+  it('converts https image_url into Anthropic url source blocks', () => {
+    const agent = new EnhancedAgent({
+      apiKey: 'test-key',
+      model: 'claude-3-5-sonnet-latest',
+      requestFormat: 'anthropic',
+    });
+
+    agent.setMessages([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'look at this' },
+          {
+            type: 'image_url',
+            image_url: { url: 'https://infra.xibeai.in/api/public/media/abc/tok' },
+          },
+        ] as any,
+      },
+    ] as any);
+
+    const normalized = (agent as any).buildAnthropicMessages();
+    expect(normalized[0].content).toEqual([
+      { type: 'text', text: 'look at this' },
+      {
+        type: 'image',
+        source: {
+          type: 'url',
+          url: 'https://infra.xibeai.in/api/public/media/abc/tok',
+        },
+      },
+    ]);
+  });
+
   it('converts image_url data URLs into Anthropic image source blocks', () => {
     const agent = new EnhancedAgent({
       apiKey: 'test-key',

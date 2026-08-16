@@ -315,7 +315,20 @@ export class GatewayRunner {
         )
         .catch(() => {});
     }
-    if (!media.length || typeof adapter.sendLocalFile !== 'function') return;
+    if (!media.length) return;
+    const { formatShareMessage, shareMediaFiles } = await import(
+      './workspace-share.js'
+    );
+    const shares = await shareMediaFiles(media);
+    const shareText = formatShareMessage(shares);
+    if (typeof adapter.sendLocalFile !== 'function') {
+      if (shareText) {
+        await adapter.sendMessage(chatId, shareText).catch(() => {});
+        this.log(`sent ${shares.length} workspace share link(s)`);
+        return;
+      }
+      return;
+    }
     for (const m of media) {
       try {
         await adapter.sendLocalFile(chatId, m.path, { kind: m.kind, workdir: wd });
@@ -330,6 +343,9 @@ export class GatewayRunner {
           )
           .catch(() => {});
       }
+    }
+    if (shareText) {
+      await adapter.sendMessage(chatId, shareText).catch(() => {});
     }
   }
 

@@ -1,0 +1,4 @@
+wake-http/__pycache__
+wake-http/*.pyc
+wake-http/test_shares.py
+*.md

@@ -3,6 +3,7 @@ import { stat, readFile } from 'node:fs/promises';
 export type ImageAttachment = {
   path: string;
   mime: string;
+  url?: string;
   dataBase64: string;
   bytes: number;
 };

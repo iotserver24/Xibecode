@@ -57,6 +57,8 @@ export interface HeadlessRunOptions {
    * or XIBECODE_VERBOSE=1|true when not set explicitly.
    */
   verbose?: boolean;
+  images?: Array<{ path: string; mime: string; url?: string; dataBase64?: string }>;
+  publishImageUrl?: (absPath: string) => Promise<string | undefined>;
 }
 
 function resolveDaemonVerbose(explicit?: boolean): boolean {
@@ -178,6 +180,7 @@ export async function runHeadlessAgent(
     onDangerousApproval,
     onAskUser: options.onAskUser,
     abortSignal: options.signal,
+    publishImageUrl: options.publishImageUrl,
   });
 
   // Keep interrupt wired if signal is provided after construction
@@ -278,6 +281,30 @@ export async function runHeadlessAgent(
   try {
     const runOpts: any = {};
     if (options.signal) runOpts.signal = options.signal;
+    if (options.publishImageUrl) runOpts.publishImageUrl = options.publishImageUrl;
+    if (options.images?.length) {
+      const { readFile } = await import('node:fs/promises');
+      runOpts.images = [];
+      for (const img of options.images) {
+        let dataBase64 = img.dataBase64;
+        if (!img.url && !dataBase64) {
+          try {
+            const buf = await readFile(img.path);
+            if (buf.length > 0 && buf.length <= 4 * 1024 * 1024) {
+              dataBase64 = buf.toString('base64');
+            }
+          } catch {
+            /* skip unreadable */
+          }
+        }
+        runOpts.images.push({
+          path: img.path,
+          mime: img.mime,
+          url: img.url,
+          dataBase64,
+        });
+      }
+    }
 
     await agent.run(
       options.prompt,

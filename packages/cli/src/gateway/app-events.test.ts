@@ -56,7 +56,7 @@ describe('app chat events', () => {
     expect(prompt).toContain('--- attached file: notes.md ---');
     expect(prompt).toContain('# hi');
     expect(prompt).toContain('`/ws/inbox/shot.png`');
-    expect(prompt).toContain('Open and look at that image file');
+    expect(prompt).toContain('see_image');
   });
 
   it('classifies image uploads and parses progress text', () => {

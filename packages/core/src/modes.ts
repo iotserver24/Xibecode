@@ -972,6 +972,7 @@ const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   'search_code_graph': 'read_only',
   'check_accessibility': 'read_only',
   'take_screenshot': 'read_only',
+  'see_image': 'read_only',
 
   // Write tools
   'write_file': 'write_fs',

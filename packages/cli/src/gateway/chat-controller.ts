@@ -51,6 +51,7 @@ import {
   collectMediaPathsFromToolResult,
   extractMedia,
 } from './media-delivery.js';
+import { formatShareMessage, shareMediaFiles, shareWorkspaceFile } from './workspace-share.js';
 import { ConfigManager } from '../utils/config.js';
 import { builtInSkillsDir } from '../utils/built-in-skills-dir.js';
 
@@ -438,7 +439,16 @@ export class ChatController {
         .catch(() => {});
     }
     if (!media.length) return;
+    const shares = await shareMediaFiles(media);
+    const shareText = formatShareMessage(shares);
     if (typeof adapter.sendLocalFile !== 'function') {
+      if (shareText) {
+        await adapter.sendMessage(chatId, shareText, { threadId }).catch(() => {});
+        this.options.log(
+          `${adapter.name}: sent ${shares.length} workspace share link(s)`,
+        );
+        return;
+      }
       this.options.log(
         `${adapter.name}: ${media.length} MEDIA file(s) skipped (platform has no file upload)`,
       );
@@ -475,6 +485,9 @@ export class ChatController {
           )
           .catch(() => {});
       }
+    }
+    if (shareText) {
+      await adapter.sendMessage(chatId, shareText, { threadId }).catch(() => {});
     }
   }
 
@@ -1005,6 +1018,7 @@ export class ChatController {
       const daemonVerbose = /^(1|true|yes|on)$/i.test(
         (process.env.XIBECODE_DAEMON_VERBOSE || process.env.XIBECODE_VERBOSE || '').trim(),
       );
+      let liveNarration = '';
 
       const result = await runHeadlessAgent({
         prompt: text,
@@ -1017,6 +1031,12 @@ export class ChatController {
         signal: abort.signal,
         rigorLevel: rigor,
         verbose: daemonVerbose,
+        images: msg.images,
+        publishImageUrl: async (abs) => {
+          const share = await shareWorkspaceFile(abs);
+          if (share?.url) return share.url;
+          return adapter.publishImageUrl?.(abs);
+        },
         onDangerousApproval: requestApproval,
         onAskUser: requestAsk,
         onAgentReady: (api) => {
@@ -1026,7 +1046,18 @@ export class ChatController {
           }
         },
         onEvent: (type, data) => {
+          if (type === 'stream_start') {
+            liveNarration = '';
+          } else if (type === 'stream_text' || type === 'stream_delta') {
+            const chunk = typeof data?.text === 'string' ? data.text : '';
+            if (chunk) liveNarration += chunk;
+          }
           if (type === 'tool_call') {
+            const spoken = liveNarration.trim();
+            liveNarration = '';
+            if (spoken && adapter.sendLiveText) {
+              void adapter.sendLiveText(msg.chatId, spoken, { threadId: msg.threadId });
+            }
             activeRun.toolCount = (activeRun.toolCount || 0) + 1;
             const name = data?.name || data?.tool || 'tool';
             const line = formatToolProgress(name, data?.input || data?.args);

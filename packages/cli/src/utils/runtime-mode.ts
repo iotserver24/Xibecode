@@ -272,6 +272,11 @@ export function e2bAgentContextBlock(
     if (f.publicPreviewLinks) {
       const exampleHost = `3000-${id.sandboxId}.e2b.dev`;
       lines.push(
+        `- The user **cannot** open sandbox disk paths. Never say a file is “at /home/user/workspace/…”.`,
+        `- To deliver **any** artifact (zip, tar.gz, pdf, png, video, code, csv, …) put \`MEDIA:relative/path\` in your **final** reply. The gateway does **both**:`,
+        `  1. Native upload (Telegram photo/document, Discord/Slack attachment, phone app file card)`,
+        `  2. A public download link \`https://8788-${id.sandboxId}.e2b.app/f/{token}/{name}\` (wake-http share — works after pause)`,
+        `- Always MEDIA: zips and big exports. Do not only describe the path. Both the in-chat file **and** the https link are required.`,
         `- Public preview for a listening port N: \`https://N-${id.sandboxId}.e2b.dev\` (e.g. port 3000 → \`${id.previewUrl(3000)}\`).`,
         `- Prefer reporting that URL after you start a server (and confirm HTTP 200 on localhost first).`,
         '',

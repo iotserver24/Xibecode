@@ -31,6 +31,7 @@ import type {
   SendLocalFileOptions,
   SendMessageOptions,
 } from './types.js';
+import { shareWorkspaceFile } from './workspace-share.js';
 
 const TEXT_INLINE_MAX = 256 * 1024;
 const TEXT_EXTS = new Set([
@@ -178,6 +179,10 @@ export class AppAdapter implements MessagingAdapter {
     string,
     (value: string) => Promise<string>
   >();
+  private publicFiles = new Map<
+    string,
+    { abs: string; name: string; mime?: string }
+  >();
 
   constructor(
     opts: { homeChatId?: string; workdir?: () => string } = {},
@@ -222,6 +227,46 @@ export class AppAdapter implements MessagingAdapter {
     this.emit(chatId, { type: 'done' });
   }
 
+  async sendLiveText(chatId: string, text: string): Promise<void> {
+    const trimmed = String(text || '').trim();
+    if (!trimmed) return;
+    this.emit(chatId, {
+      type: 'text',
+      text: trimmed,
+      delta: false,
+      final: false,
+      format: 'markdown',
+    });
+  }
+
+  async publishImageUrl(absPath: string): Promise<string | undefined> {
+    const abs = path.isAbsolute(absPath)
+      ? absPath
+      : path.resolve(this.workdir(), absPath);
+    if (!existsSync(abs)) return undefined;
+    const share = await shareWorkspaceFile(abs);
+    if (share?.url) return share.url;
+    const token = randomBytes(18).toString('base64url');
+    const name = path.basename(abs);
+    const ext = path.extname(name).toLowerCase();
+    const mime =
+      ext === '.jpg' || ext === '.jpeg'
+        ? 'image/jpeg'
+        : ext === '.gif'
+          ? 'image/gif'
+          : ext === '.webp'
+            ? 'image/webp'
+            : ext === '.bmp'
+              ? 'image/bmp'
+              : ext === '.png'
+                ? 'image/png'
+                : 'application/octet-stream';
+    this.publicFiles.set(token, { abs, name, mime });
+    const fromEnv = (process.env.XIBECODE_PUBLIC_MEDIA_BASE || '').replace(/\/$/, '');
+    if (fromEnv) return `${fromEnv}/${token}`;
+    return undefined;
+  }
+
   private beginInboundTurn(): void {
     this.typedThisTurn = false;
     this.progressStarted = false;
@@ -257,8 +302,10 @@ export class AppAdapter implements MessagingAdapter {
     }
     const ev = this.emit(chatId, {
       type: 'tool',
+      name: trimmed.split(/\s+/).slice(0, 3).join(' '),
       state: previousMessageId ? 'done' : 'start',
       summary: trimmed,
+      text: trimmed,
     });
     return ev.id;
   }
@@ -372,16 +419,22 @@ export class AppAdapter implements MessagingAdapter {
     await fs.copyFile(abs, dest);
     const kind = (opts?.kind || 'document') as AppFileKind;
     this.files.set(fileId, { abs: dest, name, kind });
+    const share = await shareWorkspaceFile(abs);
     this.emit(chatId, {
       type: 'file',
       fileId,
       name,
       kind,
       caption: opts?.caption,
+      url: share?.url,
     });
   }
 
-  private async dispatchInbound(text: string, chatId: string): Promise<void> {
+  private async dispatchInbound(
+    text: string,
+    chatId: string,
+    images?: InboundMessage['images'],
+  ): Promise<void> {
     this.beginInboundTurn();
     const trimmed = text.trim();
     if (!trimmed || !this.onMessage) return;
@@ -390,6 +443,7 @@ export class AppAdapter implements MessagingAdapter {
       chatId,
       userId: APP_DEFAULT_USER_ID,
       text: trimmed,
+      images,
     };
     await this.onMessage(msg);
   }
@@ -404,6 +458,24 @@ export class AppAdapter implements MessagingAdapter {
 
     if (method === 'GET' && url.pathname === '/health') {
       sendJson(res, 200, { ok: true, adapter: 'app', port: inboxPort() });
+      return;
+    }
+
+    const publicMatch = url.pathname.match(/^\/v1\/public\/([^/]+)$/);
+    if (method === 'GET' && publicMatch) {
+      const rec = this.publicFiles.get(publicMatch[1] || '');
+      if (!rec || !existsSync(rec.abs)) {
+        sendJson(res, 404, { error: 'file not found' });
+        return;
+      }
+      const st = await fs.stat(rec.abs);
+      res.writeHead(200, {
+        'content-type': rec.mime || 'application/octet-stream',
+        'content-length': st.size,
+        'cache-control': 'public, max-age=3600',
+        'access-control-allow-origin': '*',
+      });
+      createReadStream(rec.abs).pipe(res);
       return;
     }
 
@@ -482,7 +554,9 @@ export class AppAdapter implements MessagingAdapter {
         inlineText?: string;
         mime?: string;
         kind?: AppFileKind;
+        publicUrl?: string;
       }> = [];
+      const inboundImages: NonNullable<InboundMessage['images']> = [];
       if (files.length) {
         const destDir = inboxUploadDir(this.workdir());
         await fs.mkdir(destDir, { recursive: true });
@@ -518,7 +592,16 @@ export class AppAdapter implements MessagingAdapter {
               kind,
             });
           } else {
-            uploaded.push({ name, savedPath: dest, mime: f.mime, kind });
+            let publicUrl: string | undefined;
+            if (kind === 'photo') {
+              publicUrl = await this.publishImageUrl(dest);
+              inboundImages.push({
+                path: dest,
+                mime: String(f.mime || 'image/png'),
+                url: publicUrl,
+              });
+            }
+            uploaded.push({ name, savedPath: dest, mime: f.mime, kind, publicUrl });
           }
         }
       }
@@ -527,7 +610,7 @@ export class AppAdapter implements MessagingAdapter {
         sendJson(res, 400, { error: 'text or files required' });
         return;
       }
-      void this.dispatchInbound(prompt, chatId).catch((err: any) => {
+      void this.dispatchInbound(prompt, chatId, inboundImages).catch((err: any) => {
         this.log(`app inbound failed: ${err?.message || err}`);
         this.emit(chatId, {
           type: 'error',

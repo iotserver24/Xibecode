@@ -28,6 +28,22 @@ import {
   isAutoMemoryLoadEnabled,
 } from './utils/auto-memory.js';
 import type { ImageAttachment } from './types/index.js';
+
+function imageHref(img: ImageAttachment): string | null {
+  const url = (img.url || '').trim();
+  if (/^https?:\/\//i.test(url)) return url;
+  if (img.dataBase64 && img.mime) return `data:${img.mime};base64,${img.dataBase64}`;
+  return null;
+}
+
+function mimeFromPath(p: string): string {
+  const ext = (p.split('.').pop() || '').toLowerCase();
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+  if (ext === 'gif') return 'image/gif';
+  if (ext === 'webp') return 'image/webp';
+  if (ext === 'bmp') return 'image/bmp';
+  return 'image/png';
+}
 import type { StreamEvent, StreamOptions } from './types/index.js';
 import { SettingsManager } from './settings/settings.js';
 import { PermissionRuleManager } from './permission-rules/permission-rules.js';
@@ -931,11 +947,17 @@ export class EnhancedAgent extends EventEmitter {
     return super.emit('event', { type: event, data });
   }
 
+  private publishImageUrl?: (absPath: string) => Promise<string | undefined>;
+
   async run(
     initialPrompt: string,
     tools: Tool[],
     toolExecutor: any,
-    opts?: { images?: ImageAttachment[]; signal?: AbortSignal },
+    opts?: {
+      images?: ImageAttachment[];
+      signal?: AbortSignal;
+      publishImageUrl?: (absPath: string) => Promise<string | undefined>;
+    },
   ): Promise<void> {
     // Reset per-turn state (keeps conversation history in this.messages)
     this.iterationCount = 0;
@@ -1000,12 +1022,18 @@ export class EnhancedAgent extends EventEmitter {
       this._memoryCacheExpiry = _now + EnhancedAgent.MEMORY_CACHE_TTL_MS;
     }
 
+    if (opts?.publishImageUrl) {
+      this.publishImageUrl = opts.publishImageUrl;
+    }
+
     if (opts?.images && opts.images.length > 0) {
       const blocks: any[] = [{ type: 'text', text: initialPrompt }];
       for (const img of opts.images) {
+        const href = imageHref(img);
+        if (!href) continue;
         blocks.push({
           type: 'image_url',
-          image_url: { url: `data:${img.mime};base64,${img.dataBase64}` },
+          image_url: { url: href },
         });
       }
       this.messages.push({ role: 'user', content: blocks as any });
@@ -1563,6 +1591,11 @@ export class EnhancedAgent extends EventEmitter {
           /* budget optional */
         }
 
+        const visionBlocks = await this.attachVisionFromTools(updates);
+        if (visionBlocks.length) {
+          (toolResults as any).push(...visionBlocks);
+        }
+
         // After tool failures: force a clear error + retry menu so the model
         // does not silent-loop or leave the user on "still checking" forever.
         const failed = updates.filter((u) => !u.success);
@@ -1781,6 +1814,54 @@ export class EnhancedAgent extends EventEmitter {
     }
   }
 
+  private async attachVisionFromTools(updates: Array<{ toolUse: { name: string; input?: any }; result: any; success: boolean }>): Promise<any[]> {
+    const blocks: any[] = [];
+    const seen = new Set<string>();
+    for (const update of updates) {
+      if (!update.success) continue;
+      const name = String(update.toolUse?.name || '');
+      const result = update.result && typeof update.result === 'object' ? update.result : {};
+      const wantsVision =
+        name === 'see_image' ||
+        result.vision === true ||
+        name === 'take_screenshot';
+      if (!wantsVision) continue;
+      const diskPath = String(
+        result.path || result.abs || update.toolUse?.input?.path || '',
+      );
+      let href = String(result.public_url || result.image_url || '').trim();
+      if (!/^https?:\/\//i.test(href) && diskPath && this.publishImageUrl) {
+        try {
+          href = (await this.publishImageUrl(diskPath)) || '';
+        } catch {
+          href = '';
+        }
+      }
+      if (!/^https?:\/\//i.test(href) && diskPath && !this.publishImageUrl) {
+        try {
+          const buf = await readFile(diskPath);
+          if (buf.length > 0 && buf.length <= 4 * 1024 * 1024) {
+            const mime = String(result.mime || mimeFromPath(diskPath));
+            href = `data:${mime};base64,${buf.toString('base64')}`;
+          }
+        } catch {
+          href = '';
+        }
+      }
+      if (!href || seen.has(href)) continue;
+      seen.add(href);
+      blocks.push({
+        type: 'text',
+        text: `Vision attached for ${diskPath || name}. Use the image pixels — do not guess from the filename.`,
+      });
+      blocks.push({
+        type: 'image_url',
+        image_url: { url: href },
+      });
+    }
+    return blocks;
+  }
+
   private parseBase64DataUrl(dataUrl: string): { mediaType: string; data: string } | null {
     const match = /^data:([^;]+);base64,(.+)$/i.exec(dataUrl);
     if (!match) return null;
@@ -1794,7 +1875,15 @@ export class EnhancedAgent extends EventEmitter {
     const normalized: any[] = [];
     for (const block of blocks as any[]) {
       if (block?.type === 'image_url' && typeof block.image_url?.url === 'string') {
-        const parsed = this.parseBase64DataUrl(block.image_url.url);
+        const href = String(block.image_url.url);
+        if (/^https?:\/\//i.test(href)) {
+          normalized.push({
+            type: 'image',
+            source: { type: 'url', url: href },
+          });
+          continue;
+        }
+        const parsed = this.parseBase64DataUrl(href);
         if (!parsed) continue;
         normalized.push({
           type: 'image',
@@ -2500,10 +2589,15 @@ Working directory: ${process.cwd()}
 - For \`run_command\`, omit \`cwd\` or set it to \`.\` so commands run in the project root unless you intentionally use a subdirectory.
 
 ## Images and vision
-- You only receive **image pixels** when the **user's message includes the image path** (e.g. \`dog.jpg\` or \`@dog.jpg\`). Follow-up questions like "what's in the image?" do **not** reattach files unless the path appears again.
-- \`read_file\` on image extensions does **not** let you see the picture — it returns a short notice, not pixels. Do not claim you visually inspected an image via \`read_file\`.
-- **Filenames are not facts about image content.** \`dog.jpg\` may show anything; \`car.jpg\` may be an animal; extensions like \`.hjpg\` are not standard. Answering "what's in the image" or picking "the dog file" from **basename alone** is an unsupported guess—say you need vision (user message with that path) or shell-based image analysis, and do not pretend the name proves the subject.
-- If the user asks about a picture without naming it, use \`search_files\` / \`glob\` patterns to list candidates, then ask them to **repeat the exact filename in their next message** (or \`@path\`) so vision applies.
+- You see **pixels** only when an image is attached to the message (user upload, or after you call \`see_image\` / \`take_screenshot\`). Public https links are preferred over base64.
+- To look at a workspace image, call \`see_image\` with the path. That publishes a public URL and attaches the picture to your next turn. \`read_file\` on \`.png\` / \`.jpg\` does **not** show pixels.
+- **Filenames are not facts about image content.** \`dog.jpg\` may show anything. Do not guess from the basename.
+- If the user asks about a picture without naming it, list candidates, then \`see_image\` on the right path (or ask which one).
+
+## Talk as you work
+- Before the first tool call, write a short visible reply: what you understood and the first step you will take. Never start a turn with tools only.
+- After tools, keep talking: cite the files/paths you opened, what you found, and what you will do next. Users cannot see raw tool logs unless you mention them.
+- Keep those updates to a few sentences. The final answer still carries the full result.
 
 ${this.defaultSkillsPrompt ? `${this.defaultSkillsPrompt}\n\n` : ''}
 ## Core Principles

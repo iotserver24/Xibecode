@@ -4,8 +4,10 @@
  * Requires DISCORD_BOT_TOKEN. Slash menu registered like Telegram setMyCommands.
  */
 
+import { readFile, stat } from 'node:fs/promises';
+import path from 'node:path';
 import fetch from 'node-fetch';
-import type { InboundMessage, MessagingAdapter } from './types.js';
+import type { InboundMessage, MessagingAdapter, SendLocalFileOptions } from './types.js';
 import {
   chunkForChat,
   GATEWAY_BOT_COMMANDS,
@@ -168,6 +170,45 @@ export class DiscordAdapter implements MessagingAdapter {
         // flags: SUPPRESS_EMBEDS (1<<2) — match Telegram disable_web_page_preview
         body: { content: chunk, flags: 4 },
       });
+    }
+  }
+
+  async sendLocalFile(
+    chatId: string,
+    filePath: string,
+    opts?: SendLocalFileOptions,
+  ): Promise<void> {
+    const abs = path.isAbsolute(filePath)
+      ? filePath
+      : path.resolve(opts?.workdir || process.cwd(), filePath);
+    const st = await stat(abs);
+    if (!st.isFile()) throw new Error(`file not found: ${path.basename(filePath)}`);
+    const max = 25 * 1024 * 1024;
+    if (st.size > max) {
+      throw new Error(`too large for Discord upload (${st.size} bytes)`);
+    }
+    const name = path.basename(abs);
+    const buf = await readFile(abs);
+    const form = new FormData();
+    form.append('files[0]', new Blob([buf]), name);
+    form.append(
+      'payload_json',
+      JSON.stringify({
+        content: (opts?.caption || '').slice(0, 1900),
+        flags: 4,
+      }),
+    );
+    const res = await fetch(`https://discord.com/api/v10/channels/${chatId}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bot ${this.token}`,
+        'User-Agent': 'XibeCode-Gateway (https://github.com/iotserver24/xibecode, 1.0)',
+      },
+      body: form as any,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Discord file ${res.status}: ${text.slice(0, 200)}`);
     }
   }
 
