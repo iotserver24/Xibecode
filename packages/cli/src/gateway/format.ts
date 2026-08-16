@@ -500,6 +500,7 @@ export function codingSystemPrefix(
     '- Use ask_user when you need a human decision (port, package manager, yes/no). Do not guess preferences.',
     '- When stuck repeating the same failing command, stop, explain what failed, and ask or try a different approach.',
     '- Keep replies scannable in chat: short summary first, then details / code blocks.',
+    '- First-party app chat renders GitHub-flavored Markdown. Use real markdown (headings, lists, **bold**, `code`, fenced blocks, tables, links). Do not Telegram-escape it.',
     '- If a task is done, say what changed and how to verify. Avoid fluff.',
     '- Skills: use list_skills / view_skill for domain workflows (tests, debug, React, etc.) when relevant. Follow loaded skill steps with tools.',
     '',

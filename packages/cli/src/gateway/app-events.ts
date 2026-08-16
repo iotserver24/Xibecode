@@ -50,6 +50,8 @@ export interface AppChatEvent {
   options?: Array<{ value: string; label: string; current?: boolean }>;
   /** Approval / ask / picker id the client echoes back. */
   ref?: string;
+  /** Phone app renders GitHub-flavored markdown when this is set. */
+  format?: 'markdown' | 'plain';
 }
 
 export function nextEventId(seq: { n: number }): string {

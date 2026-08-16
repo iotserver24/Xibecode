@@ -218,7 +218,7 @@ export class AppAdapter implements MessagingAdapter {
   ): Promise<void> {
     const trimmed = String(text || '');
     if (!trimmed.trim()) return;
-    this.emit(chatId, { type: 'text', text: trimmed, final: true });
+    this.emit(chatId, { type: 'text', text: trimmed, final: true, format: 'markdown' });
     this.emit(chatId, { type: 'done' });
   }
 
@@ -268,7 +268,7 @@ export class AppAdapter implements MessagingAdapter {
     _messageId: string,
     text: string,
   ): Promise<void> {
-    this.emit(chatId, { type: 'text', text, final: true });
+    this.emit(chatId, { type: 'text', text, final: true, format: 'markdown' });
   }
 
   async sendApprovalPrompt(
@@ -281,6 +281,7 @@ export class AppAdapter implements MessagingAdapter {
       ref: approvalId,
       title: 'Approval needed',
       detail: text,
+      format: 'markdown',
     });
     return ev.id;
   }
@@ -296,6 +297,7 @@ export class AppAdapter implements MessagingAdapter {
       ref: askId,
       question,
       choices: choices || [],
+      format: 'markdown',
     });
     return ev.id;
   }
@@ -485,7 +487,7 @@ export class AppAdapter implements MessagingAdapter {
         const destDir = inboxUploadDir(this.workdir());
         await fs.mkdir(destDir, { recursive: true });
         await fs.mkdir(outboxDir(), { recursive: true });
-        for (const f of files.slice(0, 8)) {
+        for (const f of files.slice(0, 12)) {
           const name = path.basename(String(f.name || 'upload.bin')) || 'upload.bin';
           const raw = Buffer.from(String(f.contentBase64 || ''), 'base64');
           if (!raw.length) continue;
