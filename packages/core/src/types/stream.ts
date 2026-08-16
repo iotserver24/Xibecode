@@ -14,6 +14,7 @@ import type { ImageAttachment } from './attachments.js';
 /** Discriminator for stream event kinds. */
 export type StreamEventType =
   | 'thinking'
+  | 'thinking_delta'
   | 'text_delta'
   | 'tool_call_start'
   | 'tool_call_end'
@@ -28,6 +29,12 @@ export type StreamEventType =
 export interface ThinkingEvent {
   type: 'thinking';
   message: string;
+}
+
+/** Incremental model reasoning / thought tokens. */
+export interface ThinkingDeltaEvent {
+  type: 'thinking_delta';
+  text: string;
 }
 
 /** Streaming text delta from the model. */
@@ -98,6 +105,7 @@ export interface CancelledEvent {
 /** Discriminated union of all stream events. */
 export type StreamEvent =
   | ThinkingEvent
+  | ThinkingDeltaEvent
   | TextDeltaEvent
   | ToolCallStartEvent
   | ToolCallEndEvent

@@ -499,6 +499,9 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
       case 'thinking':
         ui.thinking(event.data.message);
         break;
+      case 'thinking_delta':
+        ui.streamThinking(event.data.text);
+        break;
       case 'stream_start':
         ui.startAssistantResponse();
         break;

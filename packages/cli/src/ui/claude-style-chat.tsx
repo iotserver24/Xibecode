@@ -7,7 +7,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import type { TuiThemeColorKey } from '../utils/tui-theme.js';
 import { ConfigManager, ProviderType, PROVIDER_CONFIGS, listSetupProviders } from '../utils/config.js';
-import { EnhancedAgent } from 'xibecode-core';
+import { EnhancedAgent, ThinkTagFilter } from 'xibecode-core';
 
 const pkg = createRequire(import.meta.url)('../../package.json');
 import { CodingToolExecutor, NeuralMemory } from 'xibecode-core';
@@ -106,7 +106,7 @@ function buildAutoCommitMessage(stagedFiles: string[], shortstat: string): strin
   return `${type}: update ${stagedFiles.length} files${stat ? ` (${stat})` : ''}`;
 }
 
-type UiLineType = 'user' | 'assistant' | 'tool' | 'tool_out' | 'info' | 'error';
+type UiLineType = 'user' | 'assistant' | 'tool' | 'tool_out' | 'info' | 'error' | 'thinking';
 type UiLine = { type: UiLineType; text: string };
 type StaticItem =
   | { kind: 'hero'; id: number }
@@ -193,8 +193,16 @@ function transcriptLinesFromMessage(message: MessageParam): UiLine[] {
 
   const lines: UiLine[] = [];
   for (const block of message.content as any[]) {
+    if (block?.type === 'thinking' && typeof block.thinking === 'string' && block.thinking.trim()) {
+      lines.push({ type: 'thinking', text: formatThoughtTranscript(block.thinking.trim(), 0) });
+      continue;
+    }
     if (block?.type === 'text') {
-      const text = String(block.text || '').trim();
+      const split = ThinkTagFilter.split(String(block.text || ''));
+      if (split.thinking.trim()) {
+        lines.push({ type: 'thinking', text: formatThoughtTranscript(split.thinking.trim(), 0) });
+      }
+      const text = split.text.trim();
       if (text) lines.push({ type: message.role === 'assistant' ? 'assistant' : 'user', text });
       continue;
     }
@@ -233,10 +241,11 @@ const WORK_SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '�
 /** How fast to advance OpenClaude-style spinner verbs (ms) */
 const WORK_VERB_ROTATE_MS = 2400;
 
-const QUICK_HELP = ['/help', '/mode', '/format', '/model', '/setup', '/config', '/memory', '/hooks', '/cpull', '/commit', '/donate', '/sponsor', '/clear', '/exit'];
+const QUICK_HELP = ['/help', '/mode', '/format', '/model', '/thinking', '/setup', '/config', '/memory', '/hooks', '/cpull', '/commit', '/donate', '/sponsor', '/clear', '/exit'];
 const CHAT_COMMANDS: Array<{ name: string; description: string }> = [
   { name: '/help', description: 'Show available shortcuts and usage hints' },
   { name: '/mode', description: 'Switch agent mode from an interactive picker' },
+  { name: '/thinking', description: 'Show or hide the model thought / reasoning block' },
   { name: '/clear', description: 'Clear the current chat transcript' },
   { name: '/format', description: 'Switch wire format: auto | anthropic | openai' },
   { name: '/model', description: 'Fetch and switch available models for this provider' },
@@ -290,6 +299,8 @@ function lineColorKey(type: UiLineType): TuiThemeColorKey {
       return 'professionalBlue';
     case 'tool_out':
       return 'subtle';
+    case 'thinking':
+      return 'inactive';
     case 'error':
       return 'error';
     case 'info':
@@ -308,6 +319,8 @@ function prefixForType(type: UiLineType): string {
       return 'Tool';
     case 'tool_out':
       return 'Result';
+    case 'thinking':
+      return 'Thought';
     case 'error':
       return 'Error';
     case 'info':
@@ -328,6 +341,8 @@ function prefixColorKey(type: UiLineType, mode?: AgentMode): TuiThemeColorKey {
       return 'suggestion';
     case 'tool_out':
       return 'inactive';
+    case 'thinking':
+      return 'inactive';
     case 'error':
       return 'error';
     case 'info':
@@ -339,6 +354,28 @@ function prefixColorKey(type: UiLineType, mode?: AgentMode): TuiThemeColorKey {
 function formatUiLineForLog(line: UiLine): string {
   const prefix = prefixForType(line.type);
   return `[${prefix}] ${line.text}`;
+}
+
+function isStatusThinkingMessage(message: string): boolean {
+  return /^(AI is thinking|Still waiting for model response|Starting agent|Strategic planning|Strategic plan complete)/i.test(
+    message.trim(),
+  );
+}
+
+function lastThoughtLines(text: string, maxLines: number): string[] {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const trimmed = lines.filter((line, idx) => line.trim() || idx === lines.length - 1);
+  return trimmed.slice(-maxLines);
+}
+
+function formatThoughtTranscript(text: string, seconds: number): string {
+  const header = seconds > 0 ? `Thought · ${seconds.toFixed(1)}s` : 'Thought';
+  const lines = text.replace(/\r\n/g, '\n').trim().split('\n');
+  const capped = lines.slice(0, 24);
+  const body = capped.join('\n');
+  const overflow = lines.length > 24 ? '\n…' : '';
+  const clipped = body.length > 2000 ? `${body.slice(0, 2000)}…` : `${body}${overflow}`;
+  return `${header}\n${clipped}`;
 }
 
 function XibeCodeChatApp(props: {
@@ -362,7 +399,13 @@ function XibeCodeChatApp(props: {
   runPrompt: (
     prompt: string,
     onLine: (line: UiLine) => void,
-    opts?: { images?: ImageAttachment[]; signal?: AbortSignal; onVisibleOutput?: () => void },
+    opts?: {
+      images?: ImageAttachment[];
+      signal?: AbortSignal;
+      onVisibleOutput?: () => void;
+      onThought?: (delta: string) => void;
+      onThoughtEnd?: () => void;
+    },
   ) => Promise<ReturnType<EnhancedAgent['getStats']>>;
   listBackgroundTasks: () => Promise<
     Array<{ id: string; status: string; startTime: number; prompt: string }>
@@ -465,6 +508,12 @@ function XibeCodeChatApp(props: {
 
   const [workSpinnerFrame, setWorkSpinnerFrame] = useState(0);
   const [workVerbIndex, setWorkVerbIndex] = useState(0);
+  const [liveThought, setLiveThought] = useState('');
+  const [showThinking, setShowThinking] = useState(true);
+  const liveThoughtRef = useRef('');
+  const thoughtCommittedRef = useRef(false);
+  const thoughtStartedAtRef = useRef<number | null>(null);
+  const showThinkingRef = useRef(true);
   const nextLineIdRef = useRef(1);
   const initialMessagesRef = useRef(props.initialMessages);
   const sessionIdRef = useRef(props.sessionId);
@@ -514,6 +563,45 @@ function XibeCodeChatApp(props: {
     },
     [props],
   );
+
+  useEffect(() => {
+    showThinkingRef.current = showThinking;
+  }, [showThinking]);
+
+  const resetThought = useCallback(() => {
+    liveThoughtRef.current = '';
+    thoughtCommittedRef.current = false;
+    thoughtStartedAtRef.current = null;
+    setLiveThought('');
+  }, []);
+
+  const appendThought = useCallback((delta: string) => {
+    if (!delta) return;
+    if (thoughtCommittedRef.current) {
+      thoughtCommittedRef.current = false;
+      liveThoughtRef.current = '';
+      thoughtStartedAtRef.current = null;
+    }
+    if (!thoughtStartedAtRef.current) thoughtStartedAtRef.current = Date.now();
+    liveThoughtRef.current += delta;
+    if (showThinkingRef.current) {
+      setLiveThought(liveThoughtRef.current);
+    }
+  }, []);
+
+  const commitThought = useCallback(() => {
+    const text = liveThoughtRef.current.trim();
+    if (!text || thoughtCommittedRef.current) return;
+    thoughtCommittedRef.current = true;
+    const started = thoughtStartedAtRef.current;
+    const seconds = started ? (Date.now() - started) / 1000 : 0;
+    thoughtStartedAtRef.current = null;
+    if (showThinkingRef.current) {
+      pushLine({ type: 'thinking', text: formatThoughtTranscript(text, seconds) });
+    }
+    liveThoughtRef.current = '';
+    setLiveThought('');
+  }, [pushLine]);
 
   const handleChatInputChange = useCallback((next: string) => {
     setInput(reconcileTaggedAtMentions(next, lockedPickTagsRef));
@@ -860,6 +948,7 @@ function XibeCodeChatApp(props: {
         abortReasonRef.current = 'none';
         lastVisibleOutputAtRef.current = Date.now();
         abortControllerRef.current = new AbortController();
+        resetThought();
 
         pushLine({ type: 'user', text: answersPrompt });
         sessionMessagesRef.current.push({ role: 'user', content: answersPrompt });
@@ -871,6 +960,8 @@ function XibeCodeChatApp(props: {
             onVisibleOutput: () => {
               lastVisibleOutputAtRef.current = Date.now();
             },
+            onThought: appendThought,
+            onThoughtEnd: commitThought,
           });
           const elapsedMs = Date.now() - startedAt;
           const seconds = (elapsedMs / 1000).toFixed(1);
@@ -879,13 +970,14 @@ function XibeCodeChatApp(props: {
             text: `Done in ${seconds}s` + (stats.costLabel ? ` · cost ${stats.costLabel}` : ''),
           });
         } finally {
+          commitThought();
           abortControllerRef.current = null;
           currentPromptRef.current = null;
           setIsRunning(false);
         }
       }
     },
-    [props, pushLine],
+    [props, pushLine, appendThought, commitThought, resetThought],
   );
 
   // Called from useInput when a question option is selected via arrows+Enter
@@ -1047,6 +1139,22 @@ function XibeCodeChatApp(props: {
         return;
       }
 
+      if (resolvedInput === '/thinking') {
+        const next = !showThinking;
+        setShowThinking(next);
+        showThinkingRef.current = next;
+        if (!next) {
+          setLiveThought('');
+        } else if (liveThoughtRef.current.trim()) {
+          setLiveThought(liveThoughtRef.current);
+        }
+        pushLine({
+          type: 'info',
+          text: next ? 'Thought blocks visible.' : 'Thought blocks hidden.',
+        });
+        return;
+      }
+
       if (resolvedInput === '/help') {
         setLines((prev: StaticItem[]) => [
           ...prev,
@@ -1060,7 +1168,7 @@ function XibeCodeChatApp(props: {
             kind: 'line',
             id: nextLineIdRef.current++,
             type: 'info',
-            text: 'Press Ctrl+C to quit. Type any prompt and XibeCode will run agent mode.',
+            text: 'Press Ctrl+C to quit. Type any prompt and XibeCode will run agent mode. /thinking toggles the live thought block.',
           },
           {
             kind: 'line',
@@ -1276,6 +1384,7 @@ function XibeCodeChatApp(props: {
         abortReasonRef.current = 'none';
         lastVisibleOutputAtRef.current = Date.now();
         abortControllerRef.current = new AbortController();
+        resetThought();
 
         pushLine({ type: 'user', text: prompt });
         sessionMessagesRef.current.push({ role: 'user', content: prompt });
@@ -1315,6 +1424,8 @@ function XibeCodeChatApp(props: {
             onVisibleOutput: () => {
               lastVisibleOutputAtRef.current = Date.now();
             },
+            onThought: appendThought,
+            onThoughtEnd: commitThought,
           });
           const elapsedMs = Date.now() - startedAt;
           const seconds = (elapsedMs / 1000).toFixed(1);
@@ -1323,6 +1434,7 @@ function XibeCodeChatApp(props: {
             text: `Done in ${seconds}s` + (stats.costLabel ? ` · cost ${stats.costLabel}` : ''),
           });
         } finally {
+          commitThought();
           abortControllerRef.current = null;
           currentPromptRef.current = null;
           setIsRunning(false);
@@ -1395,6 +1507,10 @@ function XibeCodeChatApp(props: {
       wireFormat,
       applyMode,
       startSetupWizard,
+      appendThought,
+      commitThought,
+      resetThought,
+      showThinking,
     ],
   );
 
@@ -1988,6 +2104,7 @@ function XibeCodeChatApp(props: {
       l.kind === 'line' &&
       (l.type === 'user' ||
         l.type === 'assistant' ||
+        l.type === 'thinking' ||
         l.type === 'tool' ||
         l.type === 'tool_out' ||
         l.type === 'error'),
@@ -2085,7 +2202,15 @@ function XibeCodeChatApp(props: {
 
           return (
             <React.Fragment key={item.id}>
-              {item.type === 'assistant' ? (
+              {item.type === 'thinking' ? (
+                <Box flexDirection="column" marginBottom={1}>
+                  {item.text.split('\n').map((line, idx) => (
+                    <Text key={`${item.id}-t-${idx}`} dimColor italic>
+                      {idx === 0 ? line : `  ${line || ' '}`}
+                    </Text>
+                  ))}
+                </Box>
+              ) : item.type === 'assistant' ? (
                 <Box flexDirection="column" marginBottom={1}>
                   <Text bold color={prefixColorKey('assistant', activeMode)}>
                     {prefixForType('assistant')}:
@@ -2125,9 +2250,21 @@ function XibeCodeChatApp(props: {
               {WORK_SPINNER_FRAMES[workSpinnerFrame]}{' '}
             </Text>
             <Text bold color={prefixColorKey('assistant', activeMode)}>
-              {workVerbPhrase}
+              {showThinking && liveThought.trim() ? 'Thinking' : workVerbPhrase}
             </Text>
           </Text>
+          {showThinking && liveThought.trim() ? (
+            <Box marginTop={1} flexDirection="column">
+              <Text dimColor italic>
+                Thought
+              </Text>
+              {lastThoughtLines(liveThought, 10).map((line, idx) => (
+                <Text key={`live-thought-${idx}`} dimColor italic wrap="wrap">
+                  {line || ' '}
+                </Text>
+              ))}
+            </Box>
+          ) : null}
         </Box>
       )}
       {questionsState && (() => {
@@ -2731,7 +2868,13 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
   const runPrompt = async (
     prompt: string,
     onLine: (line: UiLine) => void,
-    opts?: { images?: ImageAttachment[]; signal?: AbortSignal; onVisibleOutput?: () => void },
+    opts?: {
+      images?: ImageAttachment[];
+      signal?: AbortSignal;
+      onVisibleOutput?: () => void;
+      onThought?: (delta: string) => void;
+      onThoughtEnd?: () => void;
+    },
   ): Promise<ReturnType<EnhancedAgent['getStats']>> => {
     // Ensure MCP servers are connected before executing
     await mcpServersPromise;
@@ -2771,19 +2914,28 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
 
     activeAgent.on('event', (event: { type: string; data?: Record<string, unknown> }) => {
       switch (event.type) {
-        case 'thinking':
-          // Flush any pending streamed text before showing thinking indicator
-          flushStreamedBuffer();
-          if (streamFlushTimer) { clearTimeout(streamFlushTimer); streamFlushTimer = null; }
-          // Thinking messages are visible output — reset the watchdog timer
+        case 'thinking': {
+          // Status heartbeats keep the watchdog alive but are not transcript lines.
           opts?.onVisibleOutput?.();
-          onLine({
-            type: 'info',
-            text: (event.data?.message as string) || 'Thinking…',
-          });
+          const message = String(event.data?.message ?? '');
+          if (message && !isStatusThinkingMessage(message)) {
+            flushStreamedBuffer();
+            if (streamFlushTimer) { clearTimeout(streamFlushTimer); streamFlushTimer = null; }
+            onLine({ type: 'info', text: message });
+          }
           break;
+        }
+        case 'thinking_delta': {
+          const thought = String(event.data?.text ?? '');
+          if (thought) {
+            opts?.onVisibleOutput?.();
+            opts?.onThought?.(thought);
+          }
+          break;
+        }
         case 'tool_call': {
           didOutputContent = true;
+          opts?.onThoughtEnd?.();
           // Flush any pending streamed text before showing tool call
           flushStreamedBuffer();
           if (streamFlushTimer) { clearTimeout(streamFlushTimer); streamFlushTimer = null; }
@@ -2823,6 +2975,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
         }
         case 'stream_text':
           if (event.data?.text) didOutputContent = true;
+          opts?.onThoughtEnd?.();
           opts?.onVisibleOutput?.();
           streamedBuffer += (event.data?.text as string) || '';
           // Accumulate streamed text and flush periodically or when buffer is large.
@@ -2840,11 +2993,13 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
           }
           break;
         case 'stream_end':
+          opts?.onThoughtEnd?.();
           if (streamFlushTimer) { clearTimeout(streamFlushTimer); streamFlushTimer = null; }
           flushStreamedBuffer();
           break;
         case 'response':
           if (event.data?.text) didOutputContent = true;
+          opts?.onThoughtEnd?.();
           opts?.onVisibleOutput?.();
           onLine({ type: 'assistant', text: (event.data?.text as string) || '' });
           break;

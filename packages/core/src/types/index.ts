@@ -23,6 +23,7 @@ export {
   type StreamEventType,
   type StreamEvent,
   type ThinkingEvent,
+  type ThinkingDeltaEvent,
   type TextDeltaEvent,
   type ToolCallStartEvent,
   type ToolCallEndEvent,

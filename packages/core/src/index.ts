@@ -65,6 +65,7 @@ export {
   type StreamEventType,
   type StreamEvent,
   type ThinkingEvent,
+  type ThinkingDeltaEvent,
   type TextDeltaEvent,
   type ToolCallStartEvent,
   type ToolCallEndEvent,
@@ -78,6 +79,13 @@ export {
 
 // ─── Agent ─────────────────────────────────────────────────────
 export { EnhancedAgent } from './agent.js';
+export {
+  ThinkTagFilter,
+  extractDeltaReasoning,
+  extractDeltaText,
+  extractAnthropicThinkingDelta,
+  type ThinkFilterChunk,
+} from './think-filter.js';
 
 // ─── Provider pool (failover / higher connection reliability) ──
 export {

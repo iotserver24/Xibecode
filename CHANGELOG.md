@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.17.8] - 2026-08-16
+
+### Chat TUI
+
+- Live **Thought** block while the model is working (OpenCode / Hermes style). Streams `<think>` / `<thinking>` tags, `reasoning_content`, and Anthropic thinking deltas instead of stripping them.
+- `/thinking` toggles the thought pane. Status heartbeats like “AI is thinking…” stay off the transcript.
+
+### App inbox
+
+- SSE handshake sends a `ready` event so empty new chats are not stuck waiting for the first message.
+
 ## [1.17.7] - 2026-08-16
 
 ### Hosted sandbox files

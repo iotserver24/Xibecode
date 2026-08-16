@@ -361,6 +361,10 @@ export async function runCommand(prompt: string | undefined, options: RunOptions
         ui.thinking(event.data.message);
         break;
 
+      case 'thinking_delta':
+        ui.streamThinking(event.data.text);
+        break;
+
       // ── Streaming ──
       case 'stream_start':
         ui.startAssistantResponse();

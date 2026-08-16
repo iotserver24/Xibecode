@@ -26,7 +26,9 @@ export class EnhancedUI {
   private T: ThemeTokens;
   private startTime: number = 0;
   private isStreaming = false;
+  private isThinkingStream = false;
   private streamLineLen = 0;
+  private thinkLineLen = 0;
   private toolCount = 0;
 
   constructor(verbose: boolean = false, themeName: ThemeName = 'default') {
@@ -245,8 +247,41 @@ export class EnhancedUI {
     if (this.spinner) this.spinner.text = this.T.brandDim(message);
   }
 
+  streamThinking(text: string) {
+    if (!this.showThinking || !text) return;
+    this.stopSpinner();
+    if (!this.isThinkingStream) {
+      if (this.isStreaming) {
+        process.stdout.write('\n');
+        this.isStreaming = false;
+        this.streamLineLen = 0;
+      }
+      this.isThinkingStream = true;
+      this.thinkLineLen = 0;
+      console.log('  ' + this.T.muted('◇ Thought'));
+      process.stdout.write('    ');
+    }
+    const lines = text.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      if (i > 0) {
+        process.stdout.write('\n    ');
+        this.thinkLineLen = 0;
+      }
+      process.stdout.write(this.T.muted(lines[i]));
+      this.thinkLineLen += lines[i].length;
+    }
+  }
+
+  endThinking() {
+    if (!this.isThinkingStream) return;
+    process.stdout.write('\n');
+    this.isThinkingStream = false;
+    this.thinkLineLen = 0;
+  }
+
   // ─── Streaming ────────────────────────────────────────
   startAssistantResponse(persona?: { name: string; color: string }) {
+    this.endThinking();
     this.stopSpinner();
     this.isStreaming = true;
     this.streamLineLen = 0;
@@ -276,6 +311,7 @@ export class EnhancedUI {
   }
 
   endAssistantResponse() {
+    this.endThinking();
     if (this.isStreaming) {
       process.stdout.write('\n');
     }
@@ -285,6 +321,7 @@ export class EnhancedUI {
 
   // ─── Non-streaming response ───────────────────────────
   response(text: string, persona?: { name: string; color: string }) {
+    this.endThinking();
     this.stopSpinner();
 
     if (persona) {
@@ -309,6 +346,7 @@ export class EnhancedUI {
       this.stopSpinner();
       return;
     }
+    this.endThinking();
     this.stopSpinner();
     this.toolCount++;
 

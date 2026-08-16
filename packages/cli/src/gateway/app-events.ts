@@ -8,6 +8,7 @@ export const APP_DEFAULT_USER_ID = 'owner';
 export const APP_INBOX_DEFAULT_PORT = 8790;
 
 export type AppEventType =
+  | 'ready'
   | 'typing'
   | 'text'
   | 'tool'

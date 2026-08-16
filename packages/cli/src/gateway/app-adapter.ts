@@ -498,6 +498,9 @@ export class AppAdapter implements MessagingAdapter {
         connection: 'keep-alive',
         'x-accel-buffering': 'no',
       });
+      res.write(
+        `data: ${JSON.stringify({ type: 'ready', id: 'ready', ts: Date.now(), chatId })}\n\n`,
+      );
       const writeEv = (ev: AppChatEvent) => {
         if (ev.chatId !== chatId) return;
         res.write(`id: ${ev.id}\n`);

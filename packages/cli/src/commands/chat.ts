@@ -166,6 +166,9 @@ async function runPlainChat(options: ChatOptions): Promise<void> {
         case 'thinking':
           print(`[info] ${event.message}`);
           break;
+        case 'thinking_delta':
+          process.stderr.write(event.text);
+          break;
         case 'text_delta':
           process.stdout.write(event.text);
           break;

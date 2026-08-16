@@ -1611,6 +1611,9 @@ async function runAgentTurn(args: {
         case "thinking":
           args.onThinking?.(event.message);
           break;
+        case "thinking_delta":
+          args.onThinking?.(event.text);
+          break;
         case "tool_call_start": {
           const toolCallId = makeToolCallId(event.name, ++toolSequence);
           toolInputs.set(toolCallId, event.input);
@@ -1887,6 +1890,14 @@ async function handleChat(
           };
           sendNotification(ACP_METHODS.CHAT_DELTA, thinkDelta);
           break;
+        case "thinking_delta": {
+          const thoughtDelta: ACPChatDeltaParams = {
+            content: `*${event.text}*`,
+            conversationId,
+          };
+          sendNotification(ACP_METHODS.CHAT_DELTA, thoughtDelta);
+          break;
+        }
 
         case "error":
           console.error("[acp] Agent error:", event.message);

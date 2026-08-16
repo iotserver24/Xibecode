@@ -28,6 +28,12 @@ import {
   isAutoMemoryLoadEnabled,
 } from './utils/auto-memory.js';
 import type { ImageAttachment } from './types/index.js';
+import {
+  ThinkTagFilter,
+  extractAnthropicThinkingDelta,
+  extractDeltaReasoning,
+  extractDeltaText,
+} from './think-filter.js';
 
 function imageHref(img: ImageAttachment): string | null {
   const url = (img.url || '').trim();
@@ -118,7 +124,7 @@ export interface AgentConfig {
 }
 
 export interface AgentEvent {
-  type: 'thinking' | 'tool_call' | 'tool_result' | 'response' | 'error' | 'warning' | 'complete' | 'iteration' | 'stream_start' | 'stream_text' | 'stream_end' | 'mode_changed' | 'mode_change_requested' | 'plan_ready' | 'questions';
+  type: 'thinking' | 'thinking_delta' | 'tool_call' | 'tool_result' | 'response' | 'error' | 'warning' | 'complete' | 'iteration' | 'stream_start' | 'stream_text' | 'stream_end' | 'mode_changed' | 'mode_change_requested' | 'plan_ready' | 'questions';
   data: any;
 }
 
@@ -205,88 +211,6 @@ export class LoopDetector {
       return out;
     }
     return value;
-  }
-}
-
-// ─── Think-tag streaming filter ───────────────────────────────
-class ThinkTagFilter {
-  private insideThink = false;
-  private buffer = '';
-
-  reset() {
-    this.insideThink = false;
-    this.buffer = '';
-  }
-
-  /**
-   * Process a streaming text chunk. Returns the text that should be shown
-   * to the user (with <think>...</think> blocks removed in real-time).
-   */
-  push(chunk: string): string {
-    const combined = this.buffer + chunk;
-    this.buffer = '';
-    let output = '';
-    let i = 0;
-
-    while (i < combined.length) {
-      if (this.insideThink) {
-        const closeIdx = combined.indexOf('</think>', i);
-        if (closeIdx !== -1) {
-          this.insideThink = false;
-          i = closeIdx + 8;
-        } else {
-          // Still inside think block, consume everything
-          break;
-        }
-      } else {
-        const openIdx = combined.indexOf('<think>', i);
-        if (openIdx !== -1) {
-          output += combined.substring(i, openIdx);
-          this.insideThink = true;
-          i = openIdx + 7;
-        } else {
-          // Check for partial '<think' or '</think' at the end
-          const remaining = combined.substring(i);
-          const partialTag = this.findPartialTag(remaining);
-          if (partialTag > 0) {
-            output += remaining.substring(0, remaining.length - partialTag);
-            this.buffer = remaining.substring(remaining.length - partialTag);
-          } else {
-            output += remaining;
-          }
-          break;
-        }
-      }
-    }
-
-    return output;
-  }
-
-  /** Flush any remaining buffered text */
-  flush(): string {
-    const leftover = this.buffer;
-    this.buffer = '';
-    if (this.insideThink) return '';
-    return leftover;
-  }
-
-  /**
-   * Strip all think tags from a complete string (non-streaming).
-   */
-  static strip(text: string): string {
-    return text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-  }
-
-  private findPartialTag(text: string): number {
-    const tags = ['<think>', '</think>'];
-    for (const tag of tags) {
-      for (let len = tag.length - 1; len >= 1; len--) {
-        if (text.endsWith(tag.substring(0, len))) {
-          return len;
-        }
-      }
-    }
-    return 0;
   }
 }
 
@@ -947,6 +871,27 @@ export class EnhancedAgent extends EventEmitter {
     return super.emit('event', { type: event, data });
   }
 
+  private emitThinkingDelta(text: string): void {
+    if (!text) return;
+    this.emit('thinking_delta', { text });
+  }
+
+  private emitFilteredStreamText(
+    chunk: string,
+    persona: { name: string; color: string } | undefined,
+    state: { hasEmittedStart: boolean },
+  ): boolean {
+    const filtered = this.thinkFilter.push(chunk);
+    if (filtered.thinking) this.emitThinkingDelta(filtered.thinking);
+    if (!filtered.text) return state.hasEmittedStart;
+    if (!state.hasEmittedStart) {
+      this.emit('stream_start', persona ? { persona } : {});
+      state.hasEmittedStart = true;
+    }
+    this.emit('stream_text', { text: filtered.text });
+    return state.hasEmittedStart;
+  }
+
   private publishImageUrl?: (absPath: string) => Promise<string | undefined>;
 
   async run(
@@ -1369,8 +1314,15 @@ export class EnhancedAgent extends EventEmitter {
 
         // Show text responses (only if not already streamed)
         if (!streamed) {
+          for (const block of content) {
+            if ((block as any)?.type === 'thinking' && typeof (block as any).thinking === 'string') {
+              this.emitThinkingDelta((block as any).thinking);
+            }
+          }
           for (const block of textBlocks) {
-            const cleanText = ThinkTagFilter.strip(block.text);
+            const split = ThinkTagFilter.split(block.text);
+            if (split.thinking) this.emitThinkingDelta(split.thinking);
+            const cleanText = split.text.trim();
             // Remove control tags from display output
             const displayText = stripQuestions(stripPlanReady(stripTaskComplete(stripModeRequests(cleanText))));
             if (displayText) {
@@ -1967,7 +1919,7 @@ export class EnhancedAgent extends EventEmitter {
       }
 
       this.thinkFilter.reset();
-      let hasEmittedStart = false;
+      const streamState = { hasEmittedStart: false };
 
       const currentModeConfig = MODE_CONFIG[this.modeState.current];
       const persona = {
@@ -1978,33 +1930,32 @@ export class EnhancedAgent extends EventEmitter {
       const stream = (this.client.messages as any).stream(params, { signal });
 
       stream.on('text', (chunk: string) => {
-        const filtered = this.thinkFilter.push(chunk);
-        if (filtered) {
-          if (!hasEmittedStart) {
-            this.emit('stream_start', { persona });
-            hasEmittedStart = true;
-          }
-          this.emit('stream_text', { text: filtered });
-        }
+        this.emitFilteredStreamText(chunk, persona, streamState);
+      });
+
+      stream.on('streamEvent', (event: unknown) => {
+        const thinking = extractAnthropicThinkingDelta(event);
+        if (thinking) this.emitThinkingDelta(thinking);
       });
 
       const message = await stream.finalMessage();
 
       // Flush remaining buffered text
       const remaining = this.thinkFilter.flush();
-      if (remaining) {
-        if (!hasEmittedStart) {
-          this.emit('stream_start', {});
-          hasEmittedStart = true;
+      if (remaining.thinking) this.emitThinkingDelta(remaining.thinking);
+      if (remaining.text) {
+        if (!streamState.hasEmittedStart) {
+          this.emit('stream_start', { persona });
+          streamState.hasEmittedStart = true;
         }
-        this.emit('stream_text', { text: remaining });
+        this.emit('stream_text', { text: remaining.text });
       }
 
-      if (hasEmittedStart) {
+      if (streamState.hasEmittedStart) {
         this.emit('stream_end', {});
       }
 
-      return { message, streamed: hasEmittedStart };
+      return { message, streamed: streamState.hasEmittedStart };
     } catch (_streamError) {
       // ── Fallback to non-streaming ──
       try {
@@ -2258,9 +2209,11 @@ export class EnhancedAgent extends EventEmitter {
       }
 
       let fullText = '';
+      let fullReasoning = '';
       const toolCallsAccum: Array<{ id: string; name: string; arguments: string; index: number }> = [];
-      let hasEmittedStart = false;
+      const streamState = { hasEmittedStart: false };
       let buffer = '';
+      this.thinkFilter.reset();
 
       // Inactivity timeout: if no SSE chunk arrives for 120s, consider the connection dead.
       // This prevents hanging forever when a provider silently drops the connection.
@@ -2302,36 +2255,33 @@ export class EnhancedAgent extends EventEmitter {
           try {
             const json = JSON.parse(dataStr);
             const delta = json.choices?.[0]?.delta;
-            let chunkText = '';
+            const reasoningChunk = extractDeltaReasoning(delta);
+            const chunkText = extractDeltaText(delta);
 
-            if (typeof delta?.content === 'string') {
-              chunkText = delta.content;
-            } else if (Array.isArray(delta?.content)) {
-              chunkText = delta.content
-                .filter((c: any) => c.type === 'text' && typeof c.text === 'string')
-                .map((c: any) => c.text)
-                .join('');
-            }
-            // Kimi / reasoning models may stream only reasoning_content
-            if (
-              !chunkText &&
-              typeof (delta as any)?.reasoning_content === 'string'
-            ) {
-              chunkText = (delta as any).reasoning_content;
+            if (reasoningChunk) {
+              fullReasoning += reasoningChunk;
+              this.emitThinkingDelta(reasoningChunk);
             }
 
             if (chunkText) {
-              fullText += chunkText;
-              if (!hasEmittedStart) {
-                const currentModeConfig = MODE_CONFIG[this.modeState.current];
-                const persona = {
-                  name: currentModeConfig.personaName,
-                  color: currentModeConfig.displayColor,
-                };
-                this.emit('stream_start', { persona });
-                hasEmittedStart = true;
+              const filtered = this.thinkFilter.push(chunkText);
+              if (filtered.thinking) {
+                fullReasoning += filtered.thinking;
+                this.emitThinkingDelta(filtered.thinking);
               }
-              this.emit('stream_text', { text: chunkText });
+              if (filtered.text) {
+                fullText += filtered.text;
+                if (!streamState.hasEmittedStart) {
+                  const currentModeConfig = MODE_CONFIG[this.modeState.current];
+                  const persona = {
+                    name: currentModeConfig.personaName,
+                    color: currentModeConfig.displayColor,
+                  };
+                  this.emit('stream_start', { persona });
+                  streamState.hasEmittedStart = true;
+                }
+                this.emit('stream_text', { text: filtered.text });
+              }
             }
 
             // Accumulate streaming tool_calls (OpenAI sends by index with optional id/name/arguments per chunk)
@@ -2354,7 +2304,21 @@ export class EnhancedAgent extends EventEmitter {
         }
       }
 
-      if (hasEmittedStart) {
+      const leftover = this.thinkFilter.flush();
+      if (leftover.thinking) {
+        fullReasoning += leftover.thinking;
+        this.emitThinkingDelta(leftover.thinking);
+      }
+      if (leftover.text) {
+        fullText += leftover.text;
+        if (!streamState.hasEmittedStart) {
+          this.emit('stream_start', {});
+          streamState.hasEmittedStart = true;
+        }
+        this.emit('stream_text', { text: leftover.text });
+      }
+
+      if (streamState.hasEmittedStart) {
         this.emit('stream_end', {});
       }
 
@@ -2393,6 +2357,10 @@ export class EnhancedAgent extends EventEmitter {
       }
       // Recover DSML / <bash> tool markup leaked as plain text
       let textOut = fullText || '';
+      if (!textOut.trim() && fullReasoning.trim() && !hadNativeTools) {
+        // Kimi-class models often put the only answer in reasoning_content
+        textOut = fullReasoning;
+      }
       if (!hadNativeTools && textOut) {
         const recovered = recoverDsmlToolCalls(textOut);
         textOut = recovered.text;
@@ -2414,7 +2382,7 @@ export class EnhancedAgent extends EventEmitter {
       if (abortHandler) signal?.removeEventListener('abort', abortHandler);
 
       const message = { content: content.length ? content : [{ type: 'text', text: '' } as TextBlock] };
-      return { message, streamed: hasEmittedStart };
+      return { message, streamed: streamState.hasEmittedStart || Boolean(fullReasoning.trim()) };
     } catch (_streamError) {
       // Clean up inactivity timer on error
       if (inactivityTimer) {
@@ -2483,26 +2451,26 @@ export class EnhancedAgent extends EventEmitter {
 
       const data: any = await response.json();
       const msg = data?.choices?.[0]?.message ?? {};
-      // Kimi-class models often put the answer in reasoning_content with content: null
-      const rawContent =
-        msg.content ??
-        msg.reasoning_content ??
-        msg.reasoning ??
-        '';
+      const rawContent = msg.content ?? '';
       const rawToolCalls = msg.tool_calls ?? [];
+      const reasoningText =
+        (typeof msg.reasoning_content === 'string' && msg.reasoning_content) ||
+        (typeof msg.reasoning === 'string' && msg.reasoning) ||
+        '';
+      if (reasoningText) this.emitThinkingDelta(reasoningText);
 
       const content: ContentBlock[] = [];
       let text =
         typeof rawContent === 'string'
           ? rawContent
           : Array.isArray(rawContent)
-            ? rawContent.map((c: any) => c.text ?? '').join('')
+            ? rawContent.map((c: any) => (c.type === 'text' || !c.type ? c.text ?? '' : '')).join('')
             : '';
-      if (
-        (!text || !String(text).trim()) &&
-        typeof msg.reasoning_content === 'string'
-      ) {
-        text = msg.reasoning_content;
+      const tagged = ThinkTagFilter.split(text);
+      if (tagged.thinking) this.emitThinkingDelta(tagged.thinking);
+      text = tagged.text;
+      if (!text.trim() && reasoningText) {
+        text = reasoningText;
       }
       const hadNativeTools = Array.isArray(rawToolCalls) && rawToolCalls.length > 0;
       const toolBlocks: ContentBlock[] = [];
@@ -3060,6 +3028,11 @@ ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
       switch (raw.type) {
         case 'thinking':
           push({ type: 'thinking', message: raw.data?.message ?? 'Thinking...' });
+          break;
+        case 'thinking_delta':
+          if (raw.data?.text) {
+            push({ type: 'thinking_delta', text: raw.data.text });
+          }
           break;
         case 'stream_start':
           // stream_start carries persona; text deltas follow
