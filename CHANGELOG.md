@@ -6,6 +6,10 @@
 
 - Context usage chip: tokens used / model max, auto-detected from models.dev (Hermes-style) with family fallback. Inbox emits `usage` and `GET /v1/status`.
 
+### Hosting / E2B template
+
+- `xibecode-full-sandbox` Dockerfile pinned to CLI/core **1.17.9** (version bump only). Existing sandboxes stay on their old bake until Update CLI.
+
 ## [1.17.8] - 2026-08-16
 
 ### Chat TUI
