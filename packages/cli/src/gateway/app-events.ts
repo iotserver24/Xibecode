@@ -17,6 +17,7 @@ export type AppEventType =
   | 'picker'
   | 'file'
   | 'progress'
+  | 'usage'
   | 'done'
   | 'error';
 
@@ -50,6 +51,12 @@ export interface AppChatEvent {
   elapsedMs?: number;
   tools?: number;
   pct?: number;
+  /** Context tokens used (current prompt). */
+  used?: number;
+  /** Model context window (auto-detected). */
+  max?: number;
+  model?: string;
+  label?: string;
   options?: Array<{ value: string; label: string; current?: boolean }>;
   /** Approval / ask / picker id the client echoes back. */
   ref?: string;

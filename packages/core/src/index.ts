@@ -80,6 +80,14 @@ export {
 // ─── Agent ─────────────────────────────────────────────────────
 export { EnhancedAgent } from './agent.js';
 export {
+  resolveContextWindow,
+  heuristicContextWindow,
+  formatTokenCount,
+  usagePercent,
+  type ContextWindowInfo,
+  type ContextWindowSource,
+} from './context-window.js';
+export {
   ThinkTagFilter,
   extractDeltaReasoning,
   extractDeltaText,

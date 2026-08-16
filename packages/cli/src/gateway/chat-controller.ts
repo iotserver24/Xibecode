@@ -1161,6 +1161,18 @@ export class ChatController {
                 `agent ${type} ${msg.platform}:${msg.chatId} tools=${activeRun.toolCount || 0}`,
               );
             }
+          } else if (type === 'usage') {
+            if (adapter.sendUsage) {
+              void adapter.sendUsage(msg.chatId, {
+                used: Number(data?.used) || undefined,
+                max: Number(data?.max) || undefined,
+                pct: Number(data?.pct) || undefined,
+                model: typeof data?.model === 'string' ? data.model : undefined,
+                label: typeof data?.label === 'string' ? data.label : undefined,
+                input: Number(data?.input) || undefined,
+                output: Number(data?.output) || undefined,
+              });
+            }
           } else if (type === 'warning') {
             const w = String(data?.message || '');
             this.options.log(`${msg.platform} warning: ${w}`);

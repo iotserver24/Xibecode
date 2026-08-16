@@ -72,6 +72,19 @@ export interface MessagingAdapter {
   ): Promise<void>;
   /** Optional typing indicator. */
   sendTyping?(chatId: string, opts?: { threadId?: string }): Promise<void>;
+  /** Context usage (used / model max). */
+  sendUsage?(
+    chatId: string,
+    usage: {
+      used?: number;
+      max?: number;
+      pct?: number;
+      model?: string;
+      label?: string;
+      input?: number;
+      output?: number;
+    },
+  ): Promise<void>;
   /** Optional: edit a progress message in place. Returns message id. */
   sendOrEditProgress?(
     chatId: string,

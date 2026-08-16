@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.17.9] - 2026-08-16
+
+### App chat
+
+- Context usage chip: tokens used / model max, auto-detected from models.dev (Hermes-style) with family fallback. Inbox emits `usage` and `GET /v1/status`.
+
 ## [1.17.8] - 2026-08-16
 
 ### Chat TUI

@@ -183,6 +183,15 @@ export class AppAdapter implements MessagingAdapter {
     string,
     { abs: string; name: string; mime?: string }
   >();
+  private lastUsage: {
+    used?: number;
+    max?: number;
+    pct?: number;
+    model?: string;
+    label?: string;
+    input?: number;
+    output?: number;
+  } | null = null;
 
   constructor(
     opts: { homeChatId?: string; workdir?: () => string } = {},
@@ -277,6 +286,30 @@ export class AppAdapter implements MessagingAdapter {
     if (this.typedThisTurn) return;
     this.typedThisTurn = true;
     this.emit(chatId, { type: 'typing', text: 'on it' });
+  }
+
+  async sendUsage(
+    chatId: string,
+    usage: {
+      used?: number;
+      max?: number;
+      pct?: number;
+      model?: string;
+      label?: string;
+      input?: number;
+      output?: number;
+    },
+  ): Promise<void> {
+    this.lastUsage = { ...usage };
+    this.emit(chatId, {
+      type: 'usage',
+      used: usage.used,
+      max: usage.max,
+      pct: usage.pct,
+      model: usage.model,
+      label: usage.label,
+      text: usage.label,
+    });
   }
 
   async sendOrEditProgress(
@@ -489,6 +522,14 @@ export class AppAdapter implements MessagingAdapter {
       return;
     }
 
+    if (method === 'GET' && url.pathname === '/v1/status') {
+      sendJson(res, 200, {
+        ok: true,
+        usage: this.lastUsage,
+      });
+      return;
+    }
+
     if (method === 'GET' && url.pathname === '/v1/chat/events') {
       const chatId = url.searchParams.get('chatId') || APP_DEFAULT_CHAT_ID;
       const since = url.searchParams.get('since') || '';
@@ -501,6 +542,18 @@ export class AppAdapter implements MessagingAdapter {
       res.write(
         `data: ${JSON.stringify({ type: 'ready', id: 'ready', ts: Date.now(), chatId })}\n\n`,
       );
+      if (this.lastUsage) {
+        res.write(
+          `data: ${JSON.stringify({
+            type: 'usage',
+            id: 'usage',
+            ts: Date.now(),
+            chatId,
+            ...this.lastUsage,
+            text: this.lastUsage.label,
+          })}\n\n`,
+        );
+      }
       const writeEv = (ev: AppChatEvent) => {
         if (ev.chatId !== chatId) return;
         res.write(`id: ${ev.id}\n`);

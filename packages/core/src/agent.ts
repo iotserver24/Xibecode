@@ -34,6 +34,12 @@ import {
   extractDeltaReasoning,
   extractDeltaText,
 } from './think-filter.js';
+import {
+  formatTokenCount,
+  heuristicContextWindow,
+  resolveContextWindow,
+  usagePercent,
+} from './context-window.js';
 
 function imageHref(img: ImageAttachment): string | null {
   const url = (img.url || '').trim();
@@ -124,7 +130,7 @@ export interface AgentConfig {
 }
 
 export interface AgentEvent {
-  type: 'thinking' | 'thinking_delta' | 'tool_call' | 'tool_result' | 'response' | 'error' | 'warning' | 'complete' | 'iteration' | 'stream_start' | 'stream_text' | 'stream_end' | 'mode_changed' | 'mode_change_requested' | 'plan_ready' | 'questions';
+  type: 'thinking' | 'thinking_delta' | 'tool_call' | 'tool_result' | 'response' | 'error' | 'warning' | 'complete' | 'iteration' | 'stream_start' | 'stream_text' | 'stream_end' | 'mode_changed' | 'mode_change_requested' | 'plan_ready' | 'questions' | 'usage';
   data: any;
 }
 
@@ -333,6 +339,10 @@ export class EnhancedAgent extends EventEmitter {
   private autoMemoryMarkdownSection: string = '';
   private totalInputTokens: number = 0;
   private totalOutputTokens: number = 0;
+  /** Last API-reported prompt size (current context), Hermes-style. */
+  private lastPromptTokens = 0;
+  /** Resolved model window; starts as a family heuristic, then models.dev. */
+  private resolvedContextWindow = 0;
   private sessionCost: number = 0;
   private activeSkill: { name: string; instructions: string } | null = null;
   private defaultSkillsPrompt: string = '';
@@ -491,19 +501,39 @@ export class EnhancedAgent extends EventEmitter {
 
   /** Get the context window size for the current model. */
   private getContextWindowForModel(): number {
-    const model = this.config.model.toLowerCase();
-    if (model.includes('claude-3-5') || model.includes('claude-3.5')) return 200_000;
-    if (model.includes('claude-4') || model.includes('claude-sonnet-4')) return 200_000;
-    if (model.includes('claude-3-opus')) return 200_000;
-    if (model.includes('claude-3-haiku')) return 200_000;
-    if (model.includes('gpt-4o') || model.includes('gpt-4-turbo')) return 128_000;
-    if (model.includes('gpt-4')) return 8_192;
-    if (model.includes('o1') || model.includes('o3')) return 128_000;
-    if (model.includes('deepseek')) return 128_000;
-    if (model.includes('qwen')) return 128_000;
-    if (model.includes('gemini') || model.includes('mimo')) return 128_000;
-    // Default safe fallback
-    return 120_000;
+    if (this.resolvedContextWindow > 0) return this.resolvedContextWindow;
+    return heuristicContextWindow(this.config.model);
+  }
+
+  private usageSnapshot() {
+    const max = this.getContextWindowForModel();
+    const used =
+      this.lastPromptTokens > 0
+        ? this.lastPromptTokens
+        : this.estimateConversationTokens();
+    return {
+      model: this.config.model,
+      used,
+      max,
+      pct: usagePercent(used, max),
+      input: this.totalInputTokens,
+      output: this.totalOutputTokens,
+      label: `${formatTokenCount(used)} / ${formatTokenCount(max)}`,
+    };
+  }
+
+  private emitUsage(): void {
+    this.emit('usage', this.usageSnapshot());
+  }
+
+  private async refreshContextWindow(): Promise<void> {
+    try {
+      const info = await resolveContextWindow(this.config.model);
+      if (info.tokens > 0) this.resolvedContextWindow = info.tokens;
+    } catch {
+      /* keep heuristic */
+    }
+    this.emitUsage();
   }
 
   /**
@@ -971,6 +1001,9 @@ export class EnhancedAgent extends EventEmitter {
       this.publishImageUrl = opts.publishImageUrl;
     }
 
+    this.emitUsage();
+    void this.refreshContextWindow();
+
     if (opts?.images && opts.images.length > 0) {
       const blocks: any[] = [{ type: 'text', text: initialPrompt }];
       for (const img of opts.images) {
@@ -1196,12 +1229,14 @@ export class EnhancedAgent extends EventEmitter {
           const outputTokens = response.usage.output_tokens || 0;
           this.totalInputTokens += inputTokens;
           this.totalOutputTokens += outputTokens;
+          if (inputTokens > 0) this.lastPromptTokens = inputTokens;
 
           // Calculate cost
           const pricing = EnhancedAgent.PRICING[this.config.model];
           if (pricing) {
             this.sessionCost += (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
           }
+          this.emitUsage();
         }
 
         // Post-turn auto-compact (same path as preflight)
@@ -3034,6 +3069,9 @@ ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
             push({ type: 'thinking_delta', text: raw.data.text });
           }
           break;
+        case 'usage':
+          // UI / inbox consume this via the raw agent event, not StreamEvent.
+          break;
         case 'stream_start':
           // stream_start carries persona; text deltas follow
           break;
@@ -3115,6 +3153,7 @@ ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
   }
 
   getStats() {
+    const usage = this.usageSnapshot();
     return {
       iterations: this.iterationCount,
       toolCalls: this.toolCallCount,
@@ -3123,6 +3162,10 @@ ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
       inputTokens: this.totalInputTokens,
       outputTokens: this.totalOutputTokens,
       totalTokens: this.totalInputTokens + this.totalOutputTokens,
+      contextUsed: usage.used,
+      contextMax: usage.max,
+      contextPct: usage.pct,
+      contextLabel: usage.label,
       cost: this.sessionCost,
       costLabel: this.sessionCost > 0 ? `$${this.sessionCost.toFixed(4)}` : undefined,
     };

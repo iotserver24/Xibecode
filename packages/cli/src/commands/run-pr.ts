@@ -566,6 +566,10 @@ export async function runPrCommand(prompt: string | undefined, options: RunPrOpt
     inputTokens: 0,
     outputTokens: 0,
     totalTokens: 0,
+    contextUsed: 0,
+    contextMax: 0,
+    contextPct: 0,
+    contextLabel: '0 / 0',
     cost: 0,
     costLabel: undefined,
   };
