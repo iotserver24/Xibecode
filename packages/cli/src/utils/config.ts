@@ -12,6 +12,23 @@ import {
   type MCPServersConfig,
   type MCPServerConfigLegacy,
 } from 'xibecode-core';
+import {
+  ensureCurrentSlot,
+  findSavedProvider,
+  parseSavedProviders,
+  removeSavedProvider as dropSavedProvider,
+  savedProviderId,
+  slotFromActive,
+  upsertSavedProvider,
+  type SavedProvider,
+} from './saved-providers.js';
+
+export type { SavedProvider } from './saved-providers.js';
+export {
+  findSavedProvider,
+  savedProviderId,
+  savedProviderLabel,
+} from './saved-providers.js';
 
 export {
   PROVIDER_CONFIGS,
@@ -108,6 +125,12 @@ export interface XibeCodeConfig {
    * Each entry: { provider, model, apiKey, baseUrl? } or "provider|model|apiKey".
    * Also set via env XIBECODE_FALLBACK_PROVIDERS (comma-separated pipe specs).
    */
+  /**
+   * Hermes-style saved provider slots. Switching provider/model copies a
+   * slot into the active apiKey/baseUrl/provider/model fields and leaves
+   * the others in this list.
+   */
+  savedProviders?: SavedProvider[];
   fallbackProviders?: Array<{
     id?: string;
     provider?: string;
@@ -394,6 +417,65 @@ export class ConfigManager {
     return this.get('executionModel');
   }
 
+  currentProviderSlot(): SavedProvider | null {
+    return slotFromActive({
+      provider: (this.get('provider') as string | undefined) || undefined,
+      apiKey: this.get('apiKey') || this.getApiKey(),
+      baseUrl: this.get('baseUrl') || this.getBaseUrl(),
+      model: this.get('model'),
+      format: this.get('customProviderFormat'),
+    });
+  }
+
+  /** Saved slots plus the active provider if it is not already listed. */
+  listSavedProviders(): SavedProvider[] {
+    return ensureCurrentSlot(
+      parseSavedProviders(this.get('savedProviders')),
+      this.currentProviderSlot(),
+    );
+  }
+
+  /** Persist the active provider/key/url/model without dropping other slots. */
+  rememberCurrentProvider(): SavedProvider | null {
+    const current = this.currentProviderSlot();
+    if (!current) return null;
+    const next = upsertSavedProvider(
+      parseSavedProviders(this.get('savedProviders')),
+      current,
+    );
+    this.set('savedProviders', next);
+    return current;
+  }
+
+  activateSavedProvider(idOrProvider: string): SavedProvider | null {
+    this.rememberCurrentProvider();
+    const slot = findSavedProvider(this.listSavedProviders(), idOrProvider);
+    if (!slot) return null;
+    this.set('provider', slot.provider as ProviderType);
+    if (slot.apiKey) this.set('apiKey', slot.apiKey);
+    if (slot.baseUrl) this.set('baseUrl', slot.baseUrl);
+    else this.delete('baseUrl');
+    if (slot.model) this.set('model', slot.model);
+    if (slot.format) this.set('customProviderFormat', slot.format);
+    this.rememberCurrentProvider();
+    return slot;
+  }
+
+  removeSavedProvider(idOrProvider: string): void {
+    const next = dropSavedProvider(
+      parseSavedProviders(this.get('savedProviders')),
+      idOrProvider,
+    );
+    this.set('savedProviders', next);
+  }
+
+  savedProviderSlotId(): string {
+    return savedProviderId(
+      (this.get('provider') as string | undefined) || 'custom',
+      this.get('baseUrl') || this.getBaseUrl(),
+    );
+  }
+
   getUsePkgStyleContext(): boolean {
     return this.get('usePkgStyleContext') ?? false;
   }
@@ -571,6 +653,9 @@ export class ConfigManager {
       'Profile': this.getProfileName(),
       'API Key': config.apiKey ? this.maskApiKey(config.apiKey) : 'Not set',
       'Provider': config.provider || 'auto-detect',
+      'Saved providers': this.listSavedProviders()
+        .map((s) => s.id)
+        .join(', ') || 'none',
       'Base URL': config.baseUrl || 'Default',
       'Model': config.model || 'claude-sonnet-4-5-20250929',
       'Max Iterations': config.maxIterations?.toString() || '50',

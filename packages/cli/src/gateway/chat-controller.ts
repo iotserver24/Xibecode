@@ -52,7 +52,11 @@ import {
   extractMedia,
 } from './media-delivery.js';
 import { formatShareMessage, shareMediaFiles, shareWorkspaceFile } from './workspace-share.js';
-import { ConfigManager } from '../utils/config.js';
+import { ConfigManager, findSavedProvider, savedProviderLabel } from '../utils/config.js';
+import {
+  parseSavedProviders,
+  upsertSavedProvider,
+} from '../utils/saved-providers.js';
 import { builtInSkillsDir } from '../utils/built-in-skills-dir.js';
 
 const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
@@ -2035,7 +2039,9 @@ export class ChatController {
 
   /**
  * /model — list or switch.
-   *   /model | /models     current + short list
+   *   /model | /models     saved providers (if 2+) then models
+   *   /model <provider>    activate a saved provider, then list models
+   *   /model <provider>:<id>  switch provider + model
    *   /model <name>        set for this chat
    *   /model <name> --global  also write profile default
    *   /model clear         drop chat override
@@ -2058,6 +2064,7 @@ export class ChatController {
       const globalFlag = tokens.some((t) => t === '--global' || t === '-g');
       const nameParts = tokens.filter((t) => t !== '--global' && t !== '-g');
       const name = nameParts.join(' ').trim();
+      const saved = cfg.listSavedProviders();
 
       if (name === 'clear' || name === 'reset' || name === 'default') {
         await updateSessionMeta(msg.platform, msg.chatId, { model: '' });
@@ -2067,10 +2074,40 @@ export class ChatController {
         return;
       }
 
+      const colon = name.match(/^([a-z0-9._-]+):(.+)$/i);
+      if (colon) {
+        const slot = findSavedProvider(saved, colon[1]!);
+        if (slot) {
+          cfg.activateSavedProvider(slot.id);
+          const modelId = colon[2]!.trim();
+          persistSlotModel(cfg, modelId);
+          await updateSessionMeta(msg.platform, msg.chatId, { model: modelId });
+          if (globalFlag) cfg.set('model', modelId);
+          await reply(
+            `✓ Model switched to \`${modelId}\` on **${slot.provider}**.` +
+              (globalFlag ? '\nSaved as profile default.' : ''),
+          );
+          return;
+        }
+      }
+
       if (name) {
+        const slot = findSavedProvider(saved, name);
+        if (slot) {
+          cfg.activateSavedProvider(slot.id);
+          const modelId = slot.model || cfg.getModel();
+          await updateSessionMeta(msg.platform, msg.chatId, { model: modelId });
+          if (globalFlag && modelId) cfg.set('model', modelId);
+          await this.openSavedModelPicker(msg, cfg, adapter, reply, {
+            switchedProvider: slot.id,
+          });
+          return;
+        }
         await updateSessionMeta(msg.platform, msg.chatId, { model: name });
+        persistSlotModel(cfg, name);
         if (globalFlag) {
           cfg.set('model', name);
+          cfg.rememberCurrentProvider();
           await reply(
             `Model set to \`${name}\`\n• this chat\n• profile **${cfg.getProfileName()}** (persisted)`,
           );
@@ -2082,81 +2119,128 @@ export class ChatController {
         return;
       }
 
-      let listed: string[] = [];
-      let listErr: string | undefined;
-      try {
-        listed = await fetchModelsList(cfg);
-      } catch (err: any) {
-        listErr = err?.message || String(err);
-      }
-
- // model picker (provider → paginated models → switch)
-      if (adapter?.sendModelPicker) {
+      if (saved.length > 1 && adapter?.sendChoicePicker) {
         try {
-          const provider =
-            (cfg.get('provider') as string | undefined) || 'default';
-          await adapter.sendModelPicker(msg.chatId, {
-            models: listed,
-            current,
-            profileDefault: profileModel,
-            chatOverride: session.model,
-            providerSlug: provider,
-            onModelSelected: async (_chatId, modelId, _providerSlug) => {
-              if (modelId === '__custom__') {
-                return (
-                  'Type a custom model id:\n`/model your-model-id`\n\n' +
-                  'That sets it for this chat. Add `--global` to persist.'
-                );
-              }
-              await updateSessionMeta(msg.platform, msg.chatId, {
-                model: modelId,
-              });
-              return (
-                `✓ Model switched to \`${modelId}\` for this chat.\n` +
-                `Profile default stays \`${profileModel}\`.\n` +
-                `Use \`/model ${modelId} --global\` to persist.`
-              );
-            },
-          });
-          if (listErr) {
-            await reply(`(list warning: ${listErr})`);
-          }
+          await adapter.sendChoicePicker(
+            msg.chatId,
+            `Saved providers · current: ${cfg.get('provider') || 'none'}`,
+            saved.map((s) => ({
+              value: s.id,
+              label: savedProviderLabel(s),
+              current: s.id === cfg.savedProviderSlotId(),
+            })),
+          );
           return;
         } catch (err: any) {
-          this.options.log(`model picker failed: ${err?.message || err}`);
+          this.options.log(`provider picker failed: ${err?.message || err}`);
         }
       }
 
-      const lines = [
-        '**Model**',
-        `current: \`${current}\`${session.model ? ' (chat)' : ' (profile)'}`,
-        `profile default: \`${profileModel}\``,
-        `profile: ${cfg.getProfileName()}`,
-        '',
-      ];
-      if (listed.length) {
-        const show = listed.slice(0, 25);
-        lines.push(
-          `**Available** (${listed.length}${listed.length > 25 ? ', first 25' : ''}):`,
-        );
-        lines.push(...show.map((m, i) => `${i + 1}. \`${m}\``));
-        lines.push(
-          '',
-          'Set: `/model <name>` · persist: `/model <name> --global` · clear: `/model clear`',
-        );
-      } else {
-        lines.push(
-          listErr ? `Could not list models: ${listErr}` : 'No models from API.',
-          '',
-          'Set anyway: `/model <model-id>`',
-        );
-      }
-      await reply(lines.join('\n'));
+      await this.openSavedModelPicker(msg, cfg, adapter, reply, {});
     } catch (err: any) {
       this.options.log(`/model error: ${err?.message || err}`);
       await reply(`Model command failed: ${err?.message || err}`).catch(() => {});
     }
   }
+
+  private async openSavedModelPicker(
+    msg: InboundMessage,
+    cfg: ConfigManager,
+    adapter: MessagingAdapter | null | undefined,
+    reply: (text: string) => Promise<void>,
+    opts: { switchedProvider?: string },
+  ): Promise<void> {
+    const session = await getOrCreateSession(msg.platform, msg.chatId);
+    const profileModel = cfg.getModel() || '(unset)';
+    const current = session.model || profileModel;
+    let listed: string[] = [];
+    let listErr: string | undefined;
+    try {
+      listed = await fetchModelsList(cfg);
+    } catch (err: any) {
+      listErr = err?.message || String(err);
+    }
+
+    if (adapter?.sendModelPicker) {
+      try {
+        const provider =
+          (cfg.get('provider') as string | undefined) || 'default';
+        await adapter.sendModelPicker(msg.chatId, {
+          models: listed,
+          current,
+          profileDefault: profileModel,
+          chatOverride: session.model,
+          providerSlug: provider,
+          onModelSelected: async (_chatId, modelId, _providerSlug) => {
+            if (modelId === '__custom__') {
+              return (
+                'Type a custom model id:\n`/model your-model-id`\n\n' +
+                'That sets it for this chat. Add `--global` to persist.'
+              );
+            }
+            persistSlotModel(cfg, modelId);
+            await updateSessionMeta(msg.platform, msg.chatId, {
+              model: modelId,
+            });
+            const who = opts.switchedProvider || provider;
+            return `✓ Model switched to \`${modelId}\` on **${who}**.`;
+          },
+        });
+        if (listErr) {
+          await reply(`(list warning: ${listErr})`);
+        }
+        return;
+      } catch (err: any) {
+        this.options.log(`model picker failed: ${err?.message || err}`);
+      }
+    }
+
+    const lines = [
+      '**Model**',
+      `current: \`${current}\`${session.model ? ' (chat)' : ' (profile)'}`,
+      `provider: \`${cfg.get('provider') || 'auto'}\``,
+      `profile default: \`${profileModel}\``,
+      `profile: ${cfg.getProfileName()}`,
+      '',
+    ];
+    const saved = cfg.listSavedProviders();
+    if (saved.length > 1) {
+      lines.push(
+        `**Saved providers** (${saved.length}): ${saved.map((s) => `\`${s.id}\``).join(', ')}`,
+        '',
+      );
+    }
+    if (listed.length) {
+      const show = listed.slice(0, 25);
+      lines.push(
+        `**Available** (${listed.length}${listed.length > 25 ? ', first 25' : ''}):`,
+      );
+      lines.push(...show.map((m, i) => `${i + 1}. \`${m}\``));
+      lines.push(
+        '',
+        'Set: `/model <name>` · provider: `/model <provider>` · persist: `/model <name> --global`',
+      );
+    } else {
+      lines.push(
+        listErr ? `Could not list models: ${listErr}` : 'No models from API.',
+        '',
+        'Set anyway: `/model <model-id>`',
+      );
+    }
+    await reply(lines.join('\n'));
+  }
+}
+
+function persistSlotModel(cfg: ConfigManager, modelId: string): void {
+  const cur = cfg.currentProviderSlot();
+  if (!cur) return;
+  cfg.set(
+    'savedProviders',
+    upsertSavedProvider(parseSavedProviders(cfg.get('savedProviders')), {
+      ...cur,
+      model: modelId,
+    }),
+  );
 }
 
 async function fetchModelsList(cfg: ConfigManager): Promise<string[]> {

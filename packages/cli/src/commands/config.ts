@@ -91,6 +91,7 @@ export async function configCommand(options: ConfigOptions) {
   // Quick set operations
   if (options.setKey) {
     config.set('apiKey', options.setKey);
+    config.rememberCurrentProvider();
     ui.success('API key saved!');
     return;
   }
@@ -101,12 +102,14 @@ export async function configCommand(options: ConfigOptions) {
       process.exit(1);
     }
     config.set('baseUrl', options.setUrl);
+    config.rememberCurrentProvider();
     ui.success(`Base URL set to: ${options.setUrl}`);
     return;
   }
 
   if (options.setModel) {
     config.set('model', options.setModel);
+    config.rememberCurrentProvider();
     ui.success(`Default model set to: ${options.setModel}`);
     return;
   }
@@ -131,6 +134,7 @@ export async function configCommand(options: ConfigOptions) {
       if (cfg.baseUrl) config.set('baseUrl', cfg.baseUrl);
       if (cfg.defaultModel) config.set('model', cfg.defaultModel);
       if (cfg.format) config.set('customProviderFormat', cfg.format);
+      config.rememberCurrentProvider();
       ui.success(`Provider set to: ${provider} (${cfg.name})`);
       if (cfg.baseUrl) ui.info(`Base URL → ${cfg.baseUrl}`);
       if (cfg.defaultModel) ui.info(`Default model → ${cfg.defaultModel}`);
@@ -147,6 +151,7 @@ export async function configCommand(options: ConfigOptions) {
         if (mdev.baseUrl) config.set('baseUrl', mdev.baseUrl);
         if (mdev.defaultModel) config.set('model', mdev.defaultModel);
         config.set('customProviderFormat', mdev.format);
+        config.rememberCurrentProvider();
         ui.success(`Provider set to: ${provider} (${mdev.name}) [models.dev]`);
         if (mdev.baseUrl) ui.info(`Base URL → ${mdev.baseUrl}`);
         else ui.warning('No public API URL in models.dev — set with --set-url');
@@ -451,6 +456,7 @@ export async function configCommand(options: ConfigOptions) {
           },
         ]);
         config.set('apiKey', apiKey);
+        config.rememberCurrentProvider();
         ui.success('API key saved!');
         break;
       }

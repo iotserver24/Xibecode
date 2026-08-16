@@ -376,6 +376,7 @@ async function setupModel(config: ConfigManager): Promise<void> {
     model = ans.model?.trim() || defaultModel;
   }
   config.set('model', model);
+  config.rememberCurrentProvider();
   console.log(chalk.dim(`  → model: ${model}\n`));
 
   if (await askYesNo('Set a custom base URL? (proxies / OpenAI-compatible)', Boolean(config.get('baseUrl')))) {
@@ -420,7 +421,20 @@ async function setupModel(config: ConfigManager): Promise<void> {
     if (baseUrl?.trim()) config.set('baseUrl', baseUrl.trim());
   }
 
+  config.rememberCurrentProvider();
   console.log(chalk.green('\n✓ Model configuration saved.\n'));
+
+  const saved = config.listSavedProviders();
+  if (saved.length) {
+    console.log(
+      chalk.dim(
+        `  Saved providers (${saved.length}): ${saved.map((s) => s.id).join(', ')}`,
+      ),
+    );
+  }
+  if (await askYesNo('Save another provider too (keep this one)?', false)) {
+    await setupModel(config);
+  }
 }
 
 async function setupGateway(config: ConfigManager): Promise<void> {
