@@ -1102,6 +1102,15 @@ export class TelegramEngine implements MessagingAdapter {
       return true;
     }
 
+    if (data === 'mc') {
+      await answer();
+      await this.sendMessage(
+        chatId,
+        'Type a custom model id:\n/model your-model-id',
+      );
+      return true;
+    }
+
     if (data.startsWith('mm:') || data.startsWith('mc:')) {
       const idx = Number(data.slice(3));
       const models = state.model_list || [];

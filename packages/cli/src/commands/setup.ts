@@ -67,6 +67,8 @@ function printNonInteractiveGuidance(reason?: string): void {
   if (reason) console.log(chalk.yellow(reason));
   console.log(chalk.dim('Interactive wizard needs a TTY. Use flags instead:\n'));
   console.log(chalk.cyan('  xibecode config --set-key YOUR_API_KEY'));
+  console.log(chalk.cyan('  xibecode config --set-provider hermes'));
+  console.log(chalk.cyan('  xibecode config --set-key YOUR_HERMES_OR_NOUS_KEY'));
   console.log(chalk.cyan('  xibecode config --set-provider anthropic'));
   console.log(chalk.cyan('  xibecode config --set-model claude-sonnet-4-5-20250929'));
   console.log(chalk.cyan('  xibecode config --show'));
@@ -303,34 +305,43 @@ async function setupModel(config: ConfigManager): Promise<void> {
     pcfg?.defaultModel ||
     'claude-sonnet-4-5-20250929';
 
-  // Offer common models as numbered shortcuts when we know the provider
   const modelPresets: Array<{ name: string; value: string }> = [];
-  if (provider === 'anthropic') {
-    modelPresets.push(
-      { name: 'claude-sonnet-4-5-20250929 (recommended)', value: 'claude-sonnet-4-5-20250929' },
-      { name: 'claude-opus-4-5-20251101', value: 'claude-opus-4-5-20251101' },
-      { name: 'claude-haiku-4-5-20251015', value: 'claude-haiku-4-5-20251015' },
-      { name: 'Type a custom model id…', value: '__custom__' },
+  try {
+    const { fetchProviderModels, CUSTOM_MODEL_VALUE } = await import(
+      'xibecode-core'
     );
-  } else if (provider === 'openai') {
-    modelPresets.push(
-      { name: 'gpt-4o', value: 'gpt-4o' },
-      { name: 'gpt-4o-mini', value: 'gpt-4o-mini' },
-      { name: 'o3-mini', value: 'o3-mini' },
-      { name: 'Type a custom model id…', value: '__custom__' },
-    );
-  } else if (provider === 'openrouter') {
-    modelPresets.push(
-      { name: 'anthropic/claude-sonnet-4', value: 'anthropic/claude-sonnet-4' },
-      { name: 'openai/gpt-4o', value: 'openai/gpt-4o' },
-      { name: 'google/gemini-2.5-pro', value: 'google/gemini-2.5-pro' },
-      { name: 'Type a custom model id…', value: '__custom__' },
-    );
-  } else if (pcfg?.defaultModel) {
-    modelPresets.push(
-      { name: `${pcfg.defaultModel} (default)`, value: pcfg.defaultModel },
-      { name: 'Type a custom model id…', value: '__custom__' },
-    );
+    const listed = await fetchProviderModels({
+      baseUrl: config.getBaseUrl() || pcfg?.baseUrl || '',
+      apiKey: config.getApiKey(),
+      format: pcfg?.format,
+      provider: provider === 'auto' ? undefined : provider,
+      timeoutMs: 10_000,
+    });
+    const free = new Set(listed.free || []);
+    const show = listed.models.slice(0, 40);
+    if (show.length) {
+      console.log(
+        chalk.dim(
+          `  Live /models: ${listed.models.length} (${listed.anonymousCount || 0} public, ${listed.authenticatedCount || 0} with key)` +
+            (free.size ? ` · ${free.size} free` : ''),
+        ),
+      );
+    }
+    for (const id of show) {
+      modelPresets.push({
+        name: free.has(id) ? `${id} (free)` : id,
+        value: id,
+      });
+    }
+    modelPresets.push({
+      name: 'Type a custom model id…',
+      value: CUSTOM_MODEL_VALUE,
+    });
+  } catch {
+    modelPresets.push({
+      name: 'Type a custom model id…',
+      value: '__custom__',
+    });
   }
 
   let model = defaultModel;

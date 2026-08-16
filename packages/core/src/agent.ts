@@ -768,6 +768,7 @@ export class EnhancedAgent extends EventEmitter {
     if (m.startsWith('kimi') || m.startsWith('moonshot')) return 'kimi';
     if (m.startsWith('grok')) return 'grok';
     if (m.startsWith('deepseek')) return 'deepseek';
+    if (m.includes('hermes')) return 'hermes';
     if (m.startsWith('llama') || m.startsWith('mixtral')) return 'groq';
     if (m.includes('/')) return 'openrouter';
     return 'openai';

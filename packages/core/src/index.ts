@@ -42,6 +42,9 @@ export {
   listProviderCatalog,
   listAllProvidersCatalog,
   CURATED_PROVIDER_MODELS,
+  CUSTOM_MODEL_VALUE,
+  withCustomModelOption,
+  parseModelCatalog,
   type FetchModelsOptions,
   type FetchModelsResult,
 } from './models-catalog.js';

@@ -303,6 +303,7 @@ function detectProvider(model?: string): ProviderType {
     // GPT, O1, O3, Grok, and other non-Claude models → OpenAI-compatible
     if (m.startsWith('gpt-') || m.startsWith('gpt4') || m.startsWith('o1-') || m.startsWith('o3-') || m.includes('grok')) return 'openai';
     if (m.startsWith('deepseek')) return 'deepseek';
+    if (m.includes('hermes')) return 'hermes';
     if (m.startsWith('glm') || m.includes('glm-')) return 'zai';
     if (m.startsWith('moonshot') || m.startsWith('kimi')) return 'kimi';
     if (m.includes('/')) return 'openrouter';

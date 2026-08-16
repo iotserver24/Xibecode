@@ -331,6 +331,12 @@ export class ConfigManager {
     if (provider === 'lmstudio' && process.env.LM_BASE_URL) {
       return process.env.LM_BASE_URL;
     }
+    if (
+      (provider === 'hermes' || provider === 'nous') &&
+      (process.env.HERMES_BASE_URL || process.env.NOUS_BASE_URL)
+    ) {
+      return process.env.HERMES_BASE_URL || process.env.NOUS_BASE_URL;
+    }
 
     // 3. Known provider defaults
     if (provider && provider !== 'custom' && PROVIDER_CONFIGS[provider as keyof typeof PROVIDER_CONFIGS]) {

@@ -104,6 +104,7 @@ export function buildModelKeyboard(
       nav.push({ text: 'Next ▶', callback_data: `mg:${page + 1}` });
     rows.push(nav);
   }
+  rows.push([{ text: '✎ Custom model…', callback_data: 'mc' }]);
   rows.push([
     { text: '◀ Back', callback_data: 'mb' },
     { text: '✗ Cancel', callback_data: 'mx' },

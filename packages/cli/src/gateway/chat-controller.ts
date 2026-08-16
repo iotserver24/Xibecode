@@ -2102,6 +2102,12 @@ export class ChatController {
             chatOverride: session.model,
             providerSlug: provider,
             onModelSelected: async (_chatId, modelId, _providerSlug) => {
+              if (modelId === '__custom__') {
+                return (
+                  'Type a custom model id:\n`/model your-model-id`\n\n' +
+                  'That sets it for this chat. Add `--global` to persist.'
+                );
+              }
               await updateSessionMeta(msg.platform, msg.chatId, {
                 model: modelId,
               });

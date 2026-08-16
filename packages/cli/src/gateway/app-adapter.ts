@@ -440,11 +440,14 @@ export class AppAdapter implements MessagingAdapter {
       ref: pickerId,
       title: 'Model',
       detail: `current: ${opts.current} · profile: ${opts.profileDefault}`,
-      options: opts.models.slice(0, 400).map((m) => ({
-        value: m,
-        label: m,
-        current: m === opts.current,
-      })),
+      options: [
+        ...opts.models.slice(0, 399).map((m) => ({
+          value: m,
+          label: m,
+          current: m === opts.current,
+        })),
+        { value: '__custom__', label: 'Custom model…' },
+      ],
     });
   }
 
@@ -550,6 +553,32 @@ export class AppAdapter implements MessagingAdapter {
 
     if (method === 'GET' && url.pathname === '/v1/commands') {
       sendJson(res, 200, { commands: GATEWAY_BOT_COMMANDS });
+      return;
+    }
+
+    if (method === 'GET' && url.pathname === '/v1/models') {
+      try {
+        const { fetchProviderModels, CUSTOM_MODEL_VALUE } = await import(
+          'xibecode-core'
+        );
+        const { ConfigManager } = await import('../utils/config.js');
+        const cfg = new ConfigManager();
+        const provider = (cfg.get('provider') as string | undefined) || undefined;
+        const result = await fetchProviderModels({
+          baseUrl: cfg.getBaseUrl() || '',
+          apiKey: cfg.getApiKey(),
+          provider,
+          timeoutMs: 10_000,
+        });
+        sendJson(res, 200, {
+          ...result,
+          current: cfg.getModel(),
+          provider,
+          custom: CUSTOM_MODEL_VALUE,
+        });
+      } catch (err: any) {
+        sendJson(res, 502, { error: err?.message || String(err), models: [] });
+      }
       return;
     }
 

@@ -31,10 +31,25 @@ export interface FetchModelsOptions {
 
 export interface FetchModelsResult {
   models: string[];
+  /** Live ids detected as free (`:free` suffix or $0 pricing). */
+  free?: string[];
   /** Where the list came from. */
-  source: 'live' | 'curated' | 'default' | 'empty';
+  source: 'live' | 'curated' | 'default' | 'empty' | 'mixed';
   url: string;
   error?: string;
+  /** How many ids came from GET /models with no key. */
+  anonymousCount?: number;
+  /** How many ids came from GET /models with a bearer/key. */
+  authenticatedCount?: number;
+}
+
+/** Sentinel for pickers: user will type a model id. */
+export const CUSTOM_MODEL_VALUE = '__custom__';
+
+export function withCustomModelOption(models: string[]): string[] {
+  const out = models.filter((m) => m && m !== CUSTOM_MODEL_VALUE);
+  out.push(CUSTOM_MODEL_VALUE);
+  return out;
 }
 
 /** Curated agent-friendly models when /models lags or fails (messaging gateway _PROVIDER_MODELS idea). */
@@ -109,7 +124,10 @@ export const CURATED_PROVIDER_MODELS: Record<string, readonly string[]> = {
   lmstudio: ['local-model'],
 };
 
-const cache = new Map<string, { at: number; models: string[]; source: FetchModelsResult['source'] }>();
+const cache = new Map<
+  string,
+  { at: number; models: string[]; free?: string[]; source: FetchModelsResult['source'] }
+>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -149,43 +167,70 @@ function isNonChatModel(id: string): boolean {
   );
 }
 
-function parseModelIds(payload: unknown): string[] {
-  const out: string[] = [];
-  const push = (id: unknown) => {
-    if (typeof id === 'string' && id.trim()) out.push(id.trim());
+function looksFree(id: string, item?: any): boolean {
+  if (/:free$/i.test(id) || /(^|[/\-])free([/\-]|$)/i.test(id)) return true;
+  const p = item && typeof item === 'object' ? item.pricing : undefined;
+  if (!p || typeof p !== 'object') return false;
+  const num = (v: unknown) => {
+    const n = typeof v === 'number' ? v : Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const prompt = num((p as any).prompt ?? (p as any).input);
+  const completion = num((p as any).completion ?? (p as any).output);
+  if (prompt === null && completion === null) return false;
+  return (prompt ?? 0) === 0 && (completion ?? 0) === 0;
+}
+
+export function parseModelCatalog(payload: unknown): { ids: string[]; free: string[] } {
+  const ids: string[] = [];
+  const free: string[] = [];
+  const push = (id: unknown, item?: any) => {
+    if (typeof id !== 'string' || !id.trim()) return;
+    const s = id.trim();
+    ids.push(s);
+    if (looksFree(s, item)) free.push(s);
+  };
+
+  const walk = (list: unknown[]) => {
+    for (const item of list) {
+      if (typeof item === 'string') push(item);
+      else if (item && typeof item === 'object') {
+        push((item as any).id ?? (item as any).name, item);
+      }
+    }
   };
 
   if (Array.isArray(payload)) {
-    for (const item of payload) {
-      if (typeof item === 'string') push(item);
-      else if (item && typeof item === 'object') push((item as any).id ?? (item as any).name);
-    }
-    return uniqueSorted(out);
-  }
-
-  if (payload && typeof payload === 'object') {
+    walk(payload);
+  } else if (payload && typeof payload === 'object') {
     const data = (payload as any).data;
-    if (Array.isArray(data)) {
-      for (const item of data) {
-        if (typeof item === 'string') push(item);
-        else if (item && typeof item === 'object') push(item.id ?? item.name);
-      }
-    } else if (data && typeof data === 'object' && typeof data.id === 'string') {
-      push(data.id);
+    if (Array.isArray(data)) walk(data);
+    else if (data && typeof data === 'object') {
+      push(data.id ?? data.name, data);
     }
-    // some gateways: { models: [...] }
-    if (Array.isArray((payload as any).models)) {
-      for (const item of (payload as any).models) {
-        if (typeof item === 'string') push(item);
-        else if (item && typeof item === 'object') push(item.id ?? item.name);
-      }
-    }
+    if (Array.isArray((payload as any).models)) walk((payload as any).models);
   }
-  return uniqueSorted(out);
+  return { ids: uniqueSorted(ids), free: uniqueSorted(free) };
+}
+
+function parseModelIds(payload: unknown): string[] {
+  return parseModelCatalog(payload).ids;
 }
 
 function uniqueSorted(ids: string[]): string[] {
   return Array.from(new Set(ids)).sort((a, b) => a.localeCompare(b));
+}
+
+/** Prefer `first` order, then append remaining from `second`. */
+function uniqueSortedPrefer(first: string[], second: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of [...first, ...second]) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
 }
 
 function buildHeaders(
@@ -229,9 +274,49 @@ function curatedFor(provider?: string | null): string[] {
   return [];
 }
 
+async function getLiveModelIds(
+  url: string,
+  apiKey: string | undefined | null,
+  format: ProviderWireFormat | undefined,
+  baseUrl: string,
+  includeNonChat: boolean | undefined,
+  timeoutMs: number,
+): Promise<{ ids: string[]; free: string[]; error?: string }> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(apiKey, format, baseUrl),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      return { ids: [], free: [], error: `GET /models → HTTP ${res.status}` };
+    }
+    const payload = await res.json().catch(() => null);
+    const parsed = parseModelCatalog(payload);
+    let ids = parsed.ids;
+    let free = parsed.free;
+    if (!includeNonChat) {
+      ids = ids.filter((id) => !isNonChatModel(id));
+      free = free.filter((id) => !isNonChatModel(id));
+    }
+    return { ids, free };
+  } catch (err: any) {
+    return {
+      ids: [],
+      free: [],
+      error: err?.name === 'AbortError' ? 'timeout' : err?.message || String(err),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Fetch model ids from a provider's OpenAI/Anthropic-compatible `/models` API.
- * Falls back to curated defaults when live catalog fails.
+ * Tries **without** an API key first, then again **with** the key.
+ * Free models (from live pricing / `:free`) are sorted to the front.
  */
 export async function fetchProviderModels(
   opts: FetchModelsOptions,
@@ -245,50 +330,62 @@ export async function fetchProviderModels(
   if (!opts.forceRefresh) {
     const hit = cache.get(cacheKey);
     if (hit && Date.now() - hit.at < CACHE_TTL_MS) {
-      return { models: hit.models, source: hit.source, url: url || baseUrl };
+      return {
+        models: hit.models,
+        free: hit.free,
+        source: hit.source,
+        url: url || baseUrl,
+      };
     }
   }
 
   if (!url) {
-    const curated = curatedFor(provider);
+    const fallback = curatedFor(provider);
     return {
-      models: curated,
-      source: curated.length ? 'curated' : 'empty',
+      models: fallback,
+      source: fallback.length ? 'curated' : 'empty',
       url: '',
       error: 'No base URL configured',
     };
   }
 
-  let live: string[] = [];
-  let error: string | undefined;
   const timeoutMs = opts.timeoutMs ?? 12_000;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  const anon = await getLiveModelIds(
+    url,
+    undefined,
+    format,
+    baseUrl,
+    opts.includeNonChat,
+    timeoutMs,
+  );
+  const hasKey = Boolean((opts.apiKey || '').trim());
+  const authed = hasKey
+    ? await getLiveModelIds(
+        url,
+        opts.apiKey,
+        format,
+        baseUrl,
+        opts.includeNonChat,
+        timeoutMs,
+      )
+    : { ids: [] as string[], free: [] as string[] };
 
-  try {
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: buildHeaders(opts.apiKey, format, baseUrl),
-      signal: ctrl.signal,
-    });
-    if (!res.ok) {
-      error = `GET /models → HTTP ${res.status}`;
-    } else {
-      const payload = await res.json().catch(() => null);
-      live = parseModelIds(payload);
-      if (!opts.includeNonChat) {
-        live = live.filter((id) => !isNonChatModel(id));
-      }
-    }
-  } catch (err: any) {
-    error = err?.name === 'AbortError' ? 'timeout' : err?.message || String(err);
-  } finally {
-    clearTimeout(timer);
-  }
+  const live = uniqueSorted([...anon.ids, ...authed.ids]);
+  const free = uniqueSorted([...(anon.free || []), ...(authed.free || [])]);
+  const ordered = uniqueSortedPrefer(free, live);
+  const error = live.length ? undefined : anon.error || authed.error;
 
-  if (live.length) {
-    cache.set(cacheKey, { at: Date.now(), models: live, source: 'live' });
-    return { models: live, source: 'live', url, error };
+  if (ordered.length) {
+    cache.set(cacheKey, { at: Date.now(), models: ordered, free, source: 'live' });
+    return {
+      models: ordered,
+      free,
+      source: 'live',
+      url,
+      error,
+      anonymousCount: anon.ids.length,
+      authenticatedCount: authed.ids.length,
+    };
   }
 
  // models.dev catalog (messaging gateway primary offline/online database)
@@ -440,6 +537,8 @@ export async function listAllProvidersCatalog(opts?: {
     'kimi-for-coding',
     'xai',
     'grok',
+    'hermes',
+    'nous',
   ]) {
     seen.add(a);
   }

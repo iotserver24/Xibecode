@@ -265,6 +265,8 @@ const TO_MODELS_DEV: Record<string, string> = {
   bedrock: 'amazon-bedrock',
   'amazon-bedrock': 'amazon-bedrock',
   cerebras: 'cerebras',
+  hermes: 'nous',
+  nous: 'nous',
   deepinfra: 'deepinfra',
   upstage: 'upstage',
   'google-vertex': 'google-vertex',

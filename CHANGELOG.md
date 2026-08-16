@@ -2,6 +2,13 @@
 
 ## [1.17.10] - 2026-08-16
 
+### Providers
+
+- **Nous Research** (`nous`) talks to `https://inference-api.nousresearch.com/v1`. Keys: `NOUS_API_KEY` or `HERMES_API_KEY`.
+- Model pickers (`setup`, `/model`, app, web) load **GET /models twice** — no key, then with key — and put live **free** ids first (`:free` or $0 pricing). No hardcoded free list.
+- Always offer **Custom model…** so you can type any id.
+- Inbox `GET /v1/models` (website `/api/instances/:id/models`).
+
 ### Agent
 
 - Tool-loop guard no longer blocks different commands on the same tool. Only the exact same call (same args / same fetch result) is limited — warn at 3, block at 6.
