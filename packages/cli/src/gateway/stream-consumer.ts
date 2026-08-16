@@ -17,6 +17,7 @@
  */
 
 import type { MessagingAdapter } from './types.js';
+import { stripLeakedToolMarkup } from './format.js';
 
 const MIN_EDIT_MS = 900;
 const MAX_DRAFT_CHARS = 3200;
@@ -183,10 +184,13 @@ export class GatewayStreamConsumer {
     const now = Date.now();
     if (now - this.lastDraftFlush < MIN_EDIT_MS) return;
     this.lastDraftFlush = now;
+    // Strip leaked tool markup so mid-turn drafts match Telegram-clean UX
+    const cleaned = stripLeakedToolMarkup(this.draftText);
+    if (!cleaned.trim()) return;
     const preview =
-      this.draftText.length >= MAX_DRAFT_CHARS
-        ? '…' + this.draftText.slice(-MAX_DRAFT_CHARS + 1)
-        : this.draftText;
+      cleaned.length >= MAX_DRAFT_CHARS
+        ? '…' + cleaned.slice(-MAX_DRAFT_CHARS + 1)
+        : cleaned;
     this.draftMsgId = await this.adapter.sendOrEditProgress!(
       this.chatId,
       preview || '…',

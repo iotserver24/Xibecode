@@ -15,6 +15,8 @@ export interface InboundMessage {
   username?: string;
   /** Channel/thread metadata for threaded platforms. */
   threadId?: string;
+  /** Discord guild/server id when message is from a server channel (not DM). */
+  guildId?: string;
   /** True when synthesized from an inline-button tap. */
   fromCallback?: boolean;
 }

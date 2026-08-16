@@ -4,6 +4,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PLAYWRIGHT_BROWSERS_PATH=/home/user/.cache/ms-playwright
 ENV XIBECODE_PREFERRED_BROWSER=agent-browser
 
+# Lean agent tooling (keep image small; do not bake self-installable stacks).
+# - git already core; gh for PR/auth; rg/fd for search; zip/wget/rsync/procps everyday utils
 RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates \
   curl \
@@ -15,6 +17,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   g++ \
   xz-utils \
   tar \
+  ripgrep \
+  fd-find \
+  unzip \
+  zip \
+  wget \
+  rsync \
+  procps \
   fonts-liberation \
   libasound2t64 \
   libatk-bridge2.0-0t64 \
@@ -34,10 +43,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/* \
   || (apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl git jq openssh-client python3 make g++ xz-utils tar \
+    ripgrep fd-find unzip zip wget rsync procps \
     fonts-liberation libasound2 libatk-bridge2.0-0 libatk1.0-0 libcups2 \
     libdbus-1-3 libdrm2 libgbm1 libgtk-3-0 libnspr4 libnss3 libx11-xcb1 \
     libxcomposite1 libxdamage1 libxrandr2 xdg-utils \
     && rm -rf /var/lib/apt/lists/*)
+
+# Ubuntu packages fd as `fdfind` — expose the usual `fd` name for agents/docs.
+RUN ln -sf /usr/bin/fdfind /usr/local/bin/fd
+
+# GitHub CLI (official apt repo — not always current in Ubuntu universe).
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
+  && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    > /etc/apt/sources.list.d/github-cli.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends gh \
+  && rm -rf /var/lib/apt/lists/* \
+  && gh --version
 
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
   && apt-get update \

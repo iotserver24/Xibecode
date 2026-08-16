@@ -1,5 +1,6 @@
 /**
- * xibecode pair — DM pairing approval for gateway platforms.
+ * xibecode pair — pairing approval for gateway platforms.
+ * Prefer in-chat: /pair approve CODE · /pair channel · /pair server
  */
 
 import chalk from 'chalk';
@@ -7,6 +8,9 @@ import {
   approvePairing,
   revokePairing,
   listPairing,
+  pairChannel,
+  pairGuild,
+  formatPairingList,
 } from '../gateway/pairing.js';
 
 export async function pairCommand(
@@ -16,22 +20,7 @@ export async function pairCommand(
   const act = (action || 'list').toLowerCase();
 
   if (act === 'list' || act === 'ls') {
-    const state = await listPairing();
-    console.log(chalk.white('Pending pairing codes:\n'));
-    if (!state.pending.length) console.log(chalk.dim('  (none)'));
-    for (const p of state.pending) {
-      const exp = new Date(p.expiresAt).toISOString();
-      console.log(
-        `  ${chalk.cyan(p.code)}  ${p.platform}  user=${p.userId}  expires ${exp}`,
-      );
-    }
-    console.log(chalk.white('\nApproved users:\n'));
-    if (!state.approved.length) console.log(chalk.dim('  (none)'));
-    for (const a of state.approved) {
-      console.log(
-        `  ${a.platform}  user=${a.userId}  since ${new Date(a.approvedAt).toISOString()}`,
-      );
-    }
+    console.log(formatPairingList(await listPairing()));
     return;
   }
 
@@ -49,21 +38,67 @@ export async function pairCommand(
     return;
   }
 
-  if (act === 'revoke') {
+  if (act === 'channel') {
     const platform = args[0];
-    const userId = args[1];
-    if (!platform || !userId) {
-      console.error(chalk.red('Usage: xibecode pair revoke <platform> <userId>'));
+    const channelId = args[1];
+    if (!platform || !channelId) {
+      console.error(chalk.red('Usage: xibecode pair channel <platform> <channelId>'));
       process.exitCode = 1;
       return;
     }
-    const ok = await revokePairing(platform, userId);
+    const r = await pairChannel(platform, channelId);
+    console.log(r.ok ? chalk.green(r.message) : chalk.red(r.message));
+    if (!r.ok) process.exitCode = 1;
+    return;
+  }
+
+  if (act === 'server' || act === 'guild') {
+    const platform = args[0] || 'discord';
+    const guildId = args[1] || args[0];
+    // xibecode pair server discord GUILD_ID  OR  pair server GUILD_ID
+    let plat = 'discord';
+    let id = guildId;
+    if (args[0] === 'discord' || args[0] === 'telegram' || args[0] === 'slack') {
+      plat = args[0];
+      id = args[1];
+    } else {
+      id = args[0];
+    }
+    if (!id) {
+      console.error(chalk.red('Usage: xibecode pair server <guildId>'));
+      process.exitCode = 1;
+      return;
+    }
+    const r = await pairGuild(plat, id);
+    console.log(r.ok ? chalk.green(r.message) : chalk.red(r.message));
+    if (!r.ok) process.exitCode = 1;
+    return;
+  }
+
+  if (act === 'revoke') {
+    const platform = args[0];
+    const userId = args[1];
+    const scope = (args[2] as any) || 'any';
+    if (!platform || !userId) {
+      console.error(
+        chalk.red(
+          'Usage: xibecode pair revoke <platform> <id> [user|channel|guild]',
+        ),
+      );
+      process.exitCode = 1;
+      return;
+    }
+    const ok = await revokePairing(platform, userId, scope);
     console.log(ok ? chalk.green(`Revoked ${platform}:${userId}`) : chalk.red('Not found'));
     if (!ok) process.exitCode = 1;
     return;
   }
 
   console.error(chalk.red(`Unknown pair action: ${act}`));
-  console.error(chalk.dim('list | approve <platform> <code> | revoke <platform> <userId>'));
+  console.error(
+    chalk.dim(
+      'list | approve <platform> <code> | channel <platform> <id> | server <guildId> | revoke <platform> <id>',
+    ),
+  );
   process.exitCode = 1;
 }

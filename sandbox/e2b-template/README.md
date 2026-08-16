@@ -8,13 +8,16 @@ This template is intended for XibeCode `sandbox_full` mode so command execution 
 - `pnpm` (via Corepack)
 - **XibeCode CLI** (`xibecode` / `xc`) pinned to match the current npm release (see `Dockerfile`; bump when you publish a new CLI)
 - **agent-browser** (Vercel) + Chrome for Testing — default AI browser for screenshots / UI automation
-- `git`, `curl`, `jq`, `tar`
+- **git** + **GitHub CLI (`gh`)** — clone/PR/auth without runtime installs
+- Search/utils (lean): `ripgrep` (`rg`), `fd`, `jq`, `curl`, `wget`, `tar`, `unzip`/`zip`, `rsync`, `procps`
 - Build tooling: `python3`, `make`, `g++`
 - Default workspace path: `/home/user/workspace`
 - **Wake HTTP** (`/opt/vectra/wake-http`, port **8788**) — template doorbell for E2B
   [auto-resume on request](https://e2b.dev/docs/sandbox/auto-resume). Not part of the bot.
   Public URL: `https://8788-{sandboxId}.e2b.app/wake` (or `/telegram`).
   Start: `/opt/vectra/wake-http/start.sh` (hosting also starts it with the daemon).
+
+**Not baked** (install at runtime when needed): language stacks (Bun/Go/Rust), deploy CLIs, ffmpeg, global TS tooling, project deps. Keep image well under 10 GB.
 
 ## Resources (hosting tier)
 

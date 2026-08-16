@@ -1,12 +1,31 @@
 /**
  * Discord Gateway adapter (WebSocket) for coding 24/7 chat.
- * Uses REST for replies + Gateway v10 for MESSAGE_CREATE.
- * Requires DISCORD_BOT_TOKEN and Message Content Intent enabled.
+ * Uses REST for replies + Gateway v10 for MESSAGE_CREATE + slash commands.
+ * Requires DISCORD_BOT_TOKEN. Slash menu registered like Telegram setMyCommands.
  */
 
 import fetch from 'node-fetch';
 import type { InboundMessage, MessagingAdapter } from './types.js';
-import { chunkForChat } from './format.js';
+import {
+  chunkForChat,
+  GATEWAY_BOT_COMMANDS,
+  stripLeakedToolMarkup,
+} from './format.js';
+
+/** Commands that accept free-text args after the name (shown as option in Discord UI). */
+const COMMANDS_WITH_ARGS = new Set([
+  'cmd',
+  'queue',
+  'workdir',
+  'progress',
+  'level',
+  'model',
+  'models',
+  'skills',
+  'skill',
+  'update',
+  'pair',
+]);
 
 export interface DiscordConfig {
   botToken: string;
@@ -76,6 +95,8 @@ export class DiscordAdapter implements MessagingAdapter {
   private sequence: number | null = null;
   private log: (m: string) => void;
   private selfId: string | null = null;
+  private applicationId: string | null = null;
+  private slashRegistered = false;
 
   constructor(config: DiscordConfig, log?: (m: string) => void) {
     this.token = config.botToken;
@@ -138,11 +159,14 @@ export class DiscordAdapter implements MessagingAdapter {
   }
 
   async sendMessage(chatId: string, text: string): Promise<void> {
-    const chunks = chunkForChat(text, 1900); // Discord limit 2000
+    const cleaned = stripLeakedToolMarkup(text);
+    if (!cleaned.trim()) return;
+    const chunks = chunkForChat(cleaned, 1900); // Discord limit 2000
     for (const chunk of chunks) {
       await this.rest(`/channels/${chatId}/messages`, {
         method: 'POST',
-        body: { content: chunk },
+        // flags: SUPPRESS_EMBEDS (1<<2) — match Telegram disable_web_page_preview
+        body: { content: chunk, flags: 4 },
       });
     }
   }
@@ -160,12 +184,14 @@ export class DiscordAdapter implements MessagingAdapter {
     text: string,
     previousMessageId?: string,
   ): Promise<string | undefined> {
-    const body = text.slice(0, 1900);
+    // Defense in depth: never show leaked tool markup in progress/draft bubbles
+    const body = stripLeakedToolMarkup(text).slice(0, 1900);
+    if (!body.trim()) return previousMessageId;
     try {
       if (previousMessageId) {
         await this.rest(`/channels/${chatId}/messages/${previousMessageId}`, {
           method: 'PATCH',
-          body: { content: body },
+          body: { content: body, flags: 4 },
         });
         return previousMessageId;
       }
@@ -175,7 +201,7 @@ export class DiscordAdapter implements MessagingAdapter {
     try {
       const msg = await this.rest(`/channels/${chatId}/messages`, {
         method: 'POST',
-        body: { content: body },
+        body: { content: body, flags: 4 },
       });
       return msg?.id ? String(msg.id) : undefined;
     } catch {
@@ -196,6 +222,145 @@ export class DiscordAdapter implements MessagingAdapter {
         this.log(`gateway error: ${err?.message || err}; reconnect in 5s`);
         await sleep(5000);
       }
+    }
+  }
+
+  /**
+   * Register global slash commands so typing `/` shows the same menu as Telegram.
+   * Uses bulk overwrite (PUT). Propagation can take a minute for global commands.
+   *
+   * Note: plain-text `/pair list` in a **server channel** is invisible without
+   * Message Content Intent — use the slash picker or @mention the bot.
+   */
+  private async registerSlashCommands(): Promise<void> {
+    if (this.slashRegistered || !this.applicationId) return;
+    try {
+      const body = GATEWAY_BOT_COMMANDS.map((c) => {
+        const cmd: Record<string, unknown> = {
+          name: c.command.slice(0, 32).toLowerCase(),
+          // Discord description max 100 chars (Telegram allows 256)
+          description: c.description.slice(0, 100) || c.command,
+          type: 1, // CHAT_INPUT
+          // Visible in DMs with the bot
+          dm_permission: true,
+        };
+
+        // Rich /pair subcommands (list | approve | channel | server | …)
+        if (c.command === 'pair') {
+          cmd.options = [
+            {
+              type: 1, // SUB_COMMAND
+              name: 'list',
+              description: 'Pending codes + approved users/channels',
+            },
+            {
+              type: 1,
+              name: 'channel',
+              description: 'Open THIS channel to everyone',
+            },
+            {
+              type: 1,
+              name: 'server',
+              description: 'Open THIS Discord server to everyone',
+            },
+            {
+              type: 1,
+              name: 'help',
+              description: 'How pairing works',
+            },
+            {
+              type: 1,
+              name: 'approve',
+              description: 'Approve a user pairing code',
+              options: [
+                {
+                  type: 3, // STRING
+                  name: 'code',
+                  description: 'The code the user received',
+                  required: true,
+                },
+              ],
+            },
+            {
+              type: 1,
+              name: 'revoke',
+              description: 'Revoke user/channel/server access',
+              options: [
+                {
+                  type: 3,
+                  name: 'id',
+                  description: 'User / channel / server id',
+                  required: true,
+                },
+                {
+                  type: 3,
+                  name: 'scope',
+                  description: 'What kind of id (default: any)',
+                  required: false,
+                  choices: [
+                    { name: 'any', value: 'any' },
+                    { name: 'user', value: 'user' },
+                    { name: 'channel', value: 'channel' },
+                    { name: 'server', value: 'server' },
+                  ],
+                },
+              ],
+            },
+          ];
+          return cmd;
+        }
+
+        if (COMMANDS_WITH_ARGS.has(c.command)) {
+          cmd.options = [
+            {
+              name: 'args',
+              description: 'Arguments for this command',
+              type: 3, // STRING
+              required: c.command === 'cmd' || c.command === 'skill',
+            },
+          ];
+        }
+        return cmd;
+      });
+      await this.rest(`/applications/${this.applicationId}/commands`, {
+        method: 'PUT',
+        body,
+      });
+      this.slashRegistered = true;
+      this.log(
+        `registered ${body.length} Discord slash commands (/ menu) — may take ~1 min to appear`,
+      );
+    } catch (err: any) {
+      this.log(`Discord slash command register failed: ${err?.message || err}`);
+    }
+  }
+
+  /** Acknowledge interaction within Discord's 3s window (ephemeral). */
+  private async ackInteraction(
+    interactionId: string,
+    interactionToken: string,
+    content?: string,
+  ): Promise<void> {
+    try {
+      await fetch(
+        `https://discord.com/api/v10/interactions/${interactionId}/${interactionToken}/callback`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'XibeCode-Gateway (https://github.com/iotserver24/xibecode, 1.0)',
+          },
+          body: JSON.stringify({
+            type: 4, // CHANNEL_MESSAGE_WITH_SOURCE
+            data: {
+              content: (content || '…').slice(0, 200),
+              flags: 64, // EPHEMERAL — only the invoker sees the ack
+            },
+          }),
+        },
+      );
+    } catch (err: any) {
+      this.log(`interaction ack failed: ${err?.message || err}`);
     }
   }
 
@@ -230,11 +395,18 @@ export class DiscordAdapter implements MessagingAdapter {
               op: 2,
               d: {
                 token: this.token,
+                // DMs + messages that @mention the bot include content without the
+                // privileged MESSAGE_CONTENT intent (which many bots leave off).
+                // Set DISCORD_MESSAGE_CONTENT_INTENT=1 after enabling it in the portal
+                // if you need full guild message content without a mention.
                 intents:
                   (1 << 0) | // GUILDS
                   (1 << 9) | // GUILD_MESSAGES
                   (1 << 12) | // DIRECT_MESSAGES
-                  (1 << 15), // MESSAGE_CONTENT
+                  (process.env.DISCORD_MESSAGE_CONTENT_INTENT === '1' ||
+                  process.env.DISCORD_MESSAGE_CONTENT_INTENT === 'true'
+                    ? 1 << 15 // MESSAGE_CONTENT (privileged)
+                    : 0),
                 properties: {
                   os: process.platform,
                   browser: 'xibecode',
@@ -253,7 +425,13 @@ export class DiscordAdapter implements MessagingAdapter {
           resolve();
         } else if (op === 0 && t === 'READY') {
           this.selfId = d?.user?.id ? String(d.user.id) : null;
+          this.applicationId = d?.application?.id
+            ? String(d.application.id)
+            : this.selfId;
           this.log(`ready as ${d?.user?.username || this.selfId}`);
+          void this.registerSlashCommands();
+        } else if (op === 0 && t === 'INTERACTION_CREATE') {
+          await this.handleInteraction(d, onMessage);
         } else if (op === 0 && t === 'MESSAGE_CREATE') {
           await this.handleMessageCreate(d, onMessage);
         }
@@ -272,6 +450,169 @@ export class DiscordAdapter implements MessagingAdapter {
         else this.log(`ws error: ${err?.message || err}`);
       });
     });
+  }
+
+  /**
+   * Discord native slash command → same `/cmd` text path as Telegram.
+   */
+  private async handleInteraction(
+    d: any,
+    onMessage: (msg: InboundMessage) => Promise<void>,
+  ): Promise<void> {
+    // type 2 = APPLICATION_COMMAND
+    if (!d || d.type !== 2) return;
+
+    const userId = String(d.member?.user?.id || d.user?.id || '');
+    const chatId = String(d.channel_id || '');
+    const name = String(d.data?.name || '').toLowerCase().trim();
+    if (!chatId || !userId || !name) return;
+
+    const opts: any[] = Array.isArray(d.data?.options) ? d.data.options : [];
+    // Subcommand (type 1): /pair list, /pair approve code:XXX
+    const sub = opts.find((o) => o?.type === 1 || (o?.options && !o?.value));
+    let args = '';
+    if (sub?.name) {
+      const subOpts: any[] = Array.isArray(sub.options) ? sub.options : [];
+      const parts = [String(sub.name)];
+      for (const so of subOpts) {
+        if (so?.name === 'scope' && so.value && so.value !== 'any') {
+          parts.push(String(so.value));
+        } else if (so?.name === 'code' || so?.name === 'id') {
+          parts.push(String(so.value ?? '').trim());
+        } else if (so?.value != null && so.value !== '') {
+          parts.push(String(so.value).trim());
+        }
+      }
+      // revoke: prefer "scope id" order for chat-controller
+      if (sub.name === 'revoke') {
+        const scope = subOpts.find((o) => o?.name === 'scope')?.value;
+        const id = subOpts.find((o) => o?.name === 'id')?.value;
+        if (id) {
+          args =
+            scope && scope !== 'any'
+              ? `${scope} ${id}`
+              : String(id);
+        } else {
+          args = parts.slice(1).join(' ');
+        }
+        args = `revoke ${args}`.trim();
+      } else {
+        args = parts.join(' ');
+      }
+    } else {
+      for (const o of opts) {
+        if (o?.name === 'args' || o?.name === 'command' || o?.name === 'input') {
+          args = String(o.value ?? '').trim();
+          break;
+        }
+      }
+      if (!args) {
+        const first = opts.find((o) => typeof o?.value === 'string');
+        if (first) args = String(first.value).trim();
+      }
+    }
+
+    const text = args ? `/${name} ${args}` : `/${name}`;
+
+    // Must ack within 3s; real replies go via sendMessage like normal chat
+    await this.ackInteraction(
+      String(d.id),
+      String(d.token),
+      `✓ \`${text.slice(0, 80)}\``,
+    );
+
+    const username = d.member?.user?.username || d.user?.username;
+    const guildId = d.guild_id ? String(d.guild_id) : undefined;
+    if (
+      !(await this.authorizeUser(userId, chatId, {
+        guildId,
+        username,
+      }))
+    ) {
+      return;
+    }
+
+    try {
+      await onMessage({
+        platform: 'discord',
+        chatId,
+        userId,
+        text,
+        messageId: d.id ? String(d.id) : undefined,
+        username,
+        guildId,
+      });
+    } catch (err: any) {
+      this.log(`slash handler error: ${err?.message || err}`);
+      await this.sendMessage(chatId, `Error: ${err?.message || err}`).catch(
+        () => {},
+      );
+    }
+  }
+
+  /**
+   * Access: allowlist user → paired user → paired channel → paired guild → code.
+   */
+  private async authorizeUser(
+    userId: string,
+    chatId: string,
+    meta?: { guildId?: string; username?: string },
+  ): Promise<boolean> {
+    // null allowed = GATEWAY_ALLOW_ALL_USERS
+    if (!this.allowed) return true;
+    if (this.allowed.has(userId) || this.allowed.has(chatId)) return true;
+    try {
+      const {
+        isAccessPaired,
+        requestPairing,
+        formatPairingDenied,
+      } = await import('./pairing.js');
+      if (
+        await isAccessPaired({
+          platform: 'discord',
+          userId,
+          chatId,
+          guildId: meta?.guildId,
+        })
+      ) {
+        return true;
+      }
+      const code = await requestPairing('discord', userId, chatId, {
+        guildId: meta?.guildId,
+        username: meta?.username,
+      });
+      this.log(
+        `denied user ${userId}${meta?.username ? ` (@${meta.username})` : ''} — pairing ${code}`,
+      );
+      const isDm = !meta?.guildId;
+      await this.sendMessage(
+        chatId,
+        formatPairingDenied({
+          platform: 'discord',
+          code,
+          context: isDm ? 'dm' : 'channel',
+        }),
+      ).catch(() => {});
+      // Ping operator home channel if set (so they see the code without watching this chat)
+      const home = this.homeChannel;
+      if (home && home !== chatId) {
+        await this.sendMessage(
+          home,
+          `🔔 Pairing request (Discord)\n` +
+            `User: ${meta?.username || userId} (\`${userId}\`)\n` +
+            `Chat: \`${chatId}\`\n` +
+            (meta?.guildId ? `Guild: \`${meta.guildId}\`\n` : '') +
+            `Code: \`${code}\`\n` +
+            `Approve: \`/pair approve ${code}\``,
+        ).catch(() => {});
+      }
+    } catch {
+      await this.sendMessage(
+        chatId,
+        'Access denied. Add your user id to DISCORD_ALLOWED_USERS or use `/pair`.',
+      ).catch(() => {});
+    }
+    return false;
   }
 
   private startHeartbeat(ws: WsLike, interval: number): void {
@@ -294,8 +635,20 @@ export class DiscordAdapter implements MessagingAdapter {
 
     const userId = String(d.author?.id || '');
     const chatId = String(d.channel_id || '');
+    const guildId = d.guild_id ? String(d.guild_id) : undefined;
+    const username = d.author?.username;
     let text = String(d.content || '').trim();
-    if (!chatId || !userId || !text) return;
+    if (!chatId || !userId) return;
+
+    // Guild messages without Message Content Intent arrive with empty content
+    // unless the bot is @mentioned (or it's a DM / slash interaction).
+    if (!text) {
+      if (d.guild_id) {
+        // Silently ignore — user should use slash menu or @mention
+        return;
+      }
+      return;
+    }
 
     // Require mention in guild channels unless it's a DM (guild_id missing)
     const isDm = !d.guild_id;
@@ -304,30 +657,20 @@ export class DiscordAdapter implements MessagingAdapter {
       const mentionNick = `<@!${this.selfId}>`;
       if (!text.includes(mention) && !text.includes(mentionNick)) {
         // Allow slash-like commands without mention if they start with /
+        // (only works when Message Content Intent is on)
         if (!text.startsWith('/')) return;
       }
       text = text.replace(mention, '').replace(mentionNick, '').trim();
+      if (!text) return;
     }
 
-    if (this.allowed && !this.allowed.has(userId)) {
-      try {
-        const { isPaired, requestPairing } = await import('./pairing.js');
-        if (!(await isPaired('discord', userId))) {
-          const code = await requestPairing('discord', userId, chatId);
-          this.log(`denied user ${userId} — pairing ${code}`);
-          await this.sendMessage(
-            chatId,
-            `Access denied.\nPairing code: \`${code}\`\nOperator: \`xibecode pair approve discord ${code}\``,
-          ).catch(() => {});
-          return;
-        }
-      } catch {
-        await this.sendMessage(
-          chatId,
-          'Access denied. Add your user id to DISCORD_ALLOWED_USERS.',
-        ).catch(() => {});
-        return;
-      }
+    if (
+      !(await this.authorizeUser(userId, chatId, {
+        guildId,
+        username,
+      }))
+    ) {
+      return;
     }
 
     try {
@@ -337,7 +680,8 @@ export class DiscordAdapter implements MessagingAdapter {
         userId,
         text,
         messageId: d.id ? String(d.id) : undefined,
-        username: d.author?.username,
+        username,
+        guildId,
       });
     } catch (err: any) {
       this.log(`handler error: ${err?.message || err}`);

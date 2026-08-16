@@ -1316,6 +1316,115 @@ export class ChatController {
       return;
     }
 
+    // Pairing (operator-in-chat — no shell required)
+    if (cmd === 'pair' || cmd === 'pairing') {
+      const {
+        listPairing,
+        formatPairingList,
+        approvePairing,
+        revokePairing,
+        pairChannel,
+        pairGuild,
+      } = await import('./pairing.js');
+      const parts = arg.trim().split(/\s+/).filter(Boolean);
+      const sub = (parts[0] || 'list').toLowerCase();
+      const rest = parts.slice(1);
+
+      if (sub === 'list' || sub === 'ls' || sub === 'status') {
+        await reply(formatPairingList(await listPairing()));
+        return;
+      }
+      if (sub === 'approve' || sub === 'ok' || sub === 'allow') {
+        const code = rest[0] || '';
+        if (!code) {
+          await reply('Usage: `/pair approve CODE`');
+          return;
+        }
+        const r = await approvePairing(msg.platform, code);
+        await reply(r.ok ? `✅ ${r.message}` : `❌ ${r.message}`);
+        // Notify the requester's chat if different
+        if (r.ok && r.chatId && r.chatId !== msg.chatId) {
+          await adapter
+            .sendMessage(
+              r.chatId,
+              `✅ You're paired — you can use the bot now. Try \`/help\`.`,
+            )
+            .catch(() => {});
+        }
+        return;
+      }
+      if (sub === 'channel' || sub === 'here' || sub === 'this') {
+        const r = await pairChannel(msg.platform, msg.chatId, {
+          label: `${msg.platform} channel`,
+          byUserId: msg.userId,
+        });
+        await reply(r.message);
+        return;
+      }
+      if (sub === 'server' || sub === 'guild') {
+        if (msg.platform !== 'discord') {
+          await reply('`/pair server` is Discord-only.');
+          return;
+        }
+        if (!msg.guildId) {
+          await reply(
+            'Not in a server (this looks like a DM). Use `/pair channel` in a server channel, or `/pair approve CODE` for a user.',
+          );
+          return;
+        }
+        const r = await pairGuild(msg.platform, msg.guildId, {
+          label: `discord guild ${msg.guildId}`,
+        });
+        await reply(r.message);
+        return;
+      }
+      if (sub === 'revoke' || sub === 'remove' || sub === 'rm') {
+        let scope: 'user' | 'channel' | 'guild' | 'any' = 'any';
+        let id = rest[0] || '';
+        if (['user', 'channel', 'server', 'guild'].includes((rest[0] || '').toLowerCase())) {
+          const s = rest[0]!.toLowerCase();
+          scope = s === 'server' ? 'guild' : (s as 'user' | 'channel' | 'guild');
+          id = rest[1] || '';
+        }
+        if (!id) {
+          await reply(
+            'Usage: `/pair revoke <id>` or `/pair revoke user|channel|server <id>`',
+          );
+          return;
+        }
+        // bare snowflake mention
+        id = id.replace(/[<@#!>&]/g, '');
+        const ok = await revokePairing(msg.platform, id, scope);
+        await reply(
+          ok
+            ? `🗑 Revoked ${scope === 'any' ? '' : scope + ' '}\`${id}\``
+            : `Not found: \`${id}\``,
+        );
+        return;
+      }
+      if (sub === 'help') {
+        await reply(
+          [
+            '**Pairing** — control who can use this bot',
+            '',
+            '• `/pair list` — pending codes + approved users/channels',
+            '• `/pair approve CODE` — approve a user (from their code)',
+            '• `/pair channel` — open **this channel** to everyone',
+            '• `/pair server` — open **this Discord server** to everyone',
+            '• `/pair revoke user|channel|server <id>` — remove access',
+            '',
+            'New users who DM or ping get a code; you approve with `/pair approve`.',
+            'Shell still works: `xibecode pair approve discord CODE`',
+          ].join('\n'),
+        );
+        return;
+      }
+      await reply(
+        `Unknown: \`/pair ${sub}\`. Try \`/pair help\` or \`/pair list\`.`,
+      );
+      return;
+    }
+
     if (cmd === 'stop') {
       const { stopped, killedCmds } = this.stopRun(msg.platform, msg.chatId);
       if (!stopped) {

@@ -715,21 +715,30 @@ export class TelegramEngine implements MessagingAdapter {
     if (!this.allowed) return true;
     if (this.allowed.has(userId) || this.allowed.has(chatId)) return true;
     try {
-      const { isPaired, requestPairing } = await import('../pairing.js');
-      if (await isPaired('telegram', userId)) return true;
-      if (this.allowed.size === 0) {
-        const code = await requestPairing('telegram', userId, chatId);
-        this.log(`denied user ${userId} — pairing code ${code}`);
-        await this.sendMessage(
+      const {
+        isAccessPaired,
+        requestPairing,
+        formatPairingDenied,
+      } = await import('../pairing.js');
+      if (
+        await isAccessPaired({
+          platform: 'telegram',
+          userId,
           chatId,
-          `Access denied.\nPairing code: \`${code}\`\nOperator: \`xibecode pair approve telegram ${code}\``,
-        ).catch(() => {});
-        return false;
+        })
+      ) {
+        return true;
       }
-      this.log(`denied user ${userId}`);
+      // Always issue a pairing code (allowlist operators approve via /pair or CLI)
+      const code = await requestPairing('telegram', userId, chatId);
+      this.log(`denied user ${userId} — pairing code ${code}`);
       await this.sendMessage(
         chatId,
-        'Access denied. Add your user id to TELEGRAM_ALLOWED_USERS or use pairing.',
+        formatPairingDenied({
+          platform: 'telegram',
+          code,
+          context: chatId.startsWith('-') ? 'channel' : 'dm',
+        }),
       ).catch(() => {});
       return false;
     } catch {

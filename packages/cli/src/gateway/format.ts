@@ -350,11 +350,87 @@ export function wrapCron(text: string): string {
 export type GatewayRigorLevel = 'yolo' | 'default' | 'strict';
 
 /**
+ * Strip model-leaked tool-call markup that must never appear in chat UIs.
+ *
+ * DeepSeek DSML uses fullwidth pipes (U+FF5C `｜`): `<｜DSML｜tool_calls>…`
+ * Discord/Telegram often render that looking like `< | DSML | tool_calls>`.
+ * Also strips ASCII `|`, generic invoke XML, and special-token wrappers.
+ */
+export function stripLeakedToolMarkup(text: string): string {
+  if (!text) return text;
+  let body = text;
+  // Fullwidth vertical line used by DeepSeek DSML
+  const FW = '\uFF5C';
+  // Pipe class: fullwidth ｜ or ASCII |
+  const P = `(?:${FW}|\\|)`;
+
+  // Paired DSML blocks (any tag name after DSML delimiter)
+  body = body.replace(
+    new RegExp(
+      `<\\s*${P}\\s*DSML\\s*${P}[^>]*>[\\s\\S]*?<\\s*\\/\\s*${P}\\s*DSML\\s*${P}[^>]*>`,
+      'gi',
+    ),
+    '',
+  );
+  // Orphan DSML open/close tags left after partial streams
+  body = body.replace(
+    new RegExp(`<\\s*\\/?\\s*${P}\\s*DSML\\s*${P}[^>]*>`, 'gi'),
+    '',
+  );
+
+  // Generic tool/function call XML wrappers
+  body = body.replace(
+    /<\s*\/?\s*(?:tool_calls?|function_calls?|tool_call|function_call)\b[^>]*>/gi,
+    '',
+  );
+  body = body.replace(
+    /<\s*tool_calls?\b[^>]*>[\s\S]*?<\/\s*tool_calls?\s*>/gi,
+    '',
+  );
+  body = body.replace(
+    /<\s*function_calls?\b[^>]*>[\s\S]*?<\/\s*function_calls?\s*>/gi,
+    '',
+  );
+  body = body.replace(/<\s*invoke\b[^>]*>[\s\S]*?<\/\s*invoke\s*>/gi, '');
+  body = body.replace(
+    /<\s*parameter\b[^>]*>[\s\S]*?<\/\s*parameter\s*>/gi,
+    '',
+  );
+  // Orphan invoke/parameter lines (partial stream)
+  body = body.replace(/<\/?\s*invoke\b[^>]*>/gi, '');
+  body = body.replace(/<\/?\s*parameter\b[^>]*>/gi, '');
+
+  // Pseudo shell tags (`<bash>…</bash>`) — models invent these instead of tools
+  body = body.replace(
+    /<\s*(bash|sh|shell|zsh|command)\s*>[\s\S]*?<\s*\/\s*\1\s*>/gi,
+    '',
+  );
+  body = body.replace(/<\/?\s*(bash|sh|shell|zsh|command)\s*>/gi, '');
+
+  // Special-token style wrappers some models emit as plain text
+  body = body.replace(
+    /<\|(?:tool_call|tool_calls|function_call|function_calls|dsml)[^|>]*\|>[\s\S]*?<\|(?:end|\/)?(?:tool_call|tool_calls|function_call|function_calls|dsml)[^|>]*\|>/gi,
+    '',
+  );
+  body = body.replace(
+    /<\|(?:tool_call|tool_calls|function_call|function_calls|dsml)[^|>]*\|>/gi,
+    '',
+  );
+
+  // Collapse whitespace left by stripping
+  body = body.replace(/[ \t]+\n/g, '\n');
+  body = body.replace(/\n{3,}/g, '\n\n').trim();
+  return body;
+}
+
+/**
  * Prepare agent text for messaging platforms (Telegram/Discord/Slack).
  *
  * TUI renders `[[TASK_COMPLETE | summary=…]]` as a bordered footer; chat clients
  * show the raw tag which breaks Markdown and confuses users. Strip the tag and
  * append a plain done line (no internal control tokens).
+ *
+ * Also strips leaked DSML / tool-call XML so Discord/Slack match Telegram UX.
  */
 export function formatGatewayReply(text: string): string {
   if (!text) return text;
@@ -365,6 +441,8 @@ export function formatGatewayReply(text: string): string {
   // Also strip mode request tags if the model leaked them
   body = body.replace(/\[\[REQUEST_MODE:[^\]]+\]\]/gi, '').trim();
   body = body.replace(/\[\[PLAN_READY\]\]/gi, '').trim();
+  // Never show raw tool-call markup in messaging clients
+  body = stripLeakedToolMarkup(body);
 
   if (!match) return body;
 
@@ -506,8 +584,8 @@ export function describeRigor(level: GatewayRigorLevel): string {
 
 /**
  * Slash commands for messaging gateways.
- * Used for /help text and Telegram’s `/` menu via setMyCommands
- * (command: 1–32 lowercase letters/digits/_; description: 1–256 chars).
+ * Used for /help text, Telegram’s `/` menu via setMyCommands, and Discord
+ * global application commands (command: 1–32 lowercase; description: 1–100 on Discord).
  */
 export const GATEWAY_BOT_COMMANDS: ReadonlyArray<{
   command: string;
@@ -532,6 +610,7 @@ export const GATEWAY_BOT_COMMANDS: ReadonlyArray<{
   { command: 'mode', description: 'Show runtime mode (default | e2b)' },
   { command: 'cmd', description: 'Run shell: /cmd <command> (workdir, no agent)' },
   { command: 'sethome', description: 'Set this chat as cron home' },
+  { command: 'pair', description: 'Pairing: list | approve CODE | channel | server' },
   { command: 'once', description: 'Allow a pending dangerous command once' },
   { command: 'session', description: 'Allow pending command for this session' },
   { command: 'always', description: 'Always allow this command pattern' },
@@ -573,6 +652,12 @@ export const HELP_TEXT = [
   '• `yolo` — fast, no approval prompts',
   '• `default` — ask on dangerous cmds (recommended)',
   '• `strict` — stronger anti-hallucination + verify after edits',
+  '',
+  '**Pairing** (who can use the bot):',
+  '• New users get a **code** — operator: `/pair approve CODE` (or shell `xibecode pair …`)',
+  '• `/pair channel` — open **this channel** to everyone',
+  '• `/pair server` — open whole Discord server',
+  '• `/pair list` — pending codes + approved users/channels',
   '',
   '**Skills** (progressive load):',
   '• `/skills` — list installed skills',

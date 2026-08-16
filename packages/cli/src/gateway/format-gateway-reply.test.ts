@@ -39,6 +39,60 @@ describe('formatGatewayReply', () => {
     const out = formatGatewayReply('hi\n[[REQUEST_MODE:plan]]');
     expect(out).toBe('hi');
   });
+
+  it('strips leaked DSML tool_calls markup (Discord UX)', () => {
+    const leaked = [
+      "I'll open the site and take a screenshot.",
+      '',
+      '< | DSML | tool_calls>',
+      '< | DSML | invoke name="run_command">',
+      '< | DSML | parameter name="command" string="true">agent-browser open "https://anisurge.lol/"</ | DSML | parameter>',
+      '</ | DSML | invoke>',
+      '</ | DSML | tool_calls>',
+      '',
+      'Opening now…',
+    ].join('\n');
+    const out = formatGatewayReply(leaked);
+    expect(out).not.toMatch(/DSML/i);
+    expect(out).not.toMatch(/tool_calls/i);
+    expect(out).not.toMatch(/invoke name/i);
+    expect(out).toContain("I'll open the site");
+    expect(out).toContain('Opening now');
+  });
+
+  it('strips DeepSeek fullwidth ｜ DSML (real session leak)', () => {
+    const FW = '\uFF5C';
+    const leaked = [
+      "I'll open anisurge.lol in the browser.",
+      '',
+      `<${FW}DSML${FW}tool_calls>`,
+      `<${FW}DSML${FW}invoke name="run_command">`,
+      `<${FW}DSML${FW}parameter name="command" string="true">agent-browser open "https://anisurge.lol"</${FW}DSML${FW}parameter>`,
+      `</${FW}DSML${FW}invoke>`,
+      `</${FW}DSML${FW}tool_calls>`,
+    ].join('\n');
+    const out = formatGatewayReply(leaked);
+    expect(out).not.toMatch(/DSML/i);
+    expect(out).not.toContain(FW);
+    expect(out).toContain("I'll open anisurge.lol");
+  });
+
+  it('strips compact <|DSML|…|> style tags', () => {
+    const out = formatGatewayReply(
+      'Done.\n<|DSML|tool_calls><|DSML|invoke name="x">y</|DSML|invoke></|DSML|tool_calls>\nOK',
+    );
+    expect(out).not.toMatch(/DSML/i);
+    expect(out).toContain('Done.');
+    expect(out).toContain('OK');
+  });
+
+  it('strips <bash> tags from chat (not shown as raw markup)', () => {
+    const out = formatGatewayReply(
+      "I'll create the folder:\n\n<bash>\nmkdir -p dis-test\n</bash>",
+    );
+    expect(out).not.toMatch(/<bash>/i);
+    expect(out).toContain("I'll create the folder");
+  });
 });
 
 describe('memory progress / saved lines', () => {

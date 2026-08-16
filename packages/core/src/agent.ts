@@ -34,6 +34,7 @@ import { PermissionRuleManager } from './permission-rules/permission-rules.js';
 import { HooksManager } from './hooks/hooks.js';
 import { AutoMemoryManager } from './auto-memory/auto-memory.js';
 import { microcompact, resetMicrocompactCircuitBreaker } from './microcompact.js';
+import { recoverDsmlToolCalls } from './dsml-tools.js';
 import {
   ProviderPool,
   shouldFailoverProvider,
@@ -2222,6 +2223,13 @@ export class EnhancedAgent extends EventEmitter {
                 .map((c: any) => c.text)
                 .join('');
             }
+            // Kimi / reasoning models may stream only reasoning_content
+            if (
+              !chunkText &&
+              typeof (delta as any)?.reasoning_content === 'string'
+            ) {
+              chunkText = (delta as any).reasoning_content;
+            }
 
             if (chunkText) {
               fullText += chunkText;
@@ -2274,23 +2282,44 @@ export class EnhancedAgent extends EventEmitter {
       }
 
       const content: ContentBlock[] = [];
-      if (fullText) content.push({ type: 'text', text: fullText } as TextBlock);
+      // Native OpenAI tool_calls
+      let hadNativeTools = false;
+      const toolBlocks: ContentBlock[] = [];
       for (const tc of toolCallsAccum) {
         if (tc.id || tc.name || tc.arguments) {
+          hadNativeTools = true;
           let input: object;
           try {
             input = tc.arguments ? JSON.parse(tc.arguments) : {};
           } catch {
             input = { raw: tc.arguments };
           }
-          content.push({
+          toolBlocks.push({
             type: 'tool_use',
-            id: tc.id || `call_${content.length}`,
+            id: tc.id || `call_${toolBlocks.length}`,
             name: tc.name || 'unknown',
             input,
           } as ToolUseBlock);
         }
       }
+      // Recover DSML / <bash> tool markup leaked as plain text
+      let textOut = fullText || '';
+      if (!hadNativeTools && textOut) {
+        const recovered = recoverDsmlToolCalls(textOut);
+        textOut = recovered.text;
+        for (const t of recovered.tools) {
+          toolBlocks.push({
+            type: 'tool_use',
+            id: t.id,
+            name: t.name,
+            input: t.input,
+          } as ToolUseBlock);
+        }
+      } else if (textOut) {
+        textOut = recoverDsmlToolCalls(textOut).text;
+      }
+      if (textOut) content.push({ type: 'text', text: textOut } as TextBlock);
+      content.push(...toolBlocks);
 
       // Clean up abort listener on successful completion
       if (abortHandler) signal?.removeEventListener('abort', abortHandler);
@@ -2365,27 +2394,64 @@ export class EnhancedAgent extends EventEmitter {
 
       const data: any = await response.json();
       const msg = data?.choices?.[0]?.message ?? {};
-      const rawContent = msg.content ?? '';
+      // Kimi-class models often put the answer in reasoning_content with content: null
+      const rawContent =
+        msg.content ??
+        msg.reasoning_content ??
+        msg.reasoning ??
+        '';
       const rawToolCalls = msg.tool_calls ?? [];
 
       const content: ContentBlock[] = [];
-      const text = typeof rawContent === 'string' ? rawContent : (Array.isArray(rawContent) ? rawContent.map((c: any) => c.text ?? '').join('') : '');
-      if (text) content.push({ type: 'text', text } as TextBlock);
+      let text =
+        typeof rawContent === 'string'
+          ? rawContent
+          : Array.isArray(rawContent)
+            ? rawContent.map((c: any) => c.text ?? '').join('')
+            : '';
+      if (
+        (!text || !String(text).trim()) &&
+        typeof msg.reasoning_content === 'string'
+      ) {
+        text = msg.reasoning_content;
+      }
+      const hadNativeTools = Array.isArray(rawToolCalls) && rawToolCalls.length > 0;
+      const toolBlocks: ContentBlock[] = [];
       for (const tc of rawToolCalls) {
         const fn = tc.function ?? {};
         let input: object;
         try {
-          input = typeof fn.arguments === 'string' && fn.arguments ? JSON.parse(fn.arguments) : {};
+          input =
+            typeof fn.arguments === 'string' && fn.arguments
+              ? JSON.parse(fn.arguments)
+              : {};
         } catch {
           input = { raw: fn.arguments };
         }
-        content.push({
+        toolBlocks.push({
           type: 'tool_use',
-          id: tc.id ?? `call_${content.length}`,
+          id: tc.id ?? `call_${toolBlocks.length}`,
           name: fn.name ?? 'unknown',
           input,
         } as ToolUseBlock);
       }
+      // Recover DSML / <bash> when gateway returns tools as plain text
+      if (!hadNativeTools && text) {
+        const recovered = recoverDsmlToolCalls(text);
+        text = recovered.text;
+        for (const t of recovered.tools) {
+          toolBlocks.push({
+            type: 'tool_use',
+            id: t.id,
+            name: t.name,
+            input: t.input,
+          } as ToolUseBlock);
+        }
+      } else if (text) {
+        text = recoverDsmlToolCalls(text).text;
+      }
+      if (text) content.push({ type: 'text', text } as TextBlock);
+      content.push(...toolBlocks);
       if (content.length === 0) content.push({ type: 'text', text: '' } as TextBlock);
 
       const message = { content };
