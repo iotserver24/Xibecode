@@ -18,6 +18,10 @@
 
 - `xibecode-full-sandbox` rebuilt with CLI/core **1.17.15**.
 
+### CI
+
+- CLI `turbo.json` now waits for `xibecode-core#build`. The published CLI still depends on npm `^1.17.15`; without this, GitHub Actions compiled the CLI in parallel with core and failed with `Cannot find module 'xibecode-core'`.
+
 ## [1.17.14] - 2026-08-16
 
 ### Hosting / E2B template
