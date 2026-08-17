@@ -27,6 +27,15 @@ export interface ProviderConfigEntry {
  */
 export const PROVIDER_CONFIGS = {
   // ── XibeCode recommended aggregators ───────────────────────────────────
+  pollinations: {
+    baseUrl: 'https://gen.pollinations.ai/v1',
+    defaultModel: 'openai',
+    format: 'openai',
+    envKey: 'POLLINATIONS_API_KEY',
+    name: 'Pollinations',
+    apiKeyUrl: 'https://enter.pollinations.ai/keys',
+    description: 'Recommended — huge free/cheap model list + extra credits',
+  },
   routingrun: {
     baseUrl: 'https://api.routing.run/v1',
     defaultModel: 'route/glm-5.1',
@@ -515,6 +524,7 @@ export type ProviderType = keyof typeof PROVIDER_CONFIGS | 'custom';
 
 /** Recommended order for setup pickers (recommended first). */
 export const SETUP_PROVIDER_PRIORITY: readonly (keyof typeof PROVIDER_CONFIGS)[] = [
+  'pollinations',
   'routingrun',
   'zenllm',
   'nous',

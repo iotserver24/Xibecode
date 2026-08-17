@@ -19,6 +19,7 @@ import { ToolOrchestrator, type ToolExecutionUpdate } from './tool-orchestrator.
 import {
   compactConversation,
   COMPACTION_STATUS,
+  estimateRequestTokensRough,
   resolveCompactTriggerTokens,
   shouldTriggerAutoCompact,
 } from './context-compactor.js';
@@ -259,6 +260,8 @@ export class EnhancedAgent extends EventEmitter {
   private totalOutputTokens: number = 0;
   /** Last API-reported prompt size (current context), Hermes-style. */
   private lastPromptTokens = 0;
+  /** Last tool-schema JSON used for request-size estimates. */
+  private lastToolsJson = '';
   /** Resolved model window; starts as a family heuristic, then models.dev. */
   private resolvedContextWindow = 0;
   private sessionCost: number = 0;
@@ -417,6 +420,29 @@ export class EnhancedAgent extends EventEmitter {
     return this.messages.reduce((sum, message) => sum + this.estimateMessageTokens(message), 0);
   }
 
+  /** Full request: system + history + tool schemas (Hermes estimate_request_tokens_rough). */
+  private estimateFullRequestTokens(): number {
+    return estimateRequestTokensRough({
+      messages: this.messages,
+      systemPrompt: this.getSystemPrompt(),
+      toolsJson: this.lastToolsJson,
+    });
+  }
+
+  private rememberTools(tools: Tool[]): void {
+    try {
+      this.lastToolsJson = JSON.stringify(
+        tools.map((t) => ({
+          name: t.name,
+          description: t.description,
+          input_schema: (t as { input_schema?: unknown }).input_schema,
+        })),
+      );
+    } catch {
+      this.lastToolsJson = '';
+    }
+  }
+
   /** Get the context window size for the current model. */
   private getContextWindowForModel(): number {
     if (this.resolvedContextWindow > 0) return this.resolvedContextWindow;
@@ -425,10 +451,8 @@ export class EnhancedAgent extends EventEmitter {
 
   private usageSnapshot() {
     const max = this.getContextWindowForModel();
-    const used =
-      this.lastPromptTokens > 0
-        ? this.lastPromptTokens
-        : this.estimateConversationTokens();
+    const estimated = this.estimateFullRequestTokens();
+    const used = this.lastPromptTokens > 0 ? this.lastPromptTokens : estimated;
     return {
       model: this.config.model,
       used,
@@ -482,7 +506,7 @@ export class EnhancedAgent extends EventEmitter {
     if (!enabled || envOff) return false;
 
     const contextWindow = this.getContextWindowForModel();
-    let estimatedTokens = this.estimateConversationTokens();
+    let estimatedTokens = this.estimateFullRequestTokens();
     if (!shouldTriggerAutoCompact(estimatedTokens, contextWindow, edgeTokens)) {
       return false;
     }
@@ -512,7 +536,7 @@ export class EnhancedAgent extends EventEmitter {
     });
     if (mcResult.strippedCount > 0 || mcResult.ephemeralCount > 0) {
       this.messages = mcResult.messages;
-      estimatedTokens = this.estimateConversationTokens();
+      estimatedTokens = this.estimateFullRequestTokens();
       this.emit('warning', {
         message: `Microcompact: stripped ${mcResult.strippedCount} tool result(s)${
           mcResult.ephemeralCount ? `, ephemeral ${mcResult.ephemeralCount}` : ''
@@ -538,7 +562,7 @@ export class EnhancedAgent extends EventEmitter {
       if (compacted.droppedCount > 0 || compacted.messages.length < before) {
         this.messages = compacted.messages;
         estimatedTokens =
-          compacted.estimatedTokensAfter ?? this.estimateConversationTokens();
+          compacted.estimatedTokensAfter ?? this.estimateFullRequestTokens();
         this.emit('warning', {
           message:
             `✅ Context compacted · dropped ~${compacted.droppedCount} older msg(s) · ` +
@@ -866,6 +890,8 @@ export class EnhancedAgent extends EventEmitter {
     this.pendingAssistantTranscriptUuid = generateUuid();
     this.learningInitialPrompt = initialPrompt;
     this.toolsUsedThisRun = new Set();
+    this.rememberTools(tools);
+    this.emitUsage();
 
     if (this.pendingAssistantTranscriptUuid) {
       if (typeof toolExecutor?.setActiveFileHistoryMessageId === 'function') {

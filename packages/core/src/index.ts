@@ -258,6 +258,7 @@ export {
   shouldTriggerAutoCompact,
   resolveCompactTriggerTokens,
   estimateMessagesTokensRough,
+  estimateRequestTokensRough,
   selectProtectedTail,
   COMPACTION_STATUS,
   COMPACTION_STATUS_MARKER,

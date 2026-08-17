@@ -1,6 +1,24 @@
 # Changelog
 
+## [1.17.15] - 2026-08-17
+
+### Providers
+
+- **Pollinations** is the recommended default (`https://gen.pollinations.ai/v1`, model `openai`). Key from [enter.pollinations.ai/keys](https://enter.pollinations.ai/keys). Huge free/cheap catalog plus extra credits.
+
+### Agent
+
+- Context usage counts **system prompt + tool schemas + history** (Hermes-style). The app chip is no longer “under 1k” while the real request is thousands of tokens.
+
+### Release
+
+- `xibecode-core` **1.17.15** then `xibecode` **1.17.15** (npm). Existing sandboxes need **Update CLI** for the token math; new boxes get it from the rebuilt template.
+
 ## [1.17.14] - 2026-08-16
+
+### Hosting / E2B template
+
+- `xibecode-full-sandbox` rebuilt with CLI/core **1.17.14**, **Bun**, **uv**, and agent rescue tools (`tmux`, `lsof`, `killall`, `fzf`, `tree`, `git-lfs`, `build-essential`). **agent-browser + Chrome** still baked.
 
 ### Release
 

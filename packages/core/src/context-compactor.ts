@@ -80,6 +80,43 @@ export function estimateMessagesTokensRough(messages: MessageParam[]): number {
 }
 
 /**
+ * Hermes-style request estimate: system prompt + conversation + tool schemas.
+ * ~4 chars/token. Images counted separately (~1500) if present as data/url blocks.
+ */
+const IMAGE_TOKEN_COST = 1500;
+
+function estimateToolsTokensRough(toolsJson?: string): number {
+  if (!toolsJson) return 0;
+  return Math.ceil(toolsJson.length / 4);
+}
+
+function countImageBlocks(message: MessageParam): number {
+  if (!Array.isArray(message.content)) return 0;
+  let n = 0;
+  for (const block of message.content as Array<{ type?: string }>) {
+    const t = block?.type || '';
+    if (t === 'image' || t === 'image_url' || t === 'input_image') n += 1;
+  }
+  return n;
+}
+
+export function estimateRequestTokensRough(opts: {
+  messages: MessageParam[];
+  systemPrompt?: string;
+  toolsJson?: string;
+}): number {
+  let total = 0;
+  const system = (opts.systemPrompt || '').trim();
+  if (system) total += Math.ceil(system.length / 4);
+  total += estimateMessagesTokensRough(opts.messages || []);
+  total += estimateToolsTokensRough(opts.toolsJson);
+  for (const msg of opts.messages || []) {
+    total += countImageBlocks(msg) * IMAGE_TOKEN_COST;
+  }
+  return total;
+}
+
+/**
  * When to auto-compact.
  *
  * Production-style: trigger at ~75% of context for typical windows (≤512k),

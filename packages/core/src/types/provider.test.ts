@@ -10,6 +10,15 @@ import {
   withCustomModelOption,
 } from '../models-catalog.js';
 
+describe('pollinations provider', () => {
+  it('is first in setup and uses the official OpenAI-compat URL', () => {
+    expect(PROVIDER_CONFIGS.pollinations.baseUrl).toBe('https://gen.pollinations.ai/v1');
+    expect(PROVIDER_CONFIGS.pollinations.defaultModel).toBe('openai');
+    expect(PROVIDER_CONFIGS.pollinations.envKey).toBe('POLLINATIONS_API_KEY');
+    expect(listSetupProviders()[0]?.id).toBe('pollinations');
+  });
+});
+
 describe('nous provider', () => {
   it('registers Nous as OpenAI-compat at the public inference API', () => {
     expect(PROVIDER_CONFIGS.nous.baseUrl).toBe(

@@ -6,6 +6,7 @@ import {
   resolveCompactTriggerTokens,
   selectProtectedTail,
   estimateMessagesTokensRough,
+  estimateRequestTokensRough,
   COMPACTION_STATUS,
   COMPACTION_STATUS_MARKER,
 } from './context-compactor.js';
@@ -123,5 +124,19 @@ describe('compactConversation', () => {
       typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
     );
     expect(all.some((t) => t.includes('PLAN_READY') || t.includes('plan'))).toBe(true);
+  });
+});
+
+describe('estimateRequestTokensRough', () => {
+  it('counts system prompt and tool schemas, not just chat messages', () => {
+    const messages: MessageParam[] = [user('hi')];
+    const chatOnly = estimateMessagesTokensRough(messages);
+    const full = estimateRequestTokensRough({
+      messages,
+      systemPrompt: 'You are XibeCode. '.repeat(200),
+      toolsJson: JSON.stringify([{ name: 'run_command', description: 'x'.repeat(400) }]),
+    });
+    expect(full).toBeGreaterThan(chatOnly + 400);
+    expect(full).toBeGreaterThan(1000);
   });
 });

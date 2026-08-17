@@ -109,6 +109,18 @@ export const CURATED_PROVIDER_MODELS: Record<string, readonly string[]> = {
     'accounts/fireworks/models/llama-v3p3-70b-instruct',
     'accounts/fireworks/models/deepseek-v3',
   ],
+  pollinations: [
+    'openai',
+    'openai-fast',
+    'qwen3.7-flash',
+    'qwen-coder',
+    'gemini-fast',
+    'claude-fast',
+    'deepseek',
+    'kimi-code',
+    'inkling',
+    'nemotron',
+  ],
   routingrun: [
     'route/deepseek-v4-pro',
     'route/glm-5.1',
