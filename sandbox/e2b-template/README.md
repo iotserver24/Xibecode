@@ -4,13 +4,14 @@ This template is intended for XibeCode `sandbox_full` mode so command execution 
 
 ## Includes
 
-- Node.js 20
-- `pnpm` (via Corepack)
-- **XibeCode CLI** (`xibecode` / `xc`) pinned to match the current npm release (see `Dockerfile`; bump when you publish a new CLI)
-- **agent-browser** (Vercel) + Chrome for Testing — default AI browser for screenshots / UI automation
-- **git** + **GitHub CLI (`gh`)** — clone/PR/auth without runtime installs
-- Search/utils (lean): `ripgrep` (`rg`), `fd`, `jq`, `curl`, `wget`, `tar`, `unzip`/`zip`, `rsync`, `procps`
-- Build tooling: `python3`, `make`, `g++`
+- Node.js 20 + `pnpm` + **Bun**
+- **Python 3** + `python3-venv` + **uv**
+- **XibeCode CLI** (`xibecode` / `xc`) + **agent-browser** + Chrome
+- **git** + **git-lfs** + **gh**
+- Search: `rg`, `fd`, `fzf`, `tree`, `jq`
+- Process rescue: `tmux`, `lsof`, `psmisc` (`killall`), `procps`
+- Fetch/bootstrap: `curl`, `wget`, `openssl`, `ca-certificates`, `build-essential`
+- Archives: `tar`, `zip`/`unzip`, `xz-utils`, `rsync`, `openssh-client`
 - Default workspace path: `/home/user/workspace`
 - **Wake HTTP** (`/opt/vectra/wake-http`, port **8788**) — template doorbell for E2B
   [auto-resume on request](https://e2b.dev/docs/sandbox/auto-resume). Not part of the bot.
@@ -21,7 +22,7 @@ This template is intended for XibeCode `sandbox_full` mode so command execution 
 - **App inbox** (daemon, port **8790**) — first-party Flutter / website chat.
   Public URL: `https://8790-{sandboxId}.e2b.app/health`. Started with `xibecode daemon`.
 
-**Not baked** (install at runtime when needed): language stacks (Bun/Go/Rust), deploy CLIs, ffmpeg, global TS tooling, project deps. Keep image well under 10 GB.
+**Not baked** (install at runtime when needed): extra language stacks (Go/Rust), deploy CLIs, ffmpeg, project deps. Keep image well under 10 GB.
 
 ## Resources (hosting tier)
 

@@ -5,25 +5,34 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/home/user/.cache/ms-playwright
 ENV XIBECODE_PREFERRED_BROWSER=agent-browser
 
 # Lean agent tooling (keep image small; do not bake self-installable stacks).
-# - git already core; gh for PR/auth; rg/fd for search; zip/wget/rsync/procps everyday utils
+# Search: rg/fd (gitignore-safe). Process rescue: lsof/psmisc/tmux.
+# Bootstrap: curl/wget/openssl/build-essential so on-demand installs do not hang.
 RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates \
+  openssl \
   curl \
   git \
+  git-lfs \
   jq \
   openssh-client \
   python3 \
-  make \
-  g++ \
+  python3-venv \
+  build-essential \
   xz-utils \
   tar \
   ripgrep \
   fd-find \
+  fzf \
+  tree \
+  tmux \
+  lsof \
+  psmisc \
   unzip \
   zip \
   wget \
   rsync \
   procps \
+  less \
   fonts-liberation \
   libasound2t64 \
   libatk-bridge2.0-0t64 \
@@ -42,8 +51,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   xdg-utils \
   && rm -rf /var/lib/apt/lists/* \
   || (apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl git jq openssh-client python3 make g++ xz-utils tar \
-    ripgrep fd-find unzip zip wget rsync procps \
+    ca-certificates openssl curl git git-lfs jq openssh-client python3 python3-venv \
+    build-essential xz-utils tar ripgrep fd-find fzf tree tmux lsof psmisc \
+    unzip zip wget rsync procps less \
     fonts-liberation libasound2 libatk-bridge2.0-0 libatk1.0-0 libcups2 \
     libdbus-1-3 libdrm2 libgbm1 libgtk-3-0 libnspr4 libnss3 libx11-xcb1 \
     libxcomposite1 libxdamage1 libxrandr2 xdg-utils \
@@ -70,18 +80,27 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
+# Bun (official install → /usr/local so uid 1000 can run it).
+RUN curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash \
+  && bun --version
+
+# uv — fast Python installs (official, tiny; agents pip-install a lot).
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh \
+  && uv --version
+
 # Ship CLI from local tarballs (reliable; avoids npm registry lag/ghost versions).
-# Rebuild: (cd packages/core && npm pack --pack-destination ../../sandbox/e2b-template)
-#          (cd packages/cli  && npm pack --pack-destination ../../sandbox/e2b-template)
-# Then rename to xibecode-core.tgz / xibecode.tgz or keep versioned names below.
+# Rebuild: (cd packages/core && pnpm pack --pack-destination ../../sandbox/e2b-template)
+#          (cd packages/cli  && pnpm pack --pack-destination ../../sandbox/e2b-template)
 RUN mkdir -p /tmp/packs
-COPY xibecode-core-1.17.10.tgz /tmp/packs/xibecode-core-1.17.10.tgz
-COPY xibecode-1.17.10.tgz /tmp/packs/xibecode-1.17.10.tgz
+COPY xibecode-core-1.17.15.tgz /tmp/packs/xibecode-core-1.17.15.tgz
+COPY xibecode-1.17.15.tgz /tmp/packs/xibecode-1.17.15.tgz
 RUN set -e; \
-  npm install -g /tmp/packs/xibecode-core-1.17.10.tgz /tmp/packs/xibecode-1.17.10.tgz agent-browser; \
+  npm install -g /tmp/packs/xibecode-core-1.17.15.tgz /tmp/packs/xibecode-1.17.15.tgz agent-browser; \
   (agent-browser install --with-deps || agent-browser install); \
   xibecode -v; \
-  agent-browser --version || true
+  agent-browser --version || true; \
+  bun --version; \
+  uv --version
 
 # E2B injects a default `user` (uid 1000). Only create/rename if missing.
 RUN set -e; \

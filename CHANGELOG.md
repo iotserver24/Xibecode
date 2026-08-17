@@ -14,6 +14,10 @@
 
 - `xibecode-core` **1.17.15** then `xibecode` **1.17.15** (npm). Existing sandboxes need **Update CLI** for the token math; new boxes get it from the rebuilt template.
 
+### Hosting / E2B template
+
+- `xibecode-full-sandbox` rebuilt with CLI/core **1.17.15**.
+
 ## [1.17.14] - 2026-08-16
 
 ### Hosting / E2B template
