@@ -241,7 +241,7 @@ async function setupModel(config: ConfigManager): Promise<void> {
   const currentProvider = (config.get('provider') as string) || 'auto';
   const defaultProv = providers.some((p) => p.value === currentProvider)
     ? currentProvider
-    : 'routingrun';
+    : 'pollinations';
   const provider = await askNumbered(
     'Choose your LLM provider:',
     providers,
