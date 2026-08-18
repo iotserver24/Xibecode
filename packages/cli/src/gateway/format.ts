@@ -603,9 +603,10 @@ export const GATEWAY_BOT_COMMANDS: ReadonlyArray<{
 }> = [
   { command: 'start', description: 'Welcome + list commands' },
   { command: 'help', description: 'Show available commands' },
-  { command: 'new', description: 'Clear conversation (keep workdir)' },
-  { command: 'reset', description: 'Clear conversation (same as /new)' },
-  { command: 'clear', description: 'Clear conversation (same as /new)' },
+  { command: 'new', description: 'Start a new conversation (keeps previous in history)' },
+  { command: 'reset', description: 'Start a new conversation (same as /new)' },
+  { command: 'clear', description: 'Start a new conversation (same as /new)' },
+  { command: 'history', description: 'List or reopen past conversations' },
   { command: 'stop', description: 'Interrupt run + kill active commands' },
   { command: 'compact', description: 'Compact context and write a run handoff' },
   { command: 'status', description: 'Workdir, busy state, progress' },

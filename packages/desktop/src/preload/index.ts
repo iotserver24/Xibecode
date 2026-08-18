@@ -135,7 +135,8 @@ const api = {
 
   session: {
     list: (): Promise<SessionMetadata[]> => ipcRenderer.invoke('session:list'),
-    create: (options: { title?: string; model: string; cwd?: string }): Promise<any> => ipcRenderer.invoke('session:create', options),
+    create: (options: { title?: string; model: string; cwd?: string; parentSessionId?: string }): Promise<any> => ipcRenderer.invoke('session:create', options),
+    startNew: (options: { previousSessionId?: string; model: string; cwd?: string }): Promise<any> => ipcRenderer.invoke('session:start-new', options),
     load: (id: string): Promise<any | null> => ipcRenderer.invoke('session:load', id),
     save: (session: any): Promise<void> => ipcRenderer.invoke('session:save', session),
     delete: (id: string): Promise<boolean> => ipcRenderer.invoke('session:delete', id),

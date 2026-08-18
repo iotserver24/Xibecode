@@ -32,6 +32,8 @@ import type {
   SendMessageOptions,
 } from './types.js';
 import { shareWorkspaceFile } from './workspace-share.js';
+import { listConversations } from './session-store.js';
+import { loadResumeContext, SessionManager } from 'xibecode-core';
 
 const TEXT_INLINE_MAX = 256 * 1024;
 const TEXT_EXTS = new Set([
@@ -229,6 +231,29 @@ export class AppAdapter implements MessagingAdapter {
       secretHeader: String(req.headers['x-app-inbox-secret'] || ''),
       secrets: this.secrets,
       allowOpen: allowOpenInbox(),
+    });
+  }
+
+  notifyConversation(info: {
+    chatId: string;
+    sessionId: string;
+    previousSessionId?: string | null;
+    previousTitle?: string;
+    conversations?: Array<{
+      sessionId: string;
+      title: string;
+      createdAt: number;
+      updatedAt: number;
+      status: 'active' | 'closed';
+      parentSessionId?: string;
+    }>;
+  }): void {
+    this.emit(info.chatId, {
+      type: 'conversation',
+      sessionId: info.sessionId,
+      previousSessionId: info.previousSessionId || undefined,
+      title: info.previousTitle,
+      conversations: info.conversations,
     });
   }
 
@@ -613,6 +638,63 @@ export class AppAdapter implements MessagingAdapter {
       } catch (err: any) {
         sendJson(res, 502, { error: err?.message || String(err), models: [] });
       }
+      return;
+    }
+
+    if (method === 'GET' && url.pathname === '/v1/conversations') {
+      const chatId = url.searchParams.get('chatId') || APP_DEFAULT_CHAT_ID;
+      const listed = await listConversations('app', chatId);
+      sendJson(res, 200, listed);
+      return;
+    }
+
+    const convoGet = url.pathname.match(/^\/v1\/conversations\/([^/]+)$/);
+    if (method === 'GET' && convoGet) {
+      const sessionId = decodeURIComponent(convoGet[1] || '').trim();
+      if (!sessionId) {
+        sendJson(res, 400, { error: 'missing session id' });
+        return;
+      }
+      const manager = new SessionManager();
+      const loaded = await manager.loadSession(sessionId);
+      if (!loaded) {
+        sendJson(res, 404, { error: 'conversation not found', sessionId });
+        return;
+      }
+      const resume = await loadResumeContext(manager.getSessionPath(sessionId, loaded.cwd));
+      sendJson(res, 200, {
+        sessionId: loaded.id,
+        title: loaded.title,
+        cwd: loaded.cwd,
+        created: loaded.created,
+        updated: loaded.updated,
+        parentSessionId: loaded.parentSessionId,
+        successorSessionId: loaded.successorSessionId,
+        conversationStatus: loaded.conversationStatus,
+        messages: loaded.messages,
+        handoff: resume.handoff,
+      });
+      return;
+    }
+
+    if (method === 'POST' && url.pathname === '/v1/conversations/new') {
+      const body = await readJson(req);
+      const chatId = String(body.chatId || APP_DEFAULT_CHAT_ID);
+      await this.dispatchInbound('/new', chatId);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (method === 'POST' && url.pathname === '/v1/conversations/switch') {
+      const body = await readJson(req);
+      const chatId = String(body.chatId || APP_DEFAULT_CHAT_ID);
+      const sessionId = String(body.sessionId || '').trim();
+      if (!sessionId) {
+        sendJson(res, 400, { error: 'sessionId required' });
+        return;
+      }
+      await this.dispatchInbound(`/history open ${sessionId}`, chatId);
+      sendJson(res, 200, { ok: true, sessionId });
       return;
     }
 

@@ -18,6 +18,7 @@ export interface IndexDoc {
   projectPath?: string;
   status?: string;
   changedFiles?: string[];
+  parentSessionId?: string;
 }
 
 function indexDir(): string {

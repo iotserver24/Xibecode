@@ -9,6 +9,8 @@ interface SessionItem {
   cwd: string;
   created: string;
   updated: string;
+  conversationStatus?: 'active' | 'closed';
+  parentSessionId?: string;
 }
 
 interface ChatHistoryProps {
@@ -103,7 +105,7 @@ const ChatHistoryItem = memo(function ChatHistoryItem({
       )}
       
       <span className="flex-1 truncate text-[13px] leading-tight font-sans">
-        {session.title}
+        {session.conversationStatus === 'closed' ? `${session.title} · closed` : session.title}
       </span>
 
       {/* Delete button (shows on hover) */}
@@ -132,7 +134,7 @@ const ChatHistory = memo(function ChatHistory({ activeSessionId, onSelectSession
     setSessions(list);
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => { refresh(); }, [refresh, activeSessionId]);
 
   const handleDelete = useCallback(async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();

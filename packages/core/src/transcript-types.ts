@@ -106,13 +106,18 @@ export interface FileHistorySnapshotEntry extends BaseEntry {
   trackedFileBackups: Record<string, FileHistoryBackupRef>;
 }
 
-/** Session metadata entry — written at session start. */
+/** Session metadata entry — written at session start (and on /new close). */
 export interface SessionMetaTranscriptEntry extends BaseEntry {
   type: 'session-meta';
   model: string;
   cwd: string;
   gitBranch?: string;
   version?: string;
+  parentSessionId?: string;
+  successorSessionId?: string;
+  conversationStatus?: 'active' | 'closed';
+  resetReason?: string;
+  channel?: string;
 }
 
 /** Tool attempt record — replaces session-memory attempt tracking. */
@@ -159,7 +164,7 @@ export interface RunHandoffTranscriptEntry extends BaseEntry {
   };
 }
 
-/** Lifecycle event — session start, prompt, complete, fail, interrupt, shutdown, compact. */
+/** Lifecycle event — session start, prompt, complete, fail, interrupt, shutdown, compact, /new. */
 export interface LifecycleTranscriptEntry extends BaseEntry {
   type: 'lifecycle';
   event:
@@ -169,7 +174,10 @@ export interface LifecycleTranscriptEntry extends BaseEntry {
     | 'fail'
     | 'interrupt'
     | 'shutdown'
-    | 'compact';
+    | 'compact'
+    | 'session-reset'
+    | 'session-closed'
+    | 'session-created';
   origin?: 'user' | 'daemon' | 'continuation';
   detail?: string;
 }
@@ -240,6 +248,9 @@ export interface SessionInfo {
   tag?: string;
   createdAt?: number;
   model?: string;
+  parentSessionId?: string;
+  successorSessionId?: string;
+  conversationStatus?: 'active' | 'closed';
 }
 
 // ─── Type Guards ────────────────────────────────────────────────

@@ -50,6 +50,21 @@ export interface MessagingAdapter {
     text: string,
     opts?: SendMessageOptions,
   ): Promise<void>;
+  /** App/desktop: structured /new or history switch so the UI can swap lanes. */
+  notifyConversation?(info: {
+    chatId: string;
+    sessionId: string;
+    previousSessionId?: string | null;
+    previousTitle?: string;
+    conversations?: Array<{
+      sessionId: string;
+      title: string;
+      createdAt: number;
+      updatedAt: number;
+      status: 'active' | 'closed';
+      parentSessionId?: string;
+    }>;
+  }): void;
   /**
    * Mid-run spoken update (thinking / references). Must NOT end the turn.
    * Optional — Telegram keeps a single final reply.

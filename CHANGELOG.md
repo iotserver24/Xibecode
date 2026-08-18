@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.17.19] - 2026-08-19
+
+### `/new` conversations
+
+- `/new` (and `/reset`) now starts a **new session ID**. The previous transcript, run handoffs, session index entry, and file-history stay on disk.
+- The old session is marked closed and linked as the parent of the new one. Project `MEMORY.md` / `USER.md` are not wiped.
+- `/history` lists past conversations; `/history open <id>` switches the active lane. A running task must be `/stop`ped first.
+- App inbox emits a `conversation` event and exposes `/v1/conversations`. Desktop history and the Vectra chat history sheet refresh immediately after `/new`.
+- TUI `/clear` still only clears the visible display. `/new` is the real new conversation.
+
+### Release
+
+- `xibecode-core` **1.17.19** then `xibecode` **1.17.19** (npm). Existing sandboxes need **Update CLI**. New boxes get it from the rebuilt template.
+
+### Hosting / E2B template
+
+- `xibecode-full-sandbox` rebuilt with CLI/core **1.17.19**.
+
 ## [1.17.18] - 2026-08-19
 
 ### Tests / file history

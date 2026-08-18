@@ -3529,12 +3529,16 @@ ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
    * handoffs, and search share one session ID.
    */
   bindDaemonSession(ctx: DaemonSessionContext): void {
+    const previousId = this.sessionContext?.sessionId;
     this.sessionContext = ctx;
     this.initTranscript(ctx.sessionId, ctx.cwd);
-    if (!this.sessionMemory) {
+    if (!this.sessionMemory || this.sessionMemory.getSessionId() !== ctx.sessionId) {
       this.sessionMemory = new SessionMemory(ctx.cwd, ctx.sessionId);
     }
     this.sessionMemory.setTranscriptPath(ctx.transcriptPath);
+    if (previousId && previousId !== ctx.sessionId) {
+      this.observation = new RunObservation();
+    }
   }
 
   getSessionContext(): DaemonSessionContext | null {

@@ -8,7 +8,8 @@ interface Props {
 const COMMANDS = [
   { name: '/help', description: 'Show available shortcuts and usage hints' },
   { name: '/mode', description: 'Switch agent mode (agent, plan, review)' },
-  { name: '/clear', description: 'Clear the current chat transcript' },
+  { name: '/new', description: 'Start a new conversation (keeps previous in history)' },
+  { name: '/clear', description: 'Clear the visible chat only (same conversation)' },
   { name: '/format', description: 'Switch wire format: auto | anthropic | openai' },
   { name: '/model', description: 'Fetch and switch available models for this provider' },
   { name: '/setup', description: 'Guided setup (set API key, then pick provider/model)' },

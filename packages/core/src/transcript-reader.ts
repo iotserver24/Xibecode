@@ -190,9 +190,17 @@ export function parseSessionInfoFromLite(
     customTitle ||
     extractLastJsonStringField(tail, 'lastPrompt') ||
     extractLastJsonStringField(tail, 'summary') ||
-    firstPrompt;
+    firstPrompt ||
+    'New conversation';
 
-  if (!summary) return null;
+  if (
+    !customTitle &&
+    !firstPrompt &&
+    !extractLastJsonStringField(tail, 'lastPrompt') &&
+    !extractJsonStringField(head, 'sessionId')
+  ) {
+    return null;
+  }
 
   const gitBranch =
     extractLastJsonStringField(tail, 'gitBranch') ||
@@ -214,6 +222,18 @@ export function parseSessionInfoFromLite(
     ? extractLastJsonStringField(tagLine, 'tag') || undefined
     : undefined;
 
+  const parentSessionId =
+    extractLastJsonStringField(tail, 'parentSessionId') ||
+    extractLastJsonStringField(head, 'parentSessionId') ||
+    undefined;
+  const successorSessionId =
+    extractLastJsonStringField(tail, 'successorSessionId') ||
+    extractLastJsonStringField(head, 'successorSessionId') ||
+    undefined;
+  const conversationStatusRaw =
+    extractLastJsonStringField(tail, 'conversationStatus') ||
+    extractLastJsonStringField(head, 'conversationStatus');
+
   return {
     sessionId,
     summary,
@@ -226,6 +246,12 @@ export function parseSessionInfoFromLite(
     tag,
     createdAt,
     model,
+    parentSessionId,
+    successorSessionId,
+    conversationStatus:
+      conversationStatusRaw === 'closed' || conversationStatusRaw === 'active'
+        ? conversationStatusRaw
+        : undefined,
   };
 }
 
@@ -497,11 +523,17 @@ export async function loadSessionMetadata(filePath: string): Promise<{
   cwd?: string;
   gitBranch?: string;
   sessionId?: string;
+  parentSessionId?: string;
+  successorSessionId?: string;
+  conversationStatus?: 'active' | 'closed';
 }> {
   const lite = await readHeadAndTail(filePath);
   if (!lite) return {};
 
   const { head, tail } = lite;
+  const conversationStatusRaw =
+    extractLastJsonStringField(tail, 'conversationStatus') ||
+    extractLastJsonStringField(head, 'conversationStatus');
 
   return {
     customTitle:
@@ -528,5 +560,17 @@ export async function loadSessionMetadata(filePath: string): Promise<{
       extractJsonStringField(head, 'gitBranch') ||
       undefined,
     sessionId: extractJsonStringField(head, 'sessionId') || undefined,
+    parentSessionId:
+      extractLastJsonStringField(tail, 'parentSessionId') ||
+      extractLastJsonStringField(head, 'parentSessionId') ||
+      undefined,
+    successorSessionId:
+      extractLastJsonStringField(tail, 'successorSessionId') ||
+      extractLastJsonStringField(head, 'successorSessionId') ||
+      undefined,
+    conversationStatus:
+      conversationStatusRaw === 'closed' || conversationStatusRaw === 'active'
+        ? conversationStatusRaw
+        : undefined,
   };
 }

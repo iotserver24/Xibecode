@@ -21,7 +21,7 @@ import { formatToolArgs, formatToolOutcome, formatRunSwarmDetailLines } from '..
 import { SPINNER_VERBS } from '../constants/spinnerVerbs.js';
 import { collectImageReferencesForPrompt } from 'xibecode-core';
 import { loadImageAttachment, mimeFromExtension, type ImageAttachment } from '../utils/image-attachments.js';
-import { SessionManager, createDaemonSessionContext, type ChatSession } from 'xibecode-core';
+import { SessionManager, createDaemonSessionContext, startNewConversation, formatNewConversationReply, type ChatSession } from 'xibecode-core';
 import { AutoMemoryManager, HooksManager, SettingsManager as CoreSettingsManager } from 'xibecode-core';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
 import { cloudPullCommand } from '../commands/cloud-pull.js';
@@ -241,13 +241,15 @@ const WORK_SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '�
 /** How fast to advance OpenClaude-style spinner verbs (ms) */
 const WORK_VERB_ROTATE_MS = 2400;
 
-const QUICK_HELP = ['/help', '/mode', '/format', '/model', '/thinking', '/setup', '/config', '/memory', '/compact', '/hooks', '/cpull', '/commit', '/donate', '/sponsor', '/clear', '/exit'];
+const QUICK_HELP = ['/help', '/mode', '/format', '/model', '/thinking', '/setup', '/config', '/memory', '/compact', '/new', '/history', '/hooks', '/cpull', '/commit', '/donate', '/sponsor', '/clear', '/exit'];
 const CHAT_COMMANDS: Array<{ name: string; description: string }> = [
   { name: '/help', description: 'Show available shortcuts and usage hints' },
+  { name: '/new', description: 'Start a new conversation (keeps the previous one in history)' },
+  { name: '/history', description: 'List past conversations in this project' },
   { name: '/compact', description: 'Compact context and write a run handoff' },
   { name: '/mode', description: 'Switch agent mode from an interactive picker' },
   { name: '/thinking', description: 'Show or hide the model thought / reasoning block' },
-  { name: '/clear', description: 'Clear the current chat transcript' },
+  { name: '/clear', description: 'Clear the visible transcript only (same conversation)' },
   { name: '/format', description: 'Switch wire format: auto | anthropic | openai' },
   { name: '/model', description: 'Fetch and switch available models for this provider' },
   { name: '/setup', description: 'Guided setup (set API key, then pick provider/model)' },
@@ -425,6 +427,8 @@ function XibeCodeChatApp(props: {
   getCurrentMessages?: () => MessageParam[];
   onMemoryCommand?: (subcmd: string, pushLine: (line: UiLine) => void) => void;
   onCompactCommand?: (pushLine: (line: UiLine) => void) => void | Promise<void>;
+  onNewConversation?: (pushLine: (line: UiLine) => void) => void | Promise<void>;
+  onHistoryCommand?: (pushLine: (line: UiLine) => void) => void | Promise<void>;
   onHooksCommand?: (subcmd: string, pushLine: (line: UiLine) => void) => void;
   onCloudPullCommand?: (argsRaw: string, pushLine: (line: UiLine) => void) => Promise<void>;
   onCommitCommand?: (messageRaw: string, pushLine: (line: UiLine) => void) => Promise<void>;
@@ -1137,7 +1141,57 @@ function XibeCodeChatApp(props: {
       }
 
       if (resolvedInput === '/clear') {
-        pushLine({ type: 'info', text: '──────────── transcript cleared ────────────' });
+        pushLine({ type: 'info', text: '──────────── display cleared (same conversation) ────────────' });
+        return;
+      }
+
+      if (resolvedInput === '/new' || resolvedInput === '/reset') {
+        if (isRunning) {
+          pushLine({
+            type: 'error',
+            text: 'A task is still running. Wait or stop it, then /new. The current chat stays in history.',
+          });
+          return;
+        }
+        if (!props.onNewConversation) {
+          pushLine({ type: 'error', text: '/new is unavailable in this chat session.' });
+          return;
+        }
+        try {
+          await props.onNewConversation((line) => {
+            if (line.type === 'info' && line.text.startsWith('Started a new conversation')) {
+              sessionMessagesRef.current = [];
+              setLines([
+                {
+                  kind: 'line',
+                  id: nextLineIdRef.current++,
+                  type: 'info',
+                  text: '──────────── new conversation ────────────',
+                },
+                { kind: 'line', id: nextLineIdRef.current++, type: 'info', text: line.text },
+              ]);
+              return;
+            }
+            pushLine(line);
+          });
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          pushLine({ type: 'error', text: `/new failed: ${message}` });
+        }
+        return;
+      }
+
+      if (resolvedInput === '/history' || resolvedInput.startsWith('/history ')) {
+        if (!props.onHistoryCommand) {
+          pushLine({ type: 'error', text: '/history is unavailable in this chat session.' });
+          return;
+        }
+        try {
+          await props.onHistoryCommand(pushLine);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          pushLine({ type: 'error', text: `/history failed: ${message}` });
+        }
         return;
       }
 
@@ -3270,6 +3324,55 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
   const hooksMgr = new HooksManager(coreSettingsManager);
   await hooksMgr.loadFromSettingsManager().catch(() => {});
 
+  const onNewConversation = async (pushLine: (line: UiLine) => void) => {
+    const result = await startNewConversation({
+      previousSessionId: currentSessionId,
+      cwd: process.cwd(),
+      model,
+      channel: 'cli',
+      reason: 'user-new',
+    });
+    currentSession = await sessionManager.loadSession(result.newSessionId);
+    if (!currentSession) {
+      currentSession = {
+        id: result.newSessionId,
+        title: 'New conversation',
+        model,
+        cwd: process.cwd(),
+        parentSessionId: result.previousSessionId || undefined,
+        conversationStatus: 'active',
+        created: new Date().toISOString(),
+        updated: new Date().toISOString(),
+        messages: [],
+      };
+    }
+    currentSessionId = result.newSessionId;
+    onSessionCreated(result.newSessionId);
+    activeAgent?.setMessages([]);
+    pushLine({ type: 'info', text: formatNewConversationReply(result) });
+  };
+
+  const onHistoryCommand = async (pushLine: (line: UiLine) => void) => {
+    const listed = await sessionManager.listSessions(process.cwd());
+    if (!listed.length) {
+      pushLine({ type: 'info', text: 'No conversation history in this project yet.' });
+      return;
+    }
+    pushLine({ type: 'info', text: 'Conversation history (this project):' });
+    for (const item of listed.slice(0, 20)) {
+      const mark = item.id === currentSessionId ? ' (active)' : '';
+      const closed = item.conversationStatus === 'closed' ? ' · closed' : '';
+      pushLine({
+        type: 'info',
+        text: `  ${item.id}${mark}${closed} — ${item.title}`,
+      });
+    }
+    pushLine({
+      type: 'info',
+      text: 'Reopen with `xibecode resume <session-id>`. `/new` starts a fresh chat and keeps these.',
+    });
+  };
+
   const onCompactCommand = async (pushLine: (line: UiLine) => void) => {
     if (!activeAgent) {
       pushLine({ type: 'error', text: 'No active agent to compact.' });
@@ -3477,6 +3580,8 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
         getCurrentMessages={() => activeAgent?.getMessages() ?? currentSession?.messages ?? []}
         onMemoryCommand={onMemoryCommand}
         onCompactCommand={onCompactCommand}
+        onNewConversation={onNewConversation}
+        onHistoryCommand={onHistoryCommand}
         onHooksCommand={onHooksCommand}
         onCloudPullCommand={onCloudPullCommand}
         onCommitCommand={onCommitCommand}

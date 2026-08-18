@@ -53,6 +53,8 @@ export interface SessionMetadata {
   model: string;
   cwd: string;
   parentSessionId?: string;
+  successorSessionId?: string;
+  conversationStatus?: 'active' | 'closed';
   created: string;
   updated: string;
 }
@@ -139,6 +141,8 @@ export class SessionManager {
       sessionId: id,
       model: options.model,
       cwd,
+      parentSessionId: options.parentSessionId,
+      conversationStatus: 'active',
     });
 
     // Register cleanup handler on first use
@@ -399,6 +403,9 @@ export class SessionManager {
         title: metadata.customTitle || this.deriveTitleFromMessages(recovered.messages) || 'Untitled Session',
         model: metadata.model || 'unknown',
         cwd: metadata.cwd || '',
+        parentSessionId: metadata.parentSessionId,
+        successorSessionId: metadata.successorSessionId,
+        conversationStatus: metadata.conversationStatus,
         created: metadata.created || new Date().toISOString(),
         updated: new Date().toISOString(),
         messages: recovered.messages,
@@ -423,6 +430,9 @@ export class SessionManager {
       title: metadata.customTitle || 'Untitled Session',
       model: metadata.model || 'unknown',
       cwd: metadata.cwd || '',
+      parentSessionId: metadata.parentSessionId,
+      successorSessionId: metadata.successorSessionId,
+      conversationStatus: metadata.conversationStatus,
       created: metadata.created || new Date().toISOString(),
       updated: new Date().toISOString(),
       messages: [],
@@ -441,26 +451,52 @@ export class SessionManager {
     cwd?: string;
     gitBranch?: string;
     created?: string;
+    parentSessionId?: string;
+    successorSessionId?: string;
+    conversationStatus?: 'active' | 'closed';
   } {
     let customTitle: string | undefined;
     let model: string | undefined;
     let cwd: string | undefined;
     let gitBranch: string | undefined;
     let created: string | undefined;
+    let parentSessionId: string | undefined;
+    let successorSessionId: string | undefined;
+    let conversationStatus: 'active' | 'closed' | undefined;
 
     for (const entry of entries) {
       if (entry.type === 'custom-title') {
         customTitle = (entry as { customTitle: string }).customTitle;
       } else if (entry.type === 'session-meta') {
-        const meta = entry as { model?: string; cwd?: string; gitBranch?: string; timestamp?: string };
+        const meta = entry as {
+          model?: string;
+          cwd?: string;
+          gitBranch?: string;
+          timestamp?: string;
+          parentSessionId?: string;
+          successorSessionId?: string;
+          conversationStatus?: 'active' | 'closed';
+        };
         if (meta.model) model = meta.model;
         if (meta.cwd) cwd = meta.cwd;
         if (meta.gitBranch) gitBranch = meta.gitBranch;
+        if (meta.parentSessionId) parentSessionId = meta.parentSessionId;
+        if (meta.successorSessionId) successorSessionId = meta.successorSessionId;
+        if (meta.conversationStatus) conversationStatus = meta.conversationStatus;
         if (meta.timestamp && !created) created = meta.timestamp;
       }
     }
 
-    return { customTitle, model, cwd, gitBranch, created };
+    return {
+      customTitle,
+      model,
+      cwd,
+      gitBranch,
+      created,
+      parentSessionId,
+      successorSessionId,
+      conversationStatus,
+    };
   }
 
   // ─── Internal: Writing ────────────────────────────────────────
@@ -534,6 +570,9 @@ export class SessionManager {
           title: info.summary || 'Untitled Session',
           model: info.model || 'unknown',
           cwd: info.cwd || '',
+          parentSessionId: info.parentSessionId,
+          successorSessionId: info.successorSessionId,
+          conversationStatus: info.conversationStatus,
           created: info.createdAt ? new Date(info.createdAt).toISOString() : new Date().toISOString(),
           updated: new Date(info.lastModified).toISOString(),
         });

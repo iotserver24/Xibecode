@@ -20,7 +20,8 @@ export type AppEventType =
   | 'usage'
   | 'status'
   | 'done'
-  | 'error';
+  | 'error'
+  | 'conversation';
 
 export type AppFileKind = 'photo' | 'video' | 'audio' | 'voice' | 'document';
 
@@ -66,6 +67,16 @@ export interface AppChatEvent {
   ref?: string;
   /** Phone app renders GitHub-flavored markdown when this is set. */
   format?: 'markdown' | 'plain';
+  sessionId?: string;
+  previousSessionId?: string;
+  conversations?: Array<{
+    sessionId: string;
+    title: string;
+    createdAt: number;
+    updatedAt: number;
+    status: 'active' | 'closed';
+    parentSessionId?: string;
+  }>;
 }
 
 export function nextEventId(seq: { n: number }): string {

@@ -223,11 +223,35 @@ export default function App() {
     setModeState((prev) => ({ current: mode, previous: prev.current, history: [...prev.history, { mode, timestamp: Date.now(), reason }] }));
   }, []);
 
-  const handleNewChat = useCallback(() => {
-    setMessages([]);
-    setIsInitialized(false);
-    setActiveSessionId(undefined);
-  }, []);
+  const handleNewChat = useCallback(async () => {
+    if (isRunning) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: uid(),
+          role: 'error',
+          content: 'A task is still running. Stop it first, then start a new conversation. The current chat stays in history.',
+          timestamp: Date.now(),
+        },
+      ]);
+      return;
+    }
+    try {
+      const model = (await xibe.config.getModel()) || activeModel || 'unknown';
+      const created = await xibe.session.startNew({
+        previousSessionId: activeSessionId,
+        model,
+        cwd: workingDir,
+      });
+      setActiveSessionId(created.id);
+      setMessages([]);
+      setIsInitialized(false);
+    } catch {
+      setMessages([]);
+      setIsInitialized(false);
+      setActiveSessionId(undefined);
+    }
+  }, [isRunning, activeSessionId, activeModel, workingDir]);
 
   const handleSelectSession = useCallback(async (id: string) => {
     const session = await xibe.session.load(id);
@@ -247,7 +271,11 @@ export default function App() {
   const handleCommand = useCallback(async (cmd: string, arg?: string) => {
     switch (cmd) {
       case '/clear':
-        handleNewChat();
+        setMessages([]);
+        break;
+      case '/new':
+      case '/reset':
+        void handleNewChat();
         break;
       case '/mode':
         if (arg) {

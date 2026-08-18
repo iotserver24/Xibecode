@@ -5,12 +5,27 @@
 
 import { promises as fs } from 'fs';
 import * as path from 'path';
+import {
+  formatNewConversationReply,
+  startNewConversation,
+  type StartNewConversationResult,
+} from 'xibecode-core';
 import { gatewayHome } from './agent-runner.js';
 
 export interface GatewaySessionMessage {
   role: 'user' | 'assistant';
   content: string;
   at: number;
+}
+
+export interface GatewayConversationRef {
+  sessionId: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  status: 'active' | 'closed';
+  parentSessionId?: string;
+  channel?: string;
 }
 
 export interface GatewaySession {
@@ -23,6 +38,9 @@ export interface GatewaySession {
   workdir?: string;
   /** Show tool progress bubbles (default true). */
   progressEnabled?: boolean;
+  /** Archived + active conversation lanes for this chat. */
+  conversations?: GatewayConversationRef[];
+  previousSessionId?: string;
   /**
    * Gateway rigor level (anti-hallucination / approvals):
    * - yolo: no approval prompts; loose completion evidence
@@ -133,19 +151,141 @@ export async function appendTurn(
   return session;
 }
 
+function upsertConversation(
+  list: GatewayConversationRef[],
+  ref: GatewayConversationRef,
+): GatewayConversationRef[] {
+  const idx = list.findIndex((c) => c.sessionId === ref.sessionId);
+  if (idx < 0) return [...list, ref];
+  const next = [...list];
+  next[idx] = { ...list[idx], ...ref };
+  return next;
+}
+
+function markConversationsInactive(
+  list: GatewayConversationRef[],
+  except?: string,
+): GatewayConversationRef[] {
+  return list.map((c) =>
+    c.sessionId === except ? { ...c, status: 'active' as const } : { ...c, status: 'closed' as const },
+  );
+}
+
+/**
+ * `/new`: start a fresh transcript session. The old JSONL stays on disk
+ * and remains listed in `conversations`. Workdir / model / rigor persist.
+ */
+export async function startNewLane(
+  platform: string,
+  chatId: string,
+  opts?: { reason?: 'user-new' | 'user-reset' | 'user-clear'; model?: string },
+): Promise<{
+  session: GatewaySession;
+  result: StartNewConversationResult;
+  reply: string;
+}> {
+  const session = await getOrCreateSession(platform, chatId);
+  const cwd = session.workdir || process.cwd();
+  const previousId = session.transcriptSessionId;
+  const result = await startNewConversation({
+    previousSessionId: previousId,
+    cwd,
+    model: opts?.model || session.model,
+    channel: platform,
+    reason: opts?.reason || 'user-new',
+  });
+
+  const now = Date.now();
+  let conversations = [...(session.conversations || [])];
+  if (previousId && !conversations.some((c) => c.sessionId === previousId)) {
+    conversations.push({
+      sessionId: previousId,
+      title: result.previousTitle || previousId,
+      createdAt: session.createdAt,
+      updatedAt: now,
+      status: 'closed',
+      channel: platform,
+    });
+  }
+  if (previousId) {
+    conversations = conversations.map((c) =>
+      c.sessionId === previousId
+        ? {
+            ...c,
+            status: 'closed' as const,
+            title: result.previousTitle || c.title,
+            updatedAt: now,
+          }
+        : c,
+    );
+  }
+  conversations = markConversationsInactive(conversations, result.newSessionId);
+  conversations = upsertConversation(conversations, {
+    sessionId: result.newSessionId,
+    title: 'New conversation',
+    createdAt: now,
+    updatedAt: now,
+    status: 'active',
+    parentSessionId: result.previousSessionId || undefined,
+    channel: platform,
+  });
+
+  session.messages = [];
+  session.previousSessionId = result.previousSessionId || undefined;
+  session.transcriptSessionId = result.newSessionId;
+  session.conversations = conversations;
+  session.updatedAt = now;
+  await saveSession(session);
+  return {
+    session,
+    result,
+    reply: formatNewConversationReply(result),
+  };
+}
+
+/** Switch the active lane to an existing transcript without deleting either. */
+export async function switchLane(
+  platform: string,
+  chatId: string,
+  sessionId: string,
+): Promise<GatewaySession | null> {
+  const id = sessionId.trim();
+  if (!id) return null;
+  const session = await getOrCreateSession(platform, chatId);
+  const now = Date.now();
+  let conversations = markConversationsInactive(session.conversations || [], id);
+  const existing = conversations.find((c) => c.sessionId === id);
+  if (!existing) {
+    conversations = upsertConversation(conversations, {
+      sessionId: id,
+      title: id,
+      createdAt: now,
+      updatedAt: now,
+      status: 'active',
+      channel: platform,
+    });
+  }
+  session.messages = [];
+  session.previousSessionId = session.transcriptSessionId;
+  session.transcriptSessionId = id;
+  session.conversations = conversations;
+  session.updatedAt = now;
+  await saveSession(session);
+  return session;
+}
+
+export async function listConversations(
+  platform: string,
+  chatId: string,
+): Promise<{ active?: string; conversations: GatewayConversationRef[] }> {
+  const session = await getOrCreateSession(platform, chatId);
+  return {
+    active: session.transcriptSessionId,
+    conversations: [...(session.conversations || [])].sort((a, b) => b.updatedAt - a.updatedAt),
+  };
+}
+
+/** @deprecated Use startNewLane. Kept so older imports still compile. */
 export async function resetSession(platform: string, chatId: string): Promise<void> {
-  const key = `${platform}:${chatId}`;
-  const existing = await loadSession(key);
-  try {
-    await fs.unlink(sessionPath(key));
-  } catch {
-    /* ignore */
-  }
-  // Preserve workdir/progress prefs across /new
-  if (existing?.workdir || existing?.progressEnabled === false) {
-    const session = await getOrCreateSession(platform, chatId);
-    if (existing.workdir) session.workdir = existing.workdir;
-    if (existing.progressEnabled === false) session.progressEnabled = false;
-    await saveSession(session);
-  }
+  await startNewLane(platform, chatId);
 }

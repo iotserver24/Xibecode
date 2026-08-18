@@ -16,7 +16,9 @@ import { runHeadlessAgent, gatewayHome } from './agent-runner.js';
 import {
   appendTurn,
   getOrCreateSession,
-  resetSession,
+  listConversations,
+  startNewLane,
+  switchLane,
   updateSessionMeta,
 } from './session-store.js';
 import {
@@ -1628,8 +1630,70 @@ export class ChatController {
     }
 
     if (cmd === 'new' || cmd === 'reset' || cmd === 'clear') {
-      await resetSession(msg.platform, msg.chatId);
-      await reply('Conversation cleared (workdir kept).');
+      if (this.isBusy(msg.platform, msg.chatId)) {
+        await reply(
+          'A task is still running. Send `/stop` first, then `/new` to start a fresh conversation. The current chat stays in history.',
+        );
+        return;
+      }
+      const { session, result, reply: text } = await startNewLane(msg.platform, msg.chatId, {
+        reason: cmd === 'clear' ? 'user-clear' : cmd === 'reset' ? 'user-reset' : 'user-new',
+      });
+      adapter.notifyConversation?.({
+        chatId: msg.chatId,
+        sessionId: result.newSessionId,
+        previousSessionId: result.previousSessionId,
+        previousTitle: result.previousTitle,
+        conversations: session.conversations || [],
+      });
+      await reply(text);
+      return;
+    }
+
+    if (cmd === 'history') {
+      const sub = arg.trim();
+      const openMatch = /^(open|resume)\s+(\S+)/i.exec(sub);
+      if (openMatch) {
+        if (this.isBusy(msg.platform, msg.chatId)) {
+          await reply('A task is still running. Send `/stop` before switching conversations.');
+          return;
+        }
+        const target = openMatch[2] || '';
+        const switched = await switchLane(msg.platform, msg.chatId, target);
+        if (!switched) {
+          await reply('Could not open that conversation. Use `/history` to list session ids.');
+          return;
+        }
+        adapter.notifyConversation?.({
+          chatId: msg.chatId,
+          sessionId: target,
+          previousSessionId: switched.previousSessionId,
+          conversations: switched.conversations || [],
+        });
+        await reply(
+          `Opened conversation \`${target}\`.\nNew messages go to this session. Use \`/new\` to start another, or \`/history\` to switch again.`,
+        );
+        return;
+      }
+      const { active, conversations } = await listConversations(msg.platform, msg.chatId);
+      if (!conversations.length) {
+        await reply('No conversation history yet. Send a task, then `/new` to start another.');
+        return;
+      }
+      const lines = conversations.slice(0, 20).map((c, i) => {
+        const mark = c.sessionId === active ? ' **(active)**' : '';
+        const closed = c.status === 'closed' ? ' · closed' : '';
+        const title = c.title && c.title !== c.sessionId ? ` — ${c.title}` : '';
+        return `${i + 1}. \`${c.sessionId}\`${mark}${closed}${title}`;
+      });
+      await reply(
+        [
+          '**Conversation history**',
+          ...lines,
+          '',
+          'Open one with `/history open <session-id>`. `/new` starts a fresh chat and keeps these.',
+        ].join('\n'),
+      );
       return;
     }
 

@@ -240,10 +240,16 @@ export {
   type DaemonSessionContext,
   type PromptOrigin,
   type ResumeContext,
+  type LifecycleEventName,
+  type NewConversationReason,
+  type StartNewConversationInput,
+  type StartNewConversationResult,
   createDaemonSessionContext,
   loadResumeContext,
   writeLifecycleEntry,
   transcriptExists,
+  startNewConversation,
+  formatNewConversationReply,
 } from './daemon-session.js';
 export {
   type RunHandoff,

@@ -323,8 +323,37 @@ export function registerIpcHandlers(
     return sessionManager.listSessions();
   });
 
-  ipcMain.handle('session:create', async (_event, options: { title?: string; model: string; cwd?: string }): Promise<ChatSession> => {
+  ipcMain.handle('session:create', async (_event, options: { title?: string; model: string; cwd?: string; parentSessionId?: string }): Promise<ChatSession> => {
     return sessionManager.createSession(options);
+  });
+
+  ipcMain.handle('session:start-new', async (_event, options: {
+    previousSessionId?: string;
+    model: string;
+    cwd?: string;
+  }): Promise<ChatSession> => {
+    const { startNewConversation } = await import('xibecode-core');
+    const cwd = options.cwd || process.cwd();
+    const result = await startNewConversation({
+      previousSessionId: options.previousSessionId,
+      cwd,
+      model: options.model,
+      channel: 'desktop',
+      reason: 'user-new',
+    });
+    const loaded = await sessionManager.loadSession(result.newSessionId);
+    if (loaded) return loaded;
+    return {
+      id: result.newSessionId,
+      title: 'New conversation',
+      model: options.model,
+      cwd,
+      parentSessionId: result.previousSessionId || undefined,
+      conversationStatus: 'active',
+      created: new Date().toISOString(),
+      updated: new Date().toISOString(),
+      messages: [],
+    };
   });
 
   ipcMain.handle('session:load', async (_event, id: string): Promise<ChatSession | null> => {

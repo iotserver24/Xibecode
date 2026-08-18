@@ -55,10 +55,14 @@ async function readQueue(): Promise<QueuedIndexJob[]> {
 
 async function writeQueue(jobs: QueuedIndexJob[]): Promise<void> {
   await fs.mkdir(indexDir(), { recursive: true });
-  const tmp = `${queuePath()}.${process.pid}.tmp`;
+  const tmp = `${queuePath()}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`;
   const body = jobs.map((j) => JSON.stringify(j)).join('\n') + (jobs.length ? '\n' : '');
   await fs.writeFile(tmp, body, 'utf-8');
-  await fs.rename(tmp, queuePath());
+  try {
+    await fs.rename(tmp, queuePath());
+  } catch (err: any) {
+    if (err?.code !== 'ENOENT') throw err;
+  }
 }
 
 export async function enqueueSessionIndex(doc: IndexDoc): Promise<void> {
@@ -158,6 +162,7 @@ export function handoffToIndexDoc(input: {
   commands: string[];
   errors: string[];
   body?: string;
+  parentSessionId?: string;
 }): IndexDoc {
   const parts = [
     input.task,
@@ -177,5 +182,6 @@ export function handoffToIndexDoc(input: {
     projectPath: input.cwd,
     status: input.status,
     changedFiles: input.changedFiles.slice(0, 40),
+    parentSessionId: input.parentSessionId,
   };
 }
