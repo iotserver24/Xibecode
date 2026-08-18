@@ -19,6 +19,10 @@
 
 - `xibecode-core` **1.17.16** then `xibecode` **1.17.16** (npm). Existing sandboxes need **Update CLI**. New boxes get it from the rebuilt template.
 
+### Hosting / E2B template
+
+- `xibecode-full-sandbox` rebuilt with CLI/core **1.17.16** (preview_url, hosted images, e2b.app links, tighter loop guard).
+
 ## [1.17.15] - 2026-08-17
 
 ### Providers
