@@ -40,6 +40,8 @@ export function fileHistoryEnabled(): boolean {
 }
 
 export function getFileHistoryDir(): string {
+  const override = process.env.XIBECODE_FILE_HISTORY_DIR?.trim();
+  if (override) return override;
   return join(os.homedir(), '.xibecode', 'file-history');
 }
 

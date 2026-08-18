@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.17.18] - 2026-08-19
+
+### Tests / file history
+
+- File-history backups honor `XIBECODE_FILE_HISTORY_DIR`. Tests write into a temp dir instead of `~/.xibecode/file-history`, so they stay green in a read-only home.
+
+### Release
+
+- `xibecode-core` **1.17.18** then `xibecode` **1.17.18** (npm). Existing sandboxes need **Update CLI**. New boxes get it from the rebuilt template.
+
 ## [1.17.17] - 2026-08-19
 
 ### Daemon / memory

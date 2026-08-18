@@ -11,6 +11,7 @@ import {
   createBackup,
   restoreBackup,
   getBackupFileName,
+  getFileHistoryDir,
   createFileHistoryState,
   fileHistoryTrackEdit,
   fileHistoryMakeSnapshot,
@@ -24,13 +25,32 @@ import {
 import { generateUuid } from './transcript-types.js';
 
 let tmpDir: string;
+let prevHistoryDir: string | undefined;
 
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'xibecode-fh-test-'));
+  prevHistoryDir = process.env.XIBECODE_FILE_HISTORY_DIR;
+  process.env.XIBECODE_FILE_HISTORY_DIR = path.join(tmpDir, 'file-history');
 });
 
 afterEach(async () => {
+  if (prevHistoryDir === undefined) {
+    delete process.env.XIBECODE_FILE_HISTORY_DIR;
+  } else {
+    process.env.XIBECODE_FILE_HISTORY_DIR = prevHistoryDir;
+  }
   await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+describe('getFileHistoryDir', () => {
+  it('uses XIBECODE_FILE_HISTORY_DIR when set', () => {
+    expect(getFileHistoryDir()).toBe(path.join(tmpDir, 'file-history'));
+  });
+
+  it('falls back to ~/.xibecode/file-history when unset', () => {
+    delete process.env.XIBECODE_FILE_HISTORY_DIR;
+    expect(getFileHistoryDir()).toBe(path.join(os.homedir(), '.xibecode', 'file-history'));
+  });
 });
 
 describe('getBackupFileName', () => {
@@ -61,6 +81,11 @@ describe('createBackup', () => {
     const backup = await createBackup(filePath, 1);
     expect(backup.backupFileName).not.toBeNull();
     expect(backup.version).toBe(1);
+    const stored = await fs.readFile(
+      path.join(tmpDir, 'file-history', backup.backupFileName!),
+      'utf-8',
+    );
+    expect(stored).toBe('original content');
   });
 
   it('should return null backup for nonexistent file', async () => {
