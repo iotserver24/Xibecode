@@ -1095,6 +1095,14 @@ export class CodingToolExecutor implements ToolExecutor {
         return this.seeImage(p.path);
       }
 
+      case 'preview_url': {
+        const port = Number(p.port);
+        if (!Number.isFinite(port) || port < 1 || port > 65535) {
+          return { error: true, success: false, message: 'Missing required parameter: port (1-65535)' };
+        }
+        return this.previewUrl(Math.floor(port));
+      }
+
       case 'take_screenshot': {
         if (!p.url || typeof p.url !== 'string') {
           return { error: true, success: false, message: 'Missing required parameter: url (string)' };
@@ -1316,8 +1324,19 @@ export class CodingToolExecutor implements ToolExecutor {
         return { success: true, message: `Tool "${name}" registered. You can call it with the same name. Execution is sandboxed.` };
       }
 
-      default:
-        return { error: true, success: false, message: `Unknown tool: ${toolName}. Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, update_memory, curated_memory, session_search, synthesize_tool, list_skills, view_skill, save_skill, see_image, take_screenshot, get_console_logs, run_visual_test, check_accessibility, measure_performance, test_responsive, capture_network, search_skills_sh, install_skill_from_skills_sh, preview_app, delegate_subtask, run_swarm` };
+      default: {
+        const hint =
+          /list_file/.test(toolName)
+            ? ' Did you mean list_directory?'
+            : /preview/.test(toolName)
+              ? ' Did you mean preview_url?'
+              : '';
+        return {
+          error: true,
+          success: false,
+          message: `Unknown tool: ${toolName}.${hint} Available tools: read_file, read_multiple_files, write_file, edit_file, edit_lines, insert_at_line, verified_edit, list_directory, search_files, run_command, create_directory, delete_file, move_file, get_context, revert_file, run_tests, get_test_status, get_git_status, get_git_diff_summary, get_git_changed_files, create_git_checkpoint, revert_to_git_checkpoint, git_show_diff, get_mcp_status, grep_code, web_search, fetch_url, remember_lesson, update_memory, curated_memory, session_search, synthesize_tool, list_skills, view_skill, save_skill, see_image, preview_url, take_screenshot, get_console_logs, run_visual_test, check_accessibility, measure_performance, test_responsive, capture_network, search_skills_sh, install_skill_from_skills_sh, preview_app, delegate_subtask, run_swarm`,
+        };
+      }
     }
     } catch (err: any) {
       return { error: true, success: false, message: err?.message ?? String(err) };
@@ -2267,6 +2286,21 @@ export class CodingToolExecutor implements ToolExecutor {
         }
       },
       {
+        name: 'preview_url',
+        description:
+          'Return the public E2B preview URL for a port in this sandbox (https://{port}-{sandboxId}.e2b.app). Use this instead of telling the user localhost. Confirm the server is up with curl on localhost inside the VM, then give them this URL.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            port: {
+              type: 'number',
+              description: 'Local port the server is listening on (e.g. 3000, 5173, 8080)',
+            },
+          },
+          required: ['port'],
+        },
+      },
+      {
         name: 'see_image',
         description:
           'Attach a workspace image for vision. Publishes a public https URL (preferred over base64) and the pixels are added to your next turn. Use this whenever you need to look at a screenshot, user upload, or any .png/.jpg/.webp/.gif.',
@@ -2284,7 +2318,7 @@ export class CodingToolExecutor implements ToolExecutor {
       {
         name: 'take_screenshot',
         description:
-          'Capture a PNG screenshot of a URL (including localhost). Uses agent-browser if installed, else headless Chrome/Chromium. path MUST be under the project working directory (e.g. screenshots/home.png) — never /tmp. On success returns path + a MEDIA: tag — include that line in your final chat reply so Telegram sends the image. For non-image files (pdf, zip, code, …) write the file then put MEDIA:path in the final reply the same way.',
+          'Capture a PNG screenshot of a URL. Prefer the public E2B preview URL (preview_url) for user-facing sites; localhost is only for in-VM checks. Uses agent-browser if installed, else headless Chrome/Chromium. path MUST be under the project working directory (e.g. screenshots/home.png) — never /tmp. On success returns path + a MEDIA: tag — include that line in your final chat reply so Telegram sends the image. For non-image files (pdf, zip, code, …) write the file then put MEDIA:path in the final reply the same way.',
         input_schema: {
           type: 'object',
           properties: {
@@ -2767,6 +2801,39 @@ export class CodingToolExecutor implements ToolExecutor {
       throw new Error(String(result?.message || `Failed to read ${filePath}`));
     }
     return String(result?.content ?? '');
+  }
+
+  private previewUrl(port: number): Record<string, unknown> {
+    const sandboxId = (
+      process.env.E2B_SANDBOX_ID ||
+      process.env.XIBECODE_SANDBOX_ID ||
+      process.env.SANDBOX_ID ||
+      ''
+    ).trim();
+    const domain = (
+      process.env.XIBECODE_E2B_PREVIEW_DOMAIN ||
+      process.env.E2B_DOMAIN ||
+      'e2b.app'
+    )
+      .trim()
+      .replace(/^\.+/, '') || 'e2b.app';
+    if (!sandboxId) {
+      return {
+        error: true,
+        success: false,
+        message:
+          'Sandbox id unknown — cannot build a public preview URL. Curl localhost inside the VM only, and ask the user for the sandbox id if needed.',
+      };
+    }
+    const url = `https://${port}-${sandboxId}.${domain}`;
+    return {
+      success: true,
+      error: false,
+      port,
+      sandboxId,
+      url,
+      message: `Public preview: ${url}. Do not give the user localhost. Confirm 200 on http://127.0.0.1:${port} inside the VM first.`,
+    };
   }
 
   private async seeImage(filePath: string): Promise<Record<string, unknown>> {

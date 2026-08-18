@@ -443,6 +443,18 @@ export class EnhancedAgent extends EventEmitter {
     }
   }
 
+  /** Return model-visible tool names for prompt guidance without trusting hard-coded tools. */
+  private availableToolNames(): string[] {
+    try {
+      const tools = JSON.parse(this.lastToolsJson) as Array<{ name?: unknown }>;
+      return tools
+        .map((tool) => (typeof tool.name === 'string' ? tool.name : ''))
+        .filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
+
   /** Get the context window size for the current model. */
   private getContextWindowForModel(): number {
     if (this.resolvedContextWindow > 0) return this.resolvedContextWindow;
@@ -885,6 +897,8 @@ export class EnhancedAgent extends EventEmitter {
     this.completionGateRetries = 0;
     this.stopHookRetries = 0;
     this.taskCompletedFlag = false;
+    // Evidence and changed-file tracking describe this turn, not the whole session.
+    this.filesChanged.clear();
     this.questionsPendingFlag = false;
     this.activeToolExecutor = toolExecutor;
     this.pendingAssistantTranscriptUuid = generateUuid();
@@ -1711,9 +1725,23 @@ export class EnhancedAgent extends EventEmitter {
         result = { ...result, postVerify: verification.message };
       }
 
-      const success = !result?.error && result?.success !== false;
+      let success = !result?.error && result?.success !== false;
       const after = this.loopDetector.after(toolUse.name, toolUse.input, result, success);
       if (after.warning) this.emit('warning', { message: after.warning });
+      if (!after.allowed && after.reason) {
+        const note = after.reason;
+        if (result && typeof result === 'object') {
+          result = {
+            ...result,
+            success: false,
+            error: true,
+            message: `${typeof result.message === 'string' ? `${result.message}\n\n` : ''}${note}`,
+          };
+        } else {
+          result = { success: false, error: true, message: note };
+        }
+        success = false;
+      }
       this.emit('tool_result', {
         name: toolUse.name,
         result,
@@ -2520,17 +2548,50 @@ Do not use any tools. Do not write code. Output only the plan text.`;
       : platform === 'darwin'
         ? 'You are running on macOS. Use Unix/bash commands.'
         : 'You are running on Linux. Use bash commands.';
+    const availableTools = this.availableToolNames();
+    const browserTools = availableTools.filter((name) =>
+      /browser|screenshot|computer|playwright|puppeteer|see_image|preview_url/i.test(name),
+    );
+    const named = (names: string[]) => names.map((name) => '`' + name + '`').join(', ');
+    const browserFallback = named(['run_command']) + ' with the project documented browser workflow';
+    const browserVerification = browserTools.length > 0 || availableTools.includes('run_command')
+      ? [
+          '',
+          '## UI and browser verification',
+          'When a change affects a web app, UI, layout, styling, routing, or rendered state, verify it before claiming completion whenever possible.',
+          '- Exercise the changed flow as a user, not just by checking that the page renders.',
+          '- Check related routes and important empty, error, and responsive states.',
+          '- For visual changes, inspect desktop and mobile viewports.',
+          `- Prefer these available browser-capable tools: ${browserTools.length > 0 ? named(browserTools) : browserFallback}.`,
+          '- After starting a server, verify on the public preview URL (preview_url), not localhost for the user.',
+          '- If verification finds a problem, fix it and verify again. If no browser is available, run the closest tests or server checks and state the limitation.',
+          '',
+        ].join('\n')
+      : '';
+    const toolInventory = availableTools.length > 0
+      ? `\n## Tool inventory\nUse only these exact tool names: ${named(availableTools)}. Never invent a tool name; if a capability is unavailable, use an available alternative or report the blocker.\n`
+      : '';
 
     return `You are XibeCode, an expert autonomous coding assistant with advanced capabilities.
 
+<work_policy>
+- Keep every explicit requirement in view until it is done, superseded, or blocked.
+- Claim something is done, fixed, or tested only when a tool result in this turn supports it.
+- Prefer dedicated tools over bash: \`read_file\`, \`list_directory\`, \`search_files\`, \`grep_code\`, \`verified_edit\`. Use \`run_command\` only for real shell work (installs, tests, servers).
+- Long-lived servers and watchers: \`run_command\` with \`background=true\`. Do not poll the same command. Do not re-run an identical failing command.
+- Never invent a tool name. If a tool is missing, say so and use a listed one.
+- Never give the user localhost / 127.0.0.1 as a link. After a server binds, report \`https://{port}-{sandboxId}.e2b.app\` (or the host \`preview_url\` returns).
+</work_policy>
+
 ${platformNote}
+${browserVerification}${toolInventory}
 ${this.remoteToolWorkspaceRoot ? `
 ## Remote E2B workspace (sandbox_full)
 
 - **File tools** (\`read_file\`, \`write_file\`, \`list_directory\`, \`search_files\`, etc.) and **\`run_command\`** run inside an **E2B sandbox**, not on the developer's laptop.
 - The CLI was started from host path \`${process.cwd()}\`. That path is **not** inside the sandbox. **Do not** pass it to tools as an absolute path—it will be rejected.
 - In the VM the synced repo is laid out under **\`${this.remoteToolWorkspaceRoot}\`**; in tool calls use paths **relative to the repo root** (same as in git), e.g. \`package.json\`, \`packages/cli/src/index.ts\`, \`.\` for \`list_directory\`.
-- Sandbox id: **\`${this.remoteToolSandboxId || 'unknown'}\`**. If a web server starts in the VM, preview URLs are typically \`https://{port}-${this.remoteToolSandboxId || 'sandboxId'}.e2b.dev\` unless the gateway returns a specific host.
+- Sandbox id: **\`${this.remoteToolSandboxId || 'unknown'}\`**. If a web server starts in the VM, the user-facing URL is \`https://{port}-${this.remoteToolSandboxId || 'sandboxId'}.e2b.app\` (not localhost). Call \`preview_url\` with the port. Confirm 200 on localhost **inside the VM only**.
 - The chat TUI (\`xc\` / \`xibecode\`) runs **locally**; only **tools** execute remotely. You are not streaming a full \`xc\` process from inside the sandbox.
 ` : ''}
 Working directory: ${process.cwd()}
@@ -2553,10 +2614,17 @@ Working directory: ${process.cwd()}
 - Keep those updates to a few sentences. The final answer still carries the full result.
 
 ${this.defaultSkillsPrompt ? `${this.defaultSkillsPrompt}\n\n` : ''}
+## Work Policy
+- Keep every explicit requirement in view until it is completed, superseded, or genuinely blocked. If blocked, state the concrete blocker instead of silently dropping the requirement.
+- Match the requested intent: implement clear action requests, but answer questions and reviews without making unsolicited edits.
+- Claim that something is done, fixed, or tested only when tool output supports the claim. Separate observed facts from assumptions.
+- After a failed tool call, inspect the error and change the approach; do not repeat the exact same failing call.
+- Make the smallest coherent change, then validate the affected behavior and nearby regression paths.
+
 ## Core Principles
 
-1. **NO HALLUCINATIONS**: NEVER guess file paths, function names, or codebase structure. ALWAYS use \`list_files\`, \`search_files\`, or \`grep_code\` before making assumptions.
-2. **Read Before Edit**: ALWAYS read files with \`read_file\` before modifying them. Never edit a file blindly.
+1. **NO HALLUCINATIONS**: NEVER guess file paths, function names, tool names, or codebase structure. Use the supplied file/context/search tools before making assumptions.
+2. **Read Before Edit**: ALWAYS read the relevant file with \`read_file\` before modifying it. Never edit a file blindly.
 3. **Use Verified Editing**: ALWAYS prefer \`verified_edit\` as your PRIMARY file editing tool. It requires old_content verification which prevents mistakes. Only fall back to \`edit_file\` or \`edit_lines\` if \`verified_edit\` fails.
 4. **Context Awareness**: Use \`get_context\` to understand project structure before making changes.
 5. **Incremental Changes**: Make small, tested changes rather than large rewrites.

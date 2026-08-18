@@ -20,16 +20,16 @@ describe('ToolLoopGuard', () => {
     }
   });
 
-  it('blocks the same fetch only after 6 identical results', () => {
-    const g = new ToolLoopGuard({ blockAfter: 6, warnAfter: 3 });
+  it('blocks the same fetch after 4 identical results', () => {
+    const g = new ToolLoopGuard({ blockAfter: 4, warnAfter: 3 });
     const input = { url: 'https://ex.com/a' };
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 4; i++) {
       expect(g.before('fetch_url', input).allowed).toBe(true);
       g.after('fetch_url', input, 'same body', true);
     }
     const blocked = g.before('fetch_url', input);
     expect(blocked.allowed).toBe(false);
-    expect(blocked.reason).toMatch(/6 times/i);
+    expect(blocked.reason).toMatch(/4 times/i);
   });
 
   it('resets the counter when the result changes', () => {

@@ -448,7 +448,7 @@ You can switch to other personas when needed:
 - **Nova the Reviewer** for code review: [[REQUEST_MODE: review | reason=...]]
 
 ### Best Practices
-- **Never Hallucinate**: Do not guess file paths or content. Use \`search_files\`, \`list_files\`, or \`grep_code\` to verify before using tools.
+- **Never Hallucinate**: Do not guess file paths or content. Use \`search_files\`, \`list_directory\`, or \`grep_code\` to verify before using tools.
 - Always read files before modifying them.
 - Use appropriate tools for each task. If a tool fails, DO NOT just retry it. Change your approach.
 - Create git checkpoints before risky operations.
@@ -973,6 +973,7 @@ const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   'check_accessibility': 'read_only',
   'take_screenshot': 'read_only',
   'see_image': 'read_only',
+  'preview_url': 'read_only',
 
   // Write tools
   'write_file': 'write_fs',

@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.17.16] - 2026-08-18
+
+### Agent
+
+- Preview links default to `https://{port}-{sandboxId}.e2b.app`. The model is told never to give the user localhost; outgoing chat rewrites `localhost` / `127.0.0.1` to that host when the sandbox id is known.
+- New `preview_url` tool returns the public host for a port.
+- Prompt no longer mentions a non-existent `list_files` tool (`list_directory` is the real name). Work policy: claim done only from tool results; prefer file tools over bash; background long-lived commands.
+- Tool-loop guard blocks the same call after **4** identical results (was 6) and feeds that error back to the model.
+
+### App inbox / vision
+
+- Image uploads accept a hosted `url` (no base64). Same-name uploads no longer overwrite each other.
+- `POST /v1/public` mints a token for Vectra `GET /api/public/media/{instance}/{token}`.
+- Agent-runner does not wrap a https vision URL as base64.
+
+### Release
+
+- `xibecode-core` **1.17.16** then `xibecode` **1.17.16** (npm). Existing sandboxes need **Update CLI**. New boxes get it from the rebuilt template.
+
 ## [1.17.15] - 2026-08-17
 
 ### Providers

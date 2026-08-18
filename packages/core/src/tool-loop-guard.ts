@@ -4,7 +4,7 @@
  * Never block just because the same tool name was used with different args.
  * Only the exact same call (name + canonical args) can be limited:
  *   - warn at 3 identical repeats
- *   - block at 6 identical repeats with the same result / same failure
+ *   - block at 4 identical repeats with the same result / same failure
  *
  * Fetch/read tools only count when the result hash is unchanged.
  */
@@ -39,7 +39,7 @@ const READ_TOOLS = new Set([
 ]);
 
 export const DEFAULT_WARN_AFTER = 3;
-export const DEFAULT_BLOCK_AFTER = 6;
+export const DEFAULT_BLOCK_AFTER = 4;
 
 export class ToolLoopGuard {
   private records = new Map<string, Recorded>();
@@ -102,7 +102,9 @@ export class ToolLoopGuard {
 
     if (count >= this.blockAfter) {
       return {
-        allowed: true,
+        allowed: false,
+        reason:
+          `${toolName} returned the same result ${count} times. Stop this exact call. Change the path, command, or approach.`,
         warning:
           `${toolName} returned the same result ${count} times. Do not call it again with these exact arguments.`,
       };
