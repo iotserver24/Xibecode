@@ -230,11 +230,59 @@ export { type XibeCodePlugin, PluginManager, examplePlugin } from './plugins.js'
 export { SessionManager, type ChatSession, type SessionMetadata } from './session-manager.js';
 export { SessionBridge, type BridgeMessage } from './session-bridge.js';
 export { SessionMemory } from './session-memory.js';
+export {
+  sanitizeCwdKey,
+  sessionTranscriptPath,
+  projectDir,
+  projectsDir,
+} from './session-paths.js';
+export {
+  type DaemonSessionContext,
+  type PromptOrigin,
+  type ResumeContext,
+  createDaemonSessionContext,
+  loadResumeContext,
+  writeLifecycleEntry,
+  transcriptExists,
+} from './daemon-session.js';
+export {
+  type RunHandoff,
+  type RunHandoffStatus,
+  type RunHandoffTrigger,
+  type RunValidation,
+  type ValidationResult,
+  RunObservation,
+  buildRunHandoff,
+  formatRunHandoffMarkdown,
+  redactHandoff,
+  redactSensitiveText,
+  observeToolEvent,
+  writeHandoffEntry,
+  latestHandoffFromEntries,
+  messageContainsHandoff,
+  compactUserStatus,
+  RUN_HANDOFF_HEADING,
+} from './run-handoff.js';
+export {
+  compactSession,
+  isCompactInFlight,
+  resetCompactLocks,
+  type CompactSessionOptions,
+  type CompactSessionResult,
+} from './compact-service.js';
+export {
+  enqueueSessionIndex,
+  drainSessionIndexQueue,
+  scheduleSessionIndexDrain,
+  rebuildSessionIndex,
+  withSearchTimeout,
+  handoffToIndexDoc,
+} from './session-index-queue.js';
 
 // ─── Transcript ────────────────────────────────────────────────
 export { TranscriptWriter, getTranscriptWriter, appendEntryToFile } from './transcript-writer.js';
 export { loadTranscriptFile, findMainConversationTip, buildConversationChain, loadMessagesFromJsonlPath, listSessionsLite, readHeadAndTail, readFileTailSync, loadSessionMetadata } from './transcript-reader.js';
-export { type Entry, type TranscriptMessage, type MetadataEntry, type UserTranscriptEntry, type AssistantTranscriptEntry, type SystemTranscriptEntry, type AttachmentTranscriptEntry, type SummaryTranscriptEntry, type CustomTitleTranscriptEntry, type TagTranscriptEntry, type LastPromptTranscriptEntry, type CompactBoundaryTranscriptEntry, type FileHistorySnapshotEntry, type SessionMetaTranscriptEntry, type FileHistoryBackupRef, type FileHistorySnapshot, type SessionInfo, type LiteSessionFile, isTranscriptMessage, isChainParticipant, isMetadataEntry, validateUuid, generateUuid, extractJsonStringField, extractLastJsonStringField } from './transcript-types.js';
+export { type Entry, type TranscriptMessage, type MetadataEntry, type UserTranscriptEntry, type AssistantTranscriptEntry, type SystemTranscriptEntry, type AttachmentTranscriptEntry, type SummaryTranscriptEntry, type CustomTitleTranscriptEntry, type TagTranscriptEntry, type LastPromptTranscriptEntry, type CompactBoundaryTranscriptEntry, type FileHistorySnapshotEntry, type SessionMetaTranscriptEntry, type RunHandoffTranscriptEntry, type LifecycleTranscriptEntry, type FileHistoryBackupRef, type FileHistorySnapshot, type SessionInfo, type LiteSessionFile, isTranscriptMessage, isChainParticipant, isMetadataEntry, validateUuid, generateUuid, extractJsonStringField, extractLastJsonStringField } from './transcript-types.js';
 export { recoverConversationV2, assertResumeMessageSize, ResumeTranscriptTooLargeError, type TurnInterruptionState, type DeserializeResult } from './conversation-recovery-v2.js';
 export { registerCleanup, runCleanupFunctions, gracefulShutdown, gracefulShutdownSync, setupGracefulShutdown, isShuttingDown } from './graceful-shutdown.js';
 export { safeFetch, isFetchAbortError } from './safe-fetch.js';

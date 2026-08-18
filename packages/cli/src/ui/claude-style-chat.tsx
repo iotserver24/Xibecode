@@ -21,7 +21,7 @@ import { formatToolArgs, formatToolOutcome, formatRunSwarmDetailLines } from '..
 import { SPINNER_VERBS } from '../constants/spinnerVerbs.js';
 import { collectImageReferencesForPrompt } from 'xibecode-core';
 import { loadImageAttachment, mimeFromExtension, type ImageAttachment } from '../utils/image-attachments.js';
-import { SessionManager, type ChatSession } from 'xibecode-core';
+import { SessionManager, createDaemonSessionContext, type ChatSession } from 'xibecode-core';
 import { AutoMemoryManager, HooksManager, SettingsManager as CoreSettingsManager } from 'xibecode-core';
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
 import { cloudPullCommand } from '../commands/cloud-pull.js';
@@ -241,9 +241,10 @@ const WORK_SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '�
 /** How fast to advance OpenClaude-style spinner verbs (ms) */
 const WORK_VERB_ROTATE_MS = 2400;
 
-const QUICK_HELP = ['/help', '/mode', '/format', '/model', '/thinking', '/setup', '/config', '/memory', '/hooks', '/cpull', '/commit', '/donate', '/sponsor', '/clear', '/exit'];
+const QUICK_HELP = ['/help', '/mode', '/format', '/model', '/thinking', '/setup', '/config', '/memory', '/compact', '/hooks', '/cpull', '/commit', '/donate', '/sponsor', '/clear', '/exit'];
 const CHAT_COMMANDS: Array<{ name: string; description: string }> = [
   { name: '/help', description: 'Show available shortcuts and usage hints' },
+  { name: '/compact', description: 'Compact context and write a run handoff' },
   { name: '/mode', description: 'Switch agent mode from an interactive picker' },
   { name: '/thinking', description: 'Show or hide the model thought / reasoning block' },
   { name: '/clear', description: 'Clear the current chat transcript' },
@@ -423,6 +424,7 @@ function XibeCodeChatApp(props: {
   onMessagesUpdate?: (messages: MessageParam[]) => void;
   getCurrentMessages?: () => MessageParam[];
   onMemoryCommand?: (subcmd: string, pushLine: (line: UiLine) => void) => void;
+  onCompactCommand?: (pushLine: (line: UiLine) => void) => void | Promise<void>;
   onHooksCommand?: (subcmd: string, pushLine: (line: UiLine) => void) => void;
   onCloudPullCommand?: (argsRaw: string, pushLine: (line: UiLine) => void) => Promise<void>;
   onCommitCommand?: (messageRaw: string, pushLine: (line: UiLine) => void) => Promise<void>;
@@ -1207,6 +1209,20 @@ function XibeCodeChatApp(props: {
       if (resolvedInput === '/memory' || resolvedInput.startsWith('/memory ')) {
         const subcmd = resolvedInput.replace('/memory', '').trim().toLowerCase();
         props.onMemoryCommand?.(subcmd || 'list', pushLine);
+        return;
+      }
+
+      if (resolvedInput === '/compact' || resolvedInput === 'compact') {
+        if (!props.onCompactCommand) {
+          pushLine({ type: 'error', text: 'Compact is unavailable in this chat session.' });
+          return;
+        }
+        try {
+          await props.onCompactCommand(pushLine);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          pushLine({ type: 'error', text: `Compact failed: ${message}` });
+        }
         return;
       }
 
@@ -3166,7 +3182,14 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     });
     currentSessionId = currentSession.id;
     // Initialize transcript persistence for the agent
-    activeAgent?.initTranscript(currentSessionId, process.cwd());
+    activeAgent?.bindDaemonSession(
+      createDaemonSessionContext({
+        sessionId: currentSessionId,
+        cwd: process.cwd(),
+        model,
+        channel: 'cli',
+      }),
+    );
     if (options.initialMessages && options.initialMessages.length > 0) {
       currentSession.messages = options.initialMessages as MessageParam[];
       // Write initial messages to transcript
@@ -3182,7 +3205,14 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
     currentSession = await sessionManager.loadSession(currentSessionId);
     // Initialize transcript persistence for resumed session
     if (currentSession) {
-      activeAgent?.initTranscript(currentSessionId, currentSession.cwd);
+      activeAgent?.bindDaemonSession(
+        createDaemonSessionContext({
+          sessionId: currentSessionId,
+          cwd: currentSession.cwd,
+          model,
+          channel: 'cli',
+        }),
+      );
       const fileHistorySnapshots = await sessionManager.loadFileHistorySnapshots(currentSessionId);
       if (fileHistorySnapshots.length > 0) {
         toolExecutor.restoreFileHistorySnapshots(fileHistorySnapshots);
@@ -3198,7 +3228,14 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
 
   const onSessionCreated = (sessionId: string) => {
     currentSessionId = sessionId;
-    activeAgent?.initTranscript(sessionId, process.cwd());
+    activeAgent?.bindDaemonSession(
+      createDaemonSessionContext({
+        sessionId,
+        cwd: process.cwd(),
+        model,
+        channel: 'cli',
+      }),
+    );
   };
 
   const onMessagesUpdate = async (messages: MessageParam[]) => {
@@ -3232,6 +3269,17 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
   const coreSettingsManager = new CoreSettingsManager({ cwd: process.cwd() });
   const hooksMgr = new HooksManager(coreSettingsManager);
   await hooksMgr.loadFromSettingsManager().catch(() => {});
+
+  const onCompactCommand = async (pushLine: (line: UiLine) => void) => {
+    if (!activeAgent) {
+      pushLine({ type: 'error', text: 'No active agent to compact.' });
+      return;
+    }
+    pushLine({ type: 'info', text: 'Compacting context…' });
+    const result = await activeAgent.compactNow('manual');
+    pushLine({ type: 'info', text: result.userStatus });
+    await onMessagesUpdate(activeAgent.getMessages());
+  };
 
   const onMemoryCommand = (subcmd: string, pushLine: (line: UiLine) => void) => {
     void (async () => {
@@ -3428,6 +3476,7 @@ export async function launchClaudeStyleChat(options: ChatOptions): Promise<void>
         onMessagesUpdate={onMessagesUpdate}
         getCurrentMessages={() => activeAgent?.getMessages() ?? currentSession?.messages ?? []}
         onMemoryCommand={onMemoryCommand}
+        onCompactCommand={onCompactCommand}
         onHooksCommand={onHooksCommand}
         onCloudPullCommand={onCloudPullCommand}
         onCommitCommand={onCommitCommand}

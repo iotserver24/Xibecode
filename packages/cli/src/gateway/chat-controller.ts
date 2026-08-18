@@ -345,6 +345,15 @@ export class ChatController {
     return n;
   }
 
+  /** Flush active transcript writers before process exit. */
+  async flushForShutdown(): Promise<void> {
+    await Promise.all(
+      [...this.active.values()].map((run) =>
+        run.flush ? run.flush().catch(() => {}) : Promise.resolve(),
+      ),
+    );
+  }
+
   /** Send with delivery ledger (at-least-once). Falls back to direct send if ledger breaks. */
   async reliableSend(
     platform: PlatformName,
@@ -601,8 +610,9 @@ export class ChatController {
       return;
     }
 
-    if (text.startsWith('/')) {
-      await this.handleSlash(msg, text);
+    if (text.startsWith('/') || /^compact$/i.test(text.trim())) {
+      const raw = text.startsWith('/') ? text : `/${text.trim()}`;
+      await this.handleSlash(msg, raw);
       return;
     }
 
@@ -1037,6 +1047,14 @@ export class ChatController {
       );
       let liveNarration = '';
 
+      if (!session.transcriptSessionId) {
+        const { generateUuid } = await import('xibecode-core');
+        session.transcriptSessionId = generateUuid();
+        await updateSessionMeta(msg.platform, msg.chatId, {
+          transcriptSessionId: session.transcriptSessionId,
+        });
+      }
+
       const result = await runHeadlessAgent({
         prompt: text,
         workdir,
@@ -1049,6 +1067,9 @@ export class ChatController {
         rigorLevel: rigor,
         verbose: daemonVerbose,
         images: msg.images,
+        sessionId: session.transcriptSessionId,
+        channel: msg.platform,
+        promptOrigin: 'user',
         publishImageUrl: async (abs) => {
           const share = await shareWorkspaceFile(abs);
           if (share?.url) return share.url;
@@ -1060,6 +1081,9 @@ export class ChatController {
  // mid-run steer while this slot is active
           if (this.active.get(k) === activeRun) {
             activeRun.steer = api.steer;
+            activeRun.compactNow = api.compactNow;
+            activeRun.flush = api.flush;
+            activeRun.sessionId = api.sessionId;
           }
         },
         onEvent: (type, data) => {
@@ -1506,6 +1530,57 @@ export class ChatController {
       return;
     }
 
+    if (cmd === 'compact') {
+      const run = this.active.get(this.key(msg.platform, msg.chatId));
+      if (run?.compactNow) {
+        await reply('🗜️ Compacting context…');
+        try {
+          const result = await run.compactNow();
+          await reply(result.userStatus);
+        } catch (err: any) {
+          await reply(`Compact failed: ${err?.message || err}`);
+        }
+        return;
+      }
+      const session = await getOrCreateSession(msg.platform, msg.chatId);
+      if (!session.transcriptSessionId) {
+        await reply('No session to compact yet. Send a coding task first.');
+        return;
+      }
+      try {
+        const {
+          compactSession,
+          loadResumeContext,
+          sessionTranscriptPath,
+          RunObservation,
+        } = await import('xibecode-core');
+        const workdir = session.workdir || this.options.defaultWorkdir();
+        const path = sessionTranscriptPath(session.transcriptSessionId, workdir);
+        const resume = await loadResumeContext(path);
+        if (!resume.messages.length) {
+          await reply('Nothing to compact — session has no conversation yet.');
+          return;
+        }
+        const observation = new RunObservation();
+        if (resume.handoff?.task) observation.setTask(resume.handoff.task);
+        const result = await compactSession({
+          sessionId: session.transcriptSessionId,
+          cwd: workdir,
+          transcriptPath: path,
+          messages: resume.messages,
+          trigger: 'manual',
+          contextWindow: 120_000,
+          lastUuid: resume.lastUuid,
+          observation,
+          task: resume.handoff?.task,
+        });
+        await reply(result.userStatus);
+      } catch (err: any) {
+        await reply(`Compact failed: ${err?.message || err}`);
+      }
+      return;
+    }
+
     if (cmd === 'queue' || cmd === 'q') {
       const sub = arg.trim();
       const subLow = sub.toLowerCase();
@@ -1580,6 +1655,9 @@ export class ChatController {
           ? `ask: waiting — reply with text (not /status)\n  Q: ${run.pendingAsk.question.slice(0, 120)}`
           : null,
         `workdir: ${session.workdir || this.options.defaultWorkdir()}`,
+        session.transcriptSessionId
+          ? `session: ${session.transcriptSessionId}`
+          : 'session: (none yet)',
         `model: ${model}${session.model ? ' (chat)' : ''}`,
         `level: ${describeRigor(session.rigorLevel || 'default')}`,
         `progress: ${session.progressEnabled === false ? 'off' : 'on'}`,

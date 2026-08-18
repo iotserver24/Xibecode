@@ -14,6 +14,7 @@ import { skillsCommand } from "./commands/skills.js";
 import { settingsCommand } from "./commands/settings.js";
 import { hooksCommand } from "./commands/hooks.js";
 import { memoryCommand } from "./commands/memory.js";
+import { compactCommand } from "./commands/compact.js";
 import { whatsNewCommand } from "./commands/whats-new.js";
 import { updateCommand } from "./commands/update.js";
 import { modelsCmd } from "./commands/models.js";
@@ -460,6 +461,16 @@ program
   .option("--profile <name>", "Config profile to use")
   .action((action: string | undefined, args: string[], options: any) =>
     memoryCommand(action, args, options),
+  );
+
+program
+  .command("compact")
+  .description("Compact the current (or specified) session context and write a run handoff")
+  .option("--session <id>", "Session id to compact (default: latest in this project)")
+  .option("--all-context", "Diagnostic: compact using the full resume tail", false)
+  .option("--profile <name>", "Config profile to use")
+  .action((options: { session?: string; allContext?: boolean; profile?: string }) =>
+    compactCommand(options),
   );
 
 program

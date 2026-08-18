@@ -1026,7 +1026,8 @@ export class CodingToolExecutor implements ToolExecutor {
         return this.curatedMemoryAction(p);
       }
 
-      case 'session_search': {
+      case 'session_search':
+      case 'search_sessions': {
         if (!p.query || typeof p.query !== 'string') {
           return { error: true, success: false, message: 'Missing required parameter: query' };
         }
@@ -2214,11 +2215,11 @@ export class CodingToolExecutor implements ToolExecutor {
       {
         name: 'session_search',
         description:
-          'Search past XibeCode sessions (full-text style) when you need details from prior conversations not in MEMORY.md.',
+          'Search past XibeCode sessions and run handoffs by task wording, changed filename, command, or error. Prefer this over guessing prior work. Returns session id, project path, date, title, snippet, changed files, and status. Prefer the handoff snippet; only ask to reopen a transcript if that is not enough.',
         input_schema: {
           type: 'object',
           properties: {
-            query: { type: 'string', description: 'Search keywords' },
+            query: { type: 'string', description: 'Search keywords (task, path, command, error)' },
             limit: { type: 'number', description: 'Max hits (default 8)' },
           },
           required: ['query'],
@@ -4772,16 +4773,33 @@ export class CodingToolExecutor implements ToolExecutor {
 
   private async sessionSearchAction(query: string, limit?: number): Promise<any> {
     const { searchSessions } = await import('./learning-loop/index.js');
-    const hits = await searchSessions(query, { limit: limit ?? 8 });
+    const { withSearchTimeout } = await import('./session-index-queue.js');
+    const raced = await withSearchTimeout(
+      searchSessions(query, { limit: limit ?? 8 }),
+      [] as Awaited<ReturnType<typeof searchSessions>>,
+    );
+    if (raced.timedOut) {
+      return {
+        success: true,
+        count: 0,
+        hits: [],
+        degraded: true,
+        message: 'Session search timed out; continuing without prior-session memory.',
+      };
+    }
     return {
       success: true,
-      count: hits.length,
-      hits: hits.map((h) => ({
+      count: raced.value.length,
+      hits: raced.value.map((h) => ({
         sessionId: h.sessionId,
         score: h.score,
+        title: h.title,
         snippet: h.snippet,
         path: h.path,
         updated: h.updated,
+        projectPath: h.projectPath,
+        status: h.status,
+        changedFiles: h.changedFiles,
       })),
     };
   }

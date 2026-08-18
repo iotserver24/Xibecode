@@ -135,6 +135,45 @@ export interface ModeTranscriptEntry extends BaseEntry {
   mode: string;
 }
 
+/** Structured run handoff — continuity summary written from observed events. */
+export interface RunHandoffTranscriptEntry extends BaseEntry {
+  type: 'run-handoff';
+  handoff: {
+    sessionId: string;
+    cwd: string;
+    task: string;
+    status: string;
+    changedFiles: string[];
+    validation: Array<{
+      command: string;
+      result: string;
+      exitCode?: number;
+      evidenceId?: string;
+    }>;
+    decisions: string[];
+    failedApproaches: string[];
+    remainingWork: string[];
+    createdAt: string;
+    trigger: string;
+    source: 'observed';
+  };
+}
+
+/** Lifecycle event — session start, prompt, complete, fail, interrupt, shutdown, compact. */
+export interface LifecycleTranscriptEntry extends BaseEntry {
+  type: 'lifecycle';
+  event:
+    | 'session-start'
+    | 'prompt'
+    | 'complete'
+    | 'fail'
+    | 'interrupt'
+    | 'shutdown'
+    | 'compact';
+  origin?: 'user' | 'daemon' | 'continuation';
+  detail?: string;
+}
+
 /** All metadata entry types that do NOT participate in the parentUuid chain. */
 export type MetadataEntry =
   | SummaryTranscriptEntry
@@ -146,7 +185,9 @@ export type MetadataEntry =
   | SessionMetaTranscriptEntry
   | AttemptTranscriptEntry
   | LearningTranscriptEntry
-  | ModeTranscriptEntry;
+  | ModeTranscriptEntry
+  | RunHandoffTranscriptEntry
+  | LifecycleTranscriptEntry;
 
 // ─── Union Types ────────────────────────────────────────────────
 

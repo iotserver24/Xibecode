@@ -607,6 +607,7 @@ export const GATEWAY_BOT_COMMANDS: ReadonlyArray<{
   { command: 'reset', description: 'Clear conversation (same as /new)' },
   { command: 'clear', description: 'Clear conversation (same as /new)' },
   { command: 'stop', description: 'Interrupt run + kill active commands' },
+  { command: 'compact', description: 'Compact context and write a run handoff' },
   { command: 'status', description: 'Workdir, busy state, progress' },
   { command: 'queue', description: 'List or clear queued messages' },
   { command: 'workdir', description: 'Show or set project directory' },

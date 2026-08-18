@@ -8,9 +8,16 @@ import {
   CodingToolExecutor,
   SkillManager,
   parseFallbackProviders,
+  createDaemonSessionContext,
+  loadResumeContext,
+  writeLifecycleEntry,
+  transcriptExists,
+  generateUuid,
   type ProviderEndpoint,
   type ProviderType,
   type DangerousApprovalHandler,
+  type CompactSessionResult,
+  type PromptOrigin,
 } from 'xibecode-core';
 
 export type AskUserHandler = (req: {
@@ -45,7 +52,12 @@ export interface HeadlessRunOptions {
    * Called once the agent is constructed so the gateway can mid-run steer
  * (messaging gateway busy_input_mode=steer) without aborting the turn.
    */
-  onAgentReady?: (api: { steer: (text: string) => boolean }) => void;
+  onAgentReady?: (api: {
+    steer: (text: string) => boolean;
+    compactNow: () => Promise<CompactSessionResult>;
+    flush: () => Promise<void>;
+    sessionId: string;
+  }) => void;
   /**
    * Gateway rigor: yolo | default | strict
    * Controls completion evidence + post-edit verification.
@@ -59,6 +71,11 @@ export interface HeadlessRunOptions {
   verbose?: boolean;
   images?: Array<{ path: string; mime: string; url?: string; dataBase64?: string }>;
   publishImageUrl?: (absPath: string) => Promise<string | undefined>;
+  /** Canonical session id — reused across daemon turns for this chat. */
+  sessionId?: string;
+  /** Messaging channel (telegram, discord, slack, app, cli). */
+  channel?: string;
+  promptOrigin?: PromptOrigin;
 }
 
 function resolveDaemonVerbose(explicit?: boolean): boolean {
@@ -198,6 +215,15 @@ export async function runHeadlessAgent(
 
   const verbose = resolveDaemonVerbose(options.verbose);
 
+  const sessionId = options.sessionId || generateUuid();
+  const sessionContext = createDaemonSessionContext({
+    sessionId,
+    cwd: workdir,
+    model,
+    channel: options.channel || 'daemon',
+    promptOrigin: options.promptOrigin || 'user',
+  });
+
   const agent = new EnhancedAgent(
     {
       apiKey,
@@ -215,9 +241,47 @@ export async function runHeadlessAgent(
       postEditVerification,
       // Prefer ending with real tool evidence rather than pure prose claims
       strictTextOnlyCompletion: rigor === 'strict',
+      sessionContext,
     },
     provider as any,
   );
+
+  agent.bindDaemonSession(sessionContext);
+
+  const existed = await transcriptExists(sessionContext.transcriptPath);
+  if (!existed) {
+    await writeLifecycleEntry(sessionContext, 'session-start', options.channel).catch(
+      () => {},
+    );
+  }
+
+  try {
+    const resume = await loadResumeContext(sessionContext.transcriptPath);
+    if (resume.messages.length) {
+      await agent.restoreFromTranscript(
+        sessionContext.sessionId,
+        workdir,
+        resume.messages,
+        resume.lastUuid || undefined,
+      );
+    } else if (options.history?.length) {
+      agent.setMessages(
+        options.history.map((m) => ({
+          role: m.role,
+          content: m.content,
+        })) as any,
+      );
+    }
+  } catch {
+    if (options.history?.length) {
+      agent.setMessages(
+        options.history.map((m) => ({
+          role: m.role,
+          content: m.content,
+        })) as any,
+      );
+    }
+  }
 
  // mid-run steer hook for messaging gateway
   try {
@@ -229,18 +293,12 @@ export async function runHeadlessAgent(
           return false;
         }
       },
+      compactNow: () => agent.compactNow('manual'),
+      flush: () => agent.flushTranscript(),
+      sessionId: sessionContext.sessionId,
     });
   } catch {
     /* ignore */
-  }
-
-  if (options.history?.length) {
-    agent.setMessages(
-      options.history.map((m) => ({
-        role: m.role,
-        content: m.content,
-      })) as any,
-    );
   }
 
   let lastText = '';
@@ -314,6 +372,7 @@ export async function runHeadlessAgent(
       toolExecutor,
       runOpts,
     );
+    await agent.flushTranscript().catch(() => {});
     options.signal?.removeEventListener('abort', onAbort);
     restoreCwd();
 
@@ -343,6 +402,7 @@ export async function runHeadlessAgent(
       messages: agent.getMessages(),
     };
   } catch (err: any) {
+    await agent.flushTranscript().catch(() => {});
     options.signal?.removeEventListener('abort', onAbort);
     restoreCwd();
     const msg = err?.message || String(err);

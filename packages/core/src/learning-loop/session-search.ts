@@ -14,6 +14,9 @@ export interface SessionHit {
   snippet: string;
   score: number;
   updated?: string;
+  projectPath?: string;
+  status?: string;
+  changedFiles?: string[];
 }
 
 function scoreText(text: string, keywords: string[]): number {

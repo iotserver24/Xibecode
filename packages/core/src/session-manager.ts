@@ -36,6 +36,7 @@ import {
   appendEntryToFile,
 } from './transcript-writer.js';
 import { registerCleanup } from './graceful-shutdown.js';
+import { projectsDir, projectDir, sessionTranscriptPath } from './session-paths.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -63,22 +64,7 @@ export interface ChatSession extends SessionMetadata {
 
 // ─── Constants ──────────────────────────────────────────────────
 
-const MAX_SANITIZED_LENGTH = 60;
-
-// ─── Path Helpers ───────────────────────────────────────────────
-
-function sanitizePath(dirPath: string): string {
-  const sanitized = dirPath.replace(/[^a-zA-Z0-9]/g, '-');
-  if (sanitized.length <= MAX_SANITIZED_LENGTH) {
-    return sanitized;
-  }
-  let hash = 0;
-  for (let i = 0; i < dirPath.length; i++) {
-    const chr = dirPath.charCodeAt(i);
-    hash = ((hash << 5) - hash + chr) | 0;
-  }
-  return `${sanitized.slice(0, MAX_SANITIZED_LENGTH)}-${Math.abs(hash).toString(36)}`;
-}
+// Path helpers live in session-paths.ts so daemon + agent resolve the same file.
 
 // ─── Session Manager ────────────────────────────────────────────
 
@@ -92,11 +78,11 @@ export class SessionManager {
   }
 
   private getProjectsDir(): string {
-    return path.join(this.baseDir, 'projects');
+    return projectsDir(this.baseDir);
   }
 
   private getProjectDir(cwd: string): string {
-    return path.join(this.getProjectsDir(), sanitizePath(cwd));
+    return projectDir(cwd, this.baseDir);
   }
 
   private async ensureProjectDir(cwd: string): Promise<void> {
@@ -104,8 +90,8 @@ export class SessionManager {
   }
 
   /** Get the JSONL path for a session. */
-  private getSessionPath(id: string, cwd: string): string {
-    return path.join(this.getProjectDir(cwd), `${id}.jsonl`);
+  getSessionPath(id: string, cwd: string): string {
+    return sessionTranscriptPath(id, cwd, this.baseDir);
   }
 
   /** Get the legacy JSON path for a session. */

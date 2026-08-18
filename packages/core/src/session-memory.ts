@@ -60,6 +60,18 @@ export class SessionMemory {
     return this.sessionId;
   }
 
+  getLearnings(): string[] {
+    return [...this.learnings];
+  }
+
+  getAttempts(): AttemptRecord[] {
+    return [...this.attempts];
+  }
+
+  getTranscriptPath(): string | null {
+    return this.transcriptFilePath;
+  }
+
   /**
    * Enable JSONL transcript persistence for this session memory.
    * When set, attempts and learnings are written to the transcript file

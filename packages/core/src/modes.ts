@@ -1033,6 +1033,7 @@ const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   'curated_memory': 'write_fs',
   'search_lessons': 'read_only',
   'session_search': 'context',
+  'search_sessions': 'context',
 
   // Skills tools
   'list_skills': 'read_only',

@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.17.17] - 2026-08-19
+
+### Daemon / memory
+
+- Canonical session id is now shared by the daemon, transcript, `SessionMemory`, run handoffs, and session search. Transcript paths use the same cwd sanitizer as `SessionManager` (long paths no longer split across directories).
+- Each completed, failed, interrupted, blocked, or compacted run writes a structured **run handoff** (task, status, changed files, validation, failures, remaining work) from observed tool events — not invented recap.
+- Manual compact: `/compact` in chat and messaging/app, `compact` as a bare command, and `xibecode compact [--session <id>]`. Auto-compact uses the same pipeline (flush → PreCompact → handoff → compact → PostCompact → re-index).
+- Second compact on the same session is rejected while one is in flight. Daemon shutdown flushes transcript writers before exit.
+- Every daemon session/handoff is queued into the session FTS index. `session_search` returns title, project, status, and changed files, and times out instead of blocking the daemon.
+
+### App
+
+- Vectra Cloud 1.0.12: `/compact` is in the command palette and sends immediately. Compact status already surfaces in the live progress chip.
+
+### Release
+
+- `xibecode-core` **1.17.17** then `xibecode` **1.17.17** (npm). Existing sandboxes need **Update CLI**. New boxes get it from the rebuilt template.
+
 ## [1.17.16] - 2026-08-18
 
 ### Agent

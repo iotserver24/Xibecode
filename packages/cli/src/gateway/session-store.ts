@@ -32,6 +32,11 @@ export interface GatewaySession {
   rigorLevel?: 'yolo' | 'default' | 'strict';
   /** Per-chat model override (`/model`). Empty = use profile default. */
   model?: string;
+  /**
+   * Canonical JSONL session id shared with EnhancedAgent, SessionMemory,
+   * run handoffs, and the session-search index.
+   */
+  transcriptSessionId?: string;
   updatedAt: number;
   createdAt: number;
 }
@@ -89,7 +94,7 @@ export async function updateSessionMeta(
   patch: Partial<
     Pick<
       GatewaySession,
-      'workdir' | 'progressEnabled' | 'title' | 'rigorLevel' | 'model'
+      'workdir' | 'progressEnabled' | 'title' | 'rigorLevel' | 'model' | 'transcriptSessionId'
     >
   >,
 ): Promise<GatewaySession> {
@@ -100,6 +105,9 @@ export async function updateSessionMeta(
   if (patch.rigorLevel !== undefined) session.rigorLevel = patch.rigorLevel;
   if (patch.model !== undefined) {
     session.model = patch.model || undefined;
+  }
+  if (patch.transcriptSessionId !== undefined) {
+    session.transcriptSessionId = patch.transcriptSessionId || undefined;
   }
   session.updatedAt = Date.now();
   await saveSession(session);

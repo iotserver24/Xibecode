@@ -589,9 +589,10 @@ export class GatewayRunner {
       if (this.stopping) return;
       this.stopping = true;
       this.log('shutdown signal');
-      this.stop();
-      // Agent timers / ask_user promises can keep Node alive after polls end.
-      setTimeout(() => process.exit(0), 1500).unref?.();
+      void this.stopAndFlush().finally(() => {
+        // Agent timers / ask_user promises can keep Node alive after polls end.
+        setTimeout(() => process.exit(0), 1500).unref?.();
+      });
     };
     process.on('SIGINT', onSig);
     process.on('SIGTERM', onSig);
@@ -609,6 +610,17 @@ export class GatewayRunner {
         }),
       ),
     );
+  }
+
+  async stopAndFlush(): Promise<void> {
+    try {
+      await this.chat?.flushForShutdown();
+      const { getTranscriptWriter } = await import('xibecode-core');
+      await getTranscriptWriter().flush();
+    } catch {
+      /* ignore */
+    }
+    this.stop();
   }
 
   stop(): void {

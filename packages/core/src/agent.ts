@@ -3,21 +3,46 @@ import type { MessageParam, Tool, ToolUseBlock, TextBlock, ContentBlock } from '
 import { safeFetch as fetch } from './safe-fetch.js';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
-import { homedir } from 'os';
 import { EventEmitter } from 'events';
 import { AgentMode, MODE_CONFIG, ModeState, createModeState, transitionMode, ModeOrchestrator, parseModeRequest, stripModeRequests, parseTaskComplete, stripTaskComplete, parsePlanReady, stripPlanReady, parseQuestions, stripQuestions, ModeTransitionPolicy } from './modes.js';
 import { NeuralMemory } from './memory.js';
 import { SessionMemory } from './session-memory.js';
 import type { UUID } from 'crypto';
-import { generateUuid, isTranscriptMessage, type FileHistorySnapshot } from './transcript-types.js';
+import { generateUuid, type FileHistorySnapshot } from './transcript-types.js';
 import type { Entry } from './transcript-types.js';
 import { getTranscriptWriter } from './transcript-writer.js';
 import { registerCleanup, setupGracefulShutdown } from './graceful-shutdown.js';
+import { sessionTranscriptPath } from './session-paths.js';
+import {
+  RunObservation,
+  observeToolEvent,
+  buildRunHandoff,
+  writeHandoffEntry,
+  formatRunHandoffMarkdown,
+  messageContainsHandoff,
+  type RunHandoff,
+  type RunHandoffStatus,
+  type RunHandoffTrigger,
+} from './run-handoff.js';
+import {
+  compactSession,
+  type CompactSessionOptions,
+  type CompactSessionResult,
+} from './compact-service.js';
+import {
+  type DaemonSessionContext,
+  loadResumeContext,
+  writeLifecycleEntry,
+} from './daemon-session.js';
+import {
+  enqueueSessionIndex,
+  handoffToIndexDoc,
+  scheduleSessionIndexDrain,
+} from './session-index-queue.js';
 import { PROVIDER_CONFIGS, ProviderType } from './types/index.js';
 import { PermissionManager } from './permissions.js';
 import { ToolOrchestrator, type ToolExecutionUpdate } from './tool-orchestrator.js';
 import {
-  compactConversation,
   COMPACTION_STATUS,
   estimateRequestTokensRough,
   resolveCompactTriggerTokens,
@@ -129,6 +154,8 @@ export interface AgentConfig {
    * auth failures after same-endpoint retries, rotate to the next endpoint.
    */
   fallbackProviders?: ProviderEndpoint[];
+  /** Canonical daemon/chat session — transcript, memory, and search share this id. */
+  sessionContext?: DaemonSessionContext;
 }
 
 export interface AgentEvent {
@@ -245,7 +272,7 @@ export class EnhancedAgent extends EventEmitter {
   private messages: MessageParam[] = [];
   private loopDetector = new ToolLoopGuard();
   private thinkFilter = new ThinkTagFilter();
-  private config: Required<Omit<AgentConfig, 'sessionMemory' | 'contextHintFiles' | 'planningModel' | 'executionModel' | 'mindsetAdaptive' | 'strictTextOnlyCompletion' | 'defaultSkillsPrompt' | 'requestFormat' | 'completionEvidenceMode' | 'postEditVerification' | 'memoryRecallMinScore' | 'remoteToolWorkspaceRoot' | 'remoteToolSandboxId' | 'fallbackProviders'>> & { customProviderFormat: 'openai' | 'anthropic'; requestFormat: 'auto' | 'openai' | 'anthropic'; sessionMemory?: SessionMemory | null; contextHintFiles: string[]; planningModel?: string; executionModel?: string; mindsetAdaptive?: boolean; strictTextOnlyCompletion: boolean; completionEvidenceMode: 'off' | 'balanced' | 'strict'; postEditVerification: 'off' | 'balanced' | 'strict'; memoryRecallMinScore: number; fallbackProviders: ProviderEndpoint[] };
+  private config: Required<Omit<AgentConfig, 'sessionMemory' | 'contextHintFiles' | 'planningModel' | 'executionModel' | 'mindsetAdaptive' | 'strictTextOnlyCompletion' | 'defaultSkillsPrompt' | 'requestFormat' | 'completionEvidenceMode' | 'postEditVerification' | 'memoryRecallMinScore' | 'remoteToolWorkspaceRoot' | 'remoteToolSandboxId' | 'fallbackProviders' | 'sessionContext'>> & { customProviderFormat: 'openai' | 'anthropic'; requestFormat: 'auto' | 'openai' | 'anthropic'; sessionMemory?: SessionMemory | null; contextHintFiles: string[]; planningModel?: string; executionModel?: string; mindsetAdaptive?: boolean; strictTextOnlyCompletion: boolean; completionEvidenceMode: 'off' | 'balanced' | 'strict'; postEditVerification: 'off' | 'balanced' | 'strict'; memoryRecallMinScore: number; fallbackProviders: ProviderEndpoint[] };
   /** Multi-endpoint pool for connection reliability / failover. */
   private providerPool: ProviderPool | null = null;
   private iterationCount = 0;
@@ -278,6 +305,8 @@ export class EnhancedAgent extends EventEmitter {
   /** When plan-first was used, the initial strategic plan text (for context). */
   private strategicPlanText: string = '';
   private sessionMemory: SessionMemory | null = null;
+  private sessionContext: DaemonSessionContext | null = null;
+  private observation = new RunObservation();
   private contextHintFiles: string[] = [];
   private mindsetAdaptive: boolean = false;
   private currentMindset: ReasoningMindset = 'convergent';
@@ -528,17 +557,6 @@ export class EnhancedAgent extends EventEmitter {
       message: `${COMPACTION_STATUS} (~${estimatedTokens.toLocaleString()} / trigger ${triggerTokens.toLocaleString()} · ${trigger})`,
     });
 
-    if (this.hooksManager) {
-      try {
-        await this.hooksManager.execute('PreCompact', {
-          event: 'PreCompact',
-          compactTrigger: trigger === 'preflight' ? 'auto' : 'auto',
-        });
-      } catch {
-        /* non-fatal */
-      }
-    }
-
     // Phase 1: microcompact (strip old tool results)
     const mcResult = microcompact({
       messages: this.messages,
@@ -563,39 +581,13 @@ export class EnhancedAgent extends EventEmitter {
       edgeTokens,
     );
     if (stillOver || mcResult.triggeredFullCompact) {
-      const before = this.messages.length;
-      const compacted = compactConversation(this.messages, {
-        contextWindow,
-        tailTokenBudget: Math.max(4_000, Math.floor(contextWindow * 0.3)),
-        keepRecentCount: 20,
-        minTailMessages: 6,
-        maxTailMessages: 28,
-      });
-      if (compacted.droppedCount > 0 || compacted.messages.length < before) {
-        this.messages = compacted.messages;
+      const compacted = await this.compactNow('auto');
+      if (!compacted.skipped && compacted.droppedCount > 0) {
         estimatedTokens =
           compacted.estimatedTokensAfter ?? this.estimateFullRequestTokens();
-        this.emit('warning', {
-          message:
-            `✅ Context compacted · dropped ~${compacted.droppedCount} older msg(s) · ` +
-            `now ~${estimatedTokens.toLocaleString()} tokens` +
-            (compacted.groundedFacts.length
-              ? ` · ${compacted.groundedFacts.length} grounded fact(s)`
-              : ''),
-        });
       }
     }
 
-    if (this.hooksManager) {
-      try {
-        await this.hooksManager.execute('PostCompact', {
-          event: 'PostCompact',
-          compactTrigger: 'auto',
-        });
-      } catch {
-        /* non-fatal */
-      }
-    }
     return true;
   }
 
@@ -752,6 +744,9 @@ export class EnhancedAgent extends EventEmitter {
 
     // Load project memory if it exists
     this.sessionMemory = config.sessionMemory ?? null;
+    if (config.sessionContext) {
+      this.bindDaemonSession(config.sessionContext);
+    }
     this.contextHintFiles = config.contextHintFiles ?? [];
     this.memory = new NeuralMemory();
     this.memory.init().catch(console.error);
@@ -904,8 +899,28 @@ export class EnhancedAgent extends EventEmitter {
     this.pendingAssistantTranscriptUuid = generateUuid();
     this.learningInitialPrompt = initialPrompt;
     this.toolsUsedThisRun = new Set();
+    this.observation = new RunObservation();
+    this.observation.setTask(initialPrompt);
     this.rememberTools(tools);
     this.emitUsage();
+
+    if (this.sessionContext && this.transcriptFilePath) {
+      try {
+        const resume = await loadResumeContext(this.transcriptFilePath);
+        if (
+          resume.handoff &&
+          this.messages.length > 0 &&
+          !this.messages.some(messageContainsHandoff)
+        ) {
+          this.messages.unshift({
+            role: 'user',
+            content: formatRunHandoffMarkdown(resume.handoff),
+          });
+        }
+      } catch {
+        /* resume handoff is best-effort */
+      }
+    }
 
     if (this.pendingAssistantTranscriptUuid) {
       if (typeof toolExecutor?.setActiveFileHistoryMessageId === 'function') {
@@ -979,6 +994,16 @@ export class EnhancedAgent extends EventEmitter {
         role: 'user',
         content: initialPrompt,
       });
+    }
+
+    if (this.sessionContext) {
+      void writeLifecycleEntry(
+        this.sessionContext,
+        'prompt',
+        this.sessionContext.promptOrigin === 'continuation'
+          ? 'continuation'
+          : initialPrompt.slice(0, 240),
+      ).catch(() => {});
     }
 
     // ─── Neural Memory Recall ───
@@ -1103,6 +1128,7 @@ export class EnhancedAgent extends EventEmitter {
             break;
           } catch (apiError: any) {
             if (opts?.signal?.aborted || this.isAbortError(apiError)) {
+              await this.persistRunHandoff('interrupted', 'interrupt');
               throw apiError;
             }
 
@@ -1341,11 +1367,13 @@ export class EnhancedAgent extends EventEmitter {
         // The chat UI will present the questions, collect answers, and then
         // call run() again with the user's answers injected as a message.
         if (this.questionsPendingFlag) {
+          this.observation.recordRemaining('Waiting for user answers to pending questions.');
           this.emit('complete', {
             iterations: this.iterationCount,
             toolCalls: this.toolCallCount,
             filesChanged: this.filesChanged.size,
           });
+          this.persistRunHandoff('blocked', 'complete').catch(() => {});
           break;
         }
 
@@ -1594,8 +1622,10 @@ export class EnhancedAgent extends EventEmitter {
 
       } catch (error: any) {
         if (opts?.signal?.aborted || this.isAbortError(error)) {
+          await this.persistRunHandoff('interrupted', 'interrupt');
           throw error;
         }
+        await this.persistRunHandoff('failed', 'fail');
         this.emit('error', {
           message: 'API Error',
           error: error.message,
@@ -1693,7 +1723,7 @@ export class EnhancedAgent extends EventEmitter {
       this.toolsUsedThisRun.add(toolUse.name);
       let result = await toolExecutor.execute(toolUse.name, toolUse.input);
 
-      if (['write_file', 'edit_file', 'edit_lines', 'verified_edit'].includes(toolUse.name)) {
+      if (['write_file', 'edit_file', 'edit_lines', 'verified_edit', 'insert_at_line', 'delete_file', 'move_file'].includes(toolUse.name)) {
         const input = toolUse.input as { path?: string };
         if (typeof input?.path === 'string') this.filesChanged.add(input.path);
       }
@@ -1751,6 +1781,7 @@ export class EnhancedAgent extends EventEmitter {
         success ? 'tool_result_ok' : 'tool_result_error',
         `${toolUse.name}:${success ? 'ok' : 'error'}`,
       );
+      observeToolEvent(this.observation, toolUse.name, toolUse.input, result, success);
       if (this.sessionMemory) {
         const msg = typeof result === 'object' && result?.message != null ? String(result.message) : undefined;
         this.sessionMemory.recordAttempt(toolUse.name, success, msg);
@@ -3258,12 +3289,15 @@ ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
    * Called when the agent completes a run. Fires hooks and extracts memories.
    */
   private async onAgentComplete(): Promise<void> {
+    await this.persistRunHandoff('completed', 'complete');
+    await this.sessionMemory?.persist().catch(() => {});
+
     // SessionEnd hook
     if (this.hooksManager) {
       try {
         await this.hooksManager.execute('SessionEnd', {
           event: 'SessionEnd',
-          sessionId: undefined,
+          sessionId: this.transcriptSessionId || undefined,
         });
       } catch {
         /* non-fatal */
@@ -3368,12 +3402,15 @@ ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
    */
   initTranscript(sessionId: string, cwd: string): void {
     this.transcriptSessionId = sessionId;
-    const sanitizePathFn = (p: string) => p.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 60);
-    const projectsDir = join(homedir(), '.xibecode', 'projects');
-    this.transcriptFilePath = join(projectsDir, sanitizePathFn(cwd), `${sessionId}.jsonl`);
+    this.transcriptFilePath = sessionTranscriptPath(sessionId, cwd);
 
     const writer = getTranscriptWriter();
     writer.sessionFile = this.transcriptFilePath;
+    writer.setSessionId(sessionId);
+
+    if (this.sessionMemory) {
+      this.sessionMemory.setTranscriptPath(this.transcriptFilePath);
+    }
 
     // Ensure graceful shutdown handlers are installed
     setupGracefulShutdown();
@@ -3485,5 +3522,103 @@ ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
   async flushTranscript(): Promise<void> {
     const writer = getTranscriptWriter();
     await writer.flush();
+  }
+
+  /**
+   * Bind a canonical daemon/chat session so transcript, SessionMemory,
+   * handoffs, and search share one session ID.
+   */
+  bindDaemonSession(ctx: DaemonSessionContext): void {
+    this.sessionContext = ctx;
+    this.initTranscript(ctx.sessionId, ctx.cwd);
+    if (!this.sessionMemory) {
+      this.sessionMemory = new SessionMemory(ctx.cwd, ctx.sessionId);
+    }
+    this.sessionMemory.setTranscriptPath(ctx.transcriptPath);
+  }
+
+  getSessionContext(): DaemonSessionContext | null {
+    return this.sessionContext;
+  }
+
+  /**
+   * Manual or automatic compact through the shared pipeline.
+   * Idempotent: a second in-flight request for the same session is rejected.
+   */
+  async compactNow(trigger: 'manual' | 'auto' = 'manual'): Promise<CompactSessionResult> {
+    const sessionId =
+      this.transcriptSessionId || this.sessionContext?.sessionId || 'anon';
+    const result = await compactSession({
+      sessionId,
+      cwd: this.sessionContext?.cwd || process.cwd(),
+      transcriptPath: this.transcriptFilePath,
+      messages: this.messages,
+      trigger,
+      contextWindow: this.getContextWindowForModel(),
+      lastUuid: this.lastTranscriptUuid,
+      observation: this.observation,
+      task: this.learningInitialPrompt,
+      hooksManager: this.hooksManager as CompactSessionOptions['hooksManager'],
+      onStatus: (message) => this.emit('warning', { message }),
+    });
+    if (!result.alreadyInProgress) {
+      this.messages = result.messages;
+      if (result.lastUuid) this.lastTranscriptUuid = result.lastUuid;
+    }
+    return result;
+  }
+
+  private async persistRunHandoff(
+    status: RunHandoffStatus,
+    trigger: RunHandoffTrigger,
+  ): Promise<RunHandoff | null> {
+    const sessionId = this.transcriptSessionId || this.sessionContext?.sessionId;
+    if (!sessionId || !this.transcriptFilePath) return null;
+
+    const handoff = buildRunHandoff({
+      sessionId,
+      cwd: this.sessionContext?.cwd || process.cwd(),
+      status,
+      trigger,
+      observation: this.observation,
+      task: this.learningInitialPrompt,
+    });
+
+    try {
+      await writeHandoffEntry(this.transcriptFilePath, handoff);
+      if (this.sessionContext) {
+        await writeLifecycleEntry(
+          this.sessionContext,
+          trigger === 'interrupt'
+            ? 'interrupt'
+            : trigger === 'fail'
+              ? 'fail'
+              : trigger === 'shutdown'
+                ? 'shutdown'
+                : trigger === 'compact'
+                  ? 'compact'
+                  : 'complete',
+          status,
+        );
+      }
+      await getTranscriptWriter().flush();
+      await enqueueSessionIndex(
+        handoffToIndexDoc({
+          sessionId,
+          transcriptPath: this.transcriptFilePath,
+          task: handoff.task,
+          cwd: handoff.cwd,
+          status: handoff.status,
+          changedFiles: handoff.changedFiles,
+          commands: handoff.validation.map((v) => v.command),
+          errors: handoff.failedApproaches,
+          body: formatRunHandoffMarkdown(handoff),
+        }),
+      );
+      scheduleSessionIndexDrain();
+    } catch {
+      /* non-fatal */
+    }
+    return handoff;
   }
 }

@@ -208,6 +208,9 @@ export interface ActiveRun {
    * between tool iterations (does not abort). Set by the headless runner.
    */
   steer?: (text: string) => boolean;
+  compactNow?: () => Promise<{ userStatus: string; skipped: boolean; alreadyInProgress: boolean }>;
+  flush?: () => Promise<void>;
+  sessionId?: string;
   /** Optional: kill foreground shells when /stop (set by runner). */
   interruptCommands?: () => number;
   /**

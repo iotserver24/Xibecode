@@ -15,6 +15,9 @@ export interface IndexDoc {
   title: string;
   body: string;
   updated: number;
+  projectPath?: string;
+  status?: string;
+  changedFiles?: string[];
 }
 
 function indexDir(): string {
@@ -29,7 +32,15 @@ type JsIndex = {
   version: 1;
   docs: Record<
     string,
-    { path: string; title: string; updated: number; terms: string[] }
+    {
+      path: string;
+      title: string;
+      updated: number;
+      terms: string[];
+      projectPath?: string;
+      status?: string;
+      changedFiles?: string[];
+    }
   >;
 };
 
@@ -66,6 +77,9 @@ export async function indexSessionDocument(doc: IndexDoc): Promise<void> {
     title: doc.title,
     updated: doc.updated,
     terms,
+    projectPath: doc.projectPath,
+    status: doc.status,
+    changedFiles: doc.changedFiles,
   };
   // Cap index size
   const ids = Object.keys(idx.docs);
@@ -91,9 +105,22 @@ export async function ftsSearch(
   const keywords = tokenize(query);
   if (!keywords.length) return [];
 
-  // Prefer sqlite if available
+  // Prefer sqlite if available, then attach JS-index metadata (status/files).
   const sqliteHits = await trySqliteSearch(keywords, limit).catch(() => null);
-  if (sqliteHits && sqliteHits.length) return sqliteHits;
+  if (sqliteHits && sqliteHits.length) {
+    const idx = await loadJsIndex();
+    return sqliteHits.map((h) => {
+      const extra = idx.docs[h.sessionId];
+      if (!extra) return h;
+      return {
+        ...h,
+        title: h.title || extra.title,
+        projectPath: extra.projectPath,
+        status: extra.status,
+        changedFiles: extra.changedFiles,
+      };
+    });
+  }
 
   const idx = await loadJsIndex();
   const hits: SessionHit[] = [];
@@ -113,6 +140,9 @@ export async function ftsSearch(
       snippet: snippetTerms.join(' ') || doc.title,
       score,
       updated: new Date(doc.updated).toISOString(),
+      projectPath: doc.projectPath,
+      status: doc.status,
+      changedFiles: doc.changedFiles,
     });
   }
   hits.sort((a, b) => b.score - a.score || (b.updated || '').localeCompare(a.updated || ''));
