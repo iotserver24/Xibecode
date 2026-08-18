@@ -160,12 +160,15 @@ export function inlineUploadPrompt(
       parts.push(
         `--- attached file: ${f.name} ---\n${f.inlineText}\n--- end ${f.name} ---`,
       );
-    } else if (kind === 'photo' && f.savedPath) {
+    } else if (kind === 'photo' && (f.savedPath || f.publicUrl)) {
       const link = f.publicUrl
         ? ` Public vision URL: ${f.publicUrl}`
         : '';
+      const where = f.savedPath
+        ? ` saved at \`${f.savedPath}\`.`
+        : '.';
       parts.push(
-        `User attached image \`${f.name}\` saved at \`${f.savedPath}\`.${link} The picture is attached to this turn for vision — call see_image on that path if you need to look again.`,
+        `User attached image \`${f.name}\`${where}${link} The picture is attached to this turn via the hosted https URL — use those pixels. Call see_image only if you need to look again at a workspace path.`,
       );
     } else if (f.savedPath) {
       parts.push(

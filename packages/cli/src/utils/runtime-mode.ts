@@ -34,7 +34,9 @@ export interface SandboxIdentity {
   templateId: string | null;
   /** Where the id came from. */
   source: 'env' | 'run-e2b' | 'none';
-  /** Preview URL for a local port: https://{port}-{sandboxId}.e2b.dev */
+  /** Public preview domain (e2b.app for Vectra; override with XIBECODE_E2B_PREVIEW_DOMAIN). */
+  previewDomain: string;
+  /** Preview URL for a local port: https://{port}-{sandboxId}.{domain} */
   previewUrl: (port: number) => string | null;
 }
 
@@ -87,7 +89,7 @@ export function resolveSandboxIdentity(
     }
   }
 
-  const domain = (env.XIBECODE_E2B_PREVIEW_DOMAIN || env.E2B_DOMAIN || 'e2b.dev')
+  const domain = (env.XIBECODE_E2B_PREVIEW_DOMAIN || env.E2B_DOMAIN || 'e2b.app')
     .trim()
     .replace(/^\.+/, '');
 
@@ -95,9 +97,10 @@ export function resolveSandboxIdentity(
     sandboxId,
     templateId,
     source,
+    previewDomain: domain || 'e2b.app',
     previewUrl: (port: number) => {
       if (!sandboxId || !Number.isFinite(port) || port <= 0) return null;
-      return `https://${Math.floor(port)}-${sandboxId}.${domain}`;
+      return `https://${Math.floor(port)}-${sandboxId}.${domain || 'e2b.app'}`;
     },
   };
 }
@@ -242,7 +245,7 @@ export function describeRuntimeMode(info?: RuntimeModeInfo): string {
       '• Agent may use `sudo -n` for installs when needed (passwordless)',
       '• Chat history stays in `~/.xibecode/daemon/sessions/` across restarts',
       f.publicPreviewLinks && id.sandboxId
-        ? `• Preview pattern: \`https://{port}-${id.sandboxId}.e2b.dev\``
+        ? `• Preview pattern: \`https://{port}-${id.sandboxId}.${id.previewDomain}\``
         : f.publicPreviewLinks
           ? '• Public preview links for running servers'
           : '',
@@ -270,18 +273,20 @@ export function e2bAgentContextBlock(
       `- When the user asks for the sandbox id, report this value exactly.`,
     );
     if (f.publicPreviewLinks) {
-      const exampleHost = `3000-${id.sandboxId}.e2b.dev`;
+      const domain = id.previewDomain || 'e2b.app';
+      const exampleHost = `3000-${id.sandboxId}.${domain}`;
       lines.push(
         `- The user **cannot** open sandbox disk paths. Never say a file is “at /home/user/workspace/…”.`,
         `- To deliver **any** artifact (zip, tar.gz, pdf, png, video, code, csv, …) put \`MEDIA:relative/path\` in your **final** reply. The gateway does **both**:`,
         `  1. Native upload (Telegram photo/document, Discord/Slack attachment, phone app file card)`,
         `  2. A public download link \`https://8788-${id.sandboxId}.e2b.app/f/{token}/{name}\` (wake-http share — works after pause)`,
         `- Always MEDIA: zips and big exports. Do not only describe the path. Both the in-chat file **and** the https link are required.`,
-        `- Public preview for a listening port N: \`https://N-${id.sandboxId}.e2b.dev\` (e.g. port 3000 → \`${id.previewUrl(3000)}\`).`,
-        `- Prefer reporting that URL after you start a server (and confirm HTTP 200 on localhost first).`,
+        `- Public preview for a listening port N: \`https://N-${id.sandboxId}.${domain}\` (e.g. port 3000 → \`${id.previewUrl(3000)}\`).`,
+        `- **Never give the user localhost / 127.0.0.1.** You may curl localhost *inside the VM* to check the server is up, then report the public preview URL.`,
+        `- Prefer \`preview_url\` (port) to mint the host. Confirm HTTP 200 on localhost first, then send the public URL.`,
         '',
         '### Vite / dev-server host allowlist (required for preview URLs)',
-        '- E2B opens the app as `https://{port}-{sandboxId}.e2b.dev`. Vite blocks unknown Host headers by default → "This host is not allowed".',
+        `- E2B opens the app as \`https://{port}-{sandboxId}.${domain}\`. Vite blocks unknown Host headers by default → "This host is not allowed".`,
         '- **Whenever you create or run a Vite app**, set in `vite.config.ts` / `vite.config.js` before sharing the link:',
         '```js',
         'export default defineConfig({',
@@ -292,7 +297,7 @@ export function e2bAgentContextBlock(
         '  },',
         '})',
         '```',
-        `- Equivalent: \`allowedHosts: ['.e2b.dev', '${exampleHost}']\` if you prefer an explicit list.`,
+        `- Equivalent: \`allowedHosts: ['.${domain}', '${exampleHost}']\` if you prefer an explicit list.`,
         '- Bind with `--host 0.0.0.0` (or server.host above) so the proxy can reach the process.',
         '- If the user already sees "host is not allowed", **edit vite.config immediately**, restart the dev server, then re-send the preview URL.',
         '- Next.js: usually fine with `next dev -H 0.0.0.0`; webpack-dev-server may need `allowedHosts: "all"`.',
@@ -313,4 +318,22 @@ export function e2bAgentContextBlock(
     );
   }
   return lines.join('\n');
+}
+
+const LOCALHOST_URL =
+  /https?:\/\/(?:localhost|127\.0\.0\.1)(?::(\d{2,5}))?(\/[^\s)\]>]*)?/gi;
+
+/** Replace localhost / 127.0.0.1 links with the public E2B preview host. */
+export function rewriteLocalhostForUser(
+  text: string,
+  identity?: SandboxIdentity,
+): string {
+  if (!text) return text;
+  const id = identity || resolveSandboxIdentity();
+  if (!id.sandboxId) return text;
+  return text.replace(LOCALHOST_URL, (_raw, port, path) => {
+    const n = Number(port) || 3000;
+    const host = id.previewUrl(n) || `https://${n}-${id.sandboxId}.${id.previewDomain || 'e2b.app'}`;
+    return `${host}${path || ''}`;
+  });
 }

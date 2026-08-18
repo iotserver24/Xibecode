@@ -59,6 +59,22 @@ describe('app chat events', () => {
     expect(prompt).toContain('see_image');
   });
 
+  it('prefers hosted vision URL over path-only image text', () => {
+    const prompt = inlineUploadPrompt('what is this', [
+      {
+        name: 'photo.jpg',
+        savedPath: '/ws/inbox/f1-photo.jpg',
+        publicUrl: 'https://infra.xibeai.in/api/public/media/inst/tok',
+      },
+    ]);
+    expect(prompt).toContain('https://infra.xibeai.in/api/public/media/inst/tok');
+    expect(prompt).toContain('hosted https URL');
+    const urlOnly = inlineUploadPrompt('', [
+      { name: 'a.png', publicUrl: 'https://cdn.example/a.png', kind: 'photo' },
+    ]);
+    expect(urlOnly).toContain('https://cdn.example/a.png');
+  });
+
   it('classifies image uploads and parses progress text', () => {
     expect(fileKindFromName('shot.PNG')).toBe('photo');
     expect(fileKindFromName('notes.pdf')).toBe('document');

@@ -4,6 +4,7 @@ import {
   featuresForMode,
   resolveRuntimeMode,
   resolveSandboxIdentity,
+  rewriteLocalhostForUser,
 } from './runtime-mode.js';
 
 describe('runtime-mode', () => {
@@ -49,12 +50,18 @@ describe('runtime-mode', () => {
     expect(id.previewUrl(3000)).toBe('https://3000-iabc123.e2b.dev');
   });
 
+  it('defaults preview domain to e2b.app', () => {
+    const id = resolveSandboxIdentity({ E2B_SANDBOX_ID: 'iabc123' });
+    expect(id.previewUrl(3000)).toBe('https://3000-iabc123.e2b.app');
+  });
+
   it('e2b agent context mentions sandbox id, sudo -n, and Vite allowedHosts', () => {
     const block = e2bAgentContextBlock(
       {
         sandboxId: 'iabc123',
         templateId: 'xibecode-full-sandbox',
         source: 'env',
+        previewDomain: 'e2b.dev',
         previewUrl: (p) => `https://${p}-iabc123.e2b.dev`,
       },
       featuresForMode('e2b'),
@@ -69,5 +76,13 @@ describe('runtime-mode', () => {
     expect(block).toContain('8788-iabc123.e2b.app/f/');
     expect(block).toMatch(/zip/i);
     expect(block).toMatch(/Native upload/i);
+    expect(block).toMatch(/Never give the user localhost/i);
+  });
+
+  it('rewrites localhost to the public preview host', () => {
+    const id = resolveSandboxIdentity({ E2B_SANDBOX_ID: 'iabc123' });
+    expect(rewriteLocalhostForUser('Open http://localhost:3000/app', id)).toBe(
+      'Open https://3000-iabc123.e2b.app/app',
+    );
   });
 });

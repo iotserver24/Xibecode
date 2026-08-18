@@ -113,7 +113,7 @@ const sandboxLifecycle =
   lifecycleOnTimeout === 'pause'
     ? ({ onTimeout: 'pause' as const, autoResume: lifecycleAutoResume })
     : ({ onTimeout: 'kill' as const, autoResume: false as const });
-const previewDomain = process.env.XIBECODE_E2B_PREVIEW_DOMAIN?.trim() || 'e2b.dev';
+const previewDomain = process.env.XIBECODE_E2B_PREVIEW_DOMAIN?.trim() || 'e2b.app';
 const maxExportBytes = Math.max(
   1,
   Number(process.env.XIBECODE_EXPORT_MAX_MB || 64),

@@ -287,7 +287,9 @@ export async function runHeadlessAgent(
       runOpts.images = [];
       for (const img of options.images) {
         let dataBase64 = img.dataBase64;
-        if (!img.url && !dataBase64) {
+        if (/^https?:\/\//i.test(String(img.url || '').trim())) {
+          dataBase64 = undefined;
+        } else if (!img.url && !dataBase64) {
           try {
             const buf = await readFile(img.path);
             if (buf.length > 0 && buf.length <= 4 * 1024 * 1024) {

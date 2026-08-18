@@ -546,6 +546,40 @@ export class AppAdapter implements MessagingAdapter {
       return;
     }
 
+    if (method === 'POST' && url.pathname === '/v1/public') {
+      if (!this.authorized(req)) {
+        sendJson(res, 401, { error: 'unauthorized' });
+        return;
+      }
+      const body = await readJson(req);
+      const name = path.basename(String(body.name || 'upload.bin')) || 'upload.bin';
+      const raw = Buffer.from(String(body.contentBase64 || ''), 'base64');
+      if (!raw.length) {
+        sendJson(res, 400, { error: 'file required' });
+        return;
+      }
+      const destDir = inboxUploadDir(this.workdir());
+      await fs.mkdir(destDir, { recursive: true });
+      const token = randomBytes(18).toString('base64url');
+      const dest = path.join(destDir, `${token}-${name}`);
+      await fs.writeFile(dest, raw);
+      const ext = path.extname(name).toLowerCase();
+      const mime =
+        String(body.mime || '') ||
+        (ext === '.jpg' || ext === '.jpeg'
+          ? 'image/jpeg'
+          : ext === '.gif'
+            ? 'image/gif'
+            : ext === '.webp'
+              ? 'image/webp'
+              : ext === '.png'
+                ? 'image/png'
+                : 'application/octet-stream');
+      this.publicFiles.set(token, { abs: dest, name, mime });
+      sendJson(res, 200, { ok: true, token, name, mime, size: raw.length });
+      return;
+    }
+
     if (!this.authorized(req)) {
       sendJson(res, 401, { error: 'unauthorized' });
       return;
@@ -685,6 +719,7 @@ export class AppAdapter implements MessagingAdapter {
             name?: string;
             contentBase64?: string;
             mime?: string;
+            url?: string;
           }>)
         : [];
       const uploaded: Array<{
@@ -702,27 +737,32 @@ export class AppAdapter implements MessagingAdapter {
         await fs.mkdir(outboxDir(), { recursive: true });
         for (const f of files.slice(0, 12)) {
           const name = path.basename(String(f.name || 'upload.bin')) || 'upload.bin';
+          const hosted = String(f.url || '').trim();
           const raw = Buffer.from(String(f.contentBase64 || ''), 'base64');
-          if (!raw.length) continue;
-          const dest = path.join(destDir, name);
-          await fs.writeFile(dest, raw);
           const kind = fileKindFromName(name, f.mime);
           this.fileSeq += 1;
           const fileId = `f${this.fileSeq}`;
-          const outDest = path.join(outboxDir(), `${fileId}-${name}`);
-          await fs.copyFile(dest, outDest);
-          this.files.set(fileId, { abs: outDest, name, kind });
+          let dest: string | undefined;
+          if (raw.length) {
+            dest = path.join(destDir, `${fileId}-${name}`);
+            await fs.writeFile(dest, raw);
+            const outDest = path.join(outboxDir(), `${fileId}-${name}`);
+            await fs.copyFile(dest, outDest);
+            this.files.set(fileId, { abs: outDest, name, kind });
+          }
+          if (!dest && !/^https?:\/\//i.test(hosted)) continue;
           this.emit(chatId, {
             type: 'file',
             fileId,
             name,
             kind,
             mime: f.mime,
-            size: raw.length,
+            size: raw.length || undefined,
+            url: hosted || undefined,
             role: 'user',
             caption: text || undefined,
           });
-          if (looksTextFile(name, f.mime) && raw.length <= TEXT_INLINE_MAX) {
+          if (dest && looksTextFile(name, f.mime) && raw.length <= TEXT_INLINE_MAX) {
             uploaded.push({
               name,
               savedPath: dest,
@@ -731,11 +771,13 @@ export class AppAdapter implements MessagingAdapter {
               kind,
             });
           } else {
-            let publicUrl: string | undefined;
-            if (kind === 'photo') {
+            let publicUrl = /^https?:\/\//i.test(hosted) ? hosted : undefined;
+            if (!publicUrl && dest && kind === 'photo') {
               publicUrl = await this.publishImageUrl(dest);
+            }
+            if (kind === 'photo') {
               inboundImages.push({
-                path: dest,
+                path: dest || publicUrl || name,
                 mime: String(f.mime || 'image/png'),
                 url: publicUrl,
               });

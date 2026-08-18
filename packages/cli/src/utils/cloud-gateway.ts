@@ -50,7 +50,7 @@ export async function fetchPreviewHost(
     return normalizeUrl(payload.host);
   }
   if (remoteExecution.e2bSandboxId) {
-    return `https://${port}-${remoteExecution.e2bSandboxId}.e2b.dev`;
+    return `https://${port}-${remoteExecution.e2bSandboxId}.e2b.app`;
   }
   return undefined;
 }

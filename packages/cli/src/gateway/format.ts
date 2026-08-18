@@ -9,6 +9,7 @@ import {
   featuresForMode,
   resolveRuntimeMode,
   resolveSandboxIdentity,
+  rewriteLocalhostForUser,
 } from '../utils/runtime-mode.js';
 
 /** Split long text for platform limits, preferring breaks at newlines / code fences. */
@@ -443,6 +444,7 @@ export function formatGatewayReply(text: string): string {
   body = body.replace(/\[\[PLAN_READY\]\]/gi, '').trim();
   // Never show raw tool-call markup in messaging clients
   body = stripLeakedToolMarkup(body);
+  body = rewriteLocalhostForUser(body);
 
   if (!match) return body;
 
@@ -544,14 +546,14 @@ export function codingSystemPrefix(
     '- Do NOT paste large file contents into the chat when a download is better — write the file, then MEDIA: it.',
     '',
     'Screenshots:',
-    '- After you build or run a site (localhost), use take_screenshot(url, path under workspace); include the returned MEDIA: line.',
+    '- After you build or run a site, screenshot the **public** preview URL (`https://{port}-{sandboxId}.e2b.app`), not localhost. Include the returned MEDIA: line.',
     '- Browser default: **agent-browser**. Path examples: screenshots/home.png — NOT /tmp/… (outside workspace is remapped).',
     '',
     'Examples of final replies:',
     '  Built the report.',
     '  MEDIA:reports/summary.pdf',
     '',
-    '  Homepage is live at http://localhost:3000',
+    '  Homepage is live at https://3000-{sandboxId}.e2b.app',
     '  MEDIA:screenshots/home.png',
     '',
     '  [[as_document]]',
