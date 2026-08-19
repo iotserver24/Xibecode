@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.17.22] - 2026-08-19
+
+### Agent / browser
+
+- Models that said "I understand, I will use `agent-browser` / `web_search`" and then stopped are nudged to actually call the tool (max 2 retries).
+- `agent-browser` is documented as a CLI invoked via `run_command`, not a native tool name. Talk-first is no longer a substitute for tool calls.
+
+### App
+
+- `/new` no longer locks the composer as "Thinking…". History has a **New chat** button, and the header has the same action.
+- Switching lanes snapshots the old transcript first so a first message after `/new` is not archived into the previous chat.
+
+### Release
+
+- `xibecode-core` **1.17.22** then `xibecode` **1.17.22** (npm). Existing sandboxes need **Update CLI**. New boxes get it from the rebuilt template.
+
+### Hosting / E2B template
+
+- `xibecode-full-sandbox` rebuilt with CLI/core **1.17.22**.
+
 ## [1.17.21] - 2026-08-19
 
 ### Computer pane (view-only)

@@ -26,6 +26,13 @@ export {
   type StopHookResult,
 } from './stop-hooks.js';
 
+export {
+  looksLikeDeferredToolPlan,
+  evaluateDeferredToolPlan,
+  deferredToolPlanNudge,
+  MAX_DEFERRED_TOOL_PLAN_RETRIES,
+} from './deferred-tool-plan.js';
+
 // ─── Tool result budget + batch summaries ─────────────────────
 export {
   applyToolResultBudget,

@@ -91,6 +91,7 @@ import { HooksManager } from './hooks/hooks.js';
 import { AutoMemoryManager } from './auto-memory/auto-memory.js';
 import { microcompact, resetMicrocompactCircuitBreaker } from './microcompact.js';
 import { recoverDsmlToolCalls } from './dsml-tools.js';
+import { evaluateDeferredToolPlan } from './deferred-tool-plan.js';
 import {
   ProviderPool,
   shouldFailoverProvider,
@@ -330,6 +331,8 @@ export class EnhancedAgent extends EventEmitter {
   private completionGateRetries = 0;
   /** Tracks Claude-style stop-hook nudges (capped separately from completion gate). */
   private stopHookRetries = 0;
+  /** Caps "I will use web_search" plan-only retries. */
+  private deferredToolPlanRetries = 0;
   /** Set to true when [[TASK_COMPLETE]] is detected so the loop breaks immediately. */
   private taskCompletedFlag = false;
   /** Set to true when [[QUESTIONS:...]] is detected so the loop pauses for user answers. */
@@ -892,6 +895,7 @@ export class EnhancedAgent extends EventEmitter {
     this.evidenceTrail = [];
     this.completionGateRetries = 0;
     this.stopHookRetries = 0;
+    this.deferredToolPlanRetries = 0;
     this.taskCompletedFlag = false;
     // Evidence and changed-file tracking describe this turn, not the whole session.
     this.filesChanged.clear();
@@ -1385,6 +1389,22 @@ export class EnhancedAgent extends EventEmitter {
           const hasTaskComplete = textBlocks.some((b) => parseTaskComplete(b.text) != null);
           const hasEvidence = this.hasRecentGroundedEvidence();
           const assistantText = textBlocks.map((b) => b.text || '').join('\n');
+
+          const deferred = evaluateDeferredToolPlan({
+            assistantText,
+            retries: this.deferredToolPlanRetries,
+          });
+          if (deferred.nudge && deferred.message) {
+            this.deferredToolPlanRetries++;
+            this.emit('warning', {
+              message: `Deferred tool plan blocked finalize: ${deferred.reason || 'call the tools'}.`,
+            });
+            this.messages.push({
+              role: 'user',
+              content: deferred.message,
+            });
+            continue;
+          }
 
           // Claude-style stop-hooks: last defense before finalize
           try {
@@ -2645,9 +2665,10 @@ Working directory: ${process.cwd()}
 - If the user asks about a picture without naming it, list candidates, then \`see_image\` on the right path (or ask which one).
 
 ## Talk as you work
-- Before the first tool call, write a short visible reply: what you understood and the first step you will take. Never start a turn with tools only.
-- After tools, keep talking: cite the files/paths you opened, what you found, and what you will do next. Users cannot see raw tool logs unless you mention them.
-- Keep those updates to a few sentences. The final answer still carries the full result.
+- A one-line status is optional. It is never a substitute for tool calls.
+- When the user asks you to research, browse, inspect files, or run commands, CALL the tools in this same response. Do not end a turn with only "I understand", "I will…", or "Let's check the workspace".
+- \`agent-browser\` is a **CLI**, not a native tool name. Drive it with \`run_command\` (example: command \`agent-browser open https://example.com\`, then \`agent-browser snapshot -i\`). The user watches the live page in the Computer pane.
+- After tools return, say what you found and continue with the next tool or the final answer.
 
 ${this.defaultSkillsPrompt ? `${this.defaultSkillsPrompt}\n\n` : ''}
 ## Work Policy
@@ -2819,6 +2840,7 @@ Map relationships:
 - Use \`fetch_url\` to read any URL — docs, APIs, blog posts (HTML is auto-stripped to text)
 - Useful for: looking up library docs, resolving error messages, finding solutions
 - Always use \`web_search\` when you encounter an unfamiliar error or need current documentation
+- Mentioning \`web_search\` or \`agent-browser\` in prose does nothing. Emit the tool call in this response.
 
 ## Skills & MCP Integration
 
