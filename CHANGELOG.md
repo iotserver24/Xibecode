@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.17.21] - 2026-08-19
+
+### Computer pane (view-only)
+
+- App inbox emits structured `computer` events for shell vs `agent-browser` (open / click / fill / screenshot). Terminal shows `$ command` plus a capped stdout tail.
+- Live Chromium screencast: CLI proxies `agent-browser` JPEG frames from `ws://127.0.0.1:9223` at `GET /v1/computer/browser`. View-only — mouse/keyboard are never forwarded. Frames are not stored in the chat event log.
+- Vectra proxies that stream at `/api/instances/:id/computer/browser`. The phone Computer pane plays live frames (ack-paced, ~8 fps) and falls back to screenshots if the stream is down.
+- Stream port is pinned with `AGENT_BROWSER_STREAM_PORT=9223` (template + daemon env). The public `9223-{sandbox}.e2b.app` host is not used.
+
+### Release
+
+- `xibecode-core` **1.17.21** then `xibecode` **1.17.21** (npm). Existing sandboxes need **Update CLI**. New boxes get it from the rebuilt template.
+
+### Hosting / E2B template
+
+- `xibecode-full-sandbox` rebuilt with CLI/core **1.17.21**.
+
 ## [1.17.20] - 2026-08-19
 
 ### Harness / evidence

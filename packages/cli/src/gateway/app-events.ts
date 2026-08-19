@@ -12,6 +12,7 @@ export type AppEventType =
   | 'typing'
   | 'text'
   | 'tool'
+  | 'computer'
   | 'ask'
   | 'approve'
   | 'picker'
@@ -22,6 +23,9 @@ export type AppEventType =
   | 'done'
   | 'error'
   | 'conversation';
+
+export type AppComputerTab = 'terminal' | 'browser';
+export type AppComputerKind = 'shell' | 'browser' | 'file' | 'other';
 
 export type AppFileKind = 'photo' | 'video' | 'audio' | 'voice' | 'document';
 
@@ -37,12 +41,20 @@ export interface AppChatEvent {
   final?: boolean;
   name?: string;
   state?: 'start' | 'done';
+  /** Computer pane: terminal vs browser. */
+  tab?: AppComputerTab;
+  command?: string;
+  action?: string;
+  target?: string;
+  stdout?: string;
+  exitCode?: number;
+  success?: boolean;
   summary?: string;
   question?: string;
   choices?: string[];
   title?: string;
   detail?: string;
-  kind?: AppFileKind | AppPickerKind;
+  kind?: AppFileKind | AppPickerKind | AppComputerKind;
   fileId?: string;
   caption?: string;
   /** Public wake-http share URL (E2B). */

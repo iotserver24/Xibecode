@@ -34,6 +34,11 @@ import type {
 import { shareWorkspaceFile } from './workspace-share.js';
 import { listConversations } from './session-store.js';
 import { loadResumeContext, SessionManager } from 'xibecode-core';
+import {
+  ensureAgentBrowserStream,
+  pipeAgentBrowserScreencast,
+  streamPort,
+} from './computer-stream.js';
 
 const TEXT_INLINE_MAX = 256 * 1024;
 const TEXT_EXTS = new Set([
@@ -399,6 +404,44 @@ export class AppAdapter implements MessagingAdapter {
     return ev.id;
   }
 
+  notifyComputer(
+    chatId: string,
+    payload: {
+      tab: 'terminal' | 'browser';
+      kind: 'shell' | 'browser' | 'file' | 'other';
+      name: string;
+      state: 'start' | 'done';
+      command?: string;
+      action?: string;
+      target?: string;
+      url?: string;
+      label: string;
+      stdout?: string;
+      exitCode?: number;
+      success?: boolean;
+    },
+  ): void {
+    this.emit(chatId, {
+      type: 'computer',
+      tab: payload.tab,
+      kind: payload.kind,
+      name: payload.name,
+      state: payload.state,
+      command: payload.command,
+      action: payload.action,
+      target: payload.target,
+      url: payload.url,
+      label: payload.label,
+      stdout: payload.stdout,
+      exitCode: payload.exitCode,
+      success: payload.success,
+      text: payload.label,
+    });
+    if (payload.kind === 'browser' || payload.tab === 'browser') {
+      void ensureAgentBrowserStream(streamPort()).catch(() => undefined);
+    }
+  }
+
   async editInteractiveMessage(
     chatId: string,
     _messageId: string,
@@ -710,6 +753,20 @@ export class AppAdapter implements MessagingAdapter {
           ? { ...this.lastTurn, elapsedMs }
           : { busy: false },
       });
+      return;
+    }
+
+    if (method === 'GET' && url.pathname === '/v1/computer/browser') {
+      pipeAgentBrowserScreencast(req, res);
+      return;
+    }
+
+    if (method === 'GET' && url.pathname === '/v1/computer/status') {
+      const status = await ensureAgentBrowserStream(streamPort()).catch((err: Error) => ({
+        enabled: false,
+        error: err.message,
+      }));
+      sendJson(res, 200, { ok: true, ...status, port: streamPort() });
       return;
     }
 

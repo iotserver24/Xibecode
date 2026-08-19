@@ -42,6 +42,7 @@ import type {
   MessagingAdapter,
   PlatformName,
 } from './types.js';
+import { buildComputerPayload } from './computer-events.js';
 import {
   ledgerRecordPending,
   ledgerMarkSending,
@@ -784,6 +785,7 @@ export class ChatController {
     /** Last tool failure text for heartbeats (avoid infinite "still checking" with no error). */
     let lastToolFail: string | undefined;
     let consecutiveToolFails = 0;
+    const lastToolInput = new Map<string, unknown>();
 
     const { GatewayStreamConsumer } = await import('./stream-consumer.js');
  // messaging gateway: one short status line as the progress bubble header (not "Coding… dir · rigor")
@@ -1103,7 +1105,19 @@ export class ChatController {
             }
             activeRun.toolCount = (activeRun.toolCount || 0) + 1;
             const name = data?.name || data?.tool || 'tool';
-            const line = formatToolProgress(name, data?.input || data?.args);
+            const input = data?.input || data?.args;
+            lastToolInput.set(String(name), input);
+            if (adapter.notifyComputer) {
+              adapter.notifyComputer(
+                msg.chatId,
+                buildComputerPayload({
+                  name: String(name),
+                  state: 'start',
+                  input,
+                }),
+              );
+            }
+            const line = formatToolProgress(name, input);
             if (daemonVerbose) {
               this.options.log(
                 `agent tool_call #${activeRun.toolCount} ${name}: ${line.slice(0, 240)}`,
@@ -1113,6 +1127,18 @@ export class ChatController {
           } else if (type === 'tool_result') {
             const name = data?.name || data?.tool || 'tool';
             const success = data?.success !== false;
+            if (adapter.notifyComputer) {
+              adapter.notifyComputer(
+                msg.chatId,
+                buildComputerPayload({
+                  name: String(name),
+                  state: 'done',
+                  input: data?.input || data?.args || lastToolInput.get(String(name)),
+                  result: data?.result,
+                  success,
+                }),
+              );
+            }
             let preview: string | undefined;
             const r = data?.result;
             if (typeof r === 'string') preview = r;

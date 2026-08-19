@@ -119,6 +119,27 @@ export interface MessagingAdapter {
     opts?: { threadId?: string },
   ): Promise<string | undefined>;
   /**
+   * First-party Computer pane (app only). Structured shell / browser
+   * observation — view-only. Telegram/Discord ignore this.
+   */
+  notifyComputer?(
+    chatId: string,
+    payload: {
+      tab: 'terminal' | 'browser';
+      kind: 'shell' | 'browser' | 'file' | 'other';
+      name: string;
+      state: 'start' | 'done';
+      command?: string;
+      action?: string;
+      target?: string;
+      url?: string;
+      label: string;
+      stdout?: string;
+      exitCode?: number;
+      success?: boolean;
+    },
+  ): void;
+  /**
    * Optional: edit an interactive prompt (approval / ask) to final text and
  * remove inline buttons (messaging gateway: edit_message_text + reply_markup=None).
    */
