@@ -350,6 +350,16 @@ export {
   type RuleEntry,
 } from './prompt/user-context.js';
 export {
+  firstTurnMemoryReminder,
+  searchCrossSessionMemory,
+  writeSessionLog,
+  extractUserTopics,
+  formatMemoryInjection,
+  resolveMemoryPaths,
+  workspaceIdentity,
+  type MemoryHit,
+} from './prompt/cross-session-memory.js';
+export {
   type CompactionResult,
   type CompactOptions,
   compactConversation,

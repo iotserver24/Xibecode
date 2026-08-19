@@ -108,6 +108,10 @@ import {
   formatMemoryReminder,
   messagesHaveUserInfo,
 } from './prompt/user-context.js';
+import {
+  firstTurnMemoryReminder,
+  writeSessionLog,
+} from './prompt/cross-session-memory.js';
 
 /** Reasoning tier for hierarchical (AX-lite) behavior: strategic = plan only, tactical = per-step decisions, operational = tool use. */
 export type ReasoningTier = 'strategic' | 'tactical' | 'operational';
@@ -294,6 +298,8 @@ export class EnhancedAgent extends EventEmitter {
   private autoMemoryMarkdownSection: string = '';
   /** Grok-style first-turn <user_info> + git + rules prefix. */
   private userContextPrefix: string | null = null;
+  /** One first-turn cross-session memory search per agent instance. */
+  private firstTurnMemoryInjected = false;
   private totalInputTokens: number = 0;
   private totalOutputTokens: number = 0;
   /** Last API-reported prompt size (current context), Hermes-style. */
@@ -937,7 +943,10 @@ export class EnhancedAgent extends EventEmitter {
       }
     }
     this.observation.setTask(initialPrompt);
-    if (this.messages.length === 0) this.userContextPrefix = null;
+    if (this.messages.length === 0) {
+      this.userContextPrefix = null;
+      this.firstTurnMemoryInjected = false;
+    }
 
     if (this.pendingAssistantTranscriptUuid) {
       if (typeof toolExecutor?.setActiveFileHistoryMessageId === 'function') {
@@ -2597,23 +2606,43 @@ export class EnhancedAgent extends EventEmitter {
       prefix = this.userContextPrefix;
     }
 
-    let memoryReminder: string | null = null;
+    const reminderParts: string[] = [];
+    if (!this.firstTurnMemoryInjected) {
+      this.firstTurnMemoryInjected = true;
+      try {
+        const prior = await firstTurnMemoryReminder({
+          cwd: this.workspaceCwd(),
+          query: prompt,
+        });
+        if (prior) {
+          reminderParts.push(prior);
+          this.emit('thinking', { message: 'Loaded memory from earlier sessions' });
+        }
+      } catch {
+        /* cross-session recall is best-effort */
+      }
+    }
     try {
       const memories = await this.memory.retrieve(prompt, 5, this.config.memoryRecallMinScore);
       if (memories.length > 0) {
-        memoryReminder = formatMemoryReminder(
+        const neural = formatMemoryReminder(
           memories.map(
             (m) =>
               `- [${new Date(m.timestamp).toISOString().split('T')[0]}] ${m.trigger} -> ${m.action} (${m.outcome})`,
           ),
         );
+        if (neural) reminderParts.push(neural);
         this.emit('thinking', { message: `Recalled ${memories.length} relevant memories` });
       }
     } catch {
       /* recall is best-effort */
     }
 
-    return assembleUserTurnContent({ prompt, prefix, memoryReminder });
+    return assembleUserTurnContent({
+      prompt,
+      prefix,
+      memoryReminder: reminderParts.length ? reminderParts.join('\n\n') : null,
+    });
   }
 
   private getSystemPrompt(): string {
@@ -3355,6 +3384,16 @@ ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
   private async onAgentComplete(): Promise<void> {
     await this.persistRunHandoff('completed', 'complete');
     await this.sessionMemory?.persist().catch(() => {});
+    try {
+      await writeSessionLog({
+        sessionId: this.transcriptSessionId || this.sessionContext?.sessionId || 'anon',
+        cwd: this.workspaceCwd(),
+        messages: this.messages,
+        kind: 'end',
+      });
+    } catch {
+      /* session-end memory save is best-effort */
+    }
 
     // SessionEnd hook
     if (this.hooksManager) {
@@ -3616,6 +3655,18 @@ ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
   async compactNow(trigger: 'manual' | 'auto' = 'manual'): Promise<CompactSessionResult> {
     const sessionId =
       this.transcriptSessionId || this.sessionContext?.sessionId || 'anon';
+    const cwd = this.sessionContext?.cwd || process.cwd();
+    try {
+      await writeSessionLog({
+        sessionId,
+        cwd,
+        messages: this.messages,
+        kind: 'flush',
+        extra: 'Pre-compaction flush of active work.',
+      });
+    } catch {
+      /* flush is best-effort */
+    }
     const result = await compactSession({
       sessionId,
       cwd: this.sessionContext?.cwd || process.cwd(),
@@ -3632,8 +3683,32 @@ ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
     if (!result.alreadyInProgress) {
       this.messages = result.messages;
       if (result.lastUuid) this.lastTranscriptUuid = result.lastUuid;
+      try {
+        const recovered = await firstTurnMemoryReminder({
+          cwd,
+          query: this.learningInitialPrompt || this.lastUserPromptHint(),
+        });
+        if (recovered) {
+          this.messages.push({
+            role: 'user',
+            content: `<system-reminder>\n${recovered}\n</system-reminder>`,
+          });
+        }
+      } catch {
+        /* post-compact recall is best-effort */
+      }
     }
     return result;
+  }
+
+  private lastUserPromptHint(): string {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const m = this.messages[i]!;
+      if (m.role !== 'user') continue;
+      const text = typeof m.content === 'string' ? m.content : '';
+      if (text.includes('<user_query>')) return text;
+    }
+    return this.learningInitialPrompt || '';
   }
 
   private async persistRunHandoff(

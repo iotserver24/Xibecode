@@ -610,6 +610,8 @@ export const GATEWAY_BOT_COMMANDS: ReadonlyArray<{
   { command: 'history', description: 'List or reopen past conversations' },
   { command: 'stop', description: 'Interrupt run + kill active commands' },
   { command: 'compact', description: 'Compact context and write a run handoff' },
+  { command: 'flush', description: 'Save session notes to memory before compact' },
+  { command: 'recall', description: 'Show memory from earlier sessions' },
   { command: 'status', description: 'Workdir, busy state, progress' },
   { command: 'queue', description: 'List or clear queued messages' },
   { command: 'workdir', description: 'Show or set project directory' },

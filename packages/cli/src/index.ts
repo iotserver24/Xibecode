@@ -457,7 +457,7 @@ program
 // Memory management
 program
   .command("memory [action] [args...]")
-  .description("Manage project auto-memories (list, search, dream, path)")
+  .description("Manage project auto-memories (list, search, dream, path, recall)")
   .option("--profile <name>", "Config profile to use")
   .action((action: string | undefined, args: string[], options: any) =>
     memoryCommand(action, args, options),

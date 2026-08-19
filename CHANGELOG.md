@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.17.24] - 2026-08-19
+
+### Context (Grok Build style)
+
+- Each turn is sent as a Grok-style envelope: first turn gets `<user_info>` (OS, shell, workspace, date), a git snapshot, and `AGENTS.md` / user rules, then the request in `<user_query>`. Later turns send only `<user_query>`.
+- After compact, that envelope is put back so the model keeps cwd, rules, and the last task.
+- First turn also injects ranked memory from earlier sessions (`~/.xibecode/memory/<workspace>/sessions/` plus MEMORY.md). After compact, memory is searched again. Session-end writes a topic log (no extra LLM). Compact flushes notes first so work is not lost.
+- `/flush` and `/recall` on the gateway; `xibecode memory recall` on the CLI.
+
+### Release
+
+- `xibecode-core` **1.17.24** then `xibecode` **1.17.24** (npm). Existing sandboxes need **Update CLI**.
+
 ## [1.17.23] - 2026-08-19
 
 ### Computer pane

@@ -64,9 +64,17 @@ async function loadJsIndex(): Promise<JsIndex> {
 
 async function saveJsIndex(idx: JsIndex): Promise<void> {
   await fs.mkdir(indexDir(), { recursive: true });
-  const tmp = `${jsIndexPath()}.${process.pid}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(idx), 'utf-8');
-  await fs.rename(tmp, jsIndexPath());
+  const tmp = `${jsIndexPath()}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    await fs.writeFile(tmp, JSON.stringify(idx), 'utf-8');
+    await fs.rename(tmp, jsIndexPath());
+  } catch {
+    try {
+      await fs.unlink(tmp);
+    } catch {
+      /* ignore raced/missing tmp */
+    }
+  }
 }
 
 /** Upsert one document into the FTS index. */

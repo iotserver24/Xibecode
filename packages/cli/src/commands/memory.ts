@@ -17,6 +17,8 @@ import {
   rejectAll,
   setWriteApproval,
   isWriteApprovalEnabledAsync,
+  firstTurnMemoryReminder,
+  resolveMemoryPaths,
 } from 'xibecode-core';
 import { promises as fs } from 'fs';
 import * as path from 'path';
@@ -72,11 +74,22 @@ export async function memoryCommand(
     }
 
     case 'path': {
+      const grok = await resolveMemoryPaths(process.cwd());
       console.log(`Project memory dir: ${manager.getMemoryDir()}`);
+      console.log(`Grok-style memory:  ${grok.workspaceDir}`);
+      console.log(`Session logs:       ${grok.sessionsDir}`);
       console.log(`Curated (global):   ~/.xibecode/memories/{MEMORY,USER}.md`);
       console.log(`Learned skills:     ${learnedSkillsDir()}`);
       console.log(`Pending writes:     ~/.xibecode/pending/`);
       console.log(`Session FTS index:  ~/.xibecode/session-index/`);
+      break;
+    }
+
+    case 'flush':
+    case 'recall': {
+      const query = args.join(' ') || 'continue previous work';
+      const text = await firstTurnMemoryReminder({ cwd: process.cwd(), query });
+      console.log(text || 'No earlier-session memory matched this query.');
       break;
     }
 

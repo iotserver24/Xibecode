@@ -1610,6 +1610,34 @@ export class ChatController {
       return;
     }
 
+    if (cmd === 'flush' || cmd === 'recall') {
+      const session = await getOrCreateSession(msg.platform, msg.chatId);
+      const workdir = session.workdir || this.options.defaultWorkdir();
+      const query = arg.trim() || 'continue previous work';
+      try {
+        const { firstTurnMemoryReminder, writeSessionLog, loadResumeContext, sessionTranscriptPath } =
+          await import('xibecode-core');
+        if (cmd === 'flush' && session.transcriptSessionId) {
+          const path = sessionTranscriptPath(session.transcriptSessionId, workdir);
+          const resume = await loadResumeContext(path);
+          const file = await writeSessionLog({
+            sessionId: session.transcriptSessionId,
+            cwd: workdir,
+            messages: resume.messages,
+            kind: 'flush',
+            extra: 'Manual /flush',
+          });
+          await reply(file ? `💾 Session notes saved to memory.` : 'Nothing substantial to flush yet.');
+          return;
+        }
+        const text = await firstTurnMemoryReminder({ cwd: workdir, query });
+        await reply(text || 'No earlier-session memory matched.');
+      } catch (err: any) {
+        await reply(`Memory ${cmd} failed: ${err?.message || err}`);
+      }
+      return;
+    }
+
     if (cmd === 'queue' || cmd === 'q') {
       const sub = arg.trim();
       const subLow = sub.toLowerCase();
