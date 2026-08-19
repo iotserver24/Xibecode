@@ -97,10 +97,11 @@ describe('compactConversation', () => {
     });
     expect(result.droppedCount).toBeGreaterThan(0);
     expect(result.messages.length).toBeLessThan(messages.length);
-    const first = result.messages[0]!;
-    const text =
-      typeof first.content === 'string' ? first.content : JSON.stringify(first.content);
-    expect(text).toMatch(/Context compaction handoff|Conversation was compacted/);
+    const all = result.messages
+      .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
+      .join('\n');
+    expect(all).toMatch(/Context compaction handoff|Conversation was compacted/);
+    expect(all).toMatch(/This session is being continued/);
     expect(result.summaryNotice).toMatch(/compacted/i);
     const after = result.estimatedTokensAfter ?? estimateMessagesTokensRough(result.messages);
     expect(after).toBeLessThan(beforeTokens);
@@ -124,6 +125,33 @@ describe('compactConversation', () => {
       typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
     );
     expect(all.some((t) => t.includes('PLAN_READY') || t.includes('plan'))).toBe(true);
+  });
+
+  it('re-injects user_info and last query after folding older turns', () => {
+    const prefix =
+      '<user_info>\nOS Version: linux\nShell: /bin/zsh\nWorkspace Path: /repo\nToday\'s date: 2026-08-19\n</user_info>';
+    const messages: MessageParam[] = [
+      user(`${prefix}\n\n<user_query>\nfirst task\n</user_query>`),
+      assistant('started'),
+    ];
+    for (let i = 0; i < 24; i++) {
+      messages.push(user(`<user_query>\nfollowup ${i}\n</user_query>`));
+      messages.push(assistant(`reply ${i} ${'y'.repeat(180)}`));
+    }
+    const result = compactConversation(messages, {
+      contextWindow: 16_000,
+      tailTokenBudget: 1_800,
+      minTailMessages: 4,
+      maxTailMessages: 10,
+    });
+    const all = result.messages
+      .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
+      .join('\n');
+    expect(all).toContain('<user_info>');
+    expect(all).toContain('Workspace Path: /repo');
+    expect(all).toContain('<user_query>');
+    expect(result.messages[0]!.content).toContain('<user_info>');
+    expect(all).toMatch(/This session is being continued/);
   });
 });
 

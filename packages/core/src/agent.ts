@@ -101,6 +101,13 @@ import {
   CuratedMemoryStore,
   runPostTurnReview,
 } from './learning-loop/index.js';
+import {
+  assembleUserTurnContent,
+  buildUserContextPrefix,
+  buildUserInfoBlock,
+  formatMemoryReminder,
+  messagesHaveUserInfo,
+} from './prompt/user-context.js';
 
 /** Reasoning tier for hierarchical (AX-lite) behavior: strategic = plan only, tactical = per-step decisions, operational = tool use. */
 export type ReasoningTier = 'strategic' | 'tactical' | 'operational';
@@ -285,6 +292,8 @@ export class EnhancedAgent extends EventEmitter {
   private provider: ProviderType;
   /** Ranked markdown memories (user + project + .xibecode/memories); injected in getSystemPrompt */
   private autoMemoryMarkdownSection: string = '';
+  /** Grok-style first-turn <user_info> + git + rules prefix. */
+  private userContextPrefix: string | null = null;
   private totalInputTokens: number = 0;
   private totalOutputTokens: number = 0;
   /** Last API-reported prompt size (current context), Hermes-style. */
@@ -928,6 +937,7 @@ export class EnhancedAgent extends EventEmitter {
       }
     }
     this.observation.setTask(initialPrompt);
+    if (this.messages.length === 0) this.userContextPrefix = null;
 
     if (this.pendingAssistantTranscriptUuid) {
       if (typeof toolExecutor?.setActiveFileHistoryMessageId === 'function') {
@@ -985,8 +995,9 @@ export class EnhancedAgent extends EventEmitter {
     this.emitUsage();
     void this.refreshContextWindow();
 
+    const userTurn = await this.composeUserTurn(initialPrompt);
     if (opts?.images && opts.images.length > 0) {
-      const blocks: any[] = [{ type: 'text', text: initialPrompt }];
+      const blocks: any[] = [{ type: 'text', text: userTurn }];
       for (const img of opts.images) {
         const href = imageHref(img);
         if (!href) continue;
@@ -999,7 +1010,7 @@ export class EnhancedAgent extends EventEmitter {
     } else {
       this.messages.push({
         role: 'user',
-        content: initialPrompt,
+        content: userTurn,
       });
     }
 
@@ -1011,24 +1022,6 @@ export class EnhancedAgent extends EventEmitter {
           ? 'continuation'
           : initialPrompt.slice(0, 240),
       ).catch(() => {});
-    }
-
-    // ─── Neural Memory Recall ───
-    try {
-      const memories = await this.memory.retrieve(initialPrompt, 5, this.config.memoryRecallMinScore);
-      if (memories.length > 0) {
-        const memoryContext = memories.map(m => `- [${new Date(m.timestamp).toISOString().split('T')[0]}] ${m.trigger} -> ${m.action} (${m.outcome})`).join('\n');
-        this.messages.push({
-          role: 'user',
-          content:
-            `\n\n[Neural Memory Recall — UNVERIFIED HINTS]\n` +
-            `These are recall hints, not guaranteed facts. Verify with read_file / grep_code / tests before relying on them.\n` +
-            `${memoryContext}\n\nUser Prompt: ${initialPrompt}`
-        });
-        this.emit('thinking', { message: `Recalled ${memories.length} relevant memories` });
-      }
-    } catch (err) {
-      // Ignore memory errors to not block execution
     }
 
     this.emit('thinking', { message: 'Starting agent...' });
@@ -2587,6 +2580,42 @@ export class EnhancedAgent extends EventEmitter {
 
 
 
+  private workspaceCwd(): string {
+    return this.sessionContext?.cwd || process.cwd();
+  }
+
+  private async composeUserTurn(prompt: string): Promise<string> {
+    let prefix: string | null = null;
+    if (!messagesHaveUserInfo(this.messages)) {
+      if (!this.userContextPrefix) {
+        try {
+          this.userContextPrefix = await buildUserContextPrefix({ cwd: this.workspaceCwd() });
+        } catch {
+          this.userContextPrefix = buildUserInfoBlock({ cwd: this.workspaceCwd() });
+        }
+      }
+      prefix = this.userContextPrefix;
+    }
+
+    let memoryReminder: string | null = null;
+    try {
+      const memories = await this.memory.retrieve(prompt, 5, this.config.memoryRecallMinScore);
+      if (memories.length > 0) {
+        memoryReminder = formatMemoryReminder(
+          memories.map(
+            (m) =>
+              `- [${new Date(m.timestamp).toISOString().split('T')[0]}] ${m.trigger} -> ${m.action} (${m.outcome})`,
+          ),
+        );
+        this.emit('thinking', { message: `Recalled ${memories.length} relevant memories` });
+      }
+    } catch {
+      /* recall is best-effort */
+    }
+
+    return assembleUserTurnContent({ prompt, prefix, memoryReminder });
+  }
+
   private getSystemPrompt(): string {
     // AX-lite strategic tier: plan only, no tools
     if (this.currentTier === 'strategic') {
@@ -2628,7 +2657,7 @@ Do not use any tools. Do not write code. Output only the plan text.`;
       ? `\n## Tool inventory\nUse only these exact tool names: ${named(availableTools)}. Never invent a tool name; if a capability is unavailable, use an available alternative or report the blocker.\n`
       : '';
 
-    return `You are XibeCode, an expert autonomous coding assistant with advanced capabilities.
+    return `You are XibeCode, an expert autonomous coding assistant. Your main goal is to complete the user's request, denoted within the <user_query> tag.
 
 <work_policy>
 - Keep every explicit requirement in view until it is done, superseded, or blocked.
@@ -2651,6 +2680,7 @@ ${this.remoteToolWorkspaceRoot ? `
 - The chat TUI (\`xc\` / \`xibecode\`) runs **locally**; only **tools** execute remotely. You are not streaming a full \`xc\` process from inside the sandbox.
 ` : ''}
 Working directory: ${process.cwd()}
+Workspace identity (OS, shell, path, date) is in the \`<user_info>\` block of the first user message. Project instructions are in \`<rules>\`. The user's request is inside \`<user_query>\`.
 
 ## Repository root and paths
 
@@ -3264,6 +3294,7 @@ ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
    */
   setMessages(messages: MessageParam[]) {
     this.messages = messages;
+    if (!messagesHaveUserInfo(messages)) this.userContextPrefix = null;
   }
 
   /**
@@ -3275,6 +3306,7 @@ ${MODE_CONFIG[this.modeState.current].promptSuffix}`;
     this.initTranscript(sessionId, cwd);
     this.messages = messages;
     this.lastTranscriptUuid = lastUuid ?? null;
+    if (!messagesHaveUserInfo(messages)) this.userContextPrefix = null;
   }
 
   /**

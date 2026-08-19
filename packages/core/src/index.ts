@@ -334,6 +334,22 @@ export { type PersistedPlanArtifact, persistPlanArtifact, loadLatestPlanArtifact
 export { ContextManager } from './context.js';
 export { pruneContext } from './context-pruner.js';
 export {
+  wrapUserQuery,
+  extractUserQuery,
+  extractContextPrefix,
+  extractLastUserQuery,
+  messagesHaveUserInfo,
+  buildUserInfoBlock,
+  buildUserContextPrefix,
+  assembleUserTurnContent,
+  assembleCompactedMessages,
+  formatRulesSection,
+  formatGitStatusBlock,
+  normalizeGitStatus,
+  formatMemoryReminder,
+  type RuleEntry,
+} from './prompt/user-context.js';
+export {
   type CompactionResult,
   type CompactOptions,
   compactConversation,

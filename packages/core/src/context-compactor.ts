@@ -1,4 +1,10 @@
 import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
+import {
+  assembleCompactedMessages,
+  extractContextPrefix,
+  extractLastUserQuery,
+  messagePlainText,
+} from './prompt/user-context.js';
 
 export interface CompactionResult {
   messages: MessageParam[];
@@ -29,6 +35,8 @@ export const COMPACTION_STATUS =
   `🗜️ ${COMPACTION_STATUS_MARKER} — summarizing earlier conversation so I can continue…`;
 
 const HANDOFF_PREFIX =
+  'This session is being continued from a previous conversation that ran out of context. ' +
+  'The summary below covers the earlier portion of the conversation.\n\n' +
   '[Context compaction handoff]\n' +
   'This is a handoff from a previous context window. Treat the summary as ' +
   'background only — do NOT re-answer resolved questions or re-run finished work. ' +
@@ -377,7 +385,21 @@ export function compactConversation(
     opts.maxTailMessages ??
     Math.max(opts.keepRecentCount ?? 16, 24);
 
-  if (messages.length <= minTail) {
+  let prefix: string | null = null;
+  let prefixIndex = -1;
+  for (let i = 0; i < Math.min(messages.length, 6); i++) {
+    const found = extractContextPrefix(messagePlainText(messages[i]!));
+    if (found) {
+      prefix = found;
+      prefixIndex = i;
+      break;
+    }
+  }
+  const lastUserQuery = extractLastUserQuery(messages);
+  const rest =
+    prefixIndex >= 0 ? messages.filter((_, i) => i !== prefixIndex) : messages;
+
+  if (rest.length <= minTail) {
     return {
       messages,
       droppedCount: 0,
@@ -389,7 +411,7 @@ export function compactConversation(
   }
 
   // Prefer token-budget tail; also honor keepRecentCount as a soft max floor
-  const { head, tail } = selectProtectedTail(messages, {
+  const { head, tail } = selectProtectedTail(rest, {
     tailTokenBudget,
     minTailMessages: minTail,
     maxTailMessages: Math.min(maxTail, opts.keepRecentCount ?? maxTail),
@@ -433,19 +455,18 @@ export function compactConversation(
     .filter(Boolean)
     .join('\n');
 
-  // Alternation: handoff as user-role summary so the next assistant turn is clean
-  // when the tail starts with assistant; if tail starts with user, use assistant role.
-  const summaryRole: 'user' | 'assistant' =
-    tail[0]?.role === 'user' ? 'assistant' : 'user';
+  const summaryMessage: MessageParam = {
+    role: 'user',
+    content: summaryBody,
+  };
 
-  const compacted: MessageParam[] = [
-    {
-      role: summaryRole,
-      content: summaryBody,
-    },
-    ...preservedCapped,
-    ...tail,
-  ];
+  const compacted = assembleCompactedMessages({
+    prefix,
+    lastUserQuery,
+    recent: [...preservedCapped, ...tail],
+    summary: summaryMessage,
+    makeUser: (text): MessageParam => ({ role: 'user', content: text }),
+  });
 
   return {
     messages: compacted,
