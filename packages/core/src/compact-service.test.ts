@@ -57,6 +57,7 @@ describe('compactSession', () => {
     expect(result.droppedCount).toBeGreaterThan(0);
     expect(result.handoff?.changedFiles).toContain('lib/preview.dart');
     expect(result.handoff?.validation[0]?.result).toBe('passed');
+    expect(result.handoff?.validation[0]?.evidenceId).toMatch(/^val_/);
     const text = result.messages
       .map((m) => (typeof m.content === 'string' ? m.content : ''))
       .join('\n');

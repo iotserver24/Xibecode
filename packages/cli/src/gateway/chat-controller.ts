@@ -1555,6 +1555,7 @@ export class ChatController {
           loadResumeContext,
           sessionTranscriptPath,
           RunObservation,
+          restoreObservationFromHandoff,
         } = await import('xibecode-core');
         const workdir = session.workdir || this.options.defaultWorkdir();
         const path = sessionTranscriptPath(session.transcriptSessionId, workdir);
@@ -1564,7 +1565,7 @@ export class ChatController {
           return;
         }
         const observation = new RunObservation();
-        if (resume.handoff?.task) observation.setTask(resume.handoff.task);
+        if (resume.handoff) restoreObservationFromHandoff(observation, resume.handoff);
         const result = await compactSession({
           sessionId: session.transcriptSessionId,
           cwd: workdir,

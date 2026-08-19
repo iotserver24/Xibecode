@@ -149,11 +149,28 @@ export interface RunHandoffTranscriptEntry extends BaseEntry {
     task: string;
     status: string;
     changedFiles: string[];
+    fileEvidence?: Array<{
+      path: string;
+      evidenceId: string;
+      tool: string;
+      state: string;
+      sourceEventId?: string;
+      observedAt?: string;
+    }>;
     validation: Array<{
       command: string;
       result: string;
       exitCode?: number;
       evidenceId?: string;
+      kind?: string;
+      scope?: string;
+      sourceEventId?: string;
+      canonicalCommand?: string;
+      outputSummary?: string;
+      observedAt?: string;
+      stale?: boolean;
+      staleReason?: string;
+      staleAfterEdit?: string;
     }>;
     decisions: string[];
     failedApproaches: string[];

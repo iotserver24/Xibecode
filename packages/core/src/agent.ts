@@ -17,6 +17,7 @@ import {
   RunObservation,
   observeToolEvent,
   buildRunHandoff,
+  restoreObservationFromHandoff,
   writeHandoffEntry,
   formatRunHandoffMarkdown,
   messageContainsHandoff,
@@ -900,27 +901,29 @@ export class EnhancedAgent extends EventEmitter {
     this.learningInitialPrompt = initialPrompt;
     this.toolsUsedThisRun = new Set();
     this.observation = new RunObservation();
-    this.observation.setTask(initialPrompt);
     this.rememberTools(tools);
     this.emitUsage();
 
     if (this.sessionContext && this.transcriptFilePath) {
       try {
         const resume = await loadResumeContext(this.transcriptFilePath);
-        if (
-          resume.handoff &&
-          this.messages.length > 0 &&
-          !this.messages.some(messageContainsHandoff)
-        ) {
-          this.messages.unshift({
-            role: 'user',
-            content: formatRunHandoffMarkdown(resume.handoff),
-          });
+        if (resume.handoff) {
+          restoreObservationFromHandoff(this.observation, resume.handoff);
+          if (
+            this.messages.length > 0 &&
+            !this.messages.some(messageContainsHandoff)
+          ) {
+            this.messages.unshift({
+              role: 'user',
+              content: formatRunHandoffMarkdown(resume.handoff),
+            });
+          }
         }
       } catch {
         /* resume handoff is best-effort */
       }
     }
+    this.observation.setTask(initialPrompt);
 
     if (this.pendingAssistantTranscriptUuid) {
       if (typeof toolExecutor?.setActiveFileHistoryMessageId === 'function') {
@@ -1781,7 +1784,9 @@ export class EnhancedAgent extends EventEmitter {
         success ? 'tool_result_ok' : 'tool_result_error',
         `${toolUse.name}:${success ? 'ok' : 'error'}`,
       );
-      observeToolEvent(this.observation, toolUse.name, toolUse.input, result, success);
+      observeToolEvent(this.observation, toolUse.name, toolUse.input, result, success, {
+        sourceEventId: toolUse.id,
+      });
       if (this.sessionMemory) {
         const msg = typeof result === 'object' && result?.message != null ? String(result.message) : undefined;
         this.sessionMemory.recordAttempt(toolUse.name, success, msg);
@@ -2607,7 +2612,7 @@ Do not use any tools. Do not write code. Output only the plan text.`;
 
 <work_policy>
 - Keep every explicit requirement in view until it is done, superseded, or blocked.
-- Claim something is done, fixed, or tested only when a tool result in this turn supports it.
+- Claim something is done, fixed, or tested only when a tool result in this turn supports it. A run handoff result of unknown, timeout, not_run, or stale is not a pass.
 - Prefer dedicated tools over bash: \`read_file\`, \`list_directory\`, \`search_files\`, \`grep_code\`, \`verified_edit\`. Use \`run_command\` only for real shell work (installs, tests, servers).
 - Long-lived servers and watchers: \`run_command\` with \`background=true\`. Do not poll the same command. Do not re-run an identical failing command.
 - Never invent a tool name. If a tool is missing, say so and use a listed one.
@@ -2648,7 +2653,7 @@ ${this.defaultSkillsPrompt ? `${this.defaultSkillsPrompt}\n\n` : ''}
 ## Work Policy
 - Keep every explicit requirement in view until it is completed, superseded, or genuinely blocked. If blocked, state the concrete blocker instead of silently dropping the requirement.
 - Match the requested intent: implement clear action requests, but answer questions and reviews without making unsolicited edits.
-- Claim that something is done, fixed, or tested only when tool output supports the claim. Separate observed facts from assumptions.
+- Claim that something is done, fixed, or tested only when tool output supports the claim. Separate observed facts from assumptions. Handoff results of unknown, timeout, not_run, or stale are not success.
 - After a failed tool call, inspect the error and change the approach; do not repeat the exact same failing call.
 - Make the smallest coherent change, then validate the affected behavior and nearby regression paths.
 

@@ -1,0 +1,10 @@
+{
+  "name": "xibecode-daemon-parity-fixture",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "scripts": {
+    "test": "node --test src/alpha.test.mjs",
+    "fail": "node src/fail.mjs"
+  }
+}

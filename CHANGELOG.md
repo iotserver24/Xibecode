@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.17.20] - 2026-08-19
+
+### Harness / evidence
+
+- Run handoffs now keep a verification evidence ledger: evidence IDs, command kind/scope, and an explicit `unknown` / `timeout` / `not_run` result. A missing exit code is never recorded as passed.
+- Later file edits mark matching test/lint/build results **stale**. Targeted checks only go stale when they cover the edited file. Re-running the command clears stale.
+- Equivalent commands collapse onto one row (`pnpm run test` / `npm test` / `pnpm exec vitest run`). Chained `&&` / `||` / `;` stay one result with one exit code.
+- Each validation stores a redacted output summary (max 400 chars) and an `observedAt` timestamp.
+- Resume, `/compact`, and `xibecode compact` restore the ledger from the last handoff. A newer persisted edit timestamp still stales older results after restart.
+
+### Release
+
+- `xibecode-core` **1.17.20** then `xibecode` **1.17.20** (npm). Existing sandboxes need **Update CLI**. New boxes get it from the rebuilt template.
+
+### Hosting / E2B template
+
+- `xibecode-full-sandbox` rebuilt with CLI/core **1.17.20**.
+
 ## [1.17.19] - 2026-08-19
 
 ### `/new` conversations

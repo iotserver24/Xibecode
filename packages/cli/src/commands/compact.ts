@@ -9,6 +9,7 @@ import {
   SessionManager,
   compactSession,
   RunObservation,
+  restoreObservationFromHandoff,
   loadResumeContext,
   getTranscriptWriter,
   sessionTranscriptPath,
@@ -56,19 +57,7 @@ export async function compactCommand(options: {
   }
 
   const observation = new RunObservation();
-  if (resume.handoff) {
-    observation.setTask(resume.handoff.task);
-    for (const f of resume.handoff.changedFiles) observation.recordFileChange(f);
-    for (const v of resume.handoff.validation) {
-      observation.recordValidation(
-        v.command,
-        v.result as 'passed' | 'failed' | 'not_run',
-        v.exitCode,
-      );
-    }
-    for (const d of resume.handoff.failedApproaches) observation.recordFailure('prior', d);
-    for (const r of resume.handoff.remainingWork) observation.recordRemaining(r);
-  }
+  if (resume.handoff) restoreObservationFromHandoff(observation, resume.handoff);
 
   const result = await compactSession({
     sessionId: id,
