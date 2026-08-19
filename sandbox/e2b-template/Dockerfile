@@ -92,10 +92,10 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/b
 # Rebuild: (cd packages/core && pnpm pack --pack-destination ../../sandbox/e2b-template)
 #          (cd packages/cli  && pnpm pack --pack-destination ../../sandbox/e2b-template)
 RUN mkdir -p /tmp/packs
-COPY xibecode-core-1.17.23.tgz /tmp/packs/xibecode-core-1.17.23.tgz
-COPY xibecode-1.17.23.tgz /tmp/packs/xibecode-1.17.23.tgz
+COPY xibecode-core-1.17.24.tgz /tmp/packs/xibecode-core-1.17.24.tgz
+COPY xibecode-1.17.24.tgz /tmp/packs/xibecode-1.17.24.tgz
 RUN set -e; \
-  npm install -g /tmp/packs/xibecode-core-1.17.23.tgz /tmp/packs/xibecode-1.17.23.tgz agent-browser; \
+  npm install -g /tmp/packs/xibecode-core-1.17.24.tgz /tmp/packs/xibecode-1.17.24.tgz agent-browser; \
   (agent-browser install --with-deps || agent-browser install); \
   xibecode -v; \
   agent-browser --version || true; \
