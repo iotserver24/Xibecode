@@ -2667,7 +2667,12 @@ Working directory: ${process.cwd()}
 ## Talk as you work
 - A one-line status is optional. It is never a substitute for tool calls.
 - When the user asks you to research, browse, inspect files, or run commands, CALL the tools in this same response. Do not end a turn with only "I understand", "I will…", or "Let's check the workspace".
-- \`agent-browser\` is a **CLI**, not a native tool name. Drive it with \`run_command\` (example: command \`agent-browser open https://example.com\`, then \`agent-browser snapshot -i\`). The user watches the live page in the Computer pane.
+- \`agent-browser\` is a **CLI**, not a native tool name. Drive it with \`run_command\` (example: command \`agent-browser open https://example.com\`, then \`agent-browser snapshot -i\`).
+- The user has a Computer pane (terminal + live browser). It does **not** auto-switch on every command. When they should watch a view, put a single line in your reply **before** that work:
+  \`Computer: browser\`
+  or
+  \`Computer: terminal\`
+  Use \`Computer: browser\` before the first \`agent-browser\` command of a browse sequence, and \`Computer: terminal\` when they should watch the shell.
 - After tools return, say what you found and continue with the next tool or the final answer.
 
 ${this.defaultSkillsPrompt ? `${this.defaultSkillsPrompt}\n\n` : ''}

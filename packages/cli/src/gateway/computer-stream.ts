@@ -20,6 +20,44 @@ export function streamWsUrl(port = streamPort()): string {
   return `ws://127.0.0.1:${port}/?pacing=ack&maxFps=${DEFAULT_MAX_FPS}`;
 }
 
+/**
+ * CDP screencast JPEGs do not include the OS mouse pointer. Draw a page-level
+ * cursor that follows CDP mouse events so the Computer pane can show clicks.
+ */
+export const CURSOR_OVERLAY_JS = `(() => {
+  var ID = '__xc_cursor';
+  var el = document.getElementById(ID);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = ID;
+    el.setAttribute('aria-hidden', 'true');
+    el.style.cssText = 'position:fixed;left:12px;top:12px;z-index:2147483647;width:20px;height:20px;pointer-events:none;margin:0;display:block;transform:translate(-2px,-1px);transition:left 50ms linear,top 50ms linear';
+    el.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="#ffffff" stroke="#111111" stroke-width="1.4" d="M5 3.5 19 13.2l-6.6 1.2L9.6 21.5z"/></svg>';
+  }
+  var host = document.documentElement || document.body;
+  if (host && el.parentNode !== host) host.appendChild(el);
+  if (window.__xcCursorBound) return true;
+  window.__xcCursorBound = true;
+  var move = function (e) {
+    el.style.left = e.clientX + 'px';
+    el.style.top = e.clientY + 'px';
+    el.style.display = 'block';
+  };
+  window.addEventListener('mousemove', move, true);
+  window.addEventListener('mousedown', function (e) {
+    move(e);
+    el.style.filter = 'brightness(0.8)';
+  }, true);
+  window.addEventListener('mouseup', function () {
+    el.style.filter = '';
+  }, true);
+  setInterval(function () {
+    var h = document.documentElement || document.body;
+    if (h && el.parentNode !== h) h.appendChild(el);
+  }, 800);
+  return true;
+})()`;
+
 export function encodeSse(obj: unknown): string {
   return `data: ${JSON.stringify(obj)}\n\n`;
 }
@@ -104,6 +142,17 @@ export async function ensureAgentBrowserStream(
   return readStreamStatus();
 }
 
+export async function ensureCursorOverlay(): Promise<void> {
+  await runAgentBrowser(['eval', CURSOR_OVERLAY_JS], 4_000);
+}
+
+export async function highlightBrowserTarget(target: string): Promise<void> {
+  const t = String(target || '').trim();
+  if (!t || t.length > 120) return;
+  if (/^https?:/i.test(t)) return;
+  await runAgentBrowser(['highlight', t], 4_000);
+}
+
 export function pipeAgentBrowserScreencast(
   req: IncomingMessage,
   res: ServerResponse,
@@ -173,6 +222,7 @@ export function pipeAgentBrowserScreencast(
       } catch {
         /* ignore */
       }
+      void ensureCursorOverlay().catch(() => undefined);
     });
 
     ws.on('message', (raw) => {

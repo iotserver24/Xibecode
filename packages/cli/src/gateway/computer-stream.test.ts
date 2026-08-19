@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CURSOR_OVERLAY_JS,
   DEFAULT_STREAM_PORT,
   encodeSse,
   isInputMessage,
@@ -24,5 +25,11 @@ describe('computer stream helpers', () => {
     expect(isInputMessage({ type: 'input_keyboard' })).toBe(true);
     expect(isInputMessage({ type: 'frame', data: 'abc' })).toBe(false);
     expect(isInputMessage({ type: 'ack', seq: 1 })).toBe(false);
+  });
+
+  it('ships a page-level cursor overlay (CDP frames have no OS pointer)', () => {
+    expect(CURSOR_OVERLAY_JS).toContain('__xc_cursor');
+    expect(CURSOR_OVERLAY_JS).toContain('mousemove');
+    expect(CURSOR_OVERLAY_JS).toContain('mousedown');
   });
 });

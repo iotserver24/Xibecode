@@ -10,7 +10,7 @@ export const COMPUTER_COMMAND_MAX = 400;
 export const COMPUTER_STDOUT_MAX = 4000;
 
 export type ComputerTab = 'terminal' | 'browser';
-export type ComputerKind = 'shell' | 'browser' | 'file' | 'other';
+export type ComputerKind = 'shell' | 'browser' | 'file' | 'other' | 'focus';
 export type ComputerAction =
   | 'open'
   | 'click'
@@ -23,6 +23,7 @@ export type ComputerAction =
   | 'hover'
   | 'wait'
   | 'close'
+  | 'show'
   | 'other';
 
 export type ComputerPayload = {
@@ -38,6 +39,8 @@ export type ComputerPayload = {
   stdout?: string;
   exitCode?: number;
   success?: boolean;
+  /** When true the app switches the Computer pane to `tab`. */
+  focus?: boolean;
 };
 
 const FILE_TOOLS = new Set([
@@ -68,6 +71,7 @@ const BROWSER_ACTIONS = new Set<ComputerAction>([
   'hover',
   'wait',
   'close',
+  'show',
 ]);
 
 export function capText(value: string, max: number): string {
@@ -192,6 +196,39 @@ export function parseAgentBrowserCommand(command: string): {
   return { action, target, url, label };
 }
 
+/**
+ * Agent-chosen Computer pane. The app does not flip tabs on every shell
+ * command — only when the model writes one of these lines.
+ *
+ *   Computer: browser
+ *   Computer: terminal
+ *   [computer:browser]
+ */
+export function parseComputerShow(text: string): ComputerTab | null {
+  if (!text) return null;
+  let last: ComputerTab | null = null;
+  const re =
+    /(?:^|\n)\s*(?:computer|show|watch)\s*[:\-]\s*(browser|terminal)\b|\[\s*computer\s*:\s*(browser|terminal)\s*\]/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const raw = (m[1] || m[2] || '').toLowerCase();
+    if (raw === 'browser' || raw === 'terminal') last = raw;
+  }
+  return last;
+}
+
+export function buildComputerFocusPayload(tab: ComputerTab): ComputerPayload {
+  return {
+    tab,
+    kind: 'focus',
+    name: 'show',
+    state: 'start',
+    action: 'show',
+    label: tab === 'browser' ? 'Show browser' : 'Show terminal',
+    focus: true,
+  };
+}
+
 export function classifyToolKind(name: string, input?: unknown): ComputerKind {
   const n = String(name || '').toLowerCase();
   if (BROWSER_TOOLS.has(n)) return 'browser';
@@ -268,6 +305,9 @@ export function buildComputerPayload(opts: {
     opts.state === 'done' ? extractStdout(opts.result) : undefined;
   const exitCode =
     opts.state === 'done' ? extractExitCode(opts.result) : undefined;
+  // Opening a page is the agent saying "watch the browser". Later clicks
+  // and every shell command leave the current tab alone.
+  const focus = Boolean(browserTool && parsed?.action === 'open' && opts.state === 'start');
 
   return {
     tab,
@@ -282,5 +322,6 @@ export function buildComputerPayload(opts: {
     stdout,
     exitCode,
     success: opts.state === 'done' ? opts.success !== false : undefined,
+    focus,
   };
 }

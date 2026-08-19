@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.17.23] - 2026-08-19
+
+### Computer pane
+
+- The pane no longer flips to Terminal on every shell command (or to Browser on every frame). The agent chooses the view with a line `Computer: browser` or `Computer: terminal`. Opening a page still focuses Browser once.
+- Live Chromium frames do not include an OS mouse pointer. The CLI injects a page-level cursor that follows CDP clicks so you can see where the agent is pointing.
+
+### Release
+
+- `xibecode-core` **1.17.23** then `xibecode` **1.17.23** (npm). Existing sandboxes need **Update CLI**.
+
 ## [1.17.22] - 2026-08-19
 
 ### Agent / browser

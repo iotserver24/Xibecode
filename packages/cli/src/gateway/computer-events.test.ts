@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildComputerFocusPayload,
   buildComputerPayload,
   classifyToolKind,
   extractCommand,
   parseAgentBrowserCommand,
+  parseComputerShow,
   unwrapBrowserCli,
 } from './computer-events.js';
 
@@ -71,6 +73,15 @@ describe('computer events', () => {
     expect(click.kind).toBe('browser');
     expect(click.action).toBe('click');
     expect(click.label).toBe('Click @e2');
+    expect(click.focus).toBeFalsy();
+
+    const open = buildComputerPayload({
+      name: 'run_command',
+      state: 'start',
+      input: { command: 'agent-browser open https://example.com' },
+    });
+    expect(open.focus).toBe(true);
+    expect(open.action).toBe('open');
 
     const done = buildComputerPayload({
       name: 'run_command',
@@ -91,5 +102,18 @@ describe('computer events', () => {
     expect(cmd).toBeDefined();
     expect(cmd!.length).toBeLessThanOrEqual(401);
     expect(cmd).not.toMatch(/sk-abcdefghijklmnopqrstuvwxyz012345/);
+  });
+
+  it('parses Computer: browser / terminal from agent text', () => {
+    expect(parseComputerShow('Computer: browser\nOpening the docs.')).toBe('browser');
+    expect(parseComputerShow('Watch: terminal')).toBe('terminal');
+    expect(parseComputerShow('Show: browser')).toBe('browser');
+    expect(parseComputerShow('[computer:terminal] next')).toBe('terminal');
+    expect(parseComputerShow('I will use the browser')).toBeNull();
+    expect(buildComputerFocusPayload('browser')).toMatchObject({
+      tab: 'browser',
+      kind: 'focus',
+      focus: true,
+    });
   });
 });

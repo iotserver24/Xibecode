@@ -25,7 +25,7 @@ export type AppEventType =
   | 'conversation';
 
 export type AppComputerTab = 'terminal' | 'browser';
-export type AppComputerKind = 'shell' | 'browser' | 'file' | 'other';
+export type AppComputerKind = 'shell' | 'browser' | 'file' | 'other' | 'focus';
 
 export type AppFileKind = 'photo' | 'video' | 'audio' | 'voice' | 'document';
 
@@ -71,6 +71,8 @@ export interface AppChatEvent {
   max?: number;
   model?: string;
   label?: string;
+  /** Switch the Computer pane to `tab`. Ignored on ordinary shell/browser events. */
+  focus?: boolean;
   busy?: boolean;
   startedAt?: number;
   lastTool?: string;

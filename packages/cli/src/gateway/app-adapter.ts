@@ -35,7 +35,13 @@ import { shareWorkspaceFile } from './workspace-share.js';
 import { listConversations } from './session-store.js';
 import { loadResumeContext, SessionManager } from 'xibecode-core';
 import {
+  buildComputerFocusPayload,
+  parseComputerShow,
+} from './computer-events.js';
+import {
   ensureAgentBrowserStream,
+  ensureCursorOverlay,
+  highlightBrowserTarget,
   pipeAgentBrowserScreencast,
   streamPort,
 } from './computer-stream.js';
@@ -206,6 +212,7 @@ export class AppAdapter implements MessagingAdapter {
     tools?: number;
     lastTool?: string;
   } | null = null;
+  private lastComputerShow: 'terminal' | 'browser' | null = null;
 
   constructor(
     opts: { homeChatId?: string; workdir?: () => string } = {},
@@ -260,6 +267,7 @@ export class AppAdapter implements MessagingAdapter {
       title: info.previousTitle,
       conversations: info.conversations,
     });
+    this.lastComputerShow = null;
   }
 
   async sendMessage(
@@ -270,6 +278,7 @@ export class AppAdapter implements MessagingAdapter {
     const trimmed = String(text || '');
     if (!trimmed.trim()) return;
     this.emit(chatId, { type: 'text', text: trimmed, final: true, format: 'markdown' });
+    this.maybeFocusComputer(chatId, trimmed);
     this.emit(chatId, { type: 'done' });
   }
 
@@ -283,6 +292,7 @@ export class AppAdapter implements MessagingAdapter {
       final: false,
       format: 'markdown',
     });
+    this.maybeFocusComputer(chatId, trimmed);
   }
 
   async publishImageUrl(absPath: string): Promise<string | undefined> {
@@ -408,7 +418,7 @@ export class AppAdapter implements MessagingAdapter {
     chatId: string,
     payload: {
       tab: 'terminal' | 'browser';
-      kind: 'shell' | 'browser' | 'file' | 'other';
+      kind: 'shell' | 'browser' | 'file' | 'other' | 'focus';
       name: string;
       state: 'start' | 'done';
       command?: string;
@@ -419,6 +429,7 @@ export class AppAdapter implements MessagingAdapter {
       stdout?: string;
       exitCode?: number;
       success?: boolean;
+      focus?: boolean;
     },
   ): void {
     this.emit(chatId, {
@@ -435,11 +446,25 @@ export class AppAdapter implements MessagingAdapter {
       stdout: payload.stdout,
       exitCode: payload.exitCode,
       success: payload.success,
+      focus: payload.focus === true,
       text: payload.label,
     });
+    if (payload.focus) this.lastComputerShow = payload.tab;
     if (payload.kind === 'browser' || payload.tab === 'browser') {
-      void ensureAgentBrowserStream(streamPort()).catch(() => undefined);
+      void ensureAgentBrowserStream(streamPort())
+        .then(() => ensureCursorOverlay())
+        .catch(() => undefined);
+      if (payload.state === 'start' && payload.target) {
+        void highlightBrowserTarget(payload.target).catch(() => undefined);
+      }
     }
+  }
+
+  private maybeFocusComputer(chatId: string, text: string): void {
+    const tab = parseComputerShow(text);
+    if (!tab || tab === this.lastComputerShow) return;
+    this.lastComputerShow = tab;
+    this.notifyComputer(chatId, buildComputerFocusPayload(tab));
   }
 
   async editInteractiveMessage(
@@ -448,6 +473,7 @@ export class AppAdapter implements MessagingAdapter {
     text: string,
   ): Promise<void> {
     this.emit(chatId, { type: 'text', text, final: true, format: 'markdown' });
+    this.maybeFocusComputer(chatId, text);
   }
 
   async sendApprovalPrompt(

@@ -126,7 +126,7 @@ export interface MessagingAdapter {
     chatId: string,
     payload: {
       tab: 'terminal' | 'browser';
-      kind: 'shell' | 'browser' | 'file' | 'other';
+      kind: 'shell' | 'browser' | 'file' | 'other' | 'focus';
       name: string;
       state: 'start' | 'done';
       command?: string;
@@ -137,6 +137,7 @@ export interface MessagingAdapter {
       stdout?: string;
       exitCode?: number;
       success?: boolean;
+      focus?: boolean;
     },
   ): void;
   /**
